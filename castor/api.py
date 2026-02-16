@@ -319,10 +319,13 @@ async def on_startup():
             state.driver = get_driver(state.config)
 
             # Initialize camera + speaker for live frames and TTS
-            import castor.main as _main_mod
+            from castor.main import set_shared_camera, set_shared_speaker
 
-            _main_mod._shared_camera = Camera(state.config)
-            _main_mod._shared_speaker = Speaker(state.config)
+            state.camera = Camera(state.config)
+            set_shared_camera(state.camera)
+
+            state.speaker = Speaker(state.config)
+            set_shared_speaker(state.speaker)
         except Exception as e:
             logger.warning(f"Config load error (gateway still operational): {e}")
     else:
@@ -342,8 +345,22 @@ async def on_startup():
 @app.on_event("shutdown")
 async def on_shutdown():
     await _stop_channels()
+
+    # Clear shared references first so in-flight requests cannot grab
+    # a closing/closed device.
+    from castor.main import set_shared_camera, set_shared_speaker
+
+    set_shared_camera(None)
+    set_shared_speaker(None)
+
     if state.driver:
         state.driver.close()
+    if hasattr(state, "speaker") and state.speaker:
+        state.speaker.close()
+        state.speaker = None
+    if hasattr(state, "camera") and state.camera:
+        state.camera.close()
+        state.camera = None
     logger.info("OpenCastor Gateway shut down")
 
 

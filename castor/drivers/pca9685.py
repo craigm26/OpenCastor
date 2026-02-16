@@ -13,6 +13,7 @@ The mode is selected by the ``protocol`` field in your RCAN driver config:
 """
 
 import logging
+import time
 from typing import Dict
 
 from castor.drivers.base import DriverBase
@@ -38,6 +39,13 @@ try:
     HAS_MOTOR = True
 except ImportError:
     HAS_MOTOR = False
+
+
+# ---------------------------------------------------------------------------
+# Pulse-width safety bounds (microseconds)
+# ---------------------------------------------------------------------------
+PULSE_MIN_US = 500   # absolute minimum -- below this risks damaging servos/ESCs
+PULSE_MAX_US = 2500  # absolute maximum -- above this risks damaging servos/ESCs
 
 
 # ---------------------------------------------------------------------------
@@ -91,6 +99,20 @@ class PCA9685RCDriver(DriverBase):
 
         self.freq = config.get("frequency", 50)
 
+        # Validate configured pulse widths against safety bounds
+        for label, val in [
+            ("throttle_neutral_us", self.thr_neutral),
+            ("throttle_max_us", self.thr_max),
+            ("throttle_min_us", self.thr_min),
+            ("steering_center_us", self.steer_center),
+        ]:
+            if val < PULSE_MIN_US or val > PULSE_MAX_US:
+                logger.warning(
+                    f"{label}={val} is outside safe range "
+                    f"[{PULSE_MIN_US}, {PULSE_MAX_US}]; "
+                    f"it will be clamped at runtime"
+                )
+
         if not HAS_PCA9685:
             logger.warning("PCA9685 unavailable -- RC driver in mock mode")
             self.pca = None
@@ -109,9 +131,12 @@ class PCA9685RCDriver(DriverBase):
             self.pca = None
             return
 
-        # Arm the ESC: send neutral throttle so the ESC recognises the signal
+        # Arm the ESC: send neutral throttle so the ESC recognises the signal.
+        # Pulses are clamped inside _set_pulse() so out-of-range config values
+        # cannot reach the hardware.
         self._set_pulse(self.thr_ch, self.thr_neutral)
         self._set_pulse(self.steer_ch, self.steer_center)
+        time.sleep(0.5)  # give the ESC time to recognise the neutral signal
         logger.info("ESC armed (neutral throttle sent)")
 
     def move(self, linear_x: float = 0.0, angular_z: float = 0.0):
@@ -158,7 +183,13 @@ class PCA9685RCDriver(DriverBase):
             self.pca.deinit()
 
     def _set_pulse(self, channel: int, pulse_us: float):
-        """Write a pulse width (microseconds) to a PCA9685 channel."""
+        """Write a pulse width (microseconds) to a PCA9685 channel.
+
+        The value is clamped to [PULSE_MIN_US, PULSE_MAX_US] so that no
+        caller -- arming, move(), stop(), or future code -- can send an
+        out-of-range signal to the hardware.
+        """
+        pulse_us = max(PULSE_MIN_US, min(PULSE_MAX_US, pulse_us))
         duty = _us_to_duty(self.freq, pulse_us)
         self.pca.channels[channel].duty_cycle = duty
 
