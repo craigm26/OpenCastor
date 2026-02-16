@@ -257,10 +257,11 @@ class TestSafetyLayer:
         assert result == ["a"]
 
     def test_policy_toggle(self):
-        sl, _, _ = self._make_safety()
+        sl, ns, _ = self._make_safety()
         assert sl.set_policy("clamp_motor", False, principal="root")
         # Now motor values should not be clamped
         sl.write("/dev/motor", {"linear": 5.0}, principal="brain")
+        assert ns.read("/dev/motor")["linear"] == 5.0
 
 
 # =====================================================================
@@ -553,9 +554,9 @@ class TestCastorFS:
     def test_pipeline_builder(self):
         fs = CastorFS()
         fs.boot()
-        fs.ns.write("/test/input", 10)
+        fs.ns.write("/tmp/test_input", 10)
         pipe = fs.pipeline("test")
-        result = pipe.read("/test/input").transform(lambda x: x * 3).run()
+        result = pipe.read("/tmp/test_input").transform(lambda x: x * 3).run()
         assert result == 30
 
     def test_tree_output(self):

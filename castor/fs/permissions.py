@@ -62,7 +62,7 @@ class Cap(Flag):
     @classmethod
     def api_default(cls) -> "Cap":
         return (cls.MOTOR_WRITE | cls.ESTOP | cls.MEMORY_READ
-                | cls.CHANNEL_SEND | cls.DEVICE_ACCESS)
+                | cls.CHANNEL_SEND | cls.DEVICE_ACCESS | cls.SAFETY_OVERRIDE)
 
     @classmethod
     def driver_default(cls) -> "Cap":
@@ -73,7 +73,8 @@ class Cap(Flag):
         """All capabilities."""
         result = cls.NONE
         for member in cls:
-            result |= member
+            if member is not cls.NONE:
+                result |= member
         return result
 
 

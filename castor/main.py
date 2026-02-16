@@ -136,6 +136,10 @@ class Camera:
 
         logger.warning("No camera detected. Using blank frames.")
 
+    def is_available(self) -> bool:
+        """Return True if a real camera (CSI or USB) is online."""
+        return self._picam is not None or self._cv_cap is not None
+
     def capture_jpeg(self) -> bytes:
         """Return a JPEG-encoded frame as bytes."""
         if self._picam is not None:
@@ -345,7 +349,7 @@ def main():
     # 4. INITIALIZE EYES (Camera -- CSI first, then USB, then blank)
     camera = Camera(config)
     set_shared_camera(camera)
-    fs.proc.set_camera("online" if camera._picam or camera._cv_cap else "offline")
+    fs.proc.set_camera("online" if camera.is_available() else "offline")
 
     # 5. INITIALIZE VOICE (TTS via USB speaker)
     speaker = Speaker(config)
@@ -391,10 +395,13 @@ def main():
                 fs.write("/dev/motor", thought.action, principal="brain")
 
                 if driver and not args.simulate:
-                    action_type = thought.action.get("type", "")
+                    # Read back the clamped values from the safety layer
+                    clamped_action = fs.read("/dev/motor", principal="brain")
+                    safe_action = clamped_action if clamped_action else thought.action
+                    action_type = safe_action.get("type", "")
                     if action_type == "move":
-                        linear = thought.action.get("linear", 0.0)
-                        angular = thought.action.get("angular", 0.0)
+                        linear = safe_action.get("linear", 0.0)
+                        angular = safe_action.get("angular", 0.0)
                         driver.move(linear, angular)
                     elif action_type == "stop":
                         driver.stop()
@@ -437,8 +444,7 @@ def main():
         if driver and not args.simulate:
             logger.info("Parking hardware...")
             driver.close()
-        with speaker._lock:
-            speaker.close()
+        speaker.close()
         camera.close()
 
         # Flush memory and shut down the virtual filesystem

@@ -91,14 +91,17 @@ class ContextWindow:
 
     def get_window(self) -> List[Dict]:
         """Return the current context window entries."""
-        return self.ns.read("/tmp/context/window") or []
+        with self._lock:
+            return self.ns.read("/tmp/context/window") or []
 
     def get_summary(self) -> str:
         """Return the running summary of evicted entries."""
-        return self.ns.read("/tmp/context/summary") or ""
+        with self._lock:
+            return self.ns.read("/tmp/context/summary") or ""
 
     def get_turn_count(self) -> int:
-        return self.ns.read("/tmp/context/turn_count") or 0
+        with self._lock:
+            return self.ns.read("/tmp/context/turn_count") or 0
 
     def clear(self):
         """Reset the context window and summary."""
@@ -112,18 +115,19 @@ class ContextWindow:
 
         Combines the running summary with the current window entries.
         """
-        parts = []
-        summary = self.get_summary()
-        if summary:
-            parts.append(f"[Context Summary]\n{summary}")
-        window = self.get_window()
-        if window:
-            parts.append("[Recent Interactions]")
-            for entry in window:
-                role = entry.get("role", "?")
-                content = entry.get("content", "")
-                parts.append(f"{role}: {content}")
-        return "\n".join(parts)
+        with self._lock:
+            parts = []
+            summary = self.ns.read("/tmp/context/summary") or ""
+            if summary:
+                parts.append(f"[Context Summary]\n{summary}")
+            window = self.ns.read("/tmp/context/window") or []
+            if window:
+                parts.append("[Recent Interactions]")
+                for entry in window:
+                    role = entry.get("role", "?")
+                    content = entry.get("content", "")
+                    parts.append(f"{role}: {content}")
+            return "\n".join(parts)
 
     def _maybe_summarise(self):
         """Compress older entries into the summary when the window grows too large."""
@@ -193,6 +197,11 @@ class Pipeline:
     input for the next.  Stages can be filesystem reads, writes,
     transforms, or arbitrary callables.
 
+    If a ``safety`` layer is provided, all filesystem operations are
+    routed through it so that permissions, rate limiting, and audit
+    logging are enforced.  Otherwise operations go directly to the
+    underlying :class:`Namespace`.
+
     Usage::
 
         pipe = Pipeline("observe-think-act", fs)
@@ -213,12 +222,31 @@ class Pipeline:
                   .run())
     """
 
-    def __init__(self, name: str, ns: Namespace, principal: str = "brain"):
+    def __init__(self, name: str, ns: Namespace, principal: str = "brain",
+                 safety=None):
         self.name = name
         self.ns = ns
         self.principal = principal
+        self._safety = safety
         self._stages: List[PipelineStage] = []
         self._results: List[Any] = []
+
+    def _do_read(self, path: str):
+        if self._safety:
+            return self._safety.read(path, principal=self.principal)
+        return self.ns.read(path)
+
+    def _do_write(self, path: str, data):
+        if self._safety:
+            self._safety.write(path, data, principal=self.principal)
+        else:
+            self.ns.write(path, data)
+
+    def _do_append(self, path: str, data):
+        if self._safety:
+            self._safety.append(path, data, principal=self.principal)
+        else:
+            self.ns.append(path, data)
 
     def add_stage(self, stage: PipelineStage) -> "Pipeline":
         self._stages.append(stage)
@@ -228,14 +256,14 @@ class Pipeline:
     def read(self, path: str) -> "Pipeline":
         """Add a read stage that reads data from a filesystem path."""
         def _read(_input):
-            return self.ns.read(path)
+            return self._do_read(path)
         _read.__name__ = f"read({path})"
         return self.add_stage(PipelineStage(_read))
 
     def write(self, path: str) -> "Pipeline":
         """Add a write stage that writes the pipeline data to a path."""
         def _write(data):
-            self.ns.write(path, data)
+            self._do_write(path, data)
             return data
         _write.__name__ = f"write({path})"
         return self.add_stage(PipelineStage(_write))
@@ -243,7 +271,7 @@ class Pipeline:
     def append(self, path: str) -> "Pipeline":
         """Add an append stage that appends pipeline data to a list at path."""
         def _append(data):
-            self.ns.append(path, data)
+            self._do_append(path, data)
             return data
         _append.__name__ = f"append({path})"
         return self.add_stage(PipelineStage(_append))
@@ -270,9 +298,9 @@ class Pipeline:
                 else:
                     # String path -- auto-detect read vs write
                     if i == 0:
-                        data = self.ns.read(stage.operation)
+                        data = self._do_read(stage.operation)
                     else:
-                        self.ns.write(stage.operation, data)
+                        self._do_write(stage.operation, data)
                 self._results.append({"stage": repr(stage), "ok": True})
             except Exception as exc:
                 logger.error("Pipeline '%s' failed at stage %d (%s): %s",

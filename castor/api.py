@@ -14,7 +14,7 @@ import time
 import asyncio
 import logging
 import argparse
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import yaml
 from fastapi import FastAPI, HTTPException, Request, Depends
@@ -182,7 +182,7 @@ async def emergency_stop():
 async def clear_estop():
     """Clear emergency stop (requires API token)."""
     if state.fs:
-        if state.fs.clear_estop(principal="root"):
+        if state.fs.clear_estop(principal="api"):
             return {"status": "cleared"}
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     return {"status": "no_fs"}
@@ -193,13 +193,11 @@ async def clear_estop():
 # ---------------------------------------------------------------------------
 class FSReadRequest(BaseModel):
     path: str
-    principal: str = "api"
 
 
 class FSWriteRequest(BaseModel):
     path: str
     data: Any = None
-    principal: str = "api"
 
 
 @app.post("/api/fs/read", dependencies=[Depends(verify_token)])
@@ -207,7 +205,7 @@ async def fs_read(req: FSReadRequest):
     """Read a virtual filesystem path."""
     if not state.fs:
         raise HTTPException(status_code=503, detail="Filesystem not initialized")
-    data = state.fs.read(req.path, principal=req.principal)
+    data = state.fs.read(req.path, principal="api")
     if data is None and not state.fs.exists(req.path):
         raise HTTPException(status_code=404, detail=f"Path not found: {req.path}")
     return {"path": req.path, "data": data}
@@ -218,18 +216,18 @@ async def fs_write(req: FSWriteRequest):
     """Write to a virtual filesystem path."""
     if not state.fs:
         raise HTTPException(status_code=503, detail="Filesystem not initialized")
-    ok = state.fs.write(req.path, req.data, principal=req.principal)
+    ok = state.fs.write(req.path, req.data, principal="api")
     if not ok:
         raise HTTPException(status_code=403, detail="Write denied")
     return {"path": req.path, "status": "written"}
 
 
 @app.get("/api/fs/ls", dependencies=[Depends(verify_token)])
-async def fs_ls(path: str = "/", principal: str = "api"):
+async def fs_ls(path: str = "/"):
     """List virtual filesystem directory."""
     if not state.fs:
         raise HTTPException(status_code=503, detail="Filesystem not initialized")
-    children = state.fs.ls(path, principal=principal)
+    children = state.fs.ls(path, principal="api")
     if children is None:
         raise HTTPException(status_code=404, detail=f"Not a directory: {path}")
     return {"path": path, "children": children}
@@ -377,7 +375,12 @@ def _handle_channel_message(channel_name: str, chat_id: str, text: str) -> str:
         # Write through safety layer before executing
         if state.fs:
             state.fs.write("/dev/motor", thought.action, principal="channel")
-        _execute_action(thought.action)
+            # Use the clamped action from the safety layer
+            clamped_action = state.fs.read("/dev/motor", principal="channel")
+            if clamped_action:
+                _execute_action(clamped_action)
+        else:
+            _execute_action(thought.action)
 
     # Record in memory and context
     if state.fs:
@@ -466,8 +469,7 @@ async def on_startup():
             set_shared_camera(state.camera)
             if state.fs:
                 state.fs.proc.set_camera(
-                    "online" if state.camera._picam or state.camera._cv_cap
-                    else "offline"
+                    "online" if state.camera.is_available() else "offline"
                 )
 
             state.speaker = Speaker(state.config)
@@ -506,8 +508,7 @@ async def on_shutdown():
     if state.driver:
         state.driver.close()
     if hasattr(state, "speaker") and state.speaker:
-        with state.speaker._lock:
-            state.speaker.close()
+        state.speaker.close()
         state.speaker = None
     if hasattr(state, "camera") and state.camera:
         state.camera.close()

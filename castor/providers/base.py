@@ -44,6 +44,10 @@ class BaseProvider(ABC):
             base += f"\n\n--- Robot Memory ---\n{memory_context}"
         return base
 
+    def update_system_prompt(self, memory_context: str = "") -> None:
+        """Rebuild the system prompt with the provided memory context."""
+        self.system_prompt = self._build_system_prompt(memory_context)
+
     @abstractmethod
     def think(self, image_bytes: bytes, instruction: str) -> Thought:
         """

@@ -207,7 +207,7 @@ class CastorFS:
     # ------------------------------------------------------------------
     def pipeline(self, name: str, principal: str = "brain") -> Pipeline:
         """Create a new compound pipeline."""
-        return Pipeline(name, self.ns, principal=principal)
+        return Pipeline(name, self.ns, principal=principal, safety=self.safety)
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -223,6 +223,8 @@ class CastorFS:
     # ------------------------------------------------------------------
     def tree(self, path: str = "/", depth: int = 3) -> str:
         """Return a tree-style string representation of the filesystem."""
+        if depth < 0:
+            depth = 0
         lines = []
         self._tree_recursive(path, "", depth, lines)
         return "\n".join(lines)
@@ -231,26 +233,38 @@ class CastorFS:
                         lines: List[str]):
         if depth < 0:
             return
+
         node_name = path.split("/")[-1] or "/"
-        node = self.ns._walk(Namespace._split(path)) if path != "/" else self.ns._root
-        if node is None:
+        stat_info = self.ns.stat(path)
+        if stat_info is None:
             return
-        if node.is_dir:
+
+        is_dir = stat_info.get("type") == "dir"
+
+        if is_dir:
             lines.append(f"{prefix}{node_name}/")
-            children = sorted(node.children.keys())
+            children = self.ns.ls(path)
+            if not children:
+                return
+            children = sorted(children)
             for i, child in enumerate(children):
                 is_last = (i == len(children) - 1)
                 child_prefix = prefix + ("    " if is_last else "|   ")
                 connector = "`-- " if is_last else "|-- "
                 child_path = f"{path.rstrip('/')}/{child}"
-                child_node = node.children[child]
-                if child_node.is_dir:
+                child_stat = self.ns.stat(child_path)
+                if child_stat is None:
+                    continue
+                child_is_dir = child_stat.get("type") == "dir"
+                if child_is_dir:
                     lines.append(f"{prefix}{connector}{child}/")
                     self._tree_recursive(child_path, child_prefix, depth - 1,
                                          lines)
                 else:
-                    data_preview = repr(child_node.data)[:40]
+                    data = self.ns.read(child_path)
+                    data_preview = repr(data)[:40]
                     lines.append(f"{prefix}{connector}{child} = {data_preview}")
         else:
-            data_preview = repr(node.data)[:40]
+            data = self.ns.read(path)
+            data_preview = repr(data)[:40]
             lines.append(f"{prefix}{node_name} = {data_preview}")

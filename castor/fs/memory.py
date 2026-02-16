@@ -19,13 +19,17 @@ Procedural Memory (``/var/memory/procedural/``)
 Working Memory (``/tmp/context/``)
     See :mod:`castor.fs.context` for the sliding context window.
 
-All writes go through the safety layer so they're permission-gated
-and audited.
+MemoryStore operates directly on the underlying :class:`~castor.fs.namespace.Namespace`
+for performance and because the safety layer calls into memory for context
+building. Permission gating and auditing are enforced by
+:class:`~castor.fs.safety.SafetyLayer` when external code interacts with
+the virtual filesystem.
 """
 
 import time
 import json
 import logging
+import threading
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
@@ -56,6 +60,7 @@ class MemoryStore:
     def __init__(self, ns: Namespace, persist_dir: Optional[str] = None):
         self.ns = ns
         self.persist_dir = Path(persist_dir) if persist_dir else None
+        self._lock = threading.Lock()
         self._limits = {
             "episodic": DEFAULT_EPISODIC_LIMIT,
             "semantic": DEFAULT_SEMANTIC_LIMIT,
@@ -92,8 +97,9 @@ class MemoryStore:
             "outcome": outcome,
             "tags": tags or [],
         }
-        self.ns.append("/var/memory/episodic/events", episode)
-        self._enforce_limit("episodic")
+        with self._lock:
+            self.ns.append("/var/memory/episodic/events", episode)
+            self._enforce_limit("episodic")
         return episode
 
     def get_episodes(self, limit: int = 20, tag: Optional[str] = None) -> List[Dict]:
@@ -118,14 +124,15 @@ class MemoryStore:
             value:  The fact value.
             source: Where this fact came from.
         """
-        facts = self.ns.read("/var/memory/semantic/facts") or {}
-        facts[key] = {
-            "value": value,
-            "source": source,
-            "updated": time.time(),
-        }
-        self.ns.write("/var/memory/semantic/facts", facts)
-        self._enforce_limit("semantic")
+        with self._lock:
+            facts = self.ns.read("/var/memory/semantic/facts") or {}
+            facts[key] = {
+                "value": value,
+                "source": source,
+                "updated": time.time(),
+            }
+            self.ns.write("/var/memory/semantic/facts", facts)
+            self._enforce_limit("semantic")
 
     def recall_fact(self, key: str) -> Optional[Any]:
         """Retrieve a stored fact's value, or None."""
@@ -140,12 +147,13 @@ class MemoryStore:
 
     def forget_fact(self, key: str) -> bool:
         """Remove a fact from semantic memory."""
-        facts = self.ns.read("/var/memory/semantic/facts") or {}
-        if key in facts:
-            del facts[key]
-            self.ns.write("/var/memory/semantic/facts", facts)
-            return True
-        return False
+        with self._lock:
+            facts = self.ns.read("/var/memory/semantic/facts") or {}
+            if key in facts:
+                del facts[key]
+                self.ns.write("/var/memory/semantic/facts", facts)
+                return True
+            return False
 
     # ------------------------------------------------------------------
     # Procedural memory
@@ -159,15 +167,16 @@ class MemoryStore:
             steps:       List of action dicts to execute in order.
             description: Human-readable description.
         """
-        behaviors = self.ns.read("/var/memory/procedural/behaviors") or {}
-        behaviors[name] = {
-            "steps": steps,
-            "description": description,
-            "created": time.time(),
-            "executions": 0,
-        }
-        self.ns.write("/var/memory/procedural/behaviors", behaviors)
-        self._enforce_limit("procedural")
+        with self._lock:
+            behaviors = self.ns.read("/var/memory/procedural/behaviors") or {}
+            behaviors[name] = {
+                "steps": steps,
+                "description": description,
+                "created": time.time(),
+                "executions": 0,
+            }
+            self.ns.write("/var/memory/procedural/behaviors", behaviors)
+            self._enforce_limit("procedural")
 
     def get_behavior(self, name: str) -> Optional[Dict]:
         """Retrieve a stored behavior by name."""
@@ -181,20 +190,22 @@ class MemoryStore:
 
     def record_execution(self, name: str):
         """Increment the execution counter for a behavior."""
-        behaviors = self.ns.read("/var/memory/procedural/behaviors") or {}
-        if name in behaviors:
-            behaviors[name]["executions"] += 1
-            behaviors[name]["last_executed"] = time.time()
-            self.ns.write("/var/memory/procedural/behaviors", behaviors)
+        with self._lock:
+            behaviors = self.ns.read("/var/memory/procedural/behaviors") or {}
+            if name in behaviors:
+                behaviors[name]["executions"] += 1
+                behaviors[name]["last_executed"] = time.time()
+                self.ns.write("/var/memory/procedural/behaviors", behaviors)
 
     def remove_behavior(self, name: str) -> bool:
         """Remove a behavior from procedural memory."""
-        behaviors = self.ns.read("/var/memory/procedural/behaviors") or {}
-        if name in behaviors:
-            del behaviors[name]
-            self.ns.write("/var/memory/procedural/behaviors", behaviors)
-            return True
-        return False
+        with self._lock:
+            behaviors = self.ns.read("/var/memory/procedural/behaviors") or {}
+            if name in behaviors:
+                del behaviors[name]
+                self.ns.write("/var/memory/procedural/behaviors", behaviors)
+                return True
+            return False
 
     # ------------------------------------------------------------------
     # Limits & eviction
@@ -232,17 +243,24 @@ class MemoryStore:
         """Persist all memory tiers to the configured directory."""
         if not self.persist_dir:
             return
-        self.persist_dir.mkdir(parents=True, exist_ok=True)
-        for tier in ("episodic", "semantic", "procedural"):
-            data_path = f"/var/memory/{tier}"
-            children = self.ns.ls(data_path) or []
-            tier_data = {}
-            for child in children:
-                tier_data[child] = self.ns.read(f"{data_path}/{child}")
-            out_path = self.persist_dir / f"{tier}.json"
-            with open(out_path, "w") as f:
-                json.dump(tier_data, f, indent=2, default=str)
-        logger.info("Memory flushed to %s", self.persist_dir)
+        try:
+            self.persist_dir.mkdir(parents=True, exist_ok=True)
+            for tier in ("episodic", "semantic", "procedural"):
+                data_path = f"/var/memory/{tier}"
+                children = self.ns.ls(data_path) or []
+                tier_data = {}
+                for child in children:
+                    tier_data[child] = self.ns.read(f"{data_path}/{child}")
+                out_path = self.persist_dir / f"{tier}.json"
+                with open(out_path, "w") as f:
+                    json.dump(tier_data, f, indent=2, default=str)
+            logger.info("Memory flushed to %s", self.persist_dir)
+        except Exception as exc:
+            logger.warning(
+                "Failed to flush memory to %s: %s",
+                self.persist_dir,
+                exc,
+            )
 
     def _load_from_disk(self):
         """Load persisted memory from disk into the namespace."""
