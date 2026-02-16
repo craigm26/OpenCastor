@@ -1,14 +1,17 @@
 # The Brain (AI Providers)
+anthropic>=0.40.0
 google-generativeai>=0.4.0
 openai>=1.0.0
-anthropic>=0.19.0
 
 # The Body (Hardware)
-dynamixel-sdk>=3.7.31
 pyserial>=3.5
 
 # The Eyes (Vision)
 opencv-python-headless>=4.9.0
+
+# The Voice (TTS via USB speaker)
+gTTS>=2.4.0
+pygame>=2.5.0
 
 # The Law (Config & Validation)
 pyyaml>=6.0
@@ -24,16 +27,21 @@ httpx>=0.26.0
 # The Dashboard
 streamlit>=1.30.0
 SpeechRecognition>=3.10.0
-gTTS>=2.4.0
 
-# Demo & CLI
+# CLI & Demo
 rich>=13.0.0
 
-# --- Optional: Messaging Channels ---
-# Uncomment the channels you want to use, or install with:
-#   pip install opencastor[channels]
+# --- RPi RC Car Stack (recommended) ---
+# Install with: pip install -e ".[rpi]"
+# Or uncomment these if installing from requirements.txt on a Pi:
 #
-# twilio>=9.0.0              # WhatsApp
+# adafruit-circuitpython-pca9685>=3.4.0   # PCA9685 servo/ESC control
+# adafruit-circuitpython-motor>=3.4.0     # DC motor helpers
+# picamera2>=0.3.17                        # CSI camera (RPi only)
+# twilio>=9.0.0                            # WhatsApp via Twilio
+
+# --- Other Optional Channels ---
 # python-telegram-bot>=21.0  # Telegram
 # discord.py>=2.3.0          # Discord
 # slack-bolt>=1.18.0         # Slack
+# dynamixel-sdk>=3.7.31      # Dynamixel servos

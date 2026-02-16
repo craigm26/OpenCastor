@@ -1,0 +1,68 @@
+rcan_version: "1.0.0-alpha"
+
+metadata:
+  robot_name: "Castor_RC_Car"
+  robot_uuid: "00000000-0000-0000-0000-000000000002"
+  author: "OpenCastor"
+  license: "Apache-2.0"
+  tags:
+    - mobile
+    - rc_car
+    - raspberry_pi
+    - pca9685
+    - csi_camera
+    - whatsapp
+    - claude
+
+agent:
+  provider: "anthropic"
+  model: "claude-opus-4-6"
+  vision_enabled: true
+  latency_budget_ms: 3000
+  safety_stop: true
+
+physics:
+  type: "ackermann"
+  dof: 2
+  chassis:
+    wheelbase_mm: 260
+    track_width_mm: 180
+    wheel_radius_mm: 35
+
+drivers:
+  - id: "rc_car_driver"
+    protocol: "pca9685_rc"
+    port: "/dev/i2c-1"
+    address: "0x40"
+    frequency: 50
+    # Steering servo on PCA9685 channel 0
+    steering_channel: 0
+    steering_center_us: 1500
+    steering_range_us: 500
+    steering_invert: false
+    # ESC throttle on PCA9685 channel 1
+    throttle_channel: 1
+    throttle_neutral_us: 1500
+    throttle_max_us: 2000
+    throttle_min_us: 1000
+    throttle_deadzone: 0.05
+
+camera:
+  type: "csi"
+  resolution: [640, 480]
+  framerate: 30
+
+audio:
+  tts_enabled: true
+  engine: "gtts"
+  language: "en"
+  output_device: "default"
+
+channels:
+  whatsapp:
+    enabled: true
+
+network:
+  telemetry_stream: true
+  sim_to_real_sync: false
+  allow_remote_override: true

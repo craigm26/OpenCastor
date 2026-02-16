@@ -10,7 +10,13 @@ logger = logging.getLogger("OpenCastor.Anthropic")
 class AnthropicProvider(BaseProvider):
     """Anthropic Claude adapter. Optimized for complex reasoning and safety."""
 
+    # Default to the latest Claude model when none specified in config
+    DEFAULT_MODEL = "claude-opus-4-6"
+
     def __init__(self, config):
+        # Apply default model before super().__init__ reads it
+        if not config.get("model") or config.get("model") == "default-model":
+            config["model"] = self.DEFAULT_MODEL
         super().__init__(config)
         import anthropic
 
@@ -22,27 +28,28 @@ class AnthropicProvider(BaseProvider):
     def think(self, image_bytes: bytes, instruction: str) -> Thought:
         b64_image = base64.b64encode(image_bytes).decode("utf-8")
 
+        # Build message content -- include image only if it has real data
+        content = []
+        is_blank = image_bytes == b"\x00" * len(image_bytes)
+        if not is_blank and len(image_bytes) > 100:
+            content.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/jpeg",
+                        "data": b64_image,
+                    },
+                }
+            )
+        content.append({"type": "text", "text": instruction})
+
         try:
             response = self.client.messages.create(
                 model=self.model_name,
                 max_tokens=1024,
                 system=self.system_prompt,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "image/jpeg",
-                                    "data": b64_image,
-                                },
-                            },
-                            {"type": "text", "text": instruction},
-                        ],
-                    }
-                ],
+                messages=[{"role": "user", "content": content}],
             )
             text = response.content[0].text
             action = self._clean_json(text)
