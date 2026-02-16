@@ -70,7 +70,21 @@ def get_driver(config: dict):
 # Camera abstraction (CSI via picamera2, USB via OpenCV, or blank)
 # ---------------------------------------------------------------------------
 class Camera:
-    """Unified camera interface -- tries picamera2 first, falls back to OpenCV."""
+    """Unified camera interface with three operating modes:
+
+      1. CSI mode (picamera2) -- Raspberry Pi ribbon-cable camera.
+      2. USB mode (OpenCV) -- standard USB webcams.
+      3. Blank mode (returns a fixed-size, zero-filled placeholder frame when no
+         camera is available).
+
+    Config (``config["camera"]``):
+      - ``type`` (str): ``"auto"`` (default), ``"csi"``, or ``"usb"``.
+      - ``resolution`` (list[int, int]): Target frame size, default ``[640, 480]``.
+
+    When no camera is successfully initialized, :meth:`capture_jpeg` returns a
+    non-empty placeholder bytes buffer of zero bytes (not a valid JPEG), and
+    :meth:`close` is a safe no-op.
+    """
 
     def __init__(self, config: dict):
         self._picam = None
@@ -163,6 +177,7 @@ class Speaker:
         self.enabled = audio_cfg.get("tts_enabled", False)
         self.language = audio_cfg.get("language", "en")
         self._lock = threading.Lock()
+        self._mixer_ready = False
 
         if not self.enabled:
             return
@@ -172,6 +187,7 @@ class Speaker:
             import pygame
 
             pygame.mixer.init()
+            self._mixer_ready = True
             logger.info("TTS speaker online (gTTS + pygame)")
         except ImportError as exc:
             logger.warning(f"TTS disabled -- missing dependency: {exc}")
@@ -192,6 +208,15 @@ class Speaker:
                 from gtts import gTTS
                 import pygame
 
+                if not self._mixer_ready:
+                    try:
+                        pygame.mixer.init()
+                        self._mixer_ready = True
+                    except Exception as exc:
+                        logger.warning(f"TTS disabled -- audio init failed during playback: {exc}")
+                        self.enabled = False
+                        return
+
                 buf = io.BytesIO()
                 tts = gTTS(text=text[:200], lang=self.language)
                 tts.write_to_fp(buf)
@@ -203,28 +228,54 @@ class Speaker:
             except Exception as exc:
                 logger.debug(f"TTS error: {exc}")
 
+    def close(self):
+        """Stop playback and release the audio mixer."""
+        self.enabled = False
+        try:
+            import pygame
+
+            if self._mixer_ready:
+                pygame.mixer.music.stop()
+                pygame.mixer.quit()
+                self._mixer_ready = False
+        except Exception:
+            pass
+
 
 # ---------------------------------------------------------------------------
-# Shared globals for gateway access
+# Shared globals for gateway access (thread-safe)
 # ---------------------------------------------------------------------------
+_shared_lock = threading.Lock()
 _shared_camera: Camera = None
 _shared_speaker: Speaker = None
 
 
 def get_shared_camera() -> Camera:
-    return _shared_camera
+    with _shared_lock:
+        return _shared_camera
+
+
+def set_shared_camera(camera: Camera):
+    global _shared_camera
+    with _shared_lock:
+        _shared_camera = camera
 
 
 def get_shared_speaker() -> Speaker:
-    return _shared_speaker
+    with _shared_lock:
+        return _shared_speaker
+
+
+def set_shared_speaker(speaker: Speaker):
+    global _shared_speaker
+    with _shared_lock:
+        _shared_speaker = speaker
 
 
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 def main():
-    global _shared_camera, _shared_speaker
-
     parser = argparse.ArgumentParser(description="OpenCastor Runtime")
     parser.add_argument(
         "--config",
@@ -264,11 +315,11 @@ def main():
 
     # 4. INITIALIZE EYES (Camera -- CSI first, then USB, then blank)
     camera = Camera(config)
-    _shared_camera = camera
+    set_shared_camera(camera)
 
     # 5. INITIALIZE VOICE (TTS via USB speaker)
     speaker = Speaker(config)
-    _shared_speaker = speaker
+    set_shared_speaker(speaker)
 
     # 6. THE CONTROL LOOP
     latency_budget = config.get("agent", {}).get("latency_budget_ms", 3000)
@@ -316,9 +367,15 @@ def main():
     except KeyboardInterrupt:
         logger.info("User Interrupt. Shutting down...")
     finally:
+        # Clear shared references first so in-flight gateway requests
+        # cannot grab a closing/closed device.
+        set_shared_camera(None)
+        set_shared_speaker(None)
+
         if driver and not args.simulate:
             logger.info("Parking hardware...")
             driver.close()
+        speaker.close()
         camera.close()
         logger.info("OpenCastor Offline.")
 
