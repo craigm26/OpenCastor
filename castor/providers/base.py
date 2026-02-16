@@ -20,12 +20,16 @@ class BaseProvider(ABC):
         self.model_name = config.get("model", "default-model")
         self.system_prompt = self._build_system_prompt()
 
-    def _build_system_prompt(self) -> str:
+    def _build_system_prompt(self, memory_context: str = "") -> str:
         """
         Constructs the 'Robotics Persona'.
         Forces the LLM to act as a low-latency controller, not a chatbot.
+
+        If *memory_context* is provided (from the virtual filesystem's
+        memory and context stores), it is appended so the brain has
+        access to its own episodic/semantic/procedural memory.
         """
-        return (
+        base = (
             "You are the high-level controller for a robot running OpenCastor.\n"
             "Input: A video frame or telemetry data.\n"
             "Output: A STRICT JSON object defining the next physical action.\n\n"
@@ -36,6 +40,9 @@ class BaseProvider(ABC):
             '- {"type": "stop"}\n\n'
             "Do not output markdown. Do not explain yourself. Output ONLY valid JSON."
         )
+        if memory_context:
+            base += f"\n\n--- Robot Memory ---\n{memory_context}"
+        return base
 
     @abstractmethod
     def think(self, image_bytes: bytes, instruction: str) -> Thought:

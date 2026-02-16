@@ -1,7 +1,7 @@
 """
 OpenCastor Runtime - The main entry point.
 Ties Brain (Provider), Body (Driver), Eyes (Camera), Voice (TTS),
-and Law (RCAN Config) together.
+Law (RCAN Config), and the Virtual Filesystem together.
 """
 
 import io
@@ -14,6 +14,7 @@ import threading
 import yaml
 
 from castor.providers import get_provider
+from castor.fs import CastorFS
 
 logging.basicConfig(
     level=logging.INFO,
@@ -81,8 +82,9 @@ class Camera:
       - ``type`` (str): ``"auto"`` (default), ``"csi"``, or ``"usb"``.
       - ``resolution`` (list[int, int]): Target frame size, default ``[640, 480]``.
 
-    When no camera is successfully initialized, :meth:`capture_jpeg` returns a
-    non-empty placeholder bytes buffer of zero bytes (not a valid JPEG), and
+    In normal operation, :meth:`capture_jpeg` returns a JPEG-encoded frame.
+    When no camera is successfully initialized, :meth:`capture_jpeg` instead
+    returns a 1024-byte zero-filled placeholder buffer (not a valid JPEG), and
     :meth:`close` is a safe no-op.
     """
 
@@ -248,6 +250,7 @@ class Speaker:
 _shared_lock = threading.Lock()
 _shared_camera: Camera = None
 _shared_speaker: Speaker = None
+_shared_fs: CastorFS = None
 
 
 def get_shared_camera() -> Camera:
@@ -272,6 +275,17 @@ def set_shared_speaker(speaker: Speaker):
         _shared_speaker = speaker
 
 
+def get_shared_fs() -> CastorFS:
+    with _shared_lock:
+        return _shared_fs
+
+
+def set_shared_fs(fs: CastorFS):
+    global _shared_fs
+    with _shared_lock:
+        _shared_fs = fs
+
+
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
@@ -288,16 +302,29 @@ def main():
         action="store_true",
         help="Run without physical hardware",
     )
+    parser.add_argument(
+        "--memory-dir",
+        type=str,
+        default=None,
+        help="Directory for persistent memory (default: none)",
+    )
     args = parser.parse_args()
 
     # 1. BOOT SEQUENCE
     logger.info("Booting OpenCastor Runtime...")
     config = load_config(args.config)
 
+    # 1b. INITIALIZE VIRTUAL FILESYSTEM
+    fs = CastorFS(persist_dir=args.memory_dir)
+    fs.boot(config)
+    set_shared_fs(fs)
+    logger.info("Virtual Filesystem Online")
+
     # 2. INITIALIZE BRAIN
     try:
         brain = get_provider(config["agent"])
         logger.info(f"Brain Online: {config['agent'].get('model', 'unknown')}")
+        fs.proc.set_driver("none")
     except Exception as e:
         logger.critical(f"Failed to initialize Brain: {e}")
         raise SystemExit(1)
@@ -309,6 +336,8 @@ def main():
             driver = get_driver(config)
             if driver:
                 logger.info("Hardware Online")
+                protocol = config.get("drivers", [{}])[0].get("protocol", "unknown")
+                fs.proc.set_driver(protocol)
         except Exception as e:
             logger.error(f"Hardware Init Failed: {e}. Switching to Simulation.")
             args.simulate = True
@@ -316,10 +345,12 @@ def main():
     # 4. INITIALIZE EYES (Camera -- CSI first, then USB, then blank)
     camera = Camera(config)
     set_shared_camera(camera)
+    fs.proc.set_camera("online" if camera._picam or camera._cv_cap else "offline")
 
     # 5. INITIALIZE VOICE (TTS via USB speaker)
     speaker = Speaker(config)
     set_shared_speaker(speaker)
+    fs.proc.set_speaker("online" if speaker.enabled else "offline")
 
     # 6. THE CONTROL LOOP
     latency_budget = config.get("agent", {}).get("latency_budget_ms", 3000)
@@ -329,16 +360,35 @@ def main():
         while True:
             loop_start = time.time()
 
+            # Check emergency stop
+            if fs.is_estopped:
+                logger.warning("E-STOP active. Waiting...")
+                time.sleep(1.0)
+                continue
+
             # --- PHASE 1: OBSERVE ---
             frame_bytes = camera.capture_jpeg()
+            fs.ns.write("/dev/camera", {"t": time.time(), "size": len(frame_bytes)})
 
             # --- PHASE 2: ORIENT & DECIDE ---
+            # Build instruction with memory context
+            memory_ctx = fs.memory.build_context_summary()
+            context_ctx = fs.context.build_prompt_context()
             instruction = "Scan the area and report what you see."
+            if memory_ctx:
+                instruction = f"{instruction}\n\n{memory_ctx}"
+            if context_ctx:
+                instruction = f"{instruction}\n\n{context_ctx}"
+
             thought = brain.think(frame_bytes, instruction)
+            fs.proc.record_thought(thought.raw_text, thought.action)
 
             # --- PHASE 3: ACT ---
             if thought.action:
                 logger.info(f"Action: {thought.action}")
+
+                # Write action through the safety layer (clamping + rate limiting)
+                fs.write("/dev/motor", thought.action, principal="brain")
 
                 if driver and not args.simulate:
                     action_type = thought.action.get("type", "")
@@ -349,6 +399,17 @@ def main():
                     elif action_type == "stop":
                         driver.stop()
 
+                # Record episode in memory
+                fs.memory.record_episode(
+                    observation=instruction[:100],
+                    action=thought.action,
+                    outcome=thought.raw_text[:100],
+                )
+
+                # Push to context window
+                fs.context.push("brain", thought.raw_text[:200],
+                                metadata=thought.action)
+
                 # Speak the raw reasoning (truncated)
                 speaker.say(thought.raw_text[:120])
             else:
@@ -356,6 +417,7 @@ def main():
 
             # --- PHASE 4: TELEMETRY & LATENCY CHECK ---
             latency = (time.time() - loop_start) * 1000
+            fs.proc.record_loop_iteration(latency)
             if latency > latency_budget:
                 logger.warning(
                     f"Loop Lag: {latency:.2f}ms (Budget: {latency_budget}ms)"
@@ -375,8 +437,13 @@ def main():
         if driver and not args.simulate:
             logger.info("Parking hardware...")
             driver.close()
-        speaker.close()
+        with speaker._lock:
+            speaker.close()
         camera.close()
+
+        # Flush memory and shut down the virtual filesystem
+        fs.shutdown()
+        set_shared_fs(None)
         logger.info("OpenCastor Offline.")
 
 
