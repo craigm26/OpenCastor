@@ -27,6 +27,7 @@ from castor.auth import (
     list_available_providers,
     list_available_channels,
 )
+from castor.fs import CastorFS
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,6 +61,7 @@ class AppState:
     channels: Dict[str, object] = {}
     last_thought: Optional[dict] = None
     boot_time: float = time.time()
+    fs: Optional[CastorFS] = None
 
 
 state = AppState()
@@ -171,7 +173,105 @@ async def emergency_stop():
     """Emergency stop -- immediately halt all motors."""
     if state.driver:
         state.driver.stop()
+    if state.fs:
+        state.fs.estop(principal="api")
     return {"status": "stopped"}
+
+
+@app.post("/api/estop/clear", dependencies=[Depends(verify_token)])
+async def clear_estop():
+    """Clear emergency stop (requires API token)."""
+    if state.fs:
+        if state.fs.clear_estop(principal="root"):
+            return {"status": "cleared"}
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    return {"status": "no_fs"}
+
+
+# ---------------------------------------------------------------------------
+# Virtual Filesystem endpoints
+# ---------------------------------------------------------------------------
+class FSReadRequest(BaseModel):
+    path: str
+    principal: str = "api"
+
+
+class FSWriteRequest(BaseModel):
+    path: str
+    data: Any = None
+    principal: str = "api"
+
+
+@app.post("/api/fs/read", dependencies=[Depends(verify_token)])
+async def fs_read(req: FSReadRequest):
+    """Read a virtual filesystem path."""
+    if not state.fs:
+        raise HTTPException(status_code=503, detail="Filesystem not initialized")
+    data = state.fs.read(req.path, principal=req.principal)
+    if data is None and not state.fs.exists(req.path):
+        raise HTTPException(status_code=404, detail=f"Path not found: {req.path}")
+    return {"path": req.path, "data": data}
+
+
+@app.post("/api/fs/write", dependencies=[Depends(verify_token)])
+async def fs_write(req: FSWriteRequest):
+    """Write to a virtual filesystem path."""
+    if not state.fs:
+        raise HTTPException(status_code=503, detail="Filesystem not initialized")
+    ok = state.fs.write(req.path, req.data, principal=req.principal)
+    if not ok:
+        raise HTTPException(status_code=403, detail="Write denied")
+    return {"path": req.path, "status": "written"}
+
+
+@app.get("/api/fs/ls", dependencies=[Depends(verify_token)])
+async def fs_ls(path: str = "/", principal: str = "api"):
+    """List virtual filesystem directory."""
+    if not state.fs:
+        raise HTTPException(status_code=503, detail="Filesystem not initialized")
+    children = state.fs.ls(path, principal=principal)
+    if children is None:
+        raise HTTPException(status_code=404, detail=f"Not a directory: {path}")
+    return {"path": path, "children": children}
+
+
+@app.get("/api/fs/tree", dependencies=[Depends(verify_token)])
+async def fs_tree(path: str = "/", depth: int = 3):
+    """Get a tree view of the virtual filesystem."""
+    if not state.fs:
+        raise HTTPException(status_code=503, detail="Filesystem not initialized")
+    return {"tree": state.fs.tree(path, depth=depth)}
+
+
+@app.get("/api/fs/proc", dependencies=[Depends(verify_token)])
+async def fs_proc():
+    """Get /proc snapshot (runtime telemetry)."""
+    if not state.fs:
+        raise HTTPException(status_code=503, detail="Filesystem not initialized")
+    return state.fs.proc.snapshot()
+
+
+@app.get("/api/fs/memory", dependencies=[Depends(verify_token)])
+async def fs_memory(tier: str = "all", limit: int = 20):
+    """Query memory stores."""
+    if not state.fs:
+        raise HTTPException(status_code=503, detail="Filesystem not initialized")
+    result = {}
+    if tier in ("all", "episodic"):
+        result["episodic"] = state.fs.memory.get_episodes(limit=limit)
+    if tier in ("all", "semantic"):
+        result["semantic"] = state.fs.memory.list_facts()
+    if tier in ("all", "procedural"):
+        result["procedural"] = state.fs.memory.list_behaviors()
+    return result
+
+
+@app.get("/api/fs/permissions", dependencies=[Depends(verify_token)])
+async def fs_permissions():
+    """Dump the current permission table."""
+    if not state.fs:
+        raise HTTPException(status_code=503, detail="Filesystem not initialized")
+    return state.fs.perms.dump()
 
 
 # ---------------------------------------------------------------------------
@@ -248,9 +348,24 @@ def _handle_channel_message(channel_name: str, chat_id: str, text: str) -> str:
     if state.brain is None:
         return "Robot brain is not initialized. Please load a config first."
 
+    # Push the incoming message into the context window
+    if state.fs:
+        state.fs.context.push("user", text,
+                              metadata={"channel": channel_name, "chat_id": chat_id})
+
+    # Build instruction with memory context
+    instruction = text
+    if state.fs:
+        memory_ctx = state.fs.memory.build_context_summary()
+        context_ctx = state.fs.context.build_prompt_context()
+        if memory_ctx:
+            instruction = f"{instruction}\n\n{memory_ctx}"
+        if context_ctx:
+            instruction = f"{instruction}\n\n{context_ctx}"
+
     # Use live camera frame so the brain can see what's in front of it
     image_bytes = _capture_live_frame()
-    thought = state.brain.think(image_bytes, text)
+    thought = state.brain.think(image_bytes, instruction)
     state.last_thought = {
         "raw_text": thought.raw_text,
         "action": thought.action,
@@ -259,7 +374,22 @@ def _handle_channel_message(channel_name: str, chat_id: str, text: str) -> str:
     }
 
     if thought.action and state.driver:
+        # Write through safety layer before executing
+        if state.fs:
+            state.fs.write("/dev/motor", thought.action, principal="channel")
         _execute_action(thought.action)
+
+    # Record in memory and context
+    if state.fs:
+        state.fs.memory.record_episode(
+            observation=text[:100],
+            action=thought.action,
+            outcome=thought.raw_text[:100],
+            tags=[channel_name],
+        )
+        state.fs.context.push("brain", thought.raw_text[:200],
+                              metadata=thought.action)
+        state.fs.proc.record_thought(thought.raw_text, thought.action)
 
     # Speak the reply out loud
     _speak_reply(thought.raw_text)
@@ -307,6 +437,17 @@ async def on_startup():
                 f"Loaded config: {state.config['metadata']['robot_name']}"
             )
 
+            # Initialize virtual filesystem (use shared FS if runtime started it)
+            from castor.main import get_shared_fs, set_shared_fs
+
+            state.fs = get_shared_fs()
+            if state.fs is None:
+                memory_dir = os.getenv("OPENCASTOR_MEMORY_DIR")
+                state.fs = CastorFS(persist_dir=memory_dir)
+                state.fs.boot(state.config)
+                set_shared_fs(state.fs)
+            logger.info("Virtual Filesystem online")
+
             # Initialize brain
             from castor.providers import get_provider
 
@@ -323,9 +464,18 @@ async def on_startup():
 
             state.camera = Camera(state.config)
             set_shared_camera(state.camera)
+            if state.fs:
+                state.fs.proc.set_camera(
+                    "online" if state.camera._picam or state.camera._cv_cap
+                    else "offline"
+                )
 
             state.speaker = Speaker(state.config)
             set_shared_speaker(state.speaker)
+            if state.fs:
+                state.fs.proc.set_speaker(
+                    "online" if state.speaker.enabled else "offline"
+                )
         except Exception as e:
             logger.warning(f"Config load error (gateway still operational): {e}")
     else:
@@ -348,7 +498,7 @@ async def on_shutdown():
 
     # Clear shared references first so in-flight requests cannot grab
     # a closing/closed device.
-    from castor.main import set_shared_camera, set_shared_speaker
+    from castor.main import set_shared_camera, set_shared_speaker, set_shared_fs
 
     set_shared_camera(None)
     set_shared_speaker(None)
@@ -356,11 +506,19 @@ async def on_shutdown():
     if state.driver:
         state.driver.close()
     if hasattr(state, "speaker") and state.speaker:
-        state.speaker.close()
+        with state.speaker._lock:
+            state.speaker.close()
         state.speaker = None
     if hasattr(state, "camera") and state.camera:
         state.camera.close()
         state.camera = None
+
+    # Flush memory and shut down virtual filesystem
+    if state.fs:
+        state.fs.shutdown()
+        set_shared_fs(None)
+        state.fs = None
+
     logger.info("OpenCastor Gateway shut down")
 
 

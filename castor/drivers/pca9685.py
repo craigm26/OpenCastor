@@ -106,6 +106,12 @@ class PCA9685RCDriver(DriverBase):
             ("throttle_min_us", self.thr_min),
             ("steering_center_us", self.steer_center),
         ]:
+            if not isinstance(val, (int, float)):
+                logger.warning(
+                    f"{label}={val!r} is not numeric; "
+                    f"skipping range validation (will be coerced at runtime)"
+                )
+                continue
             if val < PULSE_MIN_US or val > PULSE_MAX_US:
                 logger.warning(
                     f"{label}={val} is outside safe range "
