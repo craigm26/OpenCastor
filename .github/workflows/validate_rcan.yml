@@ -1,0 +1,43 @@
+name: RCAN Spec Validation
+
+on:
+  push:
+    paths:
+      - '**.rcan.yaml'
+      - '**.rcan.yml'
+      - 'config/**'
+  pull_request:
+    paths:
+      - '**.rcan.yaml'
+      - '**.rcan.yml'
+      - 'config/**'
+
+jobs:
+  validate-spec:
+    runs-on: ubuntu-latest
+    name: "Validate Robot Configs"
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Checkout RCAN Spec
+        uses: actions/checkout@v4
+        with:
+          repository: continuonai/rcan-spec
+          path: rcan-spec
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: pip install jsonschema pyyaml
+
+      - name: Validate Configs against RCAN Schema
+        run: |
+          python3 .github/scripts/validate_rcan.py \
+            --schema rcan-spec/schema/rcan.schema.json \
+            --dir .

@@ -1,0 +1,43 @@
+rcan_version: "1.0.0-alpha"
+
+metadata:
+  robot_name: "Waveshare_AlphaBot"
+  robot_uuid: "00000000-0000-0000-0000-000000000002"
+  author: "OpenCastor Default"
+  license: "Apache-2.0"
+  tags:
+    - mobile
+    - rover
+    - waveshare
+    - alphabot
+
+agent:
+  provider: "google"
+  model: "gemini-1.5-flash"
+  vision_enabled: true
+  latency_budget_ms: 200
+  safety_stop: true
+
+physics:
+  type: "differential_drive"
+  dof: 2
+  chassis:
+    wheel_base_mm: 120
+    wheel_radius_mm: 30
+
+drivers:
+  - id: "motor_driver"
+    protocol: "pca9685_i2c"
+    port: "/dev/i2c-1"
+    address: "0x40"
+    frequency: 50
+    channels:
+      left_front: 0
+      left_rear: 1
+      right_front: 2
+      right_rear: 3
+
+network:
+  telemetry_stream: true
+  sim_to_real_sync: false
+  allow_remote_override: true

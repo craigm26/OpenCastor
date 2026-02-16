@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+.venv/
+.DS_Store
+*.egg-info/
+dist/
+build/
+*.rcan.yaml
+!config/**/*.rcan.yaml
+firebase-debug.log
+response.mp3
+node_modules/
+.idea/
+.vscode/

@@ -1,0 +1,10 @@
+__pycache__
+*.pyc
+.git
+.env
+venv/
+node_modules/
+docker-compose.yml
+Dockerfile
+*.md
+firebase-debug.log

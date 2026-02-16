@@ -1,0 +1,4 @@
+# Cloudflare Pages redirects
+/install    https://raw.githubusercontent.com/continuonai/OpenCastor/main/scripts/install.sh  302
+/github     https://github.com/continuonai/OpenCastor  302
+/spec       https://github.com/continuonai/rcan-spec  302

@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  opencastor:
+    build: .
+    image: opencastor:latest
+    container_name: opencastor_runtime
+
+    # Grant access to hardware (USB serial, camera)
+    privileged: true
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+      - /dev/video0:/dev/video0
+
+    volumes:
+      # Mount the local config file into the container
+      - ./robot.rcan.yaml:/app/robot.rcan.yaml
+
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DYNAMIXEL_PORT=/dev/ttyUSB0
+
+    restart: unless-stopped
