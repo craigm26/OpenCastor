@@ -5,7 +5,7 @@ FROM python:3.10-slim-bullseye
 
 LABEL maintainer="OpenCastor <maintainers@opencastor.com>"
 LABEL version="0.1.0-alpha"
-LABEL description="The Body for the Gemini Brain. Official Runtime."
+LABEL description="The Universal Runtime for Embodied AI."
 
 # System Dependencies
 RUN apt-get update && apt-get install -y \
@@ -31,4 +31,12 @@ RUN git clone https://github.com/continuonai/rcan-spec.git $RCAN_SPEC_PATH
 # Copy the OpenCastor Codebase
 COPY . .
 
-CMD ["python", "-m", "castor.main"]
+# Expose the API gateway port
+EXPOSE 8000
+
+# Health check -- hit the gateway's /health endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')" || exit 1
+
+# Default: run the API gateway (includes brain + channels)
+CMD ["python", "-m", "castor.api", "--host", "0.0.0.0", "--port", "8000"]

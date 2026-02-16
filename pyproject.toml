@@ -1,0 +1,95 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "opencastor"
+version = "0.1.0a1"
+description = "The Universal Runtime for Embodied AI"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [
+    { name = "OpenCastor Contributors", email = "maintainers@opencastor.com" },
+]
+keywords = ["robotics", "ai", "llm", "embodied-ai", "rcan"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Hardware",
+]
+
+dependencies = [
+    # The Brain (AI Providers)
+    "google-generativeai>=0.4.0",
+    "openai>=1.0.0",
+    "anthropic>=0.19.0",
+    # The Body (Hardware)
+    "dynamixel-sdk>=3.7.31",
+    "pyserial>=3.5",
+    # The Eyes (Vision)
+    "opencv-python-headless>=4.9.0",
+    # The Law (Config & Validation)
+    "pyyaml>=6.0",
+    "jsonschema>=4.20.0",
+    "requests>=2.31.0",
+    # The Gateway (API & Channels)
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "python-dotenv>=1.0.0",
+    "httpx>=0.26.0",
+    # The Dashboard
+    "streamlit>=1.30.0",
+    "SpeechRecognition>=3.10.0",
+    "gTTS>=2.4.0",
+    # CLI & Demo
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+whatsapp = ["twilio>=9.0.0"]
+telegram = ["python-telegram-bot>=21.0"]
+discord = ["discord.py>=2.3.0"]
+slack = ["slack-bolt>=1.18.0"]
+channels = [
+    "twilio>=9.0.0",
+    "python-telegram-bot>=21.0",
+    "discord.py>=2.3.0",
+    "slack-bolt>=1.18.0",
+]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.2.0",
+]
+
+[project.scripts]
+castor = "castor.cli:main"
+opencastor = "castor.cli:main"
+
+[project.urls]
+Homepage = "https://opencastor.com"
+Repository = "https://github.com/continuonai/OpenCastor"
+Documentation = "https://github.com/continuonai/OpenCastor#readme"
+"Bug Tracker" = "https://github.com/continuonai/OpenCastor/issues"
+
+[tool.setuptools.packages.find]
+include = ["castor*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
