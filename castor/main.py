@@ -70,7 +70,21 @@ def get_driver(config: dict):
 # Camera abstraction (CSI via picamera2, USB via OpenCV, or blank)
 # ---------------------------------------------------------------------------
 class Camera:
-    """Unified camera interface -- tries picamera2 first, falls back to OpenCV."""
+    """
+    Unified camera interface -- tries picamera2 first, falls back to OpenCV.
+
+    Selects a camera backend based on configuration and available libraries:
+      1. CSI camera via ``picamera2`` (Raspberry Pi ribbon cable cameras).
+      2. USB camera via OpenCV (``cv2.VideoCapture``).
+      3. Blank mode (returns zero-byte placeholder frames when no camera is available).
+
+    Config (``config["camera"]``):
+      - ``type`` (str): ``"auto"`` (default), ``"csi"``, or ``"usb"``.
+      - ``resolution`` (list[int, int]): Target frame size, default ``[640, 480]``.
+
+    When no camera is successfully initialized, :meth:`capture_jpeg` returns a
+    placeholder bytes buffer (not a valid JPEG) and :meth:`close` is a safe no-op.
+    """
 
     def __init__(self, config: dict):
         self._picam = None
@@ -115,8 +129,11 @@ class Camera:
                 else:
                     self._cv_cap.release()
                     self._cv_cap = None
-            except ImportError:
-                pass
+            except ImportError as exc:
+                if cam_type == "usb":
+                    logger.error(f"USB camera requested but OpenCV is not available: {exc}")
+                else:
+                    logger.debug(f"OpenCV not available for USB camera fallback: {exc}")
 
         logger.warning("No camera detected. Using blank frames.")
 
@@ -156,7 +173,23 @@ class Camera:
 # TTS (text-to-speech via USB speaker)
 # ---------------------------------------------------------------------------
 class Speaker:
-    """Speaks the robot's thoughts aloud using gTTS + pygame."""
+    """
+    Speaks the robot's thoughts aloud using gTTS + pygame.
+
+    Config (``config["audio"]``):
+      - ``tts_enabled`` (bool): Enable/disable TTS (default ``False``).
+      - ``language`` (str): gTTS language code (default ``"en"``).
+      - ``output_device`` (str): Audio output device hint (currently informational).
+
+    Threading model:
+      :meth:`say` is non-blocking -- it spawns a daemon thread for each utterance.
+      A :class:`threading.Lock` serializes playback so concurrent calls queue up
+      rather than overlapping.  Text is truncated to 200 characters inside
+      :meth:`_speak` to keep audio latency reasonable.
+
+    When TTS dependencies are missing or audio initialization fails, the speaker
+    silently disables itself and all :meth:`say` calls become no-ops.
+    """
 
     def __init__(self, config: dict):
         audio_cfg = config.get("audio", {})
@@ -167,11 +200,13 @@ class Speaker:
         if not self.enabled:
             return
 
+        self._mixer_ready = False
         try:
             from gtts import gTTS  # noqa: F401
             import pygame
 
             pygame.mixer.init()
+            self._mixer_ready = True
             logger.info("TTS speaker online (gTTS + pygame)")
         except ImportError as exc:
             logger.warning(f"TTS disabled -- missing dependency: {exc}")
@@ -192,6 +227,13 @@ class Speaker:
                 from gtts import gTTS
                 import pygame
 
+                if not self._mixer_ready:
+                    try:
+                        pygame.mixer.init()
+                        self._mixer_ready = True
+                    except Exception:
+                        return
+
                 buf = io.BytesIO()
                 tts = gTTS(text=text[:200], lang=self.language)
                 tts.write_to_fp(buf)
@@ -209,14 +251,30 @@ class Speaker:
 # ---------------------------------------------------------------------------
 _shared_camera: Camera = None
 _shared_speaker: Speaker = None
+_shared_camera_lock = threading.Lock()
+_shared_speaker_lock = threading.Lock()
 
 
 def get_shared_camera() -> Camera:
-    return _shared_camera
+    with _shared_camera_lock:
+        return _shared_camera
+
+
+def set_shared_camera(camera: Camera):
+    global _shared_camera
+    with _shared_camera_lock:
+        _shared_camera = camera
 
 
 def get_shared_speaker() -> Speaker:
-    return _shared_speaker
+    with _shared_speaker_lock:
+        return _shared_speaker
+
+
+def set_shared_speaker(speaker: Speaker):
+    global _shared_speaker
+    with _shared_speaker_lock:
+        _shared_speaker = speaker
 
 
 # ---------------------------------------------------------------------------
@@ -264,14 +322,14 @@ def main():
 
     # 4. INITIALIZE EYES (Camera -- CSI first, then USB, then blank)
     camera = Camera(config)
-    _shared_camera = camera
+    set_shared_camera(camera)
 
     # 5. INITIALIZE VOICE (TTS via USB speaker)
     speaker = Speaker(config)
-    _shared_speaker = speaker
+    set_shared_speaker(speaker)
 
     # 6. THE CONTROL LOOP
-    latency_budget = config.get("agent", {}).get("latency_budget_ms", 3000)
+    latency_budget = config.get("agent", {}).get("latency_budget_ms", 200)
     logger.info("Entering Perception-Action Loop. Press Ctrl+C to stop.")
 
     try:
@@ -298,8 +356,8 @@ def main():
                     elif action_type == "stop":
                         driver.stop()
 
-                # Speak the raw reasoning (truncated)
-                speaker.say(thought.raw_text[:120])
+                # Speak the raw reasoning
+                speaker.say(thought.raw_text)
             else:
                 logger.warning("Brain produced no valid action.")
 

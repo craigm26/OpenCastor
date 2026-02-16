@@ -14,7 +14,8 @@ class AnthropicProvider(BaseProvider):
     DEFAULT_MODEL = "claude-opus-4-6"
 
     def __init__(self, config):
-        # Apply default model before super().__init__ reads it
+        # Apply default model without mutating the caller's config dict
+        config = dict(config)
         if not config.get("model") or config.get("model") == "default-model":
             config["model"] = self.DEFAULT_MODEL
         super().__init__(config)
@@ -30,7 +31,7 @@ class AnthropicProvider(BaseProvider):
 
         # Build message content -- include image only if it has real data
         content = []
-        is_blank = image_bytes == b"\x00" * len(image_bytes)
+        is_blank = len(image_bytes) == 0 or all(b == 0 for b in image_bytes)
         if not is_blank and len(image_bytes) > 100:
             content.append(
                 {

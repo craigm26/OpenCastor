@@ -55,8 +55,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# The recommended stack: RPi + PCA9685 RC car + CSI camera + WhatsApp + Claude
+# RPi hardware: PCA9685 + CSI camera
 rpi = [
+    "adafruit-circuitpython-pca9685>=3.4.0",
+    "adafruit-circuitpython-motor>=3.4.0",
+    "picamera2>=0.3.17",
+]
+# Recommended RPi RC Car stack: hardware + WhatsApp
+rpi_rc_car = [
     "adafruit-circuitpython-pca9685>=3.4.0",
     "adafruit-circuitpython-motor>=3.4.0",
     "picamera2>=0.3.17",

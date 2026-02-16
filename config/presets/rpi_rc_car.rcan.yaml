@@ -18,7 +18,7 @@ agent:
   provider: "anthropic"
   model: "claude-opus-4-6"
   vision_enabled: true
-  latency_budget_ms: 3000
+  latency_budget_ms: 300
   safety_stop: true
 
 physics:

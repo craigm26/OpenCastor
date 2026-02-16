@@ -74,6 +74,10 @@ class PCA9685RCDriver(DriverBase):
       - throttle_deadzone  (default 0.05)
     """
 
+    # Safe pulse width limits (microseconds) to protect servos and ESCs
+    PULSE_MIN_US = 500
+    PULSE_MAX_US = 2500
+
     def __init__(self, config: Dict):
         self.config = config
 
@@ -90,6 +94,11 @@ class PCA9685RCDriver(DriverBase):
         self.thr_deadzone = config.get("throttle_deadzone", 0.05)
 
         self.freq = config.get("frequency", 50)
+
+        # Validate channel numbers (PCA9685 has 16 channels: 0-15)
+        for name, ch in (("steering_channel", self.steer_ch), ("throttle_channel", self.thr_ch)):
+            if not isinstance(ch, int) or ch < 0 or ch > 15:
+                raise ValueError(f"{name} must be an integer between 0 and 15, got {ch!r}")
 
         if not HAS_PCA9685:
             logger.warning("PCA9685 unavailable -- RC driver in mock mode")
@@ -109,9 +118,12 @@ class PCA9685RCDriver(DriverBase):
             self.pca = None
             return
 
-        # Arm the ESC: send neutral throttle so the ESC recognises the signal
+        # Arm the ESC: send neutral throttle so the ESC recognizes the signal
+        import time
+
         self._set_pulse(self.thr_ch, self.thr_neutral)
         self._set_pulse(self.steer_ch, self.steer_center)
+        time.sleep(1.0)  # ESCs typically need ~1s at neutral before accepting commands
         logger.info("ESC armed (neutral throttle sent)")
 
     def move(self, linear_x: float = 0.0, angular_z: float = 0.0):
@@ -140,6 +152,10 @@ class PCA9685RCDriver(DriverBase):
         if self.pca is None:
             logger.info(f"[MOCK RC] throttle={thr_us:.0f}us  steer={steer_us:.0f}us")
             return
+
+        # Clamp to safe pulse width limits
+        thr_us = max(self.PULSE_MIN_US, min(self.PULSE_MAX_US, thr_us))
+        steer_us = max(self.PULSE_MIN_US, min(self.PULSE_MAX_US, steer_us))
 
         self._set_pulse(self.thr_ch, thr_us)
         self._set_pulse(self.steer_ch, steer_us)

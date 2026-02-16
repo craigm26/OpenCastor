@@ -174,7 +174,7 @@ def choose_hardware():
     print("  [5] Freenove 4WD Car ($49)")
     print("  [6] SunFounder PiCar-X ($60)")
 
-    choice = input_default("Selection", "2")
+    choice = input_default("Selection", "1")
     return PRESETS.get(choice)
 
 
