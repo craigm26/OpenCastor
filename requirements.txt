@@ -1,19 +1,25 @@
-# The Brain
+# The Brain (AI Providers)
 google-generativeai>=0.4.0
 openai>=1.0.0
 anthropic>=0.19.0
 
-# The Body
+# The Body (Hardware)
 dynamixel-sdk>=3.7.31
 pyserial>=3.5
 
-# The Eyes
+# The Eyes (Vision)
 opencv-python-headless>=4.9.0
 
 # The Law (Config & Validation)
 pyyaml>=6.0
 jsonschema>=4.20.0
 requests>=2.31.0
+
+# The Gateway (API & Channels)
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-dotenv>=1.0.0
+httpx>=0.26.0
 
 # The Dashboard
 streamlit>=1.30.0
@@ -22,3 +28,12 @@ gTTS>=2.4.0
 
 # Demo & CLI
 rich>=13.0.0
+
+# --- Optional: Messaging Channels ---
+# Uncomment the channels you want to use, or install with:
+#   pip install opencastor[channels]
+#
+# twilio>=9.0.0              # WhatsApp
+# python-telegram-bot>=21.0  # Telegram
+# discord.py>=2.3.0          # Discord
+# slack-bolt>=1.18.0         # Slack

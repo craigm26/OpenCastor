@@ -1,8 +1,10 @@
 """
 OpenCastor Setup Wizard.
-Interactively generates an RCAN-compliant configuration file.
+Interactively generates an RCAN-compliant configuration file,
+collects API keys, and configures messaging channels.
 """
 
+import os
 import sys
 import uuid
 import argparse
@@ -34,10 +36,10 @@ BANNER = f"""{Colors.BLUE}
 {Colors.ENDC}"""
 
 PROVIDERS = {
-    "1": {"provider": "google", "model": "gemini-1.5-flash", "label": "Google Gemini"},
-    "2": {"provider": "openai", "model": "gpt-4o", "label": "OpenAI GPT-4o"},
-    "3": {"provider": "anthropic", "model": "claude-3-5-sonnet", "label": "Anthropic Claude 3.5"},
-    "4": {"provider": "ollama", "model": "llava:13b", "label": "Local Llama (Ollama)"},
+    "1": {"provider": "google", "model": "gemini-1.5-flash", "label": "Google Gemini", "env_var": "GOOGLE_API_KEY"},
+    "2": {"provider": "openai", "model": "gpt-4o", "label": "OpenAI GPT-4o", "env_var": "OPENAI_API_KEY"},
+    "3": {"provider": "anthropic", "model": "claude-3-5-sonnet", "label": "Anthropic Claude 3.5", "env_var": "ANTHROPIC_API_KEY"},
+    "4": {"provider": "ollama", "model": "llava:13b", "label": "Local Llama (Ollama)", "env_var": None},
 }
 
 PRESETS = {
@@ -48,10 +50,39 @@ PRESETS = {
     "5": "sunfounder_picar",
 }
 
+CHANNELS = {
+    "1": {
+        "name": "whatsapp",
+        "label": "WhatsApp (via Twilio)",
+        "env_vars": ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_WHATSAPP_NUMBER"],
+    },
+    "2": {
+        "name": "telegram",
+        "label": "Telegram Bot",
+        "env_vars": ["TELEGRAM_BOT_TOKEN"],
+    },
+    "3": {
+        "name": "discord",
+        "label": "Discord Bot",
+        "env_vars": ["DISCORD_BOT_TOKEN"],
+    },
+    "4": {
+        "name": "slack",
+        "label": "Slack Bot",
+        "env_vars": ["SLACK_BOT_TOKEN", "SLACK_APP_TOKEN"],
+    },
+}
+
 
 def input_default(prompt, default):
     response = input(f"{prompt} [{default}]: ")
     return response if response else default
+
+
+def input_secret(prompt):
+    """Read a secret value (API key / token). Masks nothing but labels it clearly."""
+    value = input(f"  {prompt}: ").strip()
+    return value if value else None
 
 
 def choose_provider():
@@ -63,6 +94,73 @@ def choose_provider():
 
     choice = input_default("Selection", "1")
     return PROVIDERS.get(choice, PROVIDERS["1"])
+
+
+def collect_api_key(agent_config):
+    """Prompt the user for their provider API key and write it to .env."""
+    env_var = agent_config.get("env_var")
+    if not env_var:
+        return  # Ollama doesn't need a key
+
+    # Check if already set in environment
+    if os.getenv(env_var):
+        print(f"\n  {Colors.GREEN}[OK]{Colors.ENDC} {env_var} already set in environment.")
+        return
+
+    print(f"\n{Colors.GREEN}--- API KEY ---{Colors.ENDC}")
+    print(f"  Your {agent_config['label']} API key is needed.")
+    print(f"  It will be saved to your local {Colors.BOLD}.env{Colors.ENDC} file (never committed to git).")
+
+    key = input_secret(f"{env_var}")
+    if key:
+        _write_env_var(env_var, key)
+        print(f"  {Colors.GREEN}[OK]{Colors.ENDC} Saved to .env")
+    else:
+        print(f"  {Colors.WARNING}Skipped.{Colors.ENDC} Set {env_var} in .env before running.")
+
+
+def choose_channels():
+    """Ask which messaging channels to enable."""
+    print(f"\n{Colors.GREEN}--- MESSAGING CHANNELS ---{Colors.ENDC}")
+    print("Connect your robot to messaging platforms (optional).")
+    print("You can enable multiple channels. Enter numbers separated by commas.")
+    print(f"  [0] None (skip)")
+    for key, val in CHANNELS.items():
+        print(f"  [{key}] {val['label']}")
+
+    choice = input_default("Selection (e.g. 1,2)", "0").strip()
+    if choice == "0":
+        return []
+
+    selected = []
+    for c in choice.split(","):
+        c = c.strip()
+        if c in CHANNELS:
+            selected.append(CHANNELS[c])
+    return selected
+
+
+def collect_channel_credentials(channels):
+    """Prompt for credentials for each selected channel."""
+    if not channels:
+        return
+
+    print(f"\n{Colors.GREEN}--- CHANNEL CREDENTIALS ---{Colors.ENDC}")
+    print(f"  Credentials will be saved to your local {Colors.BOLD}.env{Colors.ENDC} file.\n")
+
+    for ch in channels:
+        print(f"  {Colors.BOLD}{ch['label']}{Colors.ENDC}")
+        for env_var in ch["env_vars"]:
+            if os.getenv(env_var):
+                print(f"    {Colors.GREEN}[OK]{Colors.ENDC} {env_var} already set")
+                continue
+            value = input_secret(env_var)
+            if value:
+                _write_env_var(env_var, value)
+                print(f"    {Colors.GREEN}[OK]{Colors.ENDC} Saved")
+            else:
+                print(f"    {Colors.WARNING}Skipped{Colors.ENDC}")
+        print()
 
 
 def choose_hardware():
@@ -214,6 +312,30 @@ def generate_custom_config(robot_name, agent_config, links, drivers):
     }
 
 
+def _write_env_var(key: str, value: str):
+    """Append or update a variable in the local .env file."""
+    env_path = ".env"
+    lines = []
+
+    if os.path.exists(env_path):
+        with open(env_path) as f:
+            lines = f.readlines()
+
+    # Check if the key already exists; if so, update it
+    found = False
+    for i, line in enumerate(lines):
+        if line.startswith(f"{key}="):
+            lines[i] = f"{key}={value}\n"
+            found = True
+            break
+
+    if not found:
+        lines.append(f"{key}={value}\n")
+
+    with open(env_path, "w") as f:
+        f.writelines(lines)
+
+
 def main():
     parser = argparse.ArgumentParser(description="OpenCastor Setup Wizard")
     parser.add_argument(
@@ -229,27 +351,53 @@ def main():
         f"Generating spec compliant with {Colors.BOLD}github.com/continuonai/rcan-spec{Colors.ENDC}\n"
     )
 
+    # --- Step 1: Project Name ---
     robot_name = input_default("Project Name", "MyRobot")
+
+    # --- Step 2: Choose AI Provider ---
     agent_config = choose_provider()
+
+    # --- Step 3: Collect API Key ---
+    collect_api_key(agent_config)
+
+    # --- Step 4: Choose Hardware ---
     preset = choose_hardware()
 
     if preset is not None:
-        # Use a preset
         rcan_data = generate_preset_config(preset, robot_name, agent_config)
     else:
-        # Custom hardware
         links = get_kinematics()
         drivers = get_drivers(links)
         rcan_data = generate_custom_config(robot_name, agent_config, links, drivers)
 
+    # --- Step 5: Messaging Channels ---
+    selected_channels = choose_channels()
+    collect_channel_credentials(selected_channels)
+
+    # --- Step 6: Generate Config ---
     filename = f"{robot_name.lower().replace(' ', '_')}.rcan.yaml"
 
     with open(filename, "w") as f:
         yaml.dump(rcan_data, f, sort_keys=False, default_flow_style=False)
 
-    print(f"\n{Colors.BOLD}Success!{Colors.ENDC} Generated configuration file: {Colors.BLUE}{filename}{Colors.ENDC}")
-    print(f"Validate against the spec at: https://github.com/continuonai/rcan-spec")
-    print(f"\nNext: Run 'python -m castor.main --config {filename}' to boot the brain.")
+    # --- Step 7: Summary ---
+    print(f"\n{Colors.BOLD}{'=' * 50}{Colors.ENDC}")
+    print(f"{Colors.GREEN}Setup Complete!{Colors.ENDC}\n")
+    print(f"  Config file:  {Colors.BLUE}{filename}{Colors.ENDC}")
+    print(f"  AI Provider:  {agent_config['label']}")
+    print(f"  Model:        {agent_config['model']}")
+
+    if selected_channels:
+        names = ", ".join(ch["label"] for ch in selected_channels)
+        print(f"  Channels:     {names}")
+
+    print(f"\n{Colors.BOLD}Next Steps:{Colors.ENDC}")
+    print(f"  1. Run the robot:      {Colors.BLUE}castor run --config {filename}{Colors.ENDC}")
+    print(f"  2. Start the gateway:  {Colors.BLUE}castor gateway --config {filename}{Colors.ENDC}")
+    print(f"  3. Open the dashboard: {Colors.BLUE}castor dashboard{Colors.ENDC}")
+    print(f"  4. Check status:       {Colors.BLUE}castor status{Colors.ENDC}")
+    print(f"\n  Or with Docker:        {Colors.BLUE}docker compose up{Colors.ENDC}")
+    print(f"\n  Validate config:       https://github.com/continuonai/rcan-spec")
 
 
 if __name__ == "__main__":
