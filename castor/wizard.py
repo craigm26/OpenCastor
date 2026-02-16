@@ -36,18 +36,19 @@ BANNER = f"""{Colors.BLUE}
 {Colors.ENDC}"""
 
 PROVIDERS = {
-    "1": {"provider": "google", "model": "gemini-1.5-flash", "label": "Google Gemini", "env_var": "GOOGLE_API_KEY"},
-    "2": {"provider": "openai", "model": "gpt-4o", "label": "OpenAI GPT-4o", "env_var": "OPENAI_API_KEY"},
-    "3": {"provider": "anthropic", "model": "claude-3-5-sonnet", "label": "Anthropic Claude 3.5", "env_var": "ANTHROPIC_API_KEY"},
+    "1": {"provider": "anthropic", "model": "claude-opus-4-6", "label": "Anthropic Claude Opus 4.6", "env_var": "ANTHROPIC_API_KEY"},
+    "2": {"provider": "google", "model": "gemini-2.0-flash", "label": "Google Gemini", "env_var": "GOOGLE_API_KEY"},
+    "3": {"provider": "openai", "model": "gpt-4o", "label": "OpenAI GPT-4o", "env_var": "OPENAI_API_KEY"},
     "4": {"provider": "ollama", "model": "llava:13b", "label": "Local Llama (Ollama)", "env_var": None},
 }
 
 PRESETS = {
     "1": None,  # Custom
-    "2": "waveshare_alpha",
-    "3": "adeept_generic",
-    "4": "freenove_4wd",
-    "5": "sunfounder_picar",
+    "2": "rpi_rc_car",
+    "3": "waveshare_alpha",
+    "4": "adeept_generic",
+    "5": "freenove_4wd",
+    "6": "sunfounder_picar",
 }
 
 CHANNELS = {
@@ -167,12 +168,13 @@ def choose_hardware():
     print(f"\n{Colors.GREEN}--- HARDWARE KIT ---{Colors.ENDC}")
     print("Select your hardware kit:")
     print("  [1] Custom (Advanced)")
-    print("  [2] Waveshare AlphaBot ($45)")
-    print("  [3] Adeept RaspTank ($55)")
-    print("  [4] Freenove 4WD Car ($49)")
-    print("  [5] SunFounder PiCar-X ($60)")
+    print("  [2] RPi RC Car + PCA9685 + CSI Camera (Recommended)")
+    print("  [3] Waveshare AlphaBot ($45)")
+    print("  [4] Adeept RaspTank ($55)")
+    print("  [5] Freenove 4WD Car ($49)")
+    print("  [6] SunFounder PiCar-X ($60)")
 
-    choice = input_default("Selection", "1")
+    choice = input_default("Selection", "2")
     return PRESETS.get(choice)
 
 
@@ -227,7 +229,23 @@ def get_drivers(links):
 
 
 def generate_preset_config(preset_name, robot_name, agent_config):
-    """Generate config for a known Amazon kit preset."""
+    """Generate config for a known hardware preset."""
+    # Try to load from a preset RCAN file
+    preset_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "config", "presets", f"{preset_name}.rcan.yaml"
+    )
+    if os.path.exists(preset_path):
+        with open(preset_path) as f:
+            config = yaml.safe_load(f)
+        # Override name, UUID, and agent with wizard selections
+        config["metadata"]["robot_name"] = robot_name
+        config["metadata"]["robot_uuid"] = str(uuid.uuid4())
+        config["metadata"]["created_at"] = datetime.now(timezone.utc).isoformat()
+        config["agent"]["provider"] = agent_config["provider"]
+        config["agent"]["model"] = agent_config["model"]
+        return config
+
+    # Fallback: generic differential-drive preset
     return {
         "rcan_version": "1.0.0-alpha",
         "metadata": {

@@ -131,13 +131,13 @@ async def send_command(cmd: CommandRequest):
     if state.brain is None:
         raise HTTPException(status_code=503, detail="Brain not initialized")
 
-    # Use provided image or a blank frame
+    # Use provided image, live camera frame, or blank
     if cmd.image_base64:
         import base64
 
         image_bytes = base64.b64decode(cmd.image_base64)
     else:
-        image_bytes = b"\x00" * 1024
+        image_bytes = _capture_live_frame()
 
     thought = state.brain.think(image_bytes, cmd.instruction)
     state.last_thought = {
@@ -218,12 +218,39 @@ def _execute_action(action: dict):
         logger.info(f"Wait: {action.get('duration_ms', 0)}ms")
 
 
+def _capture_live_frame() -> bytes:
+    """Grab a frame from the shared camera if available, else blank."""
+    try:
+        from castor.main import get_shared_camera
+
+        camera = get_shared_camera()
+        if camera is not None:
+            return camera.capture_jpeg()
+    except Exception:
+        pass
+    return b"\x00" * 1024
+
+
+def _speak_reply(text: str):
+    """Speak via USB speaker if available."""
+    try:
+        from castor.main import get_shared_speaker
+
+        speaker = get_shared_speaker()
+        if speaker is not None:
+            speaker.say(text[:120])
+    except Exception:
+        pass
+
+
 def _handle_channel_message(channel_name: str, chat_id: str, text: str) -> str:
     """Callback invoked by channels when a message arrives."""
     if state.brain is None:
         return "Robot brain is not initialized. Please load a config first."
 
-    thought = state.brain.think(b"\x00" * 1024, text)
+    # Use live camera frame so the brain can see what's in front of it
+    image_bytes = _capture_live_frame()
+    thought = state.brain.think(image_bytes, text)
     state.last_thought = {
         "raw_text": thought.raw_text,
         "action": thought.action,
@@ -233,6 +260,9 @@ def _handle_channel_message(channel_name: str, chat_id: str, text: str) -> str:
 
     if thought.action and state.driver:
         _execute_action(thought.action)
+
+    # Speak the reply out loud
+    _speak_reply(thought.raw_text)
 
     return thought.raw_text
 
@@ -284,9 +314,15 @@ async def on_startup():
             logger.info(f"Brain online: {state.config['agent'].get('model')}")
 
             # Initialize driver (simulation-safe)
-            from castor.main import get_driver
+            from castor.main import get_driver, Camera, Speaker
 
             state.driver = get_driver(state.config)
+
+            # Initialize camera + speaker for live frames and TTS
+            import castor.main as _main_mod
+
+            _main_mod._shared_camera = Camera(state.config)
+            _main_mod._shared_speaker = Speaker(state.config)
         except Exception as e:
             logger.warning(f"Config load error (gateway still operational): {e}")
     else:
