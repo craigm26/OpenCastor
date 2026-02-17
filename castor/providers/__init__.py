@@ -1,6 +1,7 @@
 from .anthropic_provider import AnthropicProvider
 from .google_provider import GoogleProvider
 from .huggingface_provider import HuggingFaceProvider
+from .ollama_provider import OllamaProvider
 from .openai_provider import OpenAIProvider
 
 __all__ = [
@@ -8,6 +9,7 @@ __all__ = [
     "AnthropicProvider",
     "GoogleProvider",
     "HuggingFaceProvider",
+    "OllamaProvider",
     "OpenAIProvider",
 ]
 
@@ -28,6 +30,6 @@ def get_provider(config: dict):
     elif provider_name in ("huggingface", "hf"):
         return HuggingFaceProvider(config)
     elif provider_name == "ollama":
-        raise NotImplementedError("Ollama support coming soon!")
+        return OllamaProvider(config)
     else:
         raise ValueError(f"Unknown AI provider: {provider_name}")

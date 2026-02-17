@@ -806,9 +806,11 @@ def cmd_login(args) -> None:
 
     if service in ("huggingface", "hf"):
         _login_huggingface(args)
+    elif service == "ollama":
+        _login_ollama(args)
     else:
         print(f"  Unknown service: {service}")
-        print("  Supported: huggingface (hf)")
+        print("  Supported: huggingface (hf), ollama")
 
 
 def _login_huggingface(args) -> None:
@@ -877,6 +879,62 @@ def _update_env_var(env_path: str, key: str, value: str) -> None:
     with open(env_path, "w") as f:
         f.writelines(lines)
     print(f"     Also saved to: {env_path}")
+
+
+def _login_ollama(args) -> None:
+    """Handle Ollama connection setup and model discovery."""
+    from castor.providers.ollama_provider import (
+        DEFAULT_HOST,
+        OllamaConnectionError,
+        OllamaProvider,
+    )
+
+    host = args.token or os.getenv("OLLAMA_HOST") or DEFAULT_HOST
+
+    print()
+    print("  🦙 Ollama Setup")
+    print("  ───────────────")
+    print(f"  Host: {host}")
+    print()
+
+    # Test connection
+    try:
+        provider = OllamaProvider({"provider": "ollama", "ollama_host": host})
+        provider._ping()
+        print("  ✅ Connected to Ollama")
+    except OllamaConnectionError as exc:
+        print(f"  ❌ {exc}")
+        print()
+        print("  To install Ollama: https://ollama.ai/download")
+        print("  To start Ollama:   ollama serve")
+        return
+
+    # Save host to .env if non-default
+    if host != DEFAULT_HOST:
+        env_path = os.path.join(os.getcwd(), ".env")
+        _update_env_var(env_path, "OLLAMA_HOST", host)
+
+    # List models
+    if args.list_models:
+        try:
+            models = provider.list_models()
+            if models:
+                print(f"\n  📦 Available models ({len(models)}):\n")
+                for m in models:
+                    size_gb = m["size"] / (1024**3) if m["size"] else 0
+                    print(f"    • {m['name']:<30s} {size_gb:.1f} GB")
+            else:
+                print("\n  No models found. Pull one with:")
+                print("    ollama pull llava:13b")
+            print()
+        except Exception as e:
+            print(f"\n  Error listing models: {e}\n")
+
+    print("  Use in your RCAN config:")
+    print("    agent:")
+    print('      provider: "ollama"')
+    print('      model: "llava:13b"')
+    print()
 
 
 def _list_hf_models(api, task: str, limit: int = 15) -> None:
@@ -994,6 +1052,10 @@ def cmd_hub(args) -> None:
         _interactive_share(args)
         return
 
+    # Fallback
+    print("  Usage: castor hub {browse|search|show|install|share|categories}")
+    print("  Run: castor hub --help for details")
+
 
 def _interactive_share(args) -> None:
     """Interactive recipe sharing wizard."""
@@ -1070,13 +1132,26 @@ def _interactive_share(args) -> None:
 
     if args.dry_run:
         print("\n  ℹ️  Dry run — no files written.")
+    elif getattr(args, "submit", False):
+        from castor.hub import SubmitError, submit_recipe_pr
+
+        print(f"\n  ✅ Recipe packaged at: {recipe_dir}")
+        print("  📤 Submitting PR to GitHub...\n")
+        try:
+            pr_url = submit_recipe_pr(recipe_dir, manifest)
+            print(f"\n  🎉 Pull request created: {pr_url}")
+            print("     A maintainer will review your recipe shortly.")
+        except SubmitError as exc:
+            print(f"\n  ❌ Submission failed: {exc}")
+            print(f"\n  Your recipe is still saved at: {recipe_dir}")
+            print("  You can submit manually by opening a PR on GitHub.")
     else:
         print(f"\n  ✅ Recipe packaged at: {recipe_dir}")
         print("  Next steps:")
         print(f"    1. Review the scrubbed files in {recipe_dir}/")
         print("    2. Edit README.md with tips, photos, and lessons learned")
-        print("    3. Submit a PR to https://github.com/craigm26/OpenCastor")
-        print("       adding your recipe to community-recipes/")
+        print("    3. Submit a PR: castor hub share --config {args.config} --submit")
+        print("       Or manually at https://github.com/craigm26/OpenCastor")
     print()
 
 
@@ -1576,6 +1651,7 @@ def main() -> None:
             "  castor hub show picar-patrol-a1b2c3\n"
             "  castor hub install picar-patrol-a1b2c3\n"
             "  castor hub share --config robot.rcan.yaml --docs BUILD.md LESSONS.md\n"
+            "  castor hub share --config robot.rcan.yaml --submit\n"
             "  castor hub share --config robot.rcan.yaml --dry-run\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1617,6 +1693,11 @@ def main() -> None:
     )
     p_hub.add_argument("--provider", default=None, help="Filter by AI provider")
     p_hub.add_argument("--dry-run", action="store_true", help="Preview share without writing")
+    p_hub.add_argument(
+        "--submit",
+        action="store_true",
+        help="Auto-create a GitHub PR after packaging (requires gh CLI)",
+    )
     p_hub.add_argument("--verbose", "-v", action="store_true", help="Show full details")
     p_hub.add_argument("--output", "-o", default=None, help="Output directory for install/share")
 
@@ -1656,7 +1737,7 @@ def main() -> None:
         "service",
         nargs="?",
         default="huggingface",
-        choices=["huggingface", "hf"],
+        choices=["huggingface", "hf", "ollama"],
         help="Service to authenticate with (default: huggingface)",
     )
     p_login.add_argument("--token", default=None, help="API token (prompted if not provided)")

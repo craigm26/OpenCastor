@@ -1,7 +1,9 @@
 """Tests for the Community Hub."""
 
 import json
+import subprocess
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -182,3 +184,131 @@ class TestRecipeListing:
         from castor.hub import get_recipe
 
         assert get_recipe("nonexistent-abc123") is None
+
+
+class TestSubmitRecipePR:
+    """Tests for the auto-PR submission feature."""
+
+    def test_submit_error_when_gh_not_installed(self, tmp_path):
+        from castor.hub import SubmitError, _run_gh
+
+        with patch("castor.hub.subprocess.run", side_effect=FileNotFoundError):
+            with pytest.raises(SubmitError, match="not installed"):
+                _run_gh(["auth", "status"])
+
+    def test_submit_error_when_not_authenticated(self):
+        from castor.hub import SubmitError, _check_gh_auth
+
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+        mock_result.stderr = "not logged in"
+
+        with patch("castor.hub._run_gh", return_value=mock_result):
+            with pytest.raises(SubmitError, match="Not authenticated"):
+                _check_gh_auth()
+
+    def test_check_gh_auth_returns_username(self):
+        from castor.hub import _check_gh_auth
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "✓ Logged in to github.com account testuser (oauth_token)\n"
+        mock_result.stderr = ""
+
+        with patch("castor.hub._run_gh", return_value=mock_result):
+            assert _check_gh_auth() == "testuser"
+
+    def test_check_gh_auth_unknown_user(self):
+        from castor.hub import _check_gh_auth
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "✓ Some other format\n"
+        mock_result.stderr = ""
+
+        with patch("castor.hub._run_gh", return_value=mock_result):
+            assert _check_gh_auth() == "unknown"
+
+    def test_build_pr_description(self):
+        from castor.hub import _build_pr_description
+
+        manifest = {
+            "name": "Test Bot",
+            "description": "A test bot",
+            "category": "home",
+            "difficulty": "beginner",
+            "ai": {"provider": "google", "model": "gemini-2.5-flash"},
+            "hardware": ["RPi 4", "Camera"],
+            "tags": ["home", "patrol"],
+            "budget": "$100",
+            "use_case": "Home patrol",
+        }
+        desc = _build_pr_description(manifest)
+        assert "Test Bot" in desc
+        assert "Home & Indoor" in desc
+        assert "google" in desc
+        assert "RPi 4, Camera" in desc
+        assert "Home patrol" in desc
+        assert "$100" in desc
+
+    def test_build_pr_description_minimal(self):
+        from castor.hub import _build_pr_description
+
+        manifest = {
+            "name": "Minimal",
+            "description": "Bare minimum",
+            "ai": {},
+            "hardware": [],
+            "tags": [],
+        }
+        desc = _build_pr_description(manifest)
+        assert "Minimal" in desc
+        assert "Not specified" in desc
+
+    def test_submit_timeout_error(self):
+        from castor.hub import SubmitError, _run_gh
+
+        with patch(
+            "castor.hub.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="gh", timeout=60),
+        ):
+            with pytest.raises(SubmitError, match="timed out"):
+                _run_gh(["auth", "status"])
+
+    def test_submit_generic_gh_error(self):
+        from castor.hub import SubmitError, _run_gh
+
+        with patch(
+            "castor.hub.subprocess.run",
+            side_effect=subprocess.CalledProcessError(
+                1, "gh", stderr="something went wrong"
+            ),
+        ):
+            with pytest.raises(SubmitError, match="something went wrong"):
+                _run_gh(["auth", "status"])
+
+    def test_ensure_fork_already_exists(self):
+        from castor.hub import _ensure_fork
+
+        fork_result = MagicMock()
+        fork_result.returncode = 1
+        fork_result.stderr = "already exists"
+
+        view_result = MagicMock()
+        view_result.stdout = "testuser/OpenCastor\n"
+
+        with patch("castor.hub._run_gh", side_effect=[fork_result, view_result]):
+            name = _ensure_fork()
+            assert name == "testuser/OpenCastor"
+
+    def test_ensure_fork_failure(self):
+        from castor.hub import SubmitError, _ensure_fork
+
+        fork_result = MagicMock()
+        fork_result.returncode = 1
+        fork_result.stderr = "permission denied"
+
+        with patch("castor.hub._run_gh", return_value=fork_result):
+            with pytest.raises(SubmitError, match="Failed to fork"):
+                _ensure_fork()

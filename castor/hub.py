@@ -381,3 +381,214 @@ def print_recipe_card(manifest: dict, verbose: bool = False) -> None:
 
     if verbose and manifest.get("use_case"):
         print(f"\n     Use Case: {manifest['use_case']}")
+
+
+# ---------------------------------------------------------------------------
+# Auto-PR submission via `gh` CLI
+# ---------------------------------------------------------------------------
+
+UPSTREAM_REPO = "craigm26/OpenCastor"
+
+
+class SubmitError(Exception):
+    """Raised when recipe PR submission fails."""
+
+
+def _run_gh(
+    args: list[str], check: bool = True, capture: bool = True
+) -> subprocess.CompletedProcess:
+    """Run a ``gh`` CLI command and return the result."""
+    cmd = ["gh"] + args
+    try:
+        return subprocess.run(
+            cmd,
+            capture_output=capture,
+            text=True,
+            check=check,
+            timeout=60,
+        )
+    except FileNotFoundError as err:
+        raise SubmitError(
+            "GitHub CLI (gh) is not installed.\n"
+            "  Install: https://cli.github.com\n"
+            "  Then run: gh auth login"
+        ) from err
+    except subprocess.TimeoutExpired as err:
+        raise SubmitError("gh command timed out after 60 seconds.") from err
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr or ""
+        if "not logged" in stderr.lower() or "auth" in stderr.lower():
+            raise SubmitError("Not authenticated with GitHub CLI.\n  Run: gh auth login") from exc
+        raise SubmitError(f"gh command failed: {stderr.strip()}") from exc
+
+
+def _check_gh_auth() -> str:
+    """Verify ``gh`` auth and return the username."""
+    result = _run_gh(["auth", "status"], check=False)
+    output = (result.stdout or "") + (result.stderr or "")
+    if result.returncode != 0:
+        raise SubmitError("Not authenticated with GitHub CLI.\n  Run: gh auth login")
+    # Try to extract username
+    for line in output.splitlines():
+        if "logged in" in line.lower():
+            # Format: "✓ Logged in to github.com account USERNAME ..."
+            parts = line.split()
+            for i, part in enumerate(parts):
+                if part.lower() == "account" and i + 1 < len(parts):
+                    return parts[i + 1].strip("()")
+    return "unknown"
+
+
+def _ensure_fork() -> str:
+    """Fork the upstream repo if not already forked. Returns the fork clone URL."""
+    result = _run_gh(
+        ["repo", "fork", UPSTREAM_REPO, "--clone=false"],
+        check=False,
+    )
+    # gh repo fork succeeds or says "already exists" — both are fine
+    stderr = result.stderr or ""
+    if result.returncode != 0 and "already exists" not in stderr.lower():
+        raise SubmitError(f"Failed to fork {UPSTREAM_REPO}: {stderr.strip()}")
+
+    # Get the fork name
+    result = _run_gh(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"])
+    return result.stdout.strip()
+
+
+def submit_recipe_pr(
+    recipe_dir: Path,
+    manifest: dict[str, Any],
+) -> str:
+    """Submit a packaged recipe as a PR to the upstream repo.
+
+    Steps:
+      1. Verify ``gh`` auth
+      2. Fork if needed
+      3. Clone the fork to a temp dir
+      4. Create branch ``recipe/<slug>``
+      5. Copy recipe files to ``community-recipes/<slug>/``
+      6. Commit and push
+      7. Create PR with templated description
+
+    Returns the PR URL.
+    """
+    recipe_id = manifest["id"]
+    slug = re.sub(r"-[a-f0-9]{6}$", "", recipe_id)  # strip hash suffix for branch name
+    branch_name = f"recipe/{slug}"
+
+    # Step 1: Check auth
+    username = _check_gh_auth()
+    logger.info("Authenticated as %s", username)
+
+    # Step 2: Fork
+    print("  🍴 Ensuring fork exists...")
+    _ensure_fork()
+
+    # Step 3–6: Use gh to create PR directly from local files
+    # Clone fork into temp dir, copy files, push
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="opencastor-submit-") as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        print("  📥 Cloning fork...")
+        _run_gh(["repo", "clone", f"{username}/OpenCastor", str(tmpdir / "repo")], check=True)
+        repo_path = tmpdir / "repo"
+
+        # Create branch
+        subprocess.run(
+            ["git", "checkout", "-b", branch_name],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        # Copy recipe files
+        dest = repo_path / "community-recipes" / recipe_id
+        dest.mkdir(parents=True, exist_ok=True)
+        for f in recipe_dir.iterdir():
+            if f.is_file():
+                shutil.copy2(f, dest / f.name)
+
+        # Commit
+        subprocess.run(["git", "add", "-A"], cwd=repo_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", f"feat: add community recipe '{manifest['name']}'"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        # Push
+        print("  🚀 Pushing branch...")
+        subprocess.run(
+            ["git", "push", "-u", "origin", branch_name],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        # Create PR
+        print("  📝 Creating pull request...")
+        pr_body = _build_pr_description(manifest)
+        result = _run_gh(
+            [
+                "pr",
+                "create",
+                "--repo",
+                UPSTREAM_REPO,
+                "--head",
+                f"{username}:{branch_name}",
+                "--title",
+                f"[Recipe] {manifest['name']}",
+                "--body",
+                pr_body,
+            ],
+        )
+        pr_url = result.stdout.strip()
+
+    return pr_url
+
+
+def _build_pr_description(manifest: dict[str, Any]) -> str:
+    """Build a templated PR description from the recipe manifest."""
+    category_label = CATEGORIES.get(manifest.get("category", ""), manifest.get("category", ""))
+    difficulty_label = DIFFICULTY.get(
+        manifest.get("difficulty", ""), manifest.get("difficulty", "")
+    )
+    ai = manifest.get("ai", {})
+    hardware = ", ".join(manifest.get("hardware", [])) or "Not specified"
+    tags = ", ".join(manifest.get("tags", [])) or "None"
+
+    return f"""## 🤖 New Community Recipe: {manifest["name"]}
+
+{manifest.get("description", "")}
+
+### Details
+
+| Field | Value |
+|-------|-------|
+| **Category** | {category_label} |
+| **Difficulty** | {difficulty_label} |
+| **AI Provider** | {ai.get("provider", "N/A")} |
+| **AI Model** | {ai.get("model", "N/A")} |
+| **Hardware** | {hardware} |
+| **Budget** | {manifest.get("budget", "N/A")} |
+| **Tags** | {tags} |
+
+### Use Case
+
+{manifest.get("use_case", "_Not provided_")}
+
+### Checklist
+
+- [x] Config has been PII-scrubbed by OpenCastor Hub
+- [ ] README includes setup instructions
+- [ ] Tested on real hardware
+
+---
+*Submitted via `castor hub share --submit`*
+"""

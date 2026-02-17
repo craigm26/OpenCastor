@@ -5,6 +5,17 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.17.9] - 2026-02-17
+
+### Added
+- **Ollama provider** — run local LLMs with zero API keys
+  - Text generation and vision support (LLaVA, BakLLaVA, Moondream, etc.)
+  - Streaming token output via `/api/chat`
+  - Model listing and pulling via Ollama API
+  - `castor login ollama` — test connection, configure host, list available models
+  - Proper `OllamaConnectionError` with helpful "ollama serve" message
+  - Auto-detection of vision-capable models
+
 ## [2026.2.17.8] - 2026-02-17
 
 ### Added
