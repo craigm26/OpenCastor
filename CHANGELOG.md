@@ -5,6 +5,15 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.17.6] - 2026-02-17
+
+### Fixed
+- Removed deprecated `License :: OSI Approved` classifier (PEP 639 compliance) — newer setuptools rejected it when `license` expression was already set
+- Ran `ruff format` across all 73 source and test files to pass CI formatting check
+- Added `python-multipart>=0.0.7` as explicit dependency — required by FastAPI for `request.form()`, was failing on Python 3.10/3.11 in CI
+- Replaced invalid PyPI classifier `Topic :: Scientific/Engineering :: Robotics` with valid `Artificial Intelligence` classifier
+- Synced package version in `pyproject.toml` with git tag
+
 ## [2026.2.17.5] - 2026-02-17
 
 ### Added
