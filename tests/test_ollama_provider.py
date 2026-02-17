@@ -11,7 +11,6 @@ import pytest
 from castor.providers.ollama_provider import (
     DEFAULT_HOST,
     DEFAULT_MODEL,
-    VISION_MODELS,
     OllamaConnectionError,
     OllamaProvider,
     _http_request,
@@ -19,10 +18,10 @@ from castor.providers.ollama_provider import (
     _resolve_host,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _mock_urlopen(response_data, status=200):
     """Create a mock urlopen that returns JSON data."""
@@ -117,6 +116,7 @@ class TestHttpRequest:
     @patch("castor.providers.ollama_provider.urlopen")
     def test_url_error(self, mock_urlopen_fn):
         from urllib.error import URLError
+
         mock_urlopen_fn.side_effect = URLError("unreachable")
         with pytest.raises(OllamaConnectionError):
             _http_request("http://localhost:11434/")
@@ -162,20 +162,24 @@ class TestOllamaProviderInit:
     @patch("castor.providers.ollama_provider.urlopen")
     def test_vision_override_via_config(self, mock_urlopen_fn):
         mock_urlopen_fn.return_value = _mock_urlopen({"status": "ok"})
-        provider = OllamaProvider({
-            "provider": "ollama",
-            "model": "custom-model",
-            "vision_enabled": True,
-        })
+        provider = OllamaProvider(
+            {
+                "provider": "ollama",
+                "model": "custom-model",
+                "vision_enabled": True,
+            }
+        )
         assert provider.is_vision is True
 
     @patch("castor.providers.ollama_provider.urlopen")
     def test_custom_host(self, mock_urlopen_fn):
         mock_urlopen_fn.return_value = _mock_urlopen({"status": "ok"})
-        provider = OllamaProvider({
-            "provider": "ollama",
-            "ollama_host": "http://192.168.1.50:11434",
-        })
+        provider = OllamaProvider(
+            {
+                "provider": "ollama",
+                "ollama_host": "http://192.168.1.50:11434",
+            }
+        )
         assert provider.host == "http://192.168.1.50:11434"
 
     @patch("castor.providers.ollama_provider.urlopen")
@@ -441,6 +445,7 @@ class TestProviderFactory:
     def test_get_provider_ollama(self, mock_urlopen_fn):
         mock_urlopen_fn.return_value = _mock_urlopen({"status": "ok"})
         from castor.providers import get_provider
+
         provider = get_provider({"provider": "ollama"})
         assert isinstance(provider, OllamaProvider)
 

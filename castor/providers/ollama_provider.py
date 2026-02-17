@@ -46,8 +46,7 @@ class OllamaConnectionError(ConnectionError):
         self.host = host
         self.original = original
         super().__init__(
-            f"Cannot connect to Ollama at {host}. "
-            "Is Ollama running? Start it with: ollama serve"
+            f"Cannot connect to Ollama at {host}. Is Ollama running? Start it with: ollama serve"
         )
 
 
@@ -128,10 +127,7 @@ class OllamaProvider(BaseProvider):
         if self.model_name == "default-model":
             self.model_name = DEFAULT_MODEL
 
-        self.is_vision = (
-            _is_vision_model(self.model_name)
-            or config.get("vision_enabled", False)
-        )
+        self.is_vision = _is_vision_model(self.model_name) or config.get("vision_enabled", False)
 
         self.timeout = config.get("timeout", 120)
 
@@ -232,9 +228,7 @@ class OllamaProvider(BaseProvider):
         action = self._clean_json(text)
         return Thought(text, action)
 
-    def think_stream(
-        self, image_bytes: bytes, instruction: str
-    ) -> Iterator[str]:
+    def think_stream(self, image_bytes: bytes, instruction: str) -> Iterator[str]:
         """Stream tokens from the Ollama model.
 
         Yields individual text chunks as they arrive.

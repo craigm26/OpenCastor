@@ -1,6 +1,6 @@
 """Tests for castor.providers -- Thought class, BaseProvider, and factory."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -160,11 +160,17 @@ class TestGetProvider:
         get_provider(config)
         mock_cls.assert_called_once_with(config)
 
-    def test_ollama_not_implemented(self):
-        from castor.providers import get_provider
+    @patch("castor.providers.ollama_provider.urlopen")
+    def test_ollama_provider(self, mock_urlopen):
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b'{"status": "ok"}'
+        mock_urlopen.return_value = mock_resp
 
-        with pytest.raises(NotImplementedError):
-            get_provider({"provider": "ollama"})
+        from castor.providers import get_provider
+        from castor.providers.ollama_provider import OllamaProvider
+
+        provider = get_provider({"provider": "ollama"})
+        assert isinstance(provider, OllamaProvider)
 
     def test_unknown_provider(self):
         from castor.providers import get_provider
