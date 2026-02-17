@@ -94,6 +94,12 @@ PROVIDERS = {
         "env_var": "OPENAI_API_KEY",
     },
     "5": {
+        "provider": "huggingface",
+        "model": "meta-llama/Llama-3.3-70B-Instruct",
+        "label": "Hugging Face (Llama, Qwen, Mistral, etc.)",
+        "env_var": "HF_TOKEN",
+    },
+    "6": {
         "provider": "ollama",
         "model": "llava:13b",
         "label": "Local Llama (Ollama)",

@@ -38,7 +38,7 @@ pip install -e ".[dev]"
 ```
 $ castor wizard
 
-OpenCastor Setup Wizard v2026.2.17.6
+OpenCastor Setup Wizard v2026.2.17.7
 
 Which Brain do you want to use?
 [1] Anthropic Claude Opus 4.6 (Recommended)

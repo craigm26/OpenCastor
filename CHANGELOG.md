@@ -5,6 +5,25 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.17.7] - 2026-02-17
+
+### Added
+- **Hugging Face provider** — access 1M+ models via the Inference API
+  - Text-generation and vision-language models (LLaVA, Qwen-VL, etc.)
+  - Supports Inference Endpoints for dedicated deployments
+  - Auto-detects vision-capable models
+- **`castor login` CLI command** — authenticate with Hugging Face
+  - Interactive token prompt with secure input
+  - `--list-models` flag to discover trending models by task
+  - Saves token to both `~/.cache/huggingface/` and local `.env`
+- `huggingface-hub` added as core dependency
+- Hugging Face option added to setup wizard (option 5)
+- 10 new tests for HF provider and login CLI
+
+### Changed
+- Provider count: 4 → 5 (website, docs, stats updated)
+- Ollama moved from wizard option 5 → 6
+
 ## [2026.2.17.6] - 2026-02-17
 
 ### Fixed

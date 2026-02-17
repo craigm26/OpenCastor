@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opencastor"
-version = "2026.2.17.6"
+version = "2026.2.17.7"
 description = "The Universal Runtime for Embodied AI"
 readme = "README.md"
 license = "Apache-2.0"
@@ -50,6 +50,8 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "httpx>=0.26.0",
     "python-multipart>=0.0.7",
+    # The Hub (Model Discovery & Inference)
+    "huggingface-hub>=0.25.0",
     # The Dashboard
     "streamlit>=1.30.0",
     "SpeechRecognition>=3.10.0",

@@ -800,6 +800,106 @@ def cmd_plugins(args) -> None:
     print_plugins(plugins)
 
 
+def cmd_login(args) -> None:
+    """Authenticate with AI providers (Hugging Face, etc.)."""
+    import getpass
+
+    service = args.service.lower()
+
+    if service in ("huggingface", "hf"):
+        _login_huggingface(args)
+    else:
+        print(f"  Unknown service: {service}")
+        print("  Supported: huggingface (hf)")
+
+
+def _login_huggingface(args) -> None:
+    """Handle Hugging Face authentication and model discovery."""
+    import getpass
+
+    try:
+        from huggingface_hub import HfApi, login as hf_login
+    except ImportError:
+        print("  Missing dependency: huggingface-hub")
+        print("  Install with: pip install huggingface-hub")
+        return
+
+    token = args.token or os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN")
+
+    if not token:
+        print()
+        print("  🤗 Hugging Face Login")
+        print("  ─────────────────────")
+        print("  Get your token at: https://huggingface.co/settings/tokens")
+        print("  Recommended: 'Read' scope is sufficient for inference.")
+        print()
+        token = getpass.getpass("  HF Token: ").strip()
+
+    if not token:
+        print("  No token provided. Aborted.")
+        return
+
+    try:
+        hf_login(token=token, add_to_git_credential=False)
+        api = HfApi(token=token)
+        user = api.whoami()
+        username = user.get("name", user.get("fullname", "unknown"))
+        print(f"\n  ✅ Authenticated as: {username}")
+        print(f"     Token saved to: ~/.cache/huggingface/token")
+
+        # Also save to .env if it exists
+        env_path = os.path.join(os.getcwd(), ".env")
+        _update_env_var(env_path, "HF_TOKEN", token)
+
+    except Exception as e:
+        print(f"\n  ❌ Login failed: {e}")
+        return
+
+    if args.list_models:
+        _list_hf_models(api, args.task)
+
+
+def _update_env_var(env_path: str, key: str, value: str) -> None:
+    """Add or update a variable in a .env file."""
+    lines = []
+    found = False
+    if os.path.exists(env_path):
+        with open(env_path) as f:
+            lines = f.readlines()
+        for i, line in enumerate(lines):
+            if line.startswith(f"{key}="):
+                lines[i] = f"{key}={value}\n"
+                found = True
+                break
+
+    if not found:
+        lines.append(f"{key}={value}\n")
+
+    with open(env_path, "w") as f:
+        f.writelines(lines)
+    print(f"     Also saved to: {env_path}")
+
+
+def _list_hf_models(api, task: str, limit: int = 15) -> None:
+    """Print trending models for a task."""
+    print(f"\n  📦 Trending {task} models on Hugging Face:\n")
+    try:
+        models = api.list_models(task=task, sort="trending", direction=-1, limit=limit)
+        for i, m in enumerate(models, 1):
+            downloads = f"{m.downloads:,}" if m.downloads else "?"
+            likes = m.likes or 0
+            print(f"  {i:>3}. {m.id}")
+            print(f"       ↓ {downloads} downloads  ♥ {likes} likes")
+        print()
+        print("  Use any model ID in your RCAN config:")
+        print("    agent:")
+        print('      provider: "huggingface"')
+        print('      model: "meta-llama/Llama-3.3-70B-Instruct"')
+        print()
+    except Exception as e:
+        print(f"  Error listing models: {e}")
+
+
 def cmd_audit(args) -> None:
     """View the audit log."""
     from castor.audit import get_audit, print_audit
@@ -1302,6 +1402,39 @@ def main() -> None:
     )
     p_audit.add_argument("--limit", type=int, default=50, help="Max entries to show (default: 50)")
 
+    # castor login
+    p_login = sub.add_parser(
+        "login",
+        help="Authenticate with AI providers (Hugging Face, etc.)",
+        epilog=(
+            "Examples:\n"
+            "  castor login huggingface\n"
+            "  castor login hf\n"
+            "  castor login hf --token hf_xxxx\n"
+            "  castor login hf --list-models\n"
+            "  castor login hf --list-models --task image-text-to-text\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_login.add_argument(
+        "service",
+        nargs="?",
+        default="huggingface",
+        choices=["huggingface", "hf"],
+        help="Service to authenticate with (default: huggingface)",
+    )
+    p_login.add_argument("--token", default=None, help="API token (prompted if not provided)")
+    p_login.add_argument(
+        "--list-models",
+        action="store_true",
+        help="List trending models after login",
+    )
+    p_login.add_argument(
+        "--task",
+        default="text-generation",
+        help="Model task filter for --list-models (default: text-generation)",
+    )
+
     # Shell completions (argcomplete)
     try:
         import argcomplete
@@ -1357,6 +1490,7 @@ def main() -> None:
         "quickstart": cmd_quickstart,
         "plugins": cmd_plugins,
         "audit": cmd_audit,
+        "login": cmd_login,
     }
 
     # Load plugins and merge any plugin-provided commands

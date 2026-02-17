@@ -1,11 +1,13 @@
 from .anthropic_provider import AnthropicProvider
 from .google_provider import GoogleProvider
+from .huggingface_provider import HuggingFaceProvider
 from .openai_provider import OpenAIProvider
 
 __all__ = [
     "get_provider",
     "AnthropicProvider",
     "GoogleProvider",
+    "HuggingFaceProvider",
     "OpenAIProvider",
 ]
 
@@ -23,6 +25,8 @@ def get_provider(config: dict):
         return OpenAIProvider(config)
     elif provider_name == "anthropic":
         return AnthropicProvider(config)
+    elif provider_name in ("huggingface", "hf"):
+        return HuggingFaceProvider(config)
     elif provider_name == "ollama":
         raise NotImplementedError("Ollama support coming soon!")
     else:
