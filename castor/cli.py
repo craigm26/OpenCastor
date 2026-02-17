@@ -802,8 +802,6 @@ def cmd_plugins(args) -> None:
 
 def cmd_login(args) -> None:
     """Authenticate with AI providers (Hugging Face, etc.)."""
-    import getpass
-
     service = args.service.lower()
 
     if service in ("huggingface", "hf"):
@@ -818,7 +816,8 @@ def _login_huggingface(args) -> None:
     import getpass
 
     try:
-        from huggingface_hub import HfApi, login as hf_login
+        from huggingface_hub import HfApi
+        from huggingface_hub import login as hf_login
     except ImportError:
         print("  Missing dependency: huggingface-hub")
         print("  Install with: pip install huggingface-hub")
@@ -845,7 +844,7 @@ def _login_huggingface(args) -> None:
         user = api.whoami()
         username = user.get("name", user.get("fullname", "unknown"))
         print(f"\n  ✅ Authenticated as: {username}")
-        print(f"     Token saved to: ~/.cache/huggingface/token")
+        print("     Token saved to: ~/.cache/huggingface/token")
 
         # Also save to .env if it exists
         env_path = os.path.join(os.getcwd(), ".env")

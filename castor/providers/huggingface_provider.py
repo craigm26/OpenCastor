@@ -46,11 +46,11 @@ class HuggingFaceProvider(BaseProvider):
 
         try:
             from huggingface_hub import InferenceClient
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
                 "huggingface_hub is required for the Hugging Face provider. "
                 "Install it with: pip install huggingface-hub"
-            )
+            ) from exc
 
         token = _get_hf_token(config)
         if not token:
