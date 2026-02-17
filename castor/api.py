@@ -499,6 +499,41 @@ async def slack_webhook(request: Request):
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+def _print_gateway_qr(host: str, port: str):
+    """Print a terminal QR code linking to the gateway URL for mobile access."""
+    try:
+        import socket
+
+        # Determine LAN IP if bound to 0.0.0.0 or 127.0.0.1
+        if host in ("0.0.0.0", "127.0.0.1", "localhost"):
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.connect(("8.8.8.8", 80))
+                lan_ip = s.getsockname()[0]
+            except Exception:
+                lan_ip = host
+            finally:
+                s.close()
+        else:
+            lan_ip = host
+
+        url = f"http://{lan_ip}:{port}"
+
+        try:
+            import qrcode
+
+            qr = qrcode.QRCode(border=1)
+            qr.add_data(url)
+            qr.make(fit=True)
+            logger.info(f"Scan to connect from mobile: {url}")
+            qr.print_ascii(invert=True)
+        except ImportError:
+            logger.info(f"Connect from mobile: {url}")
+            logger.info("Install qrcode for terminal QR: pip install qrcode")
+    except Exception:
+        pass
+
+
 def _execute_action(action: dict):
     """Translate an action dict into driver commands."""
     action_type = action.get("type", "")
@@ -771,11 +806,13 @@ async def on_startup():
                 logger.debug(f"mDNS startup skipped: {e}")
 
     await _start_channels()
-    logger.info(
-        f"OpenCastor Gateway ready on "
-        f"{os.getenv('OPENCASTOR_API_HOST', '127.0.0.1')}:"
-        f"{os.getenv('OPENCASTOR_API_PORT', '8000')}"
-    )
+
+    host = os.getenv("OPENCASTOR_API_HOST", "127.0.0.1")
+    port = os.getenv("OPENCASTOR_API_PORT", "8000")
+    logger.info(f"OpenCastor Gateway ready on {host}:{port}")
+
+    # Print QR code for mobile access
+    _print_gateway_qr(host, port)
 
 
 @app.on_event("shutdown")

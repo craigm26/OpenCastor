@@ -314,6 +314,14 @@ def main():
     )
     args = parser.parse_args()
 
+    # 0. CRASH RECOVERY CHECK
+    try:
+        from castor.crash import handle_crash_on_startup
+        if not handle_crash_on_startup():
+            return
+    except Exception:
+        pass  # crash module is optional
+
     # 1. BOOT SEQUENCE
     logger.info("Booting OpenCastor Runtime...")
     config = load_config(args.config)
@@ -386,9 +394,79 @@ def main():
         except Exception as e:
             logger.debug(f"mDNS broadcast skipped: {e}")
 
+    # 6b. PRIVACY POLICY (default-deny for sensors)
+    privacy_policy = None
+    try:
+        from castor.privacy import PrivacyPolicy
+        privacy_policy = PrivacyPolicy(config)
+    except Exception as e:
+        logger.debug(f"Privacy policy skipped: {e}")
+
+    # 6c. APPROVAL GATE (opt-in for dangerous commands)
+    approval_gate = None
+    try:
+        from castor.approvals import ApprovalGate
+        approval_gate = ApprovalGate(config)
+        if approval_gate.require_approval:
+            logger.info("Approval gate active -- dangerous commands will be queued")
+    except Exception as e:
+        logger.debug(f"Approval gate skipped: {e}")
+
+    # 6d. BATTERY MONITOR (opt-in)
+    battery_monitor = None
+    try:
+        from castor.battery import BatteryMonitor
+
+        def _on_battery_critical(voltage):
+            logger.critical(f"Battery critical ({voltage}V) -- stopping motors!")
+            if driver:
+                driver.stop()
+
+        battery_monitor = BatteryMonitor(
+            config,
+            on_warn=lambda v: logger.warning(f"Battery low: {v}V"),
+            on_critical=_on_battery_critical,
+        )
+        if battery_monitor.enabled:
+            battery_monitor.start()
+            logger.info(f"Battery monitor online (warn={battery_monitor.warn_voltage}V)")
+    except Exception as e:
+        logger.debug(f"Battery monitor skipped: {e}")
+
+    # 6e. WATCHDOG (auto-stop motors if brain unresponsive)
+    watchdog = None
+    try:
+        from castor.watchdog import BrainWatchdog
+        stop_fn = driver.stop if driver else None
+        watchdog = BrainWatchdog(config, stop_fn=stop_fn)
+        watchdog.start()
+    except Exception as e:
+        logger.debug(f"Watchdog skipped: {e}")
+
+    # 6f. GEOFENCE (limit operating radius)
+    geofence = None
+    try:
+        from castor.geofence import Geofence
+        geofence = Geofence(config)
+    except Exception as e:
+        logger.debug(f"Geofence skipped: {e}")
+
+    # 6g. AUDIT LOG
+    audit = None
+    try:
+        from castor.audit import get_audit
+        audit = get_audit()
+        audit.log_startup(args.config)
+    except Exception as e:
+        logger.debug(f"Audit log skipped: {e}")
+
     # 7. THE CONTROL LOOP
     latency_budget = config.get("agent", {}).get("latency_budget_ms", 3000)
     logger.info("Entering Perception-Action Loop. Press Ctrl+C to stop.")
+
+    # Latency tracking for sustained-overrun warnings
+    _latency_overrun_count = 0
+    _LATENCY_WARN_THRESHOLD = 5  # consecutive overruns before suggesting action
 
     try:
         while True:
@@ -417,24 +495,47 @@ def main():
             thought = brain.think(frame_bytes, instruction)
             fs.proc.record_thought(thought.raw_text, thought.action)
 
+            # Watchdog heartbeat (brain responded successfully)
+            if watchdog:
+                watchdog.heartbeat()
+
             # --- PHASE 3: ACT ---
             if thought.action:
                 logger.info(f"Action: {thought.action}")
 
-                # Write action through the safety layer (clamping + rate limiting)
-                fs.write("/dev/motor", thought.action, principal="brain")
+                # Approval gate: queue dangerous actions for human review
+                action_to_execute = thought.action
+                if approval_gate:
+                    gate_result = approval_gate.check(thought.action)
+                    if isinstance(gate_result, dict) and gate_result.get("status") == "pending":
+                        logger.warning(
+                            f"Action queued for approval (ID={gate_result['approval_id']})"
+                        )
+                        action_to_execute = None  # Skip execution
+                    else:
+                        action_to_execute = gate_result
 
-                if driver and not args.simulate:
-                    # Read back the clamped values from the safety layer
-                    clamped_action = fs.read("/dev/motor", principal="brain")
-                    safe_action = clamped_action if clamped_action else thought.action
-                    action_type = safe_action.get("type", "")
-                    if action_type == "move":
-                        linear = safe_action.get("linear", 0.0)
-                        angular = safe_action.get("angular", 0.0)
-                        driver.move(linear, angular)
-                    elif action_type == "stop":
-                        driver.stop()
+                # Geofence check
+                if action_to_execute and geofence:
+                    action_to_execute = geofence.check_action(action_to_execute)
+
+                if action_to_execute:
+                    # Write action through the safety layer (clamping + rate limiting)
+                    fs.write("/dev/motor", action_to_execute, principal="brain")
+
+                    if driver and not args.simulate:
+                        # Read back the clamped values from the safety layer
+                        clamped_action = fs.read("/dev/motor", principal="brain")
+                        safe_action = clamped_action if clamped_action else action_to_execute
+                        action_type = safe_action.get("type", "")
+                        if action_type == "move":
+                            linear = safe_action.get("linear", 0.0)
+                            angular = safe_action.get("angular", 0.0)
+                            driver.move(linear, angular)
+                            if audit:
+                                audit.log_motor_command(safe_action)
+                        elif action_type == "stop":
+                            driver.stop()
 
                 # Record episode in memory
                 fs.memory.record_episode(
@@ -456,20 +557,70 @@ def main():
             latency = (time.time() - loop_start) * 1000
             fs.proc.record_loop_iteration(latency)
             if latency > latency_budget:
+                _latency_overrun_count += 1
                 logger.warning(
                     f"Loop Lag: {latency:.2f}ms (Budget: {latency_budget}ms)"
                 )
+                # Sustained overrun warning with suggestions
+                if _latency_overrun_count == _LATENCY_WARN_THRESHOLD:
+                    model = config.get("agent", {}).get("model", "unknown")
+                    logger.warning(
+                        f"Sustained latency overrun ({_latency_overrun_count} consecutive). "
+                        f"Suggestions: "
+                        f"(1) Switch to a faster model (current: {model}), "
+                        f"(2) Reduce camera resolution, "
+                        f"(3) Increase latency_budget_ms in your RCAN config"
+                    )
+            else:
+                _latency_overrun_count = 0
 
             # Sleep to prevent API rate limiting
             time.sleep(1.0)
 
     except KeyboardInterrupt:
         logger.info("User Interrupt. Shutting down...")
+        if audit:
+            audit.log_shutdown("user_interrupt")
+    except Exception as exc:
+        logger.critical(f"Runtime crash: {exc}")
+        if audit:
+            audit.log_error(str(exc), source="runtime")
+            audit.log_shutdown("crash")
+        # Save crash report for next startup
+        try:
+            import traceback
+            from castor.crash import save_crash_report
+            last_thought = None
+            last_action = None
+            try:
+                last_thought = fs.ns.read("/proc/last_thought")
+                last_action = fs.ns.read("/proc/last_action")
+            except Exception:
+                pass
+            uptime = time.time() - loop_start if 'loop_start' in dir() else 0
+            loop_count = fs.proc._loop_count if hasattr(fs.proc, '_loop_count') else 0
+            save_crash_report(
+                config_path=args.config,
+                error=traceback.format_exc(),
+                last_thought=str(last_thought) if last_thought else None,
+                last_action=last_action,
+                loop_count=loop_count,
+                uptime_seconds=uptime,
+            )
+        except Exception:
+            pass
+        raise
     finally:
         # Clear shared references first so in-flight gateway requests
         # cannot grab a closing/closed device.
         set_shared_camera(None)
         set_shared_speaker(None)
+
+        if watchdog:
+            watchdog.stop()
+
+        if battery_monitor:
+            battery_monitor.stop()
 
         if mdns_broadcaster:
             mdns_broadcaster.stop()
