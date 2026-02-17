@@ -1,0 +1,124 @@
+name: "🤖 Recipe Submission"
+description: Submit a new community recipe for OpenCastor
+title: "[Recipe] "
+labels: ["recipe", "community"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Submit a Community Recipe
+        Share your working robot configuration with the OpenCastor community!
+        All configs will be reviewed for PII before merging.
+
+  - type: input
+    id: recipe-name
+    attributes:
+      label: Recipe Name
+      description: A short, descriptive name for your recipe
+      placeholder: "e.g., Greenhouse Monitor Bot"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What does this robot do? What problem does it solve?
+      placeholder: "Describe your robot's purpose and what makes this config interesting..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - home
+        - agriculture
+        - education
+        - industrial
+        - research
+        - entertainment
+    validations:
+      required: true
+
+  - type: dropdown
+    id: difficulty
+    attributes:
+      label: Difficulty Level
+      options:
+        - beginner
+        - intermediate
+        - advanced
+    validations:
+      required: true
+
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Required Hardware
+      description: List all hardware components needed
+      placeholder: |
+        - Raspberry Pi 4 (4GB)
+        - PiCar-X kit
+        - USB webcam
+    validations:
+      required: true
+
+  - type: input
+    id: robot-platform
+    attributes:
+      label: Robot Platform
+      description: The robot kit or platform used
+      placeholder: "e.g., PiCar-X, TurtleBot3, custom build"
+    validations:
+      required: true
+
+  - type: input
+    id: ai-model
+    attributes:
+      label: AI Model Used
+      description: The AI model and provider
+      placeholder: "e.g., google/gemini-2.5-flash, anthropic/claude-sonnet"
+    validations:
+      required: true
+
+  - type: textarea
+    id: config-yaml
+    attributes:
+      label: Config YAML
+      description: Paste your RCAN config (PII will be scrubbed during review)
+      render: yaml
+      placeholder: |
+        robot:
+          name: my-robot
+          platform: picar-x
+        agent:
+          provider: google
+          model: gemini-2.5-flash
+    validations:
+      required: true
+
+  - type: textarea
+    id: testing-notes
+    attributes:
+      label: Testing Notes
+      description: How did you test this? Any gotchas or tips?
+      placeholder: |
+        - Tested indoors on hardwood floors
+        - Works best in well-lit environments
+        - Camera angle matters — 30° downward is optimal
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Checklist
+      options:
+        - label: I have removed API keys, passwords, and personal information from the config
+          required: true
+        - label: I have tested this config on real hardware (or simulation)
+          required: true
+        - label: I agree to share this under the project's open-source license
+          required: true
