@@ -28,6 +28,7 @@ def _clean_anomaly():
 # Injection pattern positive cases (should trigger)
 # =====================================================================
 
+
 class TestInjectionDetection:
     """Each pattern should detect its target phrase."""
 
@@ -111,6 +112,7 @@ class TestInjectionDetection:
 # =====================================================================
 # False-positive resistance (legitimate robot commands must PASS)
 # =====================================================================
+
 
 class TestFalsePositiveResistance:
     """Normal robot commands should not be flagged."""
@@ -198,6 +200,7 @@ class TestFalsePositiveResistance:
 # Forbidden path detection
 # =====================================================================
 
+
 class TestForbiddenPaths:
     def test_etc_safety(self):
         r = scan_input("write to /etc/safety/limits")
@@ -225,6 +228,7 @@ class TestForbiddenPaths:
 # Anomaly detection
 # =====================================================================
 
+
 class TestAnomalyDetection:
     def test_normal_rate_no_anomaly(self):
         for _ in range(5):
@@ -233,10 +237,11 @@ class TestAnomalyDetection:
 
     def test_spike_triggers_anomaly(self):
         from castor.safety.anti_subversion import (
+            _baseline_rates,
             _rate_lock,
             _request_history,
-            _baseline_rates,
         )
+
         # Seed a baseline
         with _rate_lock:
             now = time.time()
@@ -254,6 +259,7 @@ class TestAnomalyDetection:
 # =====================================================================
 # scan_before_write integration
 # =====================================================================
+
 
 class TestScanBeforeWrite:
     def test_dev_path_scanned(self):
@@ -273,6 +279,7 @@ class TestScanBeforeWrite:
 # check_input_safety logging integration
 # =====================================================================
 
+
 class TestCheckInputSafety:
     def test_returns_scan_result(self):
         r = check_input_safety("jailbreak now", principal="test_user")
@@ -288,14 +295,17 @@ class TestCheckInputSafety:
 # Integration with SafetyLayer (import-level sanity)
 # =====================================================================
 
+
 class TestSafetyLayerIntegration:
     def test_import_in_safety_module(self):
         """Verify the anti_subversion import works in fs.safety."""
         from castor.fs.safety import _scan_before_write
+
         r = _scan_before_write("/dev/motor/left", "normal data", "test")
         assert r.ok
 
     def test_provider_base_hook(self):
         """Verify BaseProvider has the check_output_safety method."""
         from castor.providers.base import BaseProvider
+
         assert hasattr(BaseProvider, "check_output_safety")

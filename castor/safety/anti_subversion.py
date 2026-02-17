@@ -10,7 +10,6 @@ Main entry point: :func:`scan_input`.
 
 from __future__ import annotations
 
-import base64
 import logging
 import re
 import threading
@@ -58,17 +57,29 @@ def _p(name: str, pattern: str, verdict: ScanVerdict = ScanVerdict.BLOCK):
 
 
 # 1 — Override previous instructions
-_p("ignore_instructions", r"\bignore\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions|prompts|rules)\b")
+_p(
+    "ignore_instructions",
+    r"\bignore\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions|prompts|rules)\b",
+)
 # 2 — Identity hijack
 _p("identity_hijack", r"\byou\s+are\s+now\b(?!\s+(?:moving|stopped|idle|active|ready|connected))")
 # 3 — Role play injection
-_p("role_play", r"\b(?:act|behave)\s+as\s+(?:if\s+you\s+(?:are|were)\s+)?(?:a\s+)?(?!robot|controller|motor|arm|sensor)")
+_p(
+    "role_play",
+    r"\b(?:act|behave)\s+as\s+(?:if\s+you\s+(?:are|were)\s+)?(?:a\s+)?(?!robot|controller|motor|arm|sensor)",
+)
 # 4 — Pretend injection
 _p("pretend", r"\bpretend\s+(?:you\s+are|to\s+be)\b(?!\s+(?:stopped|idle))")
 # 5 — System prompt extraction
-_p("system_prompt_extract", r"\b(?:reveal|show|print|output|display|repeat)\s+(?:your\s+)?(?:system\s+prompt|instructions|initial\s+prompt)\b")
+_p(
+    "system_prompt_extract",
+    r"\b(?:reveal|show|print|output|display|repeat)\s+(?:your\s+)?(?:system\s+prompt|instructions|initial\s+prompt)\b",
+)
 # 6 — Jailbreak keywords
-_p("jailbreak_keyword", r"\b(?:jailbreak|jail\s+break|DAN\s+mode|do\s+anything\s+now|developer\s+mode\s+enabled)\b")
+_p(
+    "jailbreak_keyword",
+    r"\b(?:jailbreak|jail\s+break|DAN\s+mode|do\s+anything\s+now|developer\s+mode\s+enabled)\b",
+)
 # 7 — Prompt leaking
 _p("prompt_leak", r"\bwhat\s+(?:is|are)\s+your\s+(?:system\s+)?(?:prompt|instructions|rules)\b")
 # 8 — Markdown/delimiter injection (triple backtick break-out)
@@ -80,7 +91,10 @@ _p("token_repetition", r"\b(\w{3,})\s+(?:\1\s+){9,}")
 # 11 — New system message injection
 _p("system_msg_inject", r"\[?\s*(?:SYSTEM|ADMIN|ROOT)\s*(?:\]|:)\s*", ScanVerdict.FLAG)
 # 12 — Instruction override phrases
-_p("instruction_override", r"\b(?:disregard|forget|override)\s+(?:all\s+)?(?:previous|prior|above|earlier)?\s*(?:instructions|rules|constraints)\b")
+_p(
+    "instruction_override",
+    r"\b(?:disregard|forget|override)\s+(?:all\s+)?(?:previous|prior|above|earlier)?\s*(?:instructions|rules|constraints)\b",
+)
 # 13 — Encoding evasion (hex escape sequences)
 _p("hex_escape", r"(?:\\x[0-9a-fA-F]{2}){6,}")
 # 14 — Unicode smuggling (excessive zero-width chars)

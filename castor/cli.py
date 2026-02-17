@@ -1156,10 +1156,19 @@ def _interactive_share(args) -> None:
 
 
 def cmd_audit(args) -> None:
-    """View the audit log."""
+    """View or verify the audit log."""
     from castor.audit import get_audit, print_audit
 
     audit = get_audit()
+
+    if getattr(args, "verify", False):
+        valid, broken_idx = audit.verify_chain()
+        if valid:
+            print("✅ Audit chain integrity verified — no tampering detected.")
+        else:
+            print(f"❌ Audit chain BROKEN at entry index {broken_idx}!")
+        return
+
     entries = audit.read(
         since=args.since,
         event=args.event,
@@ -1718,6 +1727,7 @@ def main() -> None:
         "--event", default=None, help="Filter by event type (motor_command, approval, error, etc.)"
     )
     p_audit.add_argument("--limit", type=int, default=50, help="Max entries to show (default: 50)")
+    p_audit.add_argument("--verify", action="store_true", help="Verify hash chain integrity")
 
     # castor login
     p_login = sub.add_parser(

@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 from castor.fs.namespace import Namespace
 from castor.fs.permissions import Cap, PermissionTable
 from castor.safety.anti_subversion import scan_before_write as _scan_before_write
+from castor.safety.bounds import BoundsChecker, check_write_bounds
 
 logger = logging.getLogger("OpenCastor.FS.Safety")
 
@@ -103,6 +104,9 @@ class SafetyLayer:
 
         self._telemetry = SafetyTelemetry()
 
+        # Physical bounds checker
+        self._bounds_checker = BoundsChecker.from_virtual_fs(ns)
+
         # Install safety config into the namespace
         self._install_safety_config()
 
@@ -120,6 +124,13 @@ class SafetyLayer:
         # Safety telemetry -- on-demand via /proc/safety
         self.ns.mkdir("/proc")
         self._update_safety_telemetry()
+
+    def _update_safety_telemetry(self):
+        """Write current safety state to ``/proc/safety``."""
+        try:
+            self.ns.write("/proc/safety", self._telemetry.snapshot_dict(self))
+        except Exception as exc:
+            logger.debug("Failed to update /proc/safety: %s", exc)
 
     # ------------------------------------------------------------------
     # Internal helpers
