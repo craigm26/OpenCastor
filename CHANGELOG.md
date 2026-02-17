@@ -5,6 +5,22 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.17.8] - 2026-02-17
+
+### Added
+- **Community Hub** — browse, share, and install tested robot configs
+  - `castor hub browse` — list recipes with category/difficulty/provider filters
+  - `castor hub search` — full-text search across all recipes
+  - `castor hub show` — view recipe details and README
+  - `castor hub install` — copy a recipe config to your project
+  - `castor hub share` — interactive wizard to package and scrub your config
+  - `castor hub categories` — list all categories and difficulty levels
+- **PII scrubbing engine** — automatically removes API keys, emails, phone numbers, public IPs, home paths, and secrets from shared configs
+- **2 seed recipes** — PiCar-X Home Patrol (beginner/home) and Farm Scout Crop Inspector (intermediate/agriculture)
+- **Hub website page** at opencastor.com/hub with category browser and recipe cards
+- Hub link added to site navigation across all pages
+- 17 new tests for hub (PII scrubbing, packaging, listing, filtering)
+
 ## [2026.2.17.7] - 2026-02-17
 
 ### Added

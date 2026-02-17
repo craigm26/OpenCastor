@@ -1,0 +1,30 @@
+{
+  "id": "llama-farm-scout-b4d2e8",
+  "name": "Farm Scout — Crop Row Inspector",
+  "description": "4WD rover that drives between crop rows checking for pests, disease, and irrigation issues using Llama 3.3 on Hugging Face",
+  "author": "agribot_sarah",
+  "category": "agriculture",
+  "difficulty": "intermediate",
+  "hardware": [
+    "Freenove 4WD Car Kit",
+    "Raspberry Pi 5 (8GB)",
+    "Pi Camera Module v3 (wide-angle)",
+    "Waveshare Solar Power Manager",
+    "3D-printed camera boom (STL included)"
+  ],
+  "ai": {
+    "provider": "huggingface",
+    "model": "meta-llama/Llama-3.3-70B-Instruct"
+  },
+  "tags": ["agriculture", "outdoor", "crops", "pest-detection", "solar", "huggingface", "llama"],
+  "budget": "$200",
+  "use_case": "Drives between raised bed rows in my market garden, taking photos of leaves and soil. Llama 3.3 identifies early signs of pest damage, nutrient deficiency, and dry spots. Sends a daily report via Telegram with findings and suggested actions.",
+  "created": "2026-02-16T14:00:00Z",
+  "version": "1.0.0",
+  "opencastor_version": "2026.2.17.7",
+  "files": {
+    "config": "config.rcan.yaml",
+    "readme": "README.md",
+    "docs": []
+  }
+}

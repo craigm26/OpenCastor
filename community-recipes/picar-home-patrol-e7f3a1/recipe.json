@@ -1,0 +1,29 @@
+{
+  "id": "picar-home-patrol-e7f3a1",
+  "name": "PiCar-X Home Patrol Bot",
+  "description": "Autonomous home patrol using SunFounder PiCar-X with camera pan/tilt and Gemini vision",
+  "author": "robotmike",
+  "category": "home",
+  "difficulty": "beginner",
+  "hardware": [
+    "SunFounder PiCar-X v2.0",
+    "Raspberry Pi 4B (4GB)",
+    "Pi Camera Module v3",
+    "32GB microSD"
+  ],
+  "ai": {
+    "provider": "google",
+    "model": "gemini-2.5-flash"
+  },
+  "tags": ["patrol", "home", "camera", "autonomous", "picar"],
+  "budget": "$120",
+  "use_case": "Patrols my apartment at night, looking for anything unusual. Sends alerts via WhatsApp if it spots something unexpected like an open window or water on the floor.",
+  "created": "2026-02-15T10:00:00Z",
+  "version": "1.0.0",
+  "opencastor_version": "2026.2.17.7",
+  "files": {
+    "config": "config.rcan.yaml",
+    "readme": "README.md",
+    "docs": ["BUILD_NOTES.md"]
+  }
+}

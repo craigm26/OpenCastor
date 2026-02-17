@@ -899,6 +899,187 @@ def _list_hf_models(api, task: str, limit: int = 15) -> None:
         print(f"  Error listing models: {e}")
 
 
+def cmd_hub(args) -> None:
+    """Community recipe hub — browse, share, and install configs."""
+    from castor.hub import (
+        CATEGORIES,
+        DIFFICULTY,
+        get_recipe,
+        install_recipe,
+        list_recipes,
+        print_recipe_card,
+    )
+
+    action = args.action
+
+    if action == "categories":
+        print("\n  📂 Recipe Categories:\n")
+        for key, label in CATEGORIES.items():
+            print(f"     {key:<15} {label}")
+        print("\n  🎯 Difficulty Levels:\n")
+        for key, label in DIFFICULTY.items():
+            print(f"     {key:<15} {label}")
+        print()
+        return
+
+    if action == "browse":
+        recipes = list_recipes(
+            category=args.category,
+            difficulty=args.difficulty,
+            provider=args.provider,
+        )
+        if not recipes:
+            print("\n  No recipes found.")
+            print("  Be the first! Run: castor hub share --config your_robot.rcan.yaml\n")
+            return
+        print(f"\n  🤖 Community Recipes ({len(recipes)} found):\n")
+        for r in recipes:
+            print_recipe_card(r, verbose=args.verbose)
+        print("\n  Install one: castor hub install <recipe-id>\n")
+        return
+
+    if action == "search":
+        query = args.query
+        if not query:
+            print("  Usage: castor hub search 'your query'")
+            return
+        recipes = list_recipes(search=query)
+        if not recipes:
+            print(f"\n  No recipes matching '{query}'.")
+            return
+        print(f"\n  🔍 Results for '{query}' ({len(recipes)} found):\n")
+        for r in recipes:
+            print_recipe_card(r, verbose=args.verbose)
+        print()
+        return
+
+    if action == "show":
+        recipe_id = args.query
+        if not recipe_id:
+            print("  Usage: castor hub show <recipe-id>")
+            return
+        recipe = get_recipe(recipe_id)
+        if not recipe:
+            print(f"  Recipe not found: {recipe_id}")
+            return
+        print_recipe_card(recipe, verbose=True)
+
+        # Show README if exists
+        from pathlib import Path
+
+        readme = Path(recipe["_dir"]) / "README.md"
+        if readme.exists():
+            print(f"\n  {'─' * 60}")
+            print(readme.read_text()[:2000])
+        print()
+        return
+
+    if action == "install":
+        recipe_id = args.query
+        if not recipe_id:
+            print("  Usage: castor hub install <recipe-id>")
+            return
+        dest = install_recipe(recipe_id, dest=args.output or ".")
+        if dest:
+            print(f"\n  ✅ Recipe installed: {dest}")
+            print(f"     Run: castor run --config {dest}\n")
+        else:
+            print(f"  Recipe not found: {recipe_id}")
+        return
+
+    if action == "share":
+        if not args.config:
+            print("  Usage: castor hub share --config robot.rcan.yaml [--docs BUILD.md ...]")
+            return
+        _interactive_share(args)
+        return
+
+
+def _interactive_share(args) -> None:
+    """Interactive recipe sharing wizard."""
+
+    from castor.hub import (
+        CATEGORIES,
+        DIFFICULTY,
+        create_recipe_manifest,
+        package_recipe,
+    )
+
+    print("\n  🤖 Share Your Robot Recipe")
+    print("  ─────────────────────────")
+    print("  Your config and docs will be scrubbed of PII before sharing.\n")
+
+    name = input("  Recipe name: ").strip() or "my-robot"
+    description = input("  Short description: ").strip() or "A robot config that works"
+    author = input("  Your name/handle (or Enter for Anonymous): ").strip() or "Anonymous"
+
+    print("\n  Categories:")
+    for i, (_key, label) in enumerate(CATEGORIES.items(), 1):
+        print(f"    [{i}] {label}")
+    cat_choice = input("  Category [10]: ").strip()
+    cat_keys = list(CATEGORIES.keys())
+    try:
+        category = cat_keys[int(cat_choice) - 1]
+    except (ValueError, IndexError):
+        category = "custom"
+
+    print("\n  Difficulty:")
+    for i, (_key, label) in enumerate(DIFFICULTY.items(), 1):
+        print(f"    [{i}] {label}")
+    diff_choice = input("  Difficulty [2]: ").strip()
+    diff_keys = list(DIFFICULTY.keys())
+    try:
+        difficulty = diff_keys[int(diff_choice) - 1]
+    except (ValueError, IndexError):
+        difficulty = "intermediate"
+
+    hardware_str = input("  Hardware (comma-separated): ").strip()
+    hardware = [h.strip() for h in hardware_str.split(",") if h.strip()] or ["unspecified"]
+
+    ai_provider = input("  AI provider (e.g. anthropic, huggingface): ").strip() or "unknown"
+    ai_model = input("  AI model (e.g. claude-opus-4-6): ").strip() or "unknown"
+
+    budget = input("  Approximate budget (e.g. $150, or Enter to skip): ").strip() or None
+    tags_str = input("  Tags (comma-separated, e.g. patrol,outdoor,camera): ").strip()
+    tags = [t.strip() for t in tags_str.split(",") if t.strip()] or []
+
+    print()
+    use_case = input("  Use case (one-liner about what this robot does): ").strip() or None
+
+    manifest = create_recipe_manifest(
+        name=name,
+        description=description,
+        author=author,
+        category=category,
+        difficulty=difficulty,
+        hardware=hardware,
+        ai_provider=ai_provider,
+        ai_model=ai_model,
+        tags=tags,
+        budget=budget,
+        use_case=use_case,
+    )
+
+    recipe_dir = package_recipe(
+        config_path=args.config,
+        output_dir=args.output or ".",
+        docs=args.docs,
+        manifest=manifest,
+        dry_run=args.dry_run,
+    )
+
+    if args.dry_run:
+        print("\n  ℹ️  Dry run — no files written.")
+    else:
+        print(f"\n  ✅ Recipe packaged at: {recipe_dir}")
+        print("  Next steps:")
+        print(f"    1. Review the scrubbed files in {recipe_dir}/")
+        print("    2. Edit README.md with tips, photos, and lessons learned")
+        print("    3. Submit a PR to https://github.com/craigm26/OpenCastor")
+        print("       adding your recipe to community-recipes/")
+    print()
+
+
 def cmd_audit(args) -> None:
     """View the audit log."""
     from castor.audit import get_audit, print_audit
@@ -1383,6 +1564,62 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
+    # castor hub
+    p_hub = sub.add_parser(
+        "hub",
+        help="Community recipe hub — browse, share, and install configs",
+        epilog=(
+            "Examples:\n"
+            "  castor hub browse\n"
+            "  castor hub browse --category home --provider huggingface\n"
+            "  castor hub search 'outdoor patrol'\n"
+            "  castor hub show picar-patrol-a1b2c3\n"
+            "  castor hub install picar-patrol-a1b2c3\n"
+            "  castor hub share --config robot.rcan.yaml --docs BUILD.md LESSONS.md\n"
+            "  castor hub share --config robot.rcan.yaml --dry-run\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_hub.add_argument(
+        "action",
+        nargs="?",
+        default="browse",
+        choices=["browse", "search", "show", "install", "share", "categories"],
+        help="Action to perform (default: browse)",
+    )
+    p_hub.add_argument("query", nargs="?", default=None, help="Search query or recipe ID")
+    p_hub.add_argument("--config", default=None, help="RCAN config to share")
+    p_hub.add_argument(
+        "--docs", nargs="*", default=None, help="Markdown docs to include with shared recipe"
+    )
+    p_hub.add_argument(
+        "--category",
+        default=None,
+        choices=[
+            "home",
+            "outdoor",
+            "service",
+            "industrial",
+            "education",
+            "agriculture",
+            "security",
+            "companion",
+            "art",
+            "custom",
+        ],
+        help="Filter by category",
+    )
+    p_hub.add_argument(
+        "--difficulty",
+        default=None,
+        choices=["beginner", "intermediate", "advanced"],
+        help="Filter by difficulty",
+    )
+    p_hub.add_argument("--provider", default=None, help="Filter by AI provider")
+    p_hub.add_argument("--dry-run", action="store_true", help="Preview share without writing")
+    p_hub.add_argument("--verbose", "-v", action="store_true", help="Show full details")
+    p_hub.add_argument("--output", "-o", default=None, help="Output directory for install/share")
+
     # castor audit
     p_audit = sub.add_parser(
         "audit",
@@ -1490,6 +1727,7 @@ def main() -> None:
         "plugins": cmd_plugins,
         "audit": cmd_audit,
         "login": cmd_login,
+        "hub": cmd_hub,
     }
 
     # Load plugins and merge any plugin-provided commands

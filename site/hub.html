@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Community Hub — OpenCastor</title>
+  <meta name="description" content="Browse and share working robot configs from the OpenCastor community. Tested recipes for home, outdoor, industrial, and agricultural robots.">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<nav class="site-nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">
+      <svg viewBox="0 0 32 32" fill="none"><path d="M11 26 A11 11 0 1 1 23 8 L20 11 A7 7 0 1 0 14 22 Z" fill="currentColor"/><path d="M23 8 L26 5 L23 2 L20 5 Z" fill="currentColor" opacity="0.7"/><path d="M11 26 L8 29 L5 26 L8 23 Z" fill="currentColor" opacity="0.7"/><circle cx="16" cy="16" r="3.5" fill="#4285F4" opacity="0.9"/><circle cx="16" cy="16" r="1.8" fill="#fff" opacity="0.3"/></svg>
+      <span>OpenCastor</span>
+    </a>
+    <div class="nav-links">
+      <a href="/hardware">Hardware</a>
+      <a href="/docs">Docs</a>
+      <a href="/hub" class="active">Hub</a>
+      <a href="/about">About</a>
+      <a href="https://github.com/craigm26/OpenCastor" class="btn-nav">GitHub <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg></a>
+    </div>
+    <button class="mobile-toggle" aria-label="Menu"><span></span><span></span><span></span></button>
+  </div>
+</nav>
+
+<main>
+<section class="page-hero">
+  <p class="section-label reveal">Community Hub</p>
+  <h1 class="reveal reveal-d1">Recipes that<br><span class="gradient-text">actually work.</span></h1>
+  <p class="reveal reveal-d2">Tested robot configs shared by real builders. Browse by use case, fork what works, share what you learn.</p>
+</section>
+
+<!-- How it works -->
+<section class="section" style="padding-top:20px">
+  <div class="container">
+    <div class="steps" style="margin-bottom:60px">
+      <div class="step reveal">
+        <div class="step-num">01</div>
+        <h3>Browse</h3>
+        <p>Find configs for your use case — home patrol, farm scouting, service bots, and more. Every recipe is tested on real hardware.</p>
+      </div>
+      <div class="step reveal reveal-d1">
+        <div class="step-num">02</div>
+        <h3>Install</h3>
+        <p>One command to copy a recipe to your project. Configs are PII-scrubbed and ready to customize.</p>
+        <code style="font-size:0.8125rem;margin-top:8px;display:inline-block">castor hub install &lt;recipe-id&gt;</code>
+      </div>
+      <div class="step reveal reveal-d2">
+        <div class="step-num">03</div>
+        <h3>Share Back</h3>
+        <p>Got something working? Package your config with notes and lessons learned. Auto-scrubs secrets and PII.</p>
+        <code style="font-size:0.8125rem;margin-top:8px;display:inline-block">castor hub share --config robot.rcan.yaml</code>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Categories -->
+<section class="section alt-section" id="categories">
+  <div class="container">
+    <div class="section-header reveal">
+      <p class="section-label">Categories</p>
+      <h2 class="section-title">Every robot has a purpose.</h2>
+      <p class="section-desc">Browse by what your robot needs to do.</p>
+    </div>
+
+    <div class="bento">
+      <div class="card reveal">
+        <div class="card-icon" style="background:var(--accent-light)">🏠</div>
+        <h3>Home & Indoor</h3>
+        <p>Patrol, monitoring, pet interaction, cleaning assistance. Small robots for tight spaces.</p>
+      </div>
+      <div class="card reveal reveal-d1">
+        <div class="card-icon" style="background:var(--green-light)">🌿</div>
+        <h3>Agriculture</h3>
+        <p>Crop inspection, pest detection, soil monitoring, weed identification. Built for dirt and weather.</p>
+      </div>
+      <div class="card reveal reveal-d1">
+        <div class="card-icon" style="background:var(--blue-light)">🏔️</div>
+        <h3>Outdoor & Exploration</h3>
+        <p>Terrain navigation, mapping, environmental sensing. Rugged builds for the real world.</p>
+      </div>
+      <div class="card reveal reveal-d2">
+        <div class="card-icon" style="background:var(--orange-light)">🏭</div>
+        <h3>Industrial</h3>
+        <p>Inspection, assembly assistance, warehouse navigation. Precision and reliability first.</p>
+      </div>
+      <div class="card reveal reveal-d3">
+        <div class="card-icon" style="background:var(--purple-light)">🎓</div>
+        <h3>Education & Research</h3>
+        <p>Teaching robotics, running experiments, prototyping new ideas. Learning by building.</p>
+      </div>
+      <div class="card reveal reveal-d4">
+        <div class="card-icon" style="background:var(--blue-light)">🤝</div>
+        <h3>Service & Companion</h3>
+        <p>Delivery, greeting, guidance, social interaction. Robots that work with people.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Featured Recipes -->
+<section class="section" id="recipes">
+  <div class="container">
+    <div class="section-header reveal">
+      <p class="section-label">Featured Recipes</p>
+      <h2 class="section-title">Built by the community,<br>for the community.</h2>
+    </div>
+
+    <div class="hw-grid">
+      <div class="hw-card reveal">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">🏠</div>
+          <span class="status status-green">Tested</span>
+        </div>
+        <h3>PiCar-X Home Patrol</h3>
+        <p>Autonomous nightly patrol with Gemini vision. Spots open windows, water leaks, and items on the floor. Alerts via WhatsApp.</p>
+        <div class="hw-card-meta">
+          Google Gemini 2.5 Flash &middot; SunFounder PiCar-X &middot; ~$120 &middot; Beginner
+        </div>
+      </div>
+
+      <div class="hw-card reveal reveal-d1">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">🌿</div>
+          <span class="status status-green">Tested</span>
+        </div>
+        <h3>Farm Scout — Crop Inspector</h3>
+        <p>4WD rover that checks crop rows for pests, disease, and dry spots using Llama 3.3 on Hugging Face. Daily Telegram reports.</p>
+        <div class="hw-card-meta">
+          Hugging Face Llama 3.3 &middot; Freenove 4WD &middot; ~$200 &middot; Intermediate
+        </div>
+      </div>
+
+      <div class="hw-card reveal reveal-d2">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">✨</div>
+          <span class="status" style="background:var(--accent-light);color:var(--accent)">Your recipe?</span>
+        </div>
+        <h3>Share Your Build</h3>
+        <p>Got a working robot config? Package it with <code>castor hub share</code> and help the next builder skip the hard parts.</p>
+        <div class="hw-card-meta">
+          Any AI &middot; Any hardware &middot; Your budget &middot; Your difficulty
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- What makes a great recipe -->
+<section class="section dark-section" id="contribute">
+  <div class="container">
+    <div class="section-header reveal" style="text-align:center;margin-left:auto;margin-right:auto">
+      <p class="section-label">Contributing</p>
+      <h2 class="section-title" style="color:var(--dark-text)">What makes a great recipe?</h2>
+    </div>
+
+    <div class="steps">
+      <div class="step reveal">
+        <div class="step-num">✅</div>
+        <h3>Tested on Real Hardware</h3>
+        <p>Not theoretical — you actually built it, ran it, and it works. Include what version of OpenCastor you tested with.</p>
+      </div>
+      <div class="step reveal reveal-d1">
+        <div class="step-num">📝</div>
+        <h3>Honest Documentation</h3>
+        <p>What worked, what didn't, what you'd change. The failures are often more valuable than the successes.</p>
+      </div>
+      <div class="step reveal reveal-d2">
+        <div class="step-num">💰</div>
+        <h3>Budget & Bill of Materials</h3>
+        <p>Real costs help people plan. Include links to where you bought parts if possible.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CLI Reference -->
+<section class="section">
+  <div class="container">
+    <div class="code-showcase">
+      <div class="reveal">
+        <p class="section-label">CLI</p>
+        <h2 class="section-title">Browse and share<br>from the terminal.</h2>
+        <p class="section-desc">The hub is built into the <code>castor</code> CLI. No account needed to browse. Share via GitHub PR.</p>
+      </div>
+
+      <div class="code-block reveal reveal-d2">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">Terminal</span>
+        </div>
+        <div class="code-body"><span class="cm"># Browse all recipes</span>
+<span class="s">$</span> castor hub browse
+
+<span class="cm"># Filter by category and AI provider</span>
+<span class="s">$</span> castor hub browse --category agriculture --provider huggingface
+
+<span class="cm"># Search for something specific</span>
+<span class="s">$</span> castor hub search "outdoor patrol camera"
+
+<span class="cm"># View full details</span>
+<span class="s">$</span> castor hub show picar-home-patrol-e7f3a1
+
+<span class="cm"># Install a recipe to your project</span>
+<span class="s">$</span> castor hub install picar-home-patrol-e7f3a1
+
+<span class="cm"># Share your working config (PII auto-scrubbed)</span>
+<span class="s">$</span> castor hub share --config robot.rcan.yaml \
+    --docs BUILD_NOTES.md LESSONS.md
+
+<span class="cm"># See all categories</span>
+<span class="s">$</span> castor hub categories</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PII / Safety -->
+<section class="section alt-section">
+  <div class="container">
+    <div class="section-header reveal" style="text-align:center;margin-left:auto;margin-right:auto">
+      <p class="section-label">Safety</p>
+      <h2 class="section-title">Share safely.<br>Secrets stay secret.</h2>
+      <p class="section-desc" style="margin-left:auto;margin-right:auto">The <code>castor hub share</code> command automatically scrubs your config and docs before packaging. Always review the output before submitting.</p>
+    </div>
+
+    <div class="bento" style="max-width:800px;margin:0 auto">
+      <div class="card reveal">
+        <h3>🔑 API Keys & Tokens</h3>
+        <p>OpenAI, Anthropic, Google, Hugging Face, GitHub, Slack tokens are all detected and redacted.</p>
+      </div>
+      <div class="card reveal reveal-d1">
+        <h3>📧 Personal Info</h3>
+        <p>Email addresses, phone numbers, and hostnames are scrubbed automatically.</p>
+      </div>
+      <div class="card reveal reveal-d2">
+        <h3>🌐 Network Info</h3>
+        <p>Public IPs are redacted. Private/local IPs (192.168.x.x, 10.x.x.x) are preserved since they're not unique.</p>
+      </div>
+      <div class="card reveal reveal-d3">
+        <h3>📁 File Paths</h3>
+        <p>Home directory paths (/home/username) are normalized to /home/user.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <h2 class="reveal">Every working config helps someone.</h2>
+  <p class="reveal reveal-d1">Share yours. Find your next build. Build together.</p>
+  <div class="hero-actions reveal reveal-d2">
+    <a href="https://github.com/craigm26/OpenCastor/tree/main/community-recipes" class="btn btn-primary btn-lg">
+      Browse Recipes
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+    <a href="/docs" class="btn btn-secondary btn-lg">
+      Get Started
+    </a>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="/" class="nav-logo">
+          <svg viewBox="0 0 32 32" width="24" height="24" fill="none">
+            <path d="M11 26 A11 11 0 1 1 23 8 L20 11 A7 7 0 1 0 14 22 Z" fill="currentColor" style="color:var(--accent)"/>
+            <path d="M23 8 L26 5 L23 2 L20 5 Z" fill="currentColor" style="color:var(--accent)" opacity="0.7"/>
+            <path d="M11 26 L8 29 L5 26 L8 23 Z" fill="currentColor" style="color:var(--accent)" opacity="0.7"/>
+            <circle cx="16" cy="16" r="3.5" fill="#4285F4" opacity="0.9"/>
+            <circle cx="16" cy="16" r="1.8" fill="#fff" opacity="0.3"/>
+          </svg>
+          <span>OpenCastor</span>
+        </a>
+        <p>The universal runtime for embodied AI. Give any robot a brain.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <a href="/docs">Documentation</a>
+        <a href="/hardware">Hardware</a>
+        <a href="/hub">Community Hub</a>
+        <a href="https://rcan.dev/spec/">RCAN Spec</a>
+      </div>
+      <div class="footer-col">
+        <h4>Resources</h4>
+        <a href="/docs">Getting Started</a>
+        <a href="https://github.com/craigm26/OpenCastor">GitHub</a>
+        <a href="https://github.com/craigm26/OpenCastor/issues">Issues</a>
+        <a href="https://discord.gg/jMjA8B26Bq">Discord Community</a>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <a href="/about">About</a>
+        <a href="mailto:hello@opencastor.com">Contact</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>&copy; 2025-2026 Continuon AI. Apache 2.0 License.</p>
+    </div>
+  </div>
+</footer>
+
+<script>
+const toggle=document.querySelector('.mobile-toggle'),navLinks=document.querySelector('.nav-links');
+toggle.addEventListener('click',function(){navLinks.classList.toggle('open');toggle.classList.toggle('active');document.body.style.overflow=navLinks.classList.contains('open')?'hidden':'';});
+document.querySelectorAll('.nav-links a').forEach(a=>{a.addEventListener('click',()=>{navLinks.classList.remove('open');toggle.classList.remove('active');document.body.style.overflow='';});});
+const nav=document.querySelector('.site-nav'),onScroll=()=>nav.classList.toggle('scrolled',window.scrollY>20);window.addEventListener('scroll',onScroll,{passive:true});onScroll();
+const ro=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');ro.unobserve(e.target);}});},{threshold:0.08,rootMargin:'0px 0px -40px 0px'});document.querySelectorAll('.reveal').forEach(el=>ro.observe(el));
+</script>
+</body>
+</html>
