@@ -3,22 +3,22 @@ RCAN Spec Validator.
 Finds all *.rcan.yaml files and checks them against the RCAN JSON Schema.
 """
 
+import argparse
+import json
 import os
 import sys
-import json
-import argparse
 
 import yaml
-from jsonschema import validate, ValidationError
+from jsonschema import ValidationError, validate
 
 
 def load_yaml(path):
-    with open(path, "r") as f:
+    with open(path) as f:
         return yaml.safe_load(f)
 
 
 def load_schema(path):
-    with open(path, "r") as f:
+    with open(path) as f:
         if path.endswith(".yaml") or path.endswith(".yml"):
             return yaml.safe_load(f)
         return json.load(f)

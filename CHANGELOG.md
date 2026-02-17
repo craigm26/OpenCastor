@@ -5,6 +5,24 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.17.10] - 2026-02-17
+
+### Added
+- **Anti-subversion module** (`castor/safety/anti_subversion.py`) — prompt injection defense with 15 regex patterns, forbidden path detection, anomaly rate-spike flagging, wired into SafetyLayer and BaseProvider
+- **Work authorization** (`castor/safety/authorization.py`) — work order lifecycle for destructive actions (request → approve → execute/revoke), role-gated approval, self-approval prevention, auto-expiry, destructive action detection for GPIO/motor paths
+- **Physical bounds enforcement** (`castor/safety/bounds.py`) — workspace sphere/box/forbidden zones, per-joint position/velocity/torque limits, force limits (50N default, 10N human-proximity), pre-built configs for differential_drive/arm/arm_mobile
+- **Tamper-evident audit log** — SHA-256 hash chain on every audit entry, `castor audit --verify` CLI, backward-compatible with existing logs
+- **Safety state telemetry** (`castor/safety/state.py`) — `SafetyStateSnapshot` with composite health score exposed at `/proc/safety`
+- **Recipe submission issue template** (`.github/ISSUE_TEMPLATE/recipe-submission.yml`)
+- **`castor hub share --submit`** — auto-fork, branch, and PR via `gh` CLI
+
+### Fixed
+- **RCAN Safety Invariants 4 & 5** — `check_role_rate_limit()` and `check_session_timeout()` now enforced in all SafetyLayer public methods (read/write/append/ls/stat/mkdir)
+- **E-stop authorization** — `clear_estop()` requires auth code via `OPENCASTOR_ESTOP_AUTH` env var when set
+
+### Changed
+- **PyPI publishing** — Trusted Publisher (OIDC) with API token fallback, all actions pinned to SHA, scoped permissions, concurrency groups, timeouts, twine check
+
 ## [2026.2.17.9] - 2026-02-17
 
 ### Added

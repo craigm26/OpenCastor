@@ -217,8 +217,11 @@ castor profile   list                              # Manage named config profile
 ```bash
 castor approvals                                   # View/approve dangerous commands
 castor privacy   --config robot.rcan.yaml          # Show sensor access policy
-castor audit     --since 24h                       # View append-only audit log
+castor audit     --since 24h                       # View tamper-evident audit log
+castor audit     --verify                          # Verify audit chain integrity
 ```
+
+OpenCastor's safety kernel includes anti-subversion (prompt injection defense), work authorization for destructive actions, physical bounds enforcement (workspace/joint/force limits), tamper-evident hash-chained audit logs, and safety state telemetry at `/proc/safety`. See [`docs/safety-audit-report.md`](docs/safety-audit-report.md) for the full architecture.
 
 ### Network & Fleet
 ```bash

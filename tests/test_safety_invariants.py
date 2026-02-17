@@ -8,8 +8,6 @@ import os
 import time
 from unittest.mock import patch
 
-import pytest
-
 from castor.fs.namespace import Namespace
 from castor.fs.permissions import PermissionTable
 from castor.fs.safety import SafetyLayer
@@ -40,7 +38,7 @@ class TestRoleRateLimiting(_Base):
         sl, ns, _ = self._make_safety()
         ns.write("/proc/uptime", 42)
         # GUEST has 10 req/min
-        for i in range(10):
+        for _i in range(10):
             assert sl.read("/proc/uptime", principal="driver") == 42
         # 11th should be blocked
         assert sl.read("/proc/uptime", principal="driver") is None
@@ -48,7 +46,7 @@ class TestRoleRateLimiting(_Base):
     def test_rate_limit_blocks_write(self):
         sl, ns, _ = self._make_safety()
         # driver (GUEST) has 10 req/min; use /tmp which is writable
-        for i in range(10):
+        for _i in range(10):
             sl.read("/proc/uptime", principal="driver")
         assert sl.write("/tmp/x", "data", principal="driver") is False
 

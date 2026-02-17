@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 class TestHuggingFaceProvider:
     def test_import(self):
@@ -90,10 +88,8 @@ class TestHuggingFaceProvider:
 class TestLoginCLI:
     def test_login_parser_exists(self):
         """Verify the login subcommand is registered."""
-        from castor.cli import main
 
         # Just verify it doesn't crash on --help parse
-        import argparse
 
         assert True  # If we got here, import worked
 

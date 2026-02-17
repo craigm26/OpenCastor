@@ -381,7 +381,9 @@ class SafetyLayer:
         if path.startswith(("/dev/motor", "/dev/arm")):
             bounds_result = check_write_bounds(self._bounds_checker, path, data)
             if bounds_result.violated:
-                logger.warning("WRITE denied: bounds violation on %s: %s", path, bounds_result.details)
+                logger.warning(
+                    "WRITE denied: bounds violation on %s: %s", path, bounds_result.details
+                )
                 self._audit_safety(principal, path, "bounds_violation", bounds_result.details)
                 return False
             if bounds_result.status == "warning":

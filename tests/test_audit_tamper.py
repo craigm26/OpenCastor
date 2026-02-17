@@ -1,8 +1,6 @@
 """Tests for tamper-evident audit log hash chaining."""
 
 import json
-import os
-import tempfile
 
 import pytest
 
@@ -35,7 +33,7 @@ class TestHashChainCreation:
         audit_log.log("event3")
 
         with open(audit_log._path) as f:
-            lines = [l.strip() for l in f if l.strip()]
+            lines = [line.strip() for line in f if line.strip()]
 
         assert len(lines) == 3
         assert json.loads(lines[0])["prev_hash"] == "GENESIS"
@@ -148,8 +146,12 @@ class TestBackwardCompatibility:
         """Old entries without prev_hash should not break verification."""
         # Write legacy entries (no prev_hash)
         with open(audit_log._path, "w") as f:
-            f.write(json.dumps({"ts": "2024-01-01T00:00:00", "event": "old1", "source": "sys"}) + "\n")
-            f.write(json.dumps({"ts": "2024-01-01T00:01:00", "event": "old2", "source": "sys"}) + "\n")
+            f.write(
+                json.dumps({"ts": "2024-01-01T00:00:00", "event": "old1", "source": "sys"}) + "\n"
+            )
+            f.write(
+                json.dumps({"ts": "2024-01-01T00:01:00", "event": "old2", "source": "sys"}) + "\n"
+            )
 
         valid, idx = audit_log.verify_chain()
         assert valid is True
@@ -157,14 +159,18 @@ class TestBackwardCompatibility:
     def test_legacy_then_chained(self, audit_log):
         """New entries after legacy ones should chain from the last legacy entry."""
         with open(audit_log._path, "w") as f:
-            f.write(json.dumps({"ts": "2024-01-01T00:00:00", "event": "old1", "source": "sys"}) + "\n")
-            f.write(json.dumps({"ts": "2024-01-01T00:01:00", "event": "old2", "source": "sys"}) + "\n")
+            f.write(
+                json.dumps({"ts": "2024-01-01T00:00:00", "event": "old1", "source": "sys"}) + "\n"
+            )
+            f.write(
+                json.dumps({"ts": "2024-01-01T00:01:00", "event": "old2", "source": "sys"}) + "\n"
+            )
 
         # Now log a new entry — it should hash the last legacy line
         audit_log.log("new1", source="test")
 
         with open(audit_log._path) as f:
-            lines = [l.strip() for l in f if l.strip()]
+            lines = [line.strip() for line in f if line.strip()]
 
         new_entry = json.loads(lines[2])
         assert new_entry["prev_hash"] == _hash_entry(lines[1])
@@ -176,7 +182,10 @@ class TestBackwardCompatibility:
         """Multiple legacy then multiple chained entries."""
         with open(audit_log._path, "w") as f:
             for i in range(3):
-                f.write(json.dumps({"ts": f"2024-01-0{i+1}", "event": f"legacy_{i}", "source": "sys"}) + "\n")
+                f.write(
+                    json.dumps({"ts": f"2024-01-0{i + 1}", "event": f"legacy_{i}", "source": "sys"})
+                    + "\n"
+                )
 
         for i in range(3):
             audit_log.log(f"new_{i}", source="test")

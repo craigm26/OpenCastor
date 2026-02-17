@@ -62,7 +62,7 @@ class BaseProvider(ABC):
         Returns True if safe to proceed.
         """
         try:
-            from castor.safety.anti_subversion import check_input_safety, ScanVerdict
+            from castor.safety.anti_subversion import ScanVerdict, check_input_safety
 
             result = check_input_safety(text, principal)
             return result.verdict != ScanVerdict.BLOCK

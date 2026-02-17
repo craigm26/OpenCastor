@@ -1,8 +1,6 @@
 """Tests for the Community Hub."""
 
-import json
 import subprocess
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -281,9 +279,7 @@ class TestSubmitRecipePR:
 
         with patch(
             "castor.hub.subprocess.run",
-            side_effect=subprocess.CalledProcessError(
-                1, "gh", stderr="something went wrong"
-            ),
+            side_effect=subprocess.CalledProcessError(1, "gh", stderr="something went wrong"),
         ):
             with pytest.raises(SubmitError, match="something went wrong"):
                 _run_gh(["auth", "status"])

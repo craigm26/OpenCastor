@@ -4,14 +4,14 @@ Uses the `rich` library for cinematic terminal output.
 Run: python demo_logs.py
 """
 
-import time
-import random
 import json
+import random
+import time
 
 from rich.console import Console
 from rich.panel import Panel
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.syntax import Syntax
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from rich.tree import Tree
 
 console = Console()
@@ -149,8 +149,6 @@ if __name__ == "__main__":
         boot_sequence()
         mind_loop_simulation()
         safety_trigger()
-        console.print(
-            "\n[dim]Session Ended. Log saved to /var/log/castor/session_01.json[/dim]"
-        )
+        console.print("\n[dim]Session Ended. Log saved to /var/log/castor/session_01.json[/dim]")
     except KeyboardInterrupt:
         console.print("[red]Aborted.[/red]")
