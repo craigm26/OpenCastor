@@ -1,0 +1,15 @@
+# OpenCastor Code Owners
+# Each line is a file pattern followed by one or more owners.
+# Order matters — last matching pattern takes precedence.
+
+# Default owner for everything
+*                       @craigm26
+
+# Core subsystems
+castor/providers/       @craigm26
+castor/drivers/         @craigm26
+castor/channels/        @craigm26
+
+# Configuration and CI
+config/                 @craigm26
+.github/                @craigm26

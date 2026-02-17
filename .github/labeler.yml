@@ -1,0 +1,29 @@
+providers:
+  - changed-files:
+      - any-glob-to-any-file: "castor/providers/**"
+
+drivers:
+  - changed-files:
+      - any-glob-to-any-file: "castor/drivers/**"
+
+channels:
+  - changed-files:
+      - any-glob-to-any-file: "castor/channels/**"
+
+config:
+  - changed-files:
+      - any-glob-to-any-file: "config/**"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file: ".github/**"
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "*.md"
+          - "site/**"
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file: "tests/**"
