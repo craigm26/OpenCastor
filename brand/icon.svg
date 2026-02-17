@@ -1,0 +1,31 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient id="ai-glow" x1="256" y1="192" x2="256" y2="320" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#4285F4" />
+            <stop offset="100%" stop-color="#9C27B0" />
+        </linearGradient>
+        <linearGradient id="metal-sheen" x1="128" y1="128" x2="384" y2="384" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#455A64" />
+            <stop offset="50%" stop-color="#607D8B" />
+            <stop offset="100%" stop-color="#37474F" />
+        </linearGradient>
+    </defs>
+
+    <g transform="translate(56, 56)">
+        <path d="M 200,360
+                 A 130,130 0 1 1 330,152
+                 L 291,191
+                 A 78,78 0 1 0 226,321
+                 Z"
+              fill="url(#metal-sheen)" stroke="#263238" stroke-width="5" stroke-linejoin="round"/>
+
+        <path d="M 330,152 L 369,113 L 317,61 L 278,100 Z" fill="url(#metal-sheen)" stroke="#263238" stroke-width="4"/>
+        <circle cx="304" cy="126" r="15" fill="#CFD8DC" stroke="#263238" stroke-width="4"/>
+
+        <path d="M 200,360 L 161,399 L 109,347 L 148,308 Z" fill="url(#metal-sheen)" stroke="#263238" stroke-width="4"/>
+        <circle cx="174" cy="334" r="15" fill="#CFD8DC" stroke="#263238" stroke-width="4"/>
+
+        <circle cx="260" cy="256" r="45" fill="url(#ai-glow)" stroke="#FFFFFF" stroke-width="5" opacity="0.9"/>
+        <circle cx="260" cy="256" r="26" fill="#FFFFFF" opacity="0.3"/>
+    </g>
+</svg>
