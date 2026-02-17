@@ -2,7 +2,7 @@
 
 import threading
 import time
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 from castor.watchdog import BrainWatchdog
 
@@ -120,7 +120,6 @@ class TestBrainWatchdogTimeout:
         wd = BrainWatchdog(config, stop_fn=stop_mock)
 
         # Monkey-patch the sleep interval to make the test fast
-        original_loop = wd._monitor_loop
 
         def fast_monitor_loop():
             while wd._running:

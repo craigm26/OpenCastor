@@ -7,11 +7,11 @@ import pytest
 
 from castor import profiles
 from castor.profiles import (
-    save_profile,
-    use_profile,
+    get_active_profile,
     list_profiles,
     remove_profile,
-    get_active_profile,
+    save_profile,
+    use_profile,
 )
 
 

@@ -2,8 +2,6 @@
 
 import time
 
-import pytest
-
 from castor.rcan.message import MessageType, Priority, RCANMessage
 
 

@@ -24,7 +24,7 @@ class TestAuthMaps:
             assert name in PROVIDER_AUTH_MAP
 
     def test_provider_map_entries_are_tuples(self):
-        for name, entry in PROVIDER_AUTH_MAP.items():
+        for _name, entry in PROVIDER_AUTH_MAP.items():
             assert isinstance(entry, tuple)
             assert len(entry) == 2
 
@@ -33,7 +33,7 @@ class TestAuthMaps:
             assert name in CHANNEL_AUTH_MAP
 
     def test_channel_map_entries_are_lists(self):
-        for name, entries in CHANNEL_AUTH_MAP.items():
+        for _name, entries in CHANNEL_AUTH_MAP.items():
             assert isinstance(entries, list)
             for entry in entries:
                 assert isinstance(entry, tuple)

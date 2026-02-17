@@ -1,9 +1,8 @@
 """Tests for castor.plugins -- extensible hook system."""
 
-import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from castor.plugins import PluginRegistry, load_plugins, list_plugins
+from castor.plugins import PluginRegistry, list_plugins, load_plugins
 
 
 # =====================================================================
@@ -121,7 +120,7 @@ class TestLoadPlugins:
         fresh_registry = PluginRegistry()
         with patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)), \
              patch("castor.plugins._registry", fresh_registry):
-            result = load_plugins()
+            load_plugins()
 
         assert "hello" in fresh_registry.commands
 

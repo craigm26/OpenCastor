@@ -8,6 +8,12 @@ from typing import Callable, Dict, List, Optional
 
 from castor.auth import check_channel_ready, resolve_channel_credentials
 
+__all__ = [
+    "create_channel",
+    "get_available_channels",
+    "get_ready_channels",
+]
+
 logger = logging.getLogger("OpenCastor.Channels")
 
 # Registry of channel name -> class (lazy-populated)

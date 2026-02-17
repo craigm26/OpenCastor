@@ -40,7 +40,7 @@ import traceback
 # Command handlers
 # ---------------------------------------------------------------------------
 
-def cmd_run(args):
+def cmd_run(args) -> None:
     """Run the main perception-action loop."""
     config_path = args.config
 
@@ -77,7 +77,7 @@ def cmd_run(args):
     run_main()
 
 
-def cmd_gateway(args):
+def cmd_gateway(args) -> None:
     """Start the FastAPI gateway server."""
     from castor.api import main as run_gateway
 
@@ -88,7 +88,7 @@ def cmd_gateway(args):
     run_gateway()
 
 
-def cmd_wizard(args):
+def cmd_wizard(args) -> None:
     """Run the interactive setup wizard."""
     # Web-based wizard
     if getattr(args, "web", False):
@@ -109,7 +109,7 @@ def cmd_wizard(args):
     run_wizard()
 
 
-def cmd_dashboard(args):
+def cmd_dashboard(args) -> None:
     """Launch the Streamlit dashboard."""
     import subprocess
 
@@ -119,7 +119,7 @@ def cmd_dashboard(args):
     )
 
 
-def cmd_token(args):
+def cmd_token(args) -> None:
     """Issue a JWT token for RCAN API access."""
     from castor.auth import load_dotenv_if_available
 
@@ -157,7 +157,7 @@ def cmd_token(args):
         raise SystemExit(1) from exc
 
 
-def cmd_discover(args):
+def cmd_discover(args) -> None:
     """Discover RCAN peers on the local network."""
     print("\n  Scanning for RCAN peers (5 seconds)...\n")
 
@@ -194,7 +194,7 @@ def cmd_discover(args):
             print()
 
 
-def cmd_doctor(args):
+def cmd_doctor(args) -> None:
     """Run system health checks."""
     from castor.doctor import print_report, run_all_checks
 
@@ -204,14 +204,14 @@ def cmd_doctor(args):
     print()
 
 
-def cmd_demo(args):
+def cmd_demo(args) -> None:
     """Run a simulated perception-action loop (no hardware/API keys)."""
     from castor.demo import run_demo
 
     run_demo(steps=args.steps, delay=args.delay)
 
 
-def cmd_test_hardware(args):
+def cmd_test_hardware(args) -> None:
     """Test each motor/servo individually."""
     from castor.test_hardware import run_test
 
@@ -223,7 +223,7 @@ def cmd_test_hardware(args):
     run_test(config_path=args.config, skip_confirm=args.yes)
 
 
-def cmd_calibrate(args):
+def cmd_calibrate(args) -> None:
     """Interactive servo/motor calibration."""
     from castor.calibrate import run_calibration
 
@@ -235,7 +235,7 @@ def cmd_calibrate(args):
     run_calibration(config_path=args.config)
 
 
-def cmd_logs(args):
+def cmd_logs(args) -> None:
     """View structured, colored OpenCastor logs."""
     from castor.logs import view_logs
 
@@ -248,7 +248,7 @@ def cmd_logs(args):
     )
 
 
-def cmd_backup(args):
+def cmd_backup(args) -> None:
     """Back up OpenCastor configs and credentials."""
     from castor.backup import create_backup, print_backup_summary
 
@@ -262,7 +262,7 @@ def cmd_backup(args):
         print_backup_summary(archive, files)
 
 
-def cmd_restore(args):
+def cmd_restore(args) -> None:
     """Restore OpenCastor configs from a backup archive."""
     from castor.backup import print_restore_summary, restore_backup
 
@@ -274,14 +274,14 @@ def cmd_restore(args):
             print_restore_summary(restored)
 
 
-def cmd_migrate(args):
+def cmd_migrate(args) -> None:
     """Migrate an RCAN config to the current schema version."""
     from castor.migrate import migrate_file
 
     migrate_file(args.config, dry_run=args.dry_run)
 
 
-def cmd_upgrade(args):
+def cmd_upgrade(args) -> None:
     """Upgrade OpenCastor and run a health check."""
     import subprocess
 
@@ -305,7 +305,7 @@ def cmd_upgrade(args):
     print()
 
 
-def cmd_install_service(args):
+def cmd_install_service(args) -> None:
     """Generate a systemd service unit file for OpenCastor."""
     import getpass
 
@@ -358,7 +358,7 @@ WantedBy=multi-user.target
     print()
 
 
-def cmd_status(args):
+def cmd_status(args) -> None:
     """Show which providers and channels are ready."""
     from castor.auth import (
         list_available_channels,
@@ -389,7 +389,7 @@ def cmd_status(args):
 # New command handlers (batch 3)
 # ---------------------------------------------------------------------------
 
-def cmd_shell(args):
+def cmd_shell(args) -> None:
     """Launch an interactive command shell with robot objects."""
     from castor.shell import launch_shell
 
@@ -401,21 +401,21 @@ def cmd_shell(args):
     launch_shell(config_path=args.config)
 
 
-def cmd_watch(args):
+def cmd_watch(args) -> None:
     """Launch a live Rich telemetry dashboard."""
     from castor.watch import launch_watch
 
     launch_watch(gateway_url=args.gateway, refresh=args.refresh)
 
 
-def cmd_fix(args):
+def cmd_fix(args) -> None:
     """Run doctor and attempt to auto-fix common issues."""
     from castor.fix import run_fix
 
     run_fix(config_path=args.config)
 
 
-def cmd_repl(args):
+def cmd_repl(args) -> None:
     """Drop into a Python REPL with robot objects pre-loaded."""
     from castor.repl import launch_repl
 
@@ -427,7 +427,7 @@ def cmd_repl(args):
     launch_repl(config_path=args.config)
 
 
-def cmd_record(args):
+def cmd_record(args) -> None:
     """Record a perception-action session to a JSONL file."""
     if not os.path.exists(args.config):
         print(f"\n  Config not found: {args.config}")
@@ -484,7 +484,7 @@ def cmd_record(args):
         camera.close()
 
 
-def cmd_replay(args):
+def cmd_replay(args) -> None:
     """Replay a recorded session from a JSONL file."""
     from castor.record import replay_session
 
@@ -495,7 +495,7 @@ def cmd_replay(args):
     )
 
 
-def cmd_benchmark(args):
+def cmd_benchmark(args) -> None:
     """Profile a single perception-action loop iteration."""
     from castor.benchmark import run_benchmark
 
@@ -511,7 +511,7 @@ def cmd_benchmark(args):
     )
 
 
-def cmd_lint(args):
+def cmd_lint(args) -> None:
     """Deep config validation beyond JSON schema."""
     from castor.lint import print_lint_report, run_lint
 
@@ -523,21 +523,21 @@ def cmd_lint(args):
     print_lint_report(issues, args.config)
 
 
-def cmd_learn(args):
+def cmd_learn(args) -> None:
     """Interactive step-by-step tutorial."""
     from castor.learn import run_learn
 
     run_learn(lesson=args.lesson)
 
 
-def cmd_fleet(args):
+def cmd_fleet(args) -> None:
     """Multi-robot fleet management."""
     from castor.fleet import fleet_status
 
     fleet_status(timeout=float(args.timeout))
 
 
-def cmd_export(args):
+def cmd_export(args) -> None:
     """Export config bundle (no secrets)."""
     from castor.export import export_bundle, print_export_summary
 
@@ -557,7 +557,7 @@ def cmd_export(args):
 # OpenClaw-inspired command handlers (batch 4)
 # ---------------------------------------------------------------------------
 
-def cmd_approvals(args):
+def cmd_approvals(args) -> None:
     """Manage approval queue for dangerous commands."""
     from castor.approvals import ApprovalGate, print_approvals
 
@@ -589,7 +589,7 @@ def cmd_approvals(args):
         print_approvals(pending)
 
 
-def cmd_schedule(args):
+def cmd_schedule(args) -> None:
     """Manage scheduled tasks."""
     from castor.schedule import (
         add_task,
@@ -605,10 +605,10 @@ def cmd_schedule(args):
         tasks = list_tasks(config_path=args.config)
         print_schedule(tasks)
     elif action == "add":
-        if not args.name or not args.command or not args.cron:
+        if not args.name or not args.task_command or not args.cron:
             print("\n  Usage: castor schedule add --name NAME --command CMD --cron EXPR\n")
             return
-        task = add_task(args.name, args.command, args.cron)
+        task = add_task(args.name, args.task_command, args.cron)
         print(f"\n  Added: {task['name']} ({task['cron']})\n")
     elif action == "remove":
         if not args.name:
@@ -624,14 +624,14 @@ def cmd_schedule(args):
         print("\n  Usage: castor schedule {list|add|remove|install}\n")
 
 
-def cmd_configure(args):
+def cmd_configure(args) -> None:
     """Interactive config editor."""
     from castor.configure import run_configure
 
     run_configure(config_path=args.config)
 
 
-def cmd_search(args):
+def cmd_search(args) -> None:
     """Search operational logs and session recordings."""
     from castor.memory_search import print_search_results, search_logs
 
@@ -644,7 +644,7 @@ def cmd_search(args):
     print_search_results(results, args.query)
 
 
-def cmd_network(args):
+def cmd_network(args) -> None:
     """Network configuration and VPN exposure controls."""
     from castor.network import expose, network_status
 
@@ -660,7 +660,7 @@ def cmd_network(args):
         network_status(config_path=args.config)
 
 
-def cmd_privacy(args):
+def cmd_privacy(args) -> None:
     """Show or configure privacy policy."""
     import yaml
 
@@ -678,14 +678,14 @@ def cmd_privacy(args):
 # Batch 5: Polish & quality-of-life command handlers
 # ---------------------------------------------------------------------------
 
-def cmd_update_check(args):
+def cmd_update_check(args) -> None:
     """Check PyPI for a newer version of OpenCastor."""
     from castor.update_check import print_update_status
 
     print_update_status()
 
 
-def cmd_profile(args):
+def cmd_profile(args) -> None:
     """Manage named config profiles."""
     from castor.profiles import (
         list_profiles,
@@ -727,7 +727,7 @@ def cmd_profile(args):
         print("\n  Usage: castor profile {list|save|use|remove}\n")
 
 
-def cmd_test(args):
+def cmd_test(args) -> None:
     """Run the test suite via pytest."""
     import subprocess
 
@@ -742,7 +742,7 @@ def cmd_test(args):
     sys.exit(result.returncode)
 
 
-def cmd_diff(args):
+def cmd_diff(args) -> None:
     """Compare two RCAN config files."""
     from castor.diff import diff_configs, print_diff
 
@@ -757,7 +757,7 @@ def cmd_diff(args):
     print_diff(diffs, args.config, args.baseline)
 
 
-def cmd_quickstart(args):
+def cmd_quickstart(args) -> None:
     """One-command setup: wizard -> demo -> dashboard."""
     import subprocess
 
@@ -780,7 +780,7 @@ def cmd_quickstart(args):
     print("  Next: castor run --config robot.rcan.yaml\n")
 
 
-def cmd_plugins(args):
+def cmd_plugins(args) -> None:
     """List or manage plugins."""
     from castor.plugins import list_plugins, load_plugins, print_plugins
 
@@ -789,7 +789,7 @@ def cmd_plugins(args):
     print_plugins(plugins)
 
 
-def cmd_audit(args):
+def cmd_audit(args) -> None:
     """View the audit log."""
     from castor.audit import get_audit, print_audit
 
@@ -806,7 +806,7 @@ def cmd_audit(args):
 # Parser setup
 # ---------------------------------------------------------------------------
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         prog="castor",
         description="OpenCastor - The Universal Runtime for Embodied AI",
@@ -1100,7 +1100,7 @@ def main():
                          choices=["list", "add", "remove", "install"],
                          help="Action to perform")
     p_sched.add_argument("--name", default=None, help="Task name")
-    p_sched.add_argument("--command", default=None, help="Command to run")
+    p_sched.add_argument("--command", dest="task_command", default=None, help="Command to run")
     p_sched.add_argument("--cron", default=None, help="Cron expression (e.g. '*/30 * * * *')")
     p_sched.add_argument("--config", default=None, help="RCAN config file (optional)")
 
@@ -1303,7 +1303,7 @@ def main():
         parser.print_help()
 
 
-def _friendly_error_handler():
+def _friendly_error_handler() -> None:
     """Wrap main() with user-friendly error handling and contextual suggestions."""
     try:
         main()

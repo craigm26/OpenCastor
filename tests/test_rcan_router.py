@@ -2,9 +2,9 @@
 
 import pytest
 
-from castor.rcan.capabilities import Capability, CapabilityRegistry
-from castor.rcan.message import MessageType, Priority, RCANMessage
-from castor.rcan.rbac import RCANPrincipal, RCANRole, Scope
+from castor.rcan.capabilities import CapabilityRegistry
+from castor.rcan.message import MessageType, RCANMessage
+from castor.rcan.rbac import RCANPrincipal, RCANRole
 from castor.rcan.router import MessageRouter
 from castor.rcan.ruri import RURI
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opencastor"
-version = "2026.2.17.4"
+version = "2026.2.17.5"
 description = "The Universal Runtime for Embodied AI"
 readme = "README.md"
 license = "Apache-2.0"
@@ -104,6 +104,9 @@ Documentation = "https://github.com/craigm26/OpenCastor#readme"
 
 [tool.setuptools.packages.find]
 include = ["castor*"]
+
+[tool.setuptools.package-data]
+castor = ["py.typed"]
 
 [tool.ruff]
 line-length = 100

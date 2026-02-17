@@ -9,7 +9,7 @@ from castor.rcan.rbac import RCANRole, Scope
 # Skip all tests if PyJWT is not installed
 jwt = pytest.importorskip("jwt", reason="PyJWT not installed")
 
-from castor.rcan.jwt_auth import RCANTokenManager
+from castor.rcan.jwt_auth import RCANTokenManager  # noqa: E402
 
 
 @pytest.fixture

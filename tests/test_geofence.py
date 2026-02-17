@@ -1,7 +1,5 @@
 """Tests for castor.geofence -- limit robot operating radius."""
 
-import math
-from unittest.mock import patch
 
 from castor.geofence import Geofence
 

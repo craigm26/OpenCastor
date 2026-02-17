@@ -1,9 +1,7 @@
 """Tests for castor.audit -- append-only event log."""
 
 import json
-import os
 from datetime import datetime, timedelta
-from unittest.mock import patch, MagicMock
 
 from castor.audit import AuditLog
 

@@ -5,6 +5,26 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.17.5] - 2026-02-17
+
+### Added
+- `py.typed` marker for PEP 561 type hint support
+- `__all__` exports to core modules (providers, drivers, channels, root)
+- Return type annotations (`-> None`) on all 41 CLI command handlers
+- Type hints and docstrings on `DriverBase` abstract methods (move, stop, close)
+- Signal handling (SIGTERM/SIGINT) in API gateway for graceful shutdown
+- CLI commands reference table in CONTRIBUTING.md
+- Comprehensive test suites: CLI, API endpoints, drivers, channels
+- Dependabot config for Python dependencies (already existed for GitHub Actions)
+
+### Fixed
+- `castor schedule` command not dispatching due to `--command` arg shadowing subparser `dest="command"`
+
+### Changed
+- `DriverBase.move()` now has explicit `linear: float, angular: float` signature
+- CONTRIBUTING.md now documents all 41 CLI commands and how to add new ones
+- API gateway version updated to 2026.2.17.5
+
 ## [2026.2.17.4] - 2026-02-17
 
 ### Added

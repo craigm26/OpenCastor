@@ -1,20 +1,17 @@
 """Tests for castor.fs -- the Unix-style virtual filesystem."""
 
-import time
-import json
 import tempfile
 import threading
+import time
 from pathlib import Path
 
-import pytest
-
-from castor.fs import CastorFS, Cap
+from castor.fs import Cap, CastorFS
+from castor.fs.context import ContextWindow, Pipeline
+from castor.fs.memory import MemoryStore
 from castor.fs.namespace import Namespace
 from castor.fs.permissions import ACL, PermissionTable
-from castor.fs.safety import SafetyLayer
-from castor.fs.memory import MemoryStore
-from castor.fs.context import ContextWindow, Pipeline
 from castor.fs.proc import ProcFS
+from castor.fs.safety import SafetyLayer
 
 
 # =====================================================================

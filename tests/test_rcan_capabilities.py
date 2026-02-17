@@ -1,6 +1,5 @@
 """Tests for RCAN Capability Registry."""
 
-import pytest
 
 from castor.rcan.capabilities import Capability, CapabilityRegistry
 

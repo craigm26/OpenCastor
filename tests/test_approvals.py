@@ -1,10 +1,8 @@
 """Tests for castor.approvals -- safety gate for dangerous hardware commands."""
 
-import json
-import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-from castor.approvals import ApprovalGate, print_approvals
+from castor.approvals import ApprovalGate
 
 
 # =====================================================================

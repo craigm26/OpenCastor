@@ -1,18 +1,18 @@
 """Tests for castor.doctor -- system health checks."""
 
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from castor.doctor import (
-    check_python_version,
-    check_env_file,
-    check_provider_keys,
-    check_rcan_config,
-    check_hardware_sdks,
     check_camera,
+    check_env_file,
+    check_hardware_sdks,
+    check_provider_keys,
+    check_python_version,
+    check_rcan_config,
+    print_report,
     run_all_checks,
     run_post_wizard_checks,
-    print_report,
 )
 
 

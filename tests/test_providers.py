@@ -1,7 +1,6 @@
 """Tests for castor.providers -- Thought class, BaseProvider, and factory."""
 
-import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 

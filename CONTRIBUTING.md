@@ -99,6 +99,31 @@ a messaging platform and forwards them to the robot's brain.
 5. **Add** environment variables to `.env.example`
 6. **Add** the SDK to `pyproject.toml` optional dependencies
 
+## CLI Commands Reference
+
+OpenCastor provides 41 commands via `castor <command>`. Before adding a new
+command, familiarize yourself with the existing ones:
+
+| Group | Commands |
+|-------|----------|
+| **Setup** | `wizard`, `quickstart`, `configure`, `install-service`, `learn` |
+| **Run** | `run`, `gateway`, `dashboard`, `demo`, `shell`, `repl` |
+| **Diagnostics** | `doctor`, `fix`, `status`, `logs`, `lint`, `benchmark`, `test` |
+| **Hardware** | `test-hardware`, `calibrate`, `record`, `replay`, `watch` |
+| **Config** | `migrate`, `backup`, `restore`, `export`, `diff`, `profile` |
+| **Safety** | `approvals`, `privacy`, `audit` |
+| **Network** | `discover`, `fleet`, `network`, `schedule`, `token` |
+| **Advanced** | `search`, `plugins`, `upgrade`, `update-check` |
+
+### How to Add a New CLI Command
+
+1. **Create** a handler function `cmd_<name>(args) -> None` in `castor/cli.py`
+2. **Add** a subparser in `main()` with help text and epilog example
+3. **Register** in the `commands` dict: `"<name>": cmd_<name>`
+4. **Lazy-import** the implementation module inside the handler (keeps startup fast)
+5. **Add** the command to the group table above and to `CHANGELOG.md`
+6. **Write tests** in `tests/test_cli.py`
+
 ## Code Style
 
 - **PEP 8** with 100-char line length

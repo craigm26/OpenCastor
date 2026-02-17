@@ -12,6 +12,7 @@ Run with:
 import argparse
 import logging
 import os
+import signal
 import time
 from typing import Any, Dict, Optional
 
@@ -40,7 +41,7 @@ logger = logging.getLogger("OpenCastor.Gateway")
 app = FastAPI(
     title="OpenCastor Gateway",
     description="REST API for controlling your robot and receiving messages from channels.",
-    version="2026.2.17.3",
+    version="2026.2.17.5",
 )
 
 # CORS: configurable via OPENCASTOR_CORS_ORIGINS env var (comma-separated).
@@ -865,10 +866,22 @@ async def on_shutdown():
 # ---------------------------------------------------------------------------
 # CLI entry
 # ---------------------------------------------------------------------------
+def _setup_signal_handlers() -> None:
+    """Register signal handlers for graceful shutdown."""
+    def _handle_signal(signum, frame):
+        sig_name = signal.Signals(signum).name
+        logger.info(f"Received {sig_name}, initiating graceful shutdown...")
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
+
+
 def main():
     import uvicorn
 
     load_dotenv_if_available()
+    _setup_signal_handlers()
 
     parser = argparse.ArgumentParser(description="OpenCastor API Gateway")
     parser.add_argument("--config", default="robot.rcan.yaml", help="RCAN config file")

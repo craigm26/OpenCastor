@@ -1,11 +1,8 @@
 """Tests for RCAN RBAC (Role-Based Access Control)."""
 
-import pytest
 
 from castor.fs.permissions import Cap
 from castor.rcan.rbac import (
-    ROLE_RATE_LIMITS,
-    ROLE_SESSION_TIMEOUT,
     RCANPrincipal,
     RCANRole,
     Scope,
