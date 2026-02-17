@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenCastor — Give Any Robot a Brain</title>
+  <meta name="description" content="The open-source runtime that connects AI models to robot hardware. Pick your AI. Pick your robot. One config. Go.">
+  <meta property="og:title" content="OpenCastor — Give Any Robot a Brain">
+  <meta property="og:description" content="The open-source runtime that connects AI to robot hardware. Gemini, Claude, GPT — one config file.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://opencastor.com">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="OpenCastor — Give Any Robot a Brain">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<!-- ======== NAV ======== -->
+<nav class="site-nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">
+      <svg viewBox="0 0 32 32" fill="none">
+        <path d="M11 26 A11 11 0 1 1 23 8 L20 11 A7 7 0 1 0 14 22 Z" fill="currentColor"/>
+        <path d="M23 8 L26 5 L23 2 L20 5 Z" fill="currentColor" opacity="0.7"/>
+        <path d="M11 26 L8 29 L5 26 L8 23 Z" fill="currentColor" opacity="0.7"/>
+        <circle cx="16" cy="16" r="3.5" fill="#4285F4" opacity="0.9"/>
+        <circle cx="16" cy="16" r="1.8" fill="#fff" opacity="0.3"/>
+      </svg>
+      <span>OpenCastor</span>
+    </a>
+    <div class="nav-links">
+      <a href="/hardware">Hardware</a>
+      <a href="/docs">Docs</a>
+      <a href="/about">About</a>
+      <a href="https://github.com/craigm26/OpenCastor" class="btn-nav">
+        GitHub
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg>
+      </a>
+    </div>
+    <button class="mobile-toggle" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<main>
+
+<!-- ======== HERO ======== -->
+<section class="hero">
+  <div class="badge reveal">
+    <span class="dot"></span>
+    Now Open Source &middot; v2026.2.17.3
+  </div>
+
+  <h1 class="hero-title reveal reveal-d1">
+    Give Any Robot<br><span class="gradient-text">a Brain.</span>
+  </h1>
+
+  <p class="hero-sub reveal reveal-d2">
+    The open-source runtime that connects AI to robot hardware.<br>
+    Pick your AI. Pick your robot. One config. Go.
+  </p>
+
+  <div class="hero-actions reveal reveal-d3">
+    <a href="/docs" class="btn btn-primary btn-lg">
+      Get Started
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+    <a href="https://github.com/craigm26/OpenCastor" class="btn btn-secondary btn-lg">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.09.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+      Star on GitHub
+    </a>
+  </div>
+
+  <div class="install-block reveal reveal-d4">
+    <code id="install-cmd">curl -sL opencastor.com/install | bash</code>
+    <button onclick="copyInstall()">Copy</button>
+  </div>
+</section>
+
+<!-- ======== TRUST BAR ======== -->
+<section class="trust-bar">
+  <p>Works with every major AI</p>
+  <div class="trust-logos">
+    <div class="trust-logo"><span class="logo-dot" style="background:#4285F4"></span>Google Gemini</div>
+    <div class="trust-logo"><span class="logo-dot" style="background:#10A37F"></span>OpenAI</div>
+    <div class="trust-logo"><span class="logo-dot" style="background:#D97706"></span>Anthropic Claude</div>
+    <div class="trust-logo"><span class="logo-dot" style="background:#888"></span>Ollama</div>
+  </div>
+</section>
+
+<!-- ======== FEATURES ======== -->
+<section class="section alt-section" id="features">
+  <div class="container">
+    <div class="section-header reveal">
+      <p class="section-label">Features</p>
+      <h2 class="section-title">Stop writing firmware.<br>Start building agents.</h2>
+      <p class="section-desc">OpenCastor decouples the brain from the body. Define your robot in YAML, pick your AI, and let the framework handle everything else.</p>
+    </div>
+
+    <div class="bento">
+      <div class="card reveal">
+        <div class="card-icon" style="background:var(--accent-light)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><path d="M9.663 17h4.674M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+        </div>
+        <h3>Swap AI Brains Instantly</h3>
+        <p>Switch between Gemini, GPT-4.1, Claude, and Ollama with a single line change in your config. Zero code rewrites. Your robot behavior stays the same — only the brain changes.</p>
+      </div>
+
+      <div class="card reveal reveal-d1">
+        <div class="card-icon" style="background:var(--blue-light)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="1.5"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z"/><circle cx="12" cy="12" r="3"/></svg>
+        </div>
+        <h3>Hardware Agnostic</h3>
+        <p>Built-in drivers for PCA9685, Dynamixel, Serial, and GPIO. From $50 kits to $50K arms.</p>
+      </div>
+
+      <div class="card reveal reveal-d1">
+        <div class="card-icon" style="background:var(--green-light)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="1.5"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <h3>5-Minute Setup</h3>
+        <p>Interactive wizard with presets for popular Amazon robot kits. One command to install, one to run.</p>
+      </div>
+
+      <div class="card reveal reveal-d2">
+        <div class="card-icon" style="background:var(--orange-light)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="1.5"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+        </div>
+        <h3>Safety First</h3>
+        <p>Hard-coded safety layers prevent AI hallucinations from causing physical harm. Emergency stop in every loop.</p>
+      </div>
+
+      <div class="card reveal reveal-d3">
+        <div class="card-icon" style="background:var(--purple-light)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="1.5"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        </div>
+        <h3>RCAN Standard</h3>
+        <p>Open spec for robot configs. Portable, validated, ecosystem-ready. Your YAML works everywhere.</p>
+      </div>
+
+      <div class="card reveal reveal-d4">
+        <div class="card-icon" style="background:var(--blue-light)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="1.5"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        </div>
+        <h3>Live Dashboard</h3>
+        <p>Web UI with voice control, chat, and live camera feed. Works on any screen — phone, tablet, or HDMI display.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== HOW IT WORKS ======== -->
+<section class="section dark-section" id="how">
+  <div class="container">
+    <div class="section-header reveal" style="text-align:center;margin-left:auto;margin-right:auto">
+      <p class="section-label">How It Works</p>
+      <h2 class="section-title" style="color:var(--dark-text)">Three steps to intelligent.</h2>
+      <p class="section-desc" style="margin-left:auto;margin-right:auto">No PhD required. No firmware. No custom drivers. Just config and go.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step reveal">
+        <div class="step-num">01</div>
+        <h3>Choose Your AI</h3>
+        <p>Pick from Gemini, Claude, GPT-4.1, or run locally with Ollama. Switch anytime — one line in your config.</p>
+      </div>
+      <div class="step reveal reveal-d1">
+        <div class="step-num">02</div>
+        <h3>Define Your Robot</h3>
+        <p>Describe your hardware in a simple YAML file. Use a community preset or build your own from scratch.</p>
+      </div>
+      <div class="step reveal reveal-d2">
+        <div class="step-num">03</div>
+        <h3>Deploy</h3>
+        <p>One command to install, one to run. Your robot is now an AI-powered agent. Send it commands via WhatsApp, voice, or chat.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== CODE SHOWCASE ======== -->
+<section class="section" id="config">
+  <div class="container">
+    <div class="code-showcase">
+      <div class="reveal">
+        <p class="section-label">The Magic</p>
+        <h2 class="section-title">One config file.<br>Infinite possibilities.</h2>
+        <p class="section-desc">Your robot's brain, body, and behavior defined in plain YAML. Swap providers, tune safety, change hardware — no recompilation. No code changes. Ever.</p>
+        <div style="margin-top:24px;display:flex;gap:12px;flex-wrap:wrap">
+          <a href="https://rcan.dev/spec/" class="btn btn-secondary btn-sm">
+            View RCAN Spec
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
+          </a>
+          <a href="/docs" class="btn btn-ghost btn-sm">Read the docs</a>
+        </div>
+      </div>
+
+      <div class="code-block reveal reveal-d2">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">robot.rcan.yaml</span>
+        </div>
+        <div class="code-body"><span class="cm"># Swap the brain in one line</span>
+<span class="k">agent</span>:
+  <span class="k">provider</span>: <span class="s">"anthropic"</span>
+  <span class="k">model</span>: <span class="s">"claude-opus-4-6"</span>
+  <span class="k">vision_enabled</span>: <span class="v">true</span>
+  <span class="k">safety_stop</span>: <span class="v">true</span>
+
+<span class="cm"># Define the body once</span>
+<span class="k">physics</span>:
+  <span class="k">type</span>: <span class="s">"differential_drive"</span>
+  <span class="k">dof</span>: <span class="n">2</span>
+
+<span class="k">drivers</span>:
+  - <span class="k">protocol</span>: <span class="s">"pca9685_i2c"</span>
+    <span class="k">address</span>: <span class="s">"0x40"</span>
+    <span class="k">channels</span>:
+      <span class="k">steering</span>: <span class="n">0</span>
+      <span class="k">throttle</span>: <span class="n">1</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== HARDWARE PREVIEW ======== -->
+<section class="section alt-section" id="hardware">
+  <div class="container">
+    <div class="section-header reveal">
+      <p class="section-label">Hardware</p>
+      <h2 class="section-title">From $50 toy to $50K arm.</h2>
+      <p class="section-desc">Pre-built presets for popular robot kits. Or bring your own config for anything with a motor.</p>
+    </div>
+
+    <div class="hw-grid">
+      <div class="hw-card reveal">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">&#x1F916;</div>
+          <span class="status status-green">Supported</span>
+        </div>
+        <h3>Waveshare AlphaBot</h3>
+        <p>Raspberry Pi-compatible tracked robot with camera and sensors.</p>
+        <div class="hw-card-meta">Driver: PCA9685 &middot; I2C</div>
+      </div>
+
+      <div class="hw-card reveal reveal-d1">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">&#x1F3CE;</div>
+          <span class="status status-green">Supported</span>
+        </div>
+        <h3>SunFounder PiCar-X</h3>
+        <p>Smart car with camera pan/tilt, line following, and obstacle avoidance.</p>
+        <div class="hw-card-meta">Driver: PCA9685 &middot; I2C</div>
+      </div>
+
+      <div class="hw-card reveal reveal-d2">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">&#x1F9BE;</div>
+          <span class="status status-green">Supported</span>
+        </div>
+        <h3>Dynamixel Arms</h3>
+        <p>Professional-grade servo arms with high-precision position control.</p>
+        <div class="hw-card-meta">Driver: Dynamixel v2 &middot; Serial</div>
+      </div>
+
+      <div class="hw-card reveal reveal-d3">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">&#x1F3CE;</div>
+          <span class="status status-green">Supported</span>
+        </div>
+        <h3>RC Cars (1:16 / 1:10)</h3>
+        <p>Standard RC cars with PCA9685 servo steering and ESC throttle control.</p>
+        <div class="hw-card-meta">Driver: PCA9685 RC &middot; I2C</div>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:40px" class="reveal">
+      <a href="/hardware" class="btn btn-secondary">
+        View all hardware
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ======== STATS ======== -->
+<section class="dark-section" style="padding:72px 0">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="reveal">
+        <div class="stat-number">4</div>
+        <div class="stat-label">AI Providers</div>
+      </div>
+      <div class="reveal reveal-d1">
+        <div class="stat-number">20+</div>
+        <div class="stat-label">Robot Kits Supported</div>
+      </div>
+      <div class="reveal reveal-d2">
+        <div class="stat-number">1</div>
+        <div class="stat-label">Config File</div>
+      </div>
+      <div class="reveal reveal-d3">
+        <div class="stat-number">&lt;5m</div>
+        <div class="stat-label">To First Command</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== CTA ======== -->
+<section class="cta-section">
+  <h2 class="reveal">Start building today.</h2>
+  <p class="reveal reveal-d1">Open source. Apache 2.0. Free forever.</p>
+  <div class="hero-actions reveal reveal-d2">
+    <a href="/docs" class="btn btn-primary btn-lg">
+      Get Started
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+    <a href="https://github.com/craigm26/OpenCastor" class="btn btn-secondary btn-lg">
+      View on GitHub
+    </a>
+  </div>
+</section>
+
+</main>
+
+<!-- ======== FOOTER ======== -->
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="/" class="nav-logo">
+          <svg viewBox="0 0 32 32" width="24" height="24" fill="none">
+            <path d="M11 26 A11 11 0 1 1 23 8 L20 11 A7 7 0 1 0 14 22 Z" fill="currentColor" style="color:var(--accent)"/>
+            <path d="M23 8 L26 5 L23 2 L20 5 Z" fill="currentColor" style="color:var(--accent)" opacity="0.7"/>
+            <path d="M11 26 L8 29 L5 26 L8 23 Z" fill="currentColor" style="color:var(--accent)" opacity="0.7"/>
+            <circle cx="16" cy="16" r="3.5" fill="#4285F4" opacity="0.9"/>
+            <circle cx="16" cy="16" r="1.8" fill="#fff" opacity="0.3"/>
+          </svg>
+          <span>OpenCastor</span>
+        </a>
+        <p>The universal runtime for embodied AI. Give any robot a brain.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <a href="/docs">Documentation</a>
+        <a href="/hardware">Hardware</a>
+        <a href="https://rcan.dev/spec/">RCAN Spec</a>
+      </div>
+      <div class="footer-col">
+        <h4>Resources</h4>
+        <a href="/docs">Getting Started</a>
+        <a href="https://github.com/craigm26/OpenCastor">GitHub</a>
+        <a href="https://github.com/craigm26/OpenCastor/issues">Issues</a>
+        <a href="https://discord.gg/jMjA8B26Bq">Discord Community</a>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <a href="/about">About</a>
+        <a href="mailto:hello@opencastor.com">Contact</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>&copy; 2025-2026 Continuon AI. Apache 2.0 License.</p>
+      <div class="footer-social">
+        <a href="https://github.com/craigm26" aria-label="GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.09.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+        </a>
+        <a href="https://twitter.com/opencastor" aria-label="Twitter / X">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        </a>
+        <a href="https://discord.gg/jMjA8B26Bq" aria-label="Discord">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03z M8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.947 2.418-2.157 2.418z"/></svg>
+        </a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+// Mobile menu
+const toggle = document.querySelector('.mobile-toggle');
+const navLinks = document.querySelector('.nav-links');
+toggle.addEventListener('click', function() {
+  navLinks.classList.toggle('open');
+  toggle.classList.toggle('active');
+  document.body.style.overflow = navLinks.classList.contains('open') ? 'hidden' : '';
+});
+document.querySelectorAll('.nav-links a').forEach(a => {
+  a.addEventListener('click', () => {
+    navLinks.classList.remove('open');
+    toggle.classList.remove('active');
+    document.body.style.overflow = '';
+  });
+});
+
+// Nav scroll
+const nav = document.querySelector('.site-nav');
+const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 20);
+window.addEventListener('scroll', onScroll, { passive: true });
+onScroll();
+
+// Scroll reveal
+const ro = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); ro.unobserve(e.target); } });
+}, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+document.querySelectorAll('.reveal').forEach(el => ro.observe(el));
+
+// Smooth scroll
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const t = document.querySelector(a.getAttribute('href'));
+    if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
+
+// Copy install
+function copyInstall() {
+  const cmd = document.getElementById('install-cmd').textContent;
+  navigator.clipboard.writeText(cmd).then(() => {
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = orig, 2000);
+  });
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # The API Gateway -- REST endpoints, messaging channels, and brain
+  opencastor-gateway:
+    build: .
+    image: opencastor:latest
+    container_name: opencastor_gateway
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - OPENCASTOR_API_HOST=0.0.0.0
+      - OPENCASTOR_API_PORT=8000
+      - OPENCASTOR_CONFIG=/app/robot.rcan.yaml
+    volumes:
+      - ./robot.rcan.yaml:/app/robot.rcan.yaml
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  # The Robot Runtime -- perception-action loop with hardware access
+  opencastor-runtime:
+    build: .
+    image: opencastor:latest
+    container_name: opencastor_runtime
+    command: ["python", "-m", "castor.main", "--config", "/app/robot.rcan.yaml"]
+
+    # Grant access to hardware (USB serial, camera)
+    privileged: true
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+      - /dev/video0:/dev/video0
+
+    env_file:
+      - .env
+    environment:
+      - DYNAMIXEL_PORT=/dev/ttyUSB0
+    volumes:
+      - ./robot.rcan.yaml:/app/robot.rcan.yaml
+    restart: unless-stopped
+    profiles:
+      - hardware  # Only start with: docker compose --profile hardware up
+
+  # The Dashboard -- Streamlit web UI
+  opencastor-dashboard:
+    build: .
+    image: opencastor:latest
+    container_name: opencastor_dashboard
+    command: ["python", "-m", "streamlit", "run", "castor/dashboard.py", "--server.port=8501", "--server.headless=true"]
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    volumes:
+      - ./robot.rcan.yaml:/app/robot.rcan.yaml
+    restart: unless-stopped
+    profiles:
+      - dashboard  # Only start with: docker compose --profile dashboard up

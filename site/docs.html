@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documentation — OpenCastor</title>
+  <meta name="description" content="Get started with OpenCastor in 5 minutes. Installation, configuration, AI providers, hardware drivers, and API reference.">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<nav class="site-nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">
+      <svg viewBox="0 0 32 32" fill="none"><path d="M11 26 A11 11 0 1 1 23 8 L20 11 A7 7 0 1 0 14 22 Z" fill="currentColor"/><path d="M23 8 L26 5 L23 2 L20 5 Z" fill="currentColor" opacity="0.7"/><path d="M11 26 L8 29 L5 26 L8 23 Z" fill="currentColor" opacity="0.7"/><circle cx="16" cy="16" r="3.5" fill="#4285F4" opacity="0.9"/><circle cx="16" cy="16" r="1.8" fill="#fff" opacity="0.3"/></svg>
+      <span>OpenCastor</span>
+    </a>
+    <div class="nav-links">
+      <a href="/hardware">Hardware</a>
+      <a href="/docs" class="active">Docs</a>
+      <a href="/about">About</a>
+      <a href="https://github.com/craigm26/OpenCastor" class="btn-nav">GitHub <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg></a>
+    </div>
+    <button class="mobile-toggle" aria-label="Menu"><span></span><span></span><span></span></button>
+  </div>
+</nav>
+
+<main>
+<section class="page-hero">
+  <p class="section-label reveal">Documentation</p>
+  <h1 class="reveal reveal-d1">From zero to robot<br>in five minutes.</h1>
+  <p class="reveal reveal-d2">Everything you need to install, configure, and deploy your first AI-powered robot.</p>
+</section>
+
+<!-- Quick Start -->
+<section class="section" style="padding-top:20px">
+  <div class="container">
+    <div class="quickstart reveal">
+      <h2 style="font-size:1.5rem;margin-bottom:28px">Quick Start</h2>
+
+      <div class="quickstart-step">
+        <div class="quickstart-num">1</div>
+        <div>
+          <h4>Install OpenCastor</h4>
+          <p style="font-size:0.9375rem;color:var(--text-secondary);margin-bottom:8px">One command installs everything: Python deps, hardware drivers, and the interactive wizard.</p>
+          <code>curl -sL opencastor.com/install | bash</code>
+        </div>
+      </div>
+
+      <div class="quickstart-step">
+        <div class="quickstart-num">2</div>
+        <div>
+          <h4>Run the setup wizard</h4>
+          <p style="font-size:0.9375rem;color:var(--text-secondary);margin-bottom:8px">The wizard walks you through choosing an AI provider, hardware kit, and messaging channels. It generates a validated RCAN config file and saves your API keys to <code style="padding:2px 6px;font-size:0.8125rem">.env</code>. <a href="#wizard" style="color:var(--accent);font-weight:500">See full walkthrough below.</a></p>
+          <code>castor wizard</code>
+        </div>
+      </div>
+
+      <div class="quickstart-step">
+        <div class="quickstart-num">3</div>
+        <div>
+          <h4>Launch</h4>
+          <p style="font-size:0.9375rem;color:var(--text-secondary);margin-bottom:8px">Start the runtime. Your robot is now an AI agent accepting commands via WhatsApp, voice, or API.</p>
+          <code>castor run --config my_robot.rcan.yaml</code>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Wizard Walkthrough -->
+<section class="section" id="wizard">
+  <div class="container">
+    <div class="section-header reveal" style="text-align:center;margin-left:auto;margin-right:auto">
+      <p class="section-label">Setup Wizard</p>
+      <h2 class="section-title">What to expect when<br>you run <code style="font-family:var(--font-mono);color:var(--accent)">castor wizard</code></h2>
+      <p class="section-desc" style="margin-left:auto;margin-right:auto">The wizard asks five questions, then generates a fully validated RCAN config file. Here is every step.</p>
+    </div>
+
+    <!-- Step 1: Name -->
+    <div class="wizard-step reveal">
+      <div class="wizard-step-header">
+        <div class="wizard-step-num">1</div>
+        <div>
+          <h3>Name your robot</h3>
+          <p>Give your project a name. This becomes the filename for your config and appears in mDNS discovery.</p>
+        </div>
+      </div>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">Terminal</span>
+        </div>
+        <div class="code-body"><span class="cm">Project Name [MyRobot]:</span> <span class="s">Explorer</span></div>
+      </div>
+    </div>
+
+    <!-- Step 2: AI Provider -->
+    <div class="wizard-step reveal">
+      <div class="wizard-step-header">
+        <div class="wizard-step-num">2</div>
+        <div>
+          <h3>Choose your AI brain</h3>
+          <p>Pick which large language model powers your robot. You can change this anytime by editing one line in your config file.</p>
+        </div>
+      </div>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">Terminal</span>
+        </div>
+        <div class="code-body"><span class="cm">--- BRAIN SELECTION ---</span>
+<span class="cm">Which AI provider do you want to use?</span>
+  <span class="k">[1]</span> <span class="s">Anthropic Claude Opus 4.6</span> <span class="v">(Recommended)</span>
+  <span class="k">[2]</span> <span class="s">Google Gemini 2.5 Flash</span>
+  <span class="k">[3]</span> <span class="s">Google Gemini 3 Flash (Preview)</span>
+  <span class="k">[4]</span> <span class="s">OpenAI GPT-4.1</span>
+  <span class="k">[5]</span> <span class="s">Local Llama (Ollama)</span>  <span class="cm">-- free, runs on your machine</span>
+<span class="cm">Selection [1]:</span> <span class="s">1</span></div>
+      </div>
+      <div class="wizard-tip">
+        <strong>Tip:</strong> Ollama (option 5) is completely free and runs locally on your Pi or laptop. No API key needed. Great for experimenting before committing to a paid provider.
+      </div>
+    </div>
+
+    <!-- Step 3: API Key -->
+    <div class="wizard-step reveal">
+      <div class="wizard-step-header">
+        <div class="wizard-step-num">3</div>
+        <div>
+          <h3>Enter your API key</h3>
+          <p>Paste your provider API key. The wizard saves it to a local <code style="padding:2px 6px;font-size:0.8125rem">.env</code> file that is never committed to git. If you already have the key set in your environment, this step is skipped automatically.</p>
+        </div>
+      </div>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">Terminal</span>
+        </div>
+        <div class="code-body"><span class="cm">--- API KEY ---</span>
+<span class="cm">  Your Anthropic Claude Opus 4.6 API key is needed.</span>
+<span class="cm">  It will be saved to your local</span> <span class="v">.env</span> <span class="cm">file (never committed to git).</span>
+<span class="cm">  ANTHROPIC_API_KEY:</span> <span class="s">sk-ant-...</span>
+  <span class="v">[OK]</span> <span class="cm">Saved to .env</span></div>
+      </div>
+    </div>
+
+    <!-- Step 4: Hardware Kit -->
+    <div class="wizard-step reveal">
+      <div class="wizard-step-header">
+        <div class="wizard-step-num">4</div>
+        <div>
+          <h3>Select your hardware</h3>
+          <p>Pick a pre-built preset for popular Amazon robot kits, or choose Custom for advanced setups like Dynamixel arms. Presets configure motors, wiring, and physics automatically.</p>
+        </div>
+      </div>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">Terminal</span>
+        </div>
+        <div class="code-body"><span class="cm">--- HARDWARE KIT ---</span>
+<span class="cm">Select your hardware kit:</span>
+  <span class="k">[1]</span> <span class="s">Custom (Advanced)</span>
+  <span class="k">[2]</span> <span class="s">RPi RC Car + PCA9685 + CSI Camera</span> <span class="v">(Recommended)</span>
+  <span class="k">[3]</span> <span class="s">Waveshare AlphaBot ($45)</span>
+  <span class="k">[4]</span> <span class="s">Adeept RaspTank ($55)</span>
+  <span class="k">[5]</span> <span class="s">Freenove 4WD Car ($49)</span>
+  <span class="k">[6]</span> <span class="s">SunFounder PiCar-X ($60)</span>
+<span class="cm">Selection [2]:</span> <span class="s">2</span></div>
+      </div>
+      <div class="wizard-tip">
+        <strong>Custom mode</strong> walks you through defining degrees of freedom, link dimensions, and motor mappings. Use this for robot arms, hexapods, or any non-standard build.
+      </div>
+    </div>
+
+    <!-- Step 5: Channels -->
+    <div class="wizard-step reveal">
+      <div class="wizard-step-header">
+        <div class="wizard-step-num">5</div>
+        <div>
+          <h3>Connect messaging channels</h3>
+          <p>Optionally connect WhatsApp, Telegram, Discord, or Slack so you can command your robot from your phone. You can enable multiple channels at once or skip this entirely.</p>
+        </div>
+      </div>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">Terminal</span>
+        </div>
+        <div class="code-body"><span class="cm">--- MESSAGING CHANNELS ---</span>
+<span class="cm">Connect your robot to messaging platforms (optional).</span>
+<span class="cm">You can enable multiple channels. Enter numbers separated by commas.</span>
+  <span class="k">[0]</span> <span class="s">None (skip)</span>
+  <span class="k">[1]</span> <span class="s">WhatsApp (scan QR code)</span>  <span class="cm">-- no account needed!</span>
+  <span class="k">[2]</span> <span class="s">WhatsApp via Twilio (legacy)</span>
+  <span class="k">[3]</span> <span class="s">Telegram Bot</span>
+  <span class="k">[4]</span> <span class="s">Discord Bot</span>
+  <span class="k">[5]</span> <span class="s">Slack Bot</span>
+<span class="cm">Selection (e.g. 1,3) [0]:</span> <span class="s">1</span></div>
+      </div>
+    </div>
+
+    <!-- Step 6: Output -->
+    <div class="wizard-step reveal">
+      <div class="wizard-step-header">
+        <div class="wizard-step-num" style="background:var(--green-light);color:var(--green)">&#10003;</div>
+        <div>
+          <h3>Config generated</h3>
+          <p>The wizard outputs a validated <code style="padding:2px 6px;font-size:0.8125rem">.rcan.yaml</code> config file with all required sections: metadata, agent, physics, drivers, network, and RCAN protocol. It also auto-detects your robot's capabilities.</p>
+        </div>
+      </div>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">Terminal</span>
+        </div>
+        <div class="code-body"><span class="v">Detected RCAN Capabilities:</span>
+  <span class="v">+</span> <span class="s">status</span>
+  <span class="v">+</span> <span class="s">nav</span>
+  <span class="v">+</span> <span class="s">teleop</span>
+  <span class="v">+</span> <span class="s">vision</span>
+  <span class="v">+</span> <span class="s">chat</span>
+
+<span class="cm">==================================================</span>
+<span class="v">Setup Complete!</span>
+
+  Config file:  <span class="k">explorer.rcan.yaml</span>
+  AI Provider:  <span class="s">Anthropic Claude Opus 4.6</span>
+  Model:        <span class="s">claude-opus-4-6</span>
+  Channels:     <span class="s">WhatsApp (scan QR code)</span>
+
+<span class="v">Next Steps:</span>
+  1. Run the robot:      <span class="k">castor run --config explorer.rcan.yaml</span>
+  2. Start the gateway:  <span class="k">castor gateway --config explorer.rcan.yaml</span>
+  3. Open the dashboard: <span class="k">castor dashboard</span></div>
+      </div>
+    </div>
+
+    <!-- After the wizard -->
+    <div class="wizard-after reveal">
+      <h3>What the wizard creates</h3>
+      <div class="wizard-after-grid">
+        <div class="wizard-after-item">
+          <div class="wizard-after-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          </div>
+          <div>
+            <strong>explorer.rcan.yaml</strong>
+            <p>Your robot config file. Contains AI provider, hardware definitions, physics model, RCAN protocol settings, and declared capabilities. Validates against the RCAN schema.</p>
+          </div>
+        </div>
+        <div class="wizard-after-item">
+          <div class="wizard-after-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          </div>
+          <div>
+            <strong>.env</strong>
+            <p>Your API keys and channel credentials. Stored locally, listed in <code style="padding:2px 5px;font-size:0.8125rem">.gitignore</code>, never committed. The runtime loads these automatically.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Guides -->
+<section class="section alt-section" id="guides">
+  <div class="container">
+    <div class="section-header reveal">
+      <h2 class="section-title">Guides</h2>
+      <p class="section-desc">Deep dives into every part of the OpenCastor stack.</p>
+    </div>
+
+    <div class="guide-grid">
+      <a href="https://github.com/craigm26/OpenCastor/wiki/Installation" class="guide-card reveal">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          Installation
+        </h3>
+        <p>System requirements, platform-specific instructions, Docker setup, and troubleshooting.</p>
+      </a>
+
+      <a href="https://rcan.dev/spec/" class="guide-card reveal reveal-d1">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          RCAN Configuration
+        </h3>
+        <p>The RCAN spec: schema reference, YAML syntax, presets, and validation.</p>
+      </a>
+
+      <a href="https://github.com/craigm26/OpenCastor/wiki/Providers" class="guide-card reveal reveal-d2">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9.663 17h4.674M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+          AI Providers
+        </h3>
+        <p>Setting up Gemini, GPT-4.1, Claude, and Ollama. API keys, model selection, and tuning.</p>
+      </a>
+
+      <a href="https://github.com/craigm26/OpenCastor/wiki/Drivers" class="guide-card reveal reveal-d3">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z"/><circle cx="12" cy="12" r="3"/></svg>
+          Hardware Drivers
+        </h3>
+        <p>PCA9685, Dynamixel, Serial, GPIO drivers. Writing custom drivers for new hardware.</p>
+      </a>
+
+      <a href="https://github.com/craigm26/OpenCastor/wiki/Safety" class="guide-card reveal reveal-d4">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          Safety System
+        </h3>
+        <p>Emergency stops, velocity limits, collision avoidance, and the safety layer architecture.</p>
+      </a>
+
+      <a href="https://github.com/craigm26/OpenCastor/wiki/Dashboard" class="guide-card reveal reveal-d5">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          CastorDash
+        </h3>
+        <p>Web dashboard setup, voice control, chat interface, camera feeds, and kiosk mode.</p>
+      </a>
+
+      <a href="https://github.com/craigm26/OpenCastor/wiki/Channels" class="guide-card reveal">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+          Messaging Channels
+        </h3>
+        <p>WhatsApp, Telegram, Discord, and Slack integrations for commanding your robot remotely.</p>
+      </a>
+
+      <a href="https://github.com/craigm26/OpenCastor/wiki/API" class="guide-card reveal reveal-d1">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+          API Reference
+        </h3>
+        <p>REST API endpoints, WebSocket streams, Python SDK, and integration examples.</p>
+      </a>
+
+      <a href="https://github.com/craigm26/OpenCastor/wiki/Docker" class="guide-card reveal reveal-d2">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12H3l9-9 9 9h-2M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg>
+          Docker Deployment
+        </h3>
+        <p>Container setup, docker-compose, hardware pass-through, and production deployment.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- Code Example -->
+<section class="section">
+  <div class="container" style="max-width:720px">
+    <div class="section-header reveal" style="text-align:center;margin-left:auto;margin-right:auto">
+      <h2 class="section-title">Minimal example</h2>
+      <p class="section-desc" style="margin-left:auto;margin-right:auto">Everything you need to run your first AI-powered robot in a single config file.</p>
+    </div>
+
+    <div class="code-block reveal">
+      <div class="code-header">
+        <div class="code-dots"><span></span><span></span><span></span></div>
+        <span class="code-filename">my_robot.rcan.yaml</span>
+      </div>
+      <div class="code-body"><span class="k">rcan_version</span>: <span class="s">"1.0.0-alpha"</span>
+
+<span class="k">metadata</span>:
+  <span class="k">robot_name</span>: <span class="s">"Explorer"</span>
+  <span class="k">robot_uuid</span>: <span class="s">"..."</span>  <span class="cm"># auto-generated by wizard</span>
+
+<span class="k">agent</span>:
+  <span class="k">provider</span>: <span class="s">"anthropic"</span>
+  <span class="k">model</span>: <span class="s">"claude-opus-4-6"</span>
+  <span class="k">vision_enabled</span>: <span class="v">true</span>
+  <span class="k">safety_stop</span>: <span class="v">true</span>
+
+<span class="k">physics</span>:
+  <span class="k">type</span>: <span class="s">"differential_drive"</span>
+  <span class="k">dof</span>: <span class="n">2</span>
+
+<span class="k">drivers</span>:
+  - <span class="k">protocol</span>: <span class="s">"pca9685_i2c"</span>
+    <span class="k">address</span>: <span class="s">"0x40"</span>
+
+<span class="k">rcan_protocol</span>:
+  <span class="k">port</span>: <span class="n">8000</span>
+  <span class="k">capabilities</span>: <span class="s">[status, nav, teleop, chat]</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="cta-section">
+  <h2 class="reveal">Ready to build?</h2>
+  <p class="reveal reveal-d1">Join the community and start building intelligent robots today.</p>
+  <div class="hero-actions reveal reveal-d2">
+    <a href="https://github.com/craigm26/OpenCastor" class="btn btn-primary btn-lg">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.09.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+      View on GitHub
+    </a>
+    <a href="https://discord.gg/jMjA8B26Bq" class="btn btn-secondary btn-lg">Join our Discord</a>
+  </div>
+</section>
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="/" class="nav-logo"><svg viewBox="0 0 32 32" width="24" height="24" fill="none"><path d="M11 26 A11 11 0 1 1 23 8 L20 11 A7 7 0 1 0 14 22 Z" fill="currentColor" style="color:var(--accent)"/><path d="M23 8 L26 5 L23 2 L20 5 Z" fill="currentColor" style="color:var(--accent)" opacity="0.7"/><path d="M11 26 L8 29 L5 26 L8 23 Z" fill="currentColor" style="color:var(--accent)" opacity="0.7"/><circle cx="16" cy="16" r="3.5" fill="#4285F4" opacity="0.9"/><circle cx="16" cy="16" r="1.8" fill="#fff" opacity="0.3"/></svg><span>OpenCastor</span></a>
+        <p>The universal runtime for embodied AI.</p>
+      </div>
+      <div class="footer-col"><h4>Product</h4><a href="/docs">Documentation</a><a href="/hardware">Hardware</a><a href="https://rcan.dev/spec/">RCAN Spec</a></div>
+      <div class="footer-col"><h4>Resources</h4><a href="/docs">Getting Started</a><a href="https://github.com/craigm26/OpenCastor">GitHub</a><a href="https://github.com/craigm26/OpenCastor/issues">Issues</a></div>
+      <div class="footer-col"><h4>Company</h4><a href="/about">About</a><a href="mailto:hello@opencastor.com">Contact</a></div>
+    </div>
+    <div class="footer-bottom">
+      <p>&copy; 2025-2026 Continuon AI. Apache 2.0 License.</p>
+      <div class="footer-social">
+        <a href="https://github.com/craigm26" aria-label="GitHub"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.09.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg></a>
+        <a href="https://twitter.com/opencastor" aria-label="Twitter / X"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
+        <a href="https://discord.gg/jMjA8B26Bq" aria-label="Discord"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.947 2.418-2.157 2.418z"/></svg></a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+const toggle = document.querySelector('.mobile-toggle');
+const navLinks = document.querySelector('.nav-links');
+toggle.addEventListener('click', function() { navLinks.classList.toggle('open'); toggle.classList.toggle('active'); document.body.style.overflow = navLinks.classList.contains('open') ? 'hidden' : ''; });
+document.querySelectorAll('.nav-links a').forEach(a => { a.addEventListener('click', () => { navLinks.classList.remove('open'); toggle.classList.remove('active'); document.body.style.overflow = ''; }); });
+const nav = document.querySelector('.site-nav');
+window.addEventListener('scroll', () => nav.classList.toggle('scrolled', window.scrollY > 20), { passive: true });
+nav.classList.toggle('scrolled', window.scrollY > 20);
+const ro = new IntersectionObserver((entries) => { entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); ro.unobserve(e.target); } }); }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+document.querySelectorAll('.reveal').forEach(el => ro.observe(el));
+</script>
+</body>
+</html>

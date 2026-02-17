@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Discord Community
+    url: https://discord.gg/jMjA8B26Bq
+    about: Ask questions, share builds, and get help from the community.
+  - name: RCAN Spec
+    url: https://rcan.dev/spec/
+    about: Report issues with the RCAN configuration standard.

@@ -1,0 +1,97 @@
+rcan_version: "1.0.0-alpha"
+
+metadata:
+  robot_name: "Dynamixel_6DOF_Arm"
+  robot_uuid: "00000000-0000-0000-0000-000000000005"
+  author: "OpenCastor Default"
+  license: "Apache-2.0"
+  tags:
+    - arm
+    - manipulator
+    - dynamixel
+    - 6dof
+
+agent:
+  provider: "anthropic"
+  model: "claude-opus-4-6"
+  vision_enabled: true
+  latency_budget_ms: 300
+  safety_stop: true
+
+physics:
+  type: "serial_manipulator"
+  dof: 6
+  kinematics:
+    - id: "link_1"
+      length_mm: 50
+      mass_g: 200
+      axis: "z"
+      limits_deg: [-180, 180]
+    - id: "link_2"
+      length_mm: 150
+      mass_g: 300
+      axis: "y"
+      limits_deg: [-90, 90]
+    - id: "link_3"
+      length_mm: 150
+      mass_g: 250
+      axis: "y"
+      limits_deg: [-90, 90]
+    - id: "link_4"
+      length_mm: 50
+      mass_g: 150
+      axis: "z"
+      limits_deg: [-180, 180]
+    - id: "link_5"
+      length_mm: 50
+      mass_g: 100
+      axis: "y"
+      limits_deg: [-90, 90]
+    - id: "link_6"
+      length_mm: 50
+      mass_g: 80
+      axis: "z"
+      limits_deg: [-180, 180]
+
+drivers:
+  - link_id: "link_1"
+    protocol: "dynamixel_v2"
+    port: "/dev/ttyUSB0"
+    hardware_id: 1
+    baud_rate: 57600
+  - link_id: "link_2"
+    protocol: "dynamixel_v2"
+    port: "/dev/ttyUSB0"
+    hardware_id: 2
+    baud_rate: 57600
+  - link_id: "link_3"
+    protocol: "dynamixel_v2"
+    port: "/dev/ttyUSB0"
+    hardware_id: 3
+    baud_rate: 57600
+  - link_id: "link_4"
+    protocol: "dynamixel_v2"
+    port: "/dev/ttyUSB0"
+    hardware_id: 4
+    baud_rate: 57600
+  - link_id: "link_5"
+    protocol: "dynamixel_v2"
+    port: "/dev/ttyUSB0"
+    hardware_id: 5
+    baud_rate: 57600
+  - link_id: "link_6"
+    protocol: "dynamixel_v2"
+    port: "/dev/ttyUSB0"
+    hardware_id: 6
+    baud_rate: 57600
+
+network:
+  telemetry_stream: true
+  sim_to_real_sync: true
+  allow_remote_override: false
+
+rcan_protocol:
+  port: 8000
+  capabilities: [status, arm, chat]
+  enable_mdns: false
+  enable_jwt: false

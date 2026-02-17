@@ -1,0 +1,30 @@
+<svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient id="ai-glow" x1="200" y1="150" x2="200" y2="250" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#4285F4" /> <stop offset="100%" stop-color="#9C27B0" /> </linearGradient>
+        <linearGradient id="metal-sheen" x1="100" y1="100" x2="300" y2="300" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#455A64" /> <stop offset="50%" stop-color="#607D8B" /> <stop offset="100%" stop-color="#37474F" /> </linearGradient>
+    </defs>
+
+    <g transform="translate(50, 20)">
+        <path d="M 150,280
+                 A 100,100 0 1 1 250,120
+                 L 220,150
+                 A 60,60 0 1 0 180,250
+                 Z"
+              fill="url(#metal-sheen)" stroke="#263238" stroke-width="4" stroke-linejoin="round"/>
+
+        <path d="M 250,120 L 280,90 L 240,50 L 210,80 Z" fill="url(#metal-sheen)" stroke="#263238" stroke-width="3"/>
+        <circle cx="230" cy="100" r="12" fill="#CFD8DC" stroke="#263238" stroke-width="3"/>
+
+        <path d="M 150,280 L 120,310 L 80,270 L 110,240 Z" fill="url(#metal-sheen)" stroke="#263238" stroke-width="3"/>
+        <circle cx="130" cy="260" r="12" fill="#CFD8DC" stroke="#263238" stroke-width="3"/>
+
+        <circle cx="200" cy="200" r="35" fill="url(#ai-glow)" stroke="#FFFFFF" stroke-width="4" opacity="0.9"/>
+        <circle cx="200" cy="200" r="20" fill="#FFFFFF" opacity="0.3"/>
+    </g>
+
+    <text x="200" y="350" font-family="'Roboto', 'Inter', sans-serif" font-size="42" text-anchor="middle" fill="#263238">
+        <tspan font-weight="300">Open</tspan><tspan font-weight="700">Castor</tspan>
+    </text>
+</svg>

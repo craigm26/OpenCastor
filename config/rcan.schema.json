@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rcan.dev/schema/rcan.schema.json",
+  "title": "RCAN Configuration",
+  "description": "Robot Configuration and Autonomy Notation — the config format for OpenCastor robots.",
+  "type": "object",
+  "required": ["rcan_version", "metadata", "agent", "physics", "drivers", "network", "rcan_protocol"],
+  "additionalProperties": false,
+  "properties": {
+    "rcan_version": {
+      "type": "string",
+      "description": "Semantic version of the RCAN spec this config targets.",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?$"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Descriptive information about the robot.",
+      "required": ["robot_name", "robot_uuid", "author", "license"],
+      "additionalProperties": false,
+      "properties": {
+        "robot_name": { "type": "string", "minLength": 1 },
+        "robot_uuid": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "author": { "type": "string", "minLength": 1 },
+        "license": { "type": "string" },
+        "ruri": {
+          "type": "string",
+          "description": "Explicit RCAN URI for this robot. Auto-generated if omitted.",
+          "pattern": "^rcan://[a-zA-Z0-9_*-]+\\.[a-zA-Z0-9_*-]+\\.[a-zA-Z0-9_*-]+(/[a-zA-Z0-9_/-]*)?$"
+        },
+        "manufacturer": {
+          "type": "string",
+          "description": "Manufacturer or organisation identifier for RURI generation."
+        },
+        "model": {
+          "type": "string",
+          "description": "Robot model name for RURI generation."
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "description": "AI provider and model configuration.",
+      "required": ["provider", "model"],
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["google", "openai", "anthropic", "ollama", "openrouter"]
+        },
+        "model": { "type": "string", "minLength": 1 },
+        "vision_enabled": { "type": "boolean", "default": true },
+        "latency_budget_ms": { "type": "integer", "minimum": 0 },
+        "safety_stop": { "type": "boolean", "default": true },
+        "api_key": {
+          "type": "string",
+          "description": "Fallback API key. Prefer env vars instead."
+        }
+      }
+    },
+    "physics": {
+      "type": "object",
+      "description": "Physical characteristics of the robot.",
+      "required": ["type", "dof"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["differential_drive", "ackermann", "serial_manipulator", "parallel_manipulator", "holonomic", "custom"]
+        },
+        "dof": { "type": "integer", "minimum": 1 },
+        "chassis": {
+          "type": "object",
+          "description": "Chassis dimensions for mobile robots.",
+          "properties": {
+            "wheel_base_mm": { "type": "number", "minimum": 0 },
+            "wheelbase_mm": { "type": "number", "minimum": 0 },
+            "track_width_mm": { "type": "number", "minimum": 0 },
+            "wheel_radius_mm": { "type": "number", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "kinematics": {
+          "type": "array",
+          "description": "Link definitions for manipulator arms.",
+          "items": {
+            "type": "object",
+            "required": ["id", "length_mm", "axis"],
+            "properties": {
+              "id": { "type": "string" },
+              "length_mm": { "type": "number", "minimum": 0 },
+              "mass_g": { "type": "number", "minimum": 0 },
+              "axis": { "type": "string", "enum": ["x", "y", "z"] },
+              "limits_deg": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 2,
+                "maxItems": 2
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "drivers": {
+      "type": "array",
+      "description": "Hardware driver configurations.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["protocol"],
+        "properties": {
+          "id": { "type": "string" },
+          "link_id": { "type": "string" },
+          "protocol": { "type": "string", "minLength": 1 },
+          "port": { "type": "string" },
+          "address": { "type": "string" },
+          "frequency": { "type": "integer", "minimum": 0 },
+          "baud_rate": { "type": "integer", "minimum": 0 },
+          "hardware_id": { "type": "integer", "minimum": 0 },
+          "channels": {
+            "type": "object",
+            "additionalProperties": { "type": "integer" }
+          },
+          "steering_channel": { "type": "integer", "minimum": 0 },
+          "steering_center_us": { "type": "integer" },
+          "steering_range_us": { "type": "integer", "minimum": 0 },
+          "steering_invert": { "type": "boolean" },
+          "throttle_channel": { "type": "integer", "minimum": 0 },
+          "throttle_neutral_us": { "type": "integer" },
+          "throttle_max_us": { "type": "integer" },
+          "throttle_min_us": { "type": "integer" },
+          "throttle_deadzone": { "type": "number", "minimum": 0, "maximum": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "camera": {
+      "type": "object",
+      "description": "Camera configuration.",
+      "properties": {
+        "type": { "type": "string" },
+        "resolution": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "framerate": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "audio": {
+      "type": "object",
+      "description": "Text-to-speech and audio output configuration.",
+      "properties": {
+        "tts_enabled": { "type": "boolean" },
+        "engine": { "type": "string" },
+        "language": { "type": "string" },
+        "output_device": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "channels": {
+      "type": "object",
+      "description": "Messaging channel configurations.",
+      "properties": {
+        "whatsapp": {
+          "type": "object",
+          "properties": { "enabled": { "type": "boolean" } },
+          "additionalProperties": true
+        },
+        "telegram": {
+          "type": "object",
+          "properties": { "enabled": { "type": "boolean" } },
+          "additionalProperties": true
+        },
+        "discord": {
+          "type": "object",
+          "properties": { "enabled": { "type": "boolean" } },
+          "additionalProperties": true
+        },
+        "slack": {
+          "type": "object",
+          "properties": { "enabled": { "type": "boolean" } },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "network": {
+      "type": "object",
+      "description": "Network and telemetry settings.",
+      "required": ["telemetry_stream"],
+      "additionalProperties": false,
+      "properties": {
+        "telemetry_stream": { "type": "boolean" },
+        "sim_to_real_sync": { "type": "boolean" },
+        "allow_remote_override": { "type": "boolean" }
+      }
+    },
+    "rcan_protocol": {
+      "type": "object",
+      "description": "RCAN protocol settings. Required for safety invariants, RURI identity, RBAC, and capability declaration. All sub-fields have safe defaults.",
+      "additionalProperties": false,
+      "properties": {
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 8000,
+          "description": "Port for the RCAN protocol endpoint."
+        },
+        "capabilities": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Advertised capabilities (e.g. nav, vision, teleop, chat, status)."
+        },
+        "enable_mdns": {
+          "type": "boolean",
+          "default": false,
+          "description": "Advertise and discover peers via mDNS (_rcan._tcp.local)."
+        },
+        "enable_jwt": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable JWT authentication for the API."
+        },
+        "registry": {
+          "type": "string",
+          "description": "Optional URL of an RCAN fleet registry."
+        }
+      }
+    }
+  }
+}

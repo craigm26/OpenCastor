@@ -1,0 +1,87 @@
+name: Bug Report
+description: Report a bug in OpenCastor
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please fill out the sections below so we can reproduce and fix it.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+      placeholder: "When I run `castor run`, the robot drives in circles instead of following the AI command."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce this?
+      placeholder: |
+        1. Run `castor wizard` and select Anthropic Claude
+        2. Run `castor run --config my_robot.rcan.yaml`
+        3. Send command "move forward"
+        4. Robot turns left instead
+    validations:
+      required: true
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: AI Provider
+      options:
+        - Anthropic Claude
+        - Google Gemini
+        - OpenAI GPT
+        - Ollama (local)
+        - N/A
+    validations:
+      required: true
+
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Hardware
+      options:
+        - Raspberry Pi + PCA9685
+        - Waveshare AlphaBot
+        - Adeept RaspTank
+        - SunFounder PiCar-X
+        - Dynamixel arm
+        - Simulation (no hardware)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Platform, Python version, OpenCastor version.
+      placeholder: |
+        - OS: Raspberry Pi OS Bookworm (64-bit)
+        - Python: 3.11.2
+        - OpenCastor: 2026.2.17.3
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / error output
+      description: Paste any relevant logs or error messages.
+      render: shell
+    validations:
+      required: false

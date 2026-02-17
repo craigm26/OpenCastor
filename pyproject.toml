@@ -1,0 +1,109 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "opencastor"
+version = "2026.2.17.3"
+description = "The Universal Runtime for Embodied AI"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [
+    { name = "OpenCastor Contributors", email = "hello@opencastor.com" },
+]
+keywords = ["robotics", "ai", "llm", "embodied-ai", "rcan"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Hardware",
+]
+
+dependencies = [
+    # The Brain (AI Providers)
+    "anthropic>=0.40.0",
+    "google-generativeai>=0.4.0",
+    "openai>=1.0.0",
+    # The Body (Hardware)
+    "pyserial>=3.5",
+    # The Eyes (Vision)
+    "opencv-python-headless>=4.9.0",
+    # The Voice (TTS via USB speaker)
+    "gTTS>=2.4.0",
+    "pygame>=2.5.0",
+    # The Law (Config & Validation)
+    "pyyaml>=6.0",
+    "jsonschema>=4.20.0",
+    "requests>=2.31.0",
+    # The Gateway (API & Channels)
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "python-dotenv>=1.0.0",
+    "httpx>=0.26.0",
+    # The Dashboard
+    "streamlit>=1.30.0",
+    "SpeechRecognition>=3.10.0",
+    # CLI & Demo
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+# The recommended stack: RPi + PCA9685 RC car + CSI camera + WhatsApp + Claude
+rpi = [
+    "adafruit-circuitpython-pca9685>=3.4.0",
+    "adafruit-circuitpython-motor>=3.4.0",
+    "picamera2>=0.3.17",
+    "neonize>=1.0.0",
+]
+whatsapp = ["neonize>=1.0.0"]
+whatsapp-twilio = ["twilio>=9.0.0"]
+telegram = ["python-telegram-bot>=21.0"]
+discord = ["discord.py>=2.3.0"]
+slack = ["slack-bolt>=1.18.0"]
+channels = [
+    "neonize>=1.0.0",
+    "python-telegram-bot>=21.0",
+    "discord.py>=2.3.0",
+    "slack-bolt>=1.18.0",
+]
+rcan = [
+    "PyJWT>=2.8.0",
+    "zeroconf>=0.131.0",
+]
+dynamixel = ["dynamixel-sdk>=3.7.31"]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.2.0",
+]
+
+[project.scripts]
+castor = "castor.cli:main"
+opencastor = "castor.cli:main"
+
+[project.urls]
+Homepage = "https://opencastor.com"
+Repository = "https://github.com/craigm26/OpenCastor"
+Documentation = "https://github.com/craigm26/OpenCastor#readme"
+"Bug Tracker" = "https://github.com/craigm26/OpenCastor/issues"
+"Discord" = "https://discord.gg/jMjA8B26Bq"
+
+[tool.setuptools.packages.find]
+include = ["castor*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
