@@ -43,9 +43,12 @@ app = FastAPI(
     version="2026.2.17.3",
 )
 
+# CORS: configurable via OPENCASTOR_CORS_ORIGINS env var (comma-separated).
+# Defaults to ["*"] for local development. Restrict for production.
+_cors_origins = os.getenv("OPENCASTOR_CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[o.strip() for o in _cors_origins],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -338,10 +341,10 @@ async def issue_token(req: TokenRequest):
             ttl_seconds=req.ttl_seconds,
         )
         return {"token": token, "expires_in": req.ttl_seconds}
-    except KeyError:
-        raise HTTPException(status_code=400, detail=f"Invalid role: {req.role}")
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid role: {req.role}") from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/api/auth/whoami", dependencies=[Depends(verify_token)])
@@ -382,7 +385,7 @@ async def rcan_message_endpoint(request: Request):
         response = state.rcan_router.route(msg, principal)
         return response.to_dict()
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid RCAN message: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid RCAN message: {e}") from e
 
 
 @app.get("/cap/status", dependencies=[Depends(verify_token)])
@@ -446,7 +449,7 @@ async def get_roles():
             principals[name] = p.to_dict()
         return {"roles": roles, "principals": principals}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"RBAC not available: {e}")
+        raise HTTPException(status_code=500, detail=f"RBAC not available: {e}") from e
 
 
 @app.get("/api/fs/permissions", dependencies=[Depends(verify_token)])
@@ -810,6 +813,13 @@ async def on_startup():
     host = os.getenv("OPENCASTOR_API_HOST", "127.0.0.1")
     port = os.getenv("OPENCASTOR_API_PORT", "8000")
     logger.info(f"OpenCastor Gateway ready on {host}:{port}")
+
+    # Warn if running without authentication
+    if not os.getenv("OPENCASTOR_API_TOKEN") and not os.getenv("OPENCASTOR_JWT_SECRET"):
+        logger.warning(
+            "Gateway running WITHOUT authentication. "
+            "Set OPENCASTOR_API_TOKEN or OPENCASTOR_JWT_SECRET in .env for production."
+        )
 
     # Print QR code for mobile access
     _print_gateway_qr(host, port)

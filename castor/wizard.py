@@ -32,7 +32,6 @@ try:
     from rich.console import Console
     from rich.panel import Panel
     from rich.progress import Progress, SpinnerColumn, TextColumn
-    from rich.table import Table
 
     _console = Console()
     HAS_RICH = True
@@ -583,7 +582,7 @@ def main():
 
     if HAS_RICH:
         _console.print("[bold magenta]OpenCastor Setup Wizard v2026.2.17.3[/]")
-        _console.print(f"Generating spec compliant with [bold]rcan.dev/spec[/]\n")
+        _console.print("Generating spec compliant with [bold]rcan.dev/spec[/]\n")
     else:
         print(f"{Colors.HEADER}OpenCastor Setup Wizard v2026.2.17.3{Colors.ENDC}")
         print(
@@ -670,10 +669,10 @@ def main():
 
     # --- Post-Wizard Health Check ---
     try:
-        from castor.doctor import run_post_wizard_checks, print_report
+        from castor.doctor import print_report, run_post_wizard_checks
 
         if HAS_RICH:
-            _console.print(f"\n[bold magenta]--- Running Health Check ---[/]")
+            _console.print("\n[bold magenta]--- Running Health Check ---[/]")
         else:
             print(f"\n{Colors.HEADER}--- Running Health Check ---{Colors.ENDC}")
         results = run_post_wizard_checks(
@@ -695,15 +694,15 @@ def main():
             names = ", ".join(ch["label"] for ch in selected_channels)
             _console.print(f"  Channels:     {names}")
 
-        _console.print(f"\n[bold]Next Steps:[/]")
+        _console.print("\n[bold]Next Steps:[/]")
         _console.print(f"  1. Run the robot:        [cyan]castor run --config {filename}[/]")
         _console.print(f"  2. Start the gateway:    [cyan]castor gateway --config {filename}[/]")
-        _console.print(f"  3. Open the dashboard:   [cyan]castor dashboard[/]")
-        _console.print(f"  4. Check status:         [cyan]castor status[/]")
+        _console.print("  3. Open the dashboard:   [cyan]castor dashboard[/]")
+        _console.print("  4. Check status:         [cyan]castor status[/]")
         _console.print(f"  5. Auto-start on boot:   [cyan]castor install-service --config {filename}[/]")
         _console.print(f"  6. Test your hardware:   [cyan]castor test-hardware --config {filename}[/]")
         _console.print(f"  7. Calibrate servos:     [cyan]castor calibrate --config {filename}[/]")
-        _console.print(f"\n  Or with Docker:          [cyan]docker compose up[/]")
+        _console.print("\n  Or with Docker:          [cyan]docker compose up[/]")
         _console.print("  Validate config:         https://rcan.dev/spec/")
     else:
         print(f"\n{Colors.BOLD}{'=' * 50}{Colors.ENDC}")

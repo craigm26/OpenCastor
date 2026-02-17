@@ -95,6 +95,7 @@ def replay_session(recording_path: str, execute: bool = False, config_path: str 
     driver = None
     if execute and config_path:
         import yaml
+
         from castor.main import get_driver
         with open(config_path) as f:
             config = yaml.safe_load(f)

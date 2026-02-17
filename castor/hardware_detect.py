@@ -127,7 +127,7 @@ def _detect_platform() -> str:
     """Detect the current platform (Raspberry Pi, Jetson, or generic)."""
     # Check for Raspberry Pi
     try:
-        with open("/proc/device-tree/model", "r") as f:
+        with open("/proc/device-tree/model") as f:
             model = f.read().lower()
             if "raspberry pi" in model:
                 return "rpi"

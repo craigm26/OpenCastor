@@ -13,17 +13,12 @@ Usage:
     castor learn --lesson 3
 """
 
-import os
-import sys
-import time
 
 
 def run_learn(lesson: int = None):
     """Run the interactive tutorial."""
     try:
         from rich.console import Console
-        from rich.panel import Panel
-        from rich.markdown import Markdown
         console = Console()
         has_rich = True
     except ImportError:
@@ -53,7 +48,7 @@ def run_learn(lesson: int = None):
         lesson_fn(has_rich, console)
         if i < len(lessons) - 1:
             if not _continue_prompt(has_rich, console):
-                print("\n  Tutorial paused. Resume with: castor learn --lesson {}\n".format(i + 2))
+                print(f"\n  Tutorial paused. Resume with: castor learn --lesson {i + 2}\n")
                 return
 
 

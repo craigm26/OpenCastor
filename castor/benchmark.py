@@ -29,7 +29,6 @@ def run_benchmark(config_path: str, iterations: int = 3, simulate: bool = False)
 
     try:
         from rich.console import Console
-        from rich.table import Table
         console = Console()
         has_rich = True
     except ImportError:
@@ -43,8 +42,8 @@ def run_benchmark(config_path: str, iterations: int = 3, simulate: bool = False)
         print(f"  Iterations: {iterations}\n")
 
     # Initialize components
-    from castor.providers import get_provider
     from castor.main import Camera, get_driver
+    from castor.providers import get_provider
 
     print("  Initializing components...")
 
@@ -104,11 +103,12 @@ def run_benchmark(config_path: str, iterations: int = 3, simulate: bool = False)
 def _print_results(results, config, has_rich, console):
     """Print benchmark results as a summary table."""
     n = len(results)
-    avg = lambda key: sum(r[key] for r in results) / n
+    def avg(key):
+        return sum(r[key] for r in results) / n
 
-    avg_capture = avg("capture_ms")
-    avg_inference = avg("inference_ms")
-    avg_driver = avg("driver_ms")
+    avg("capture_ms")
+    avg("inference_ms")
+    avg("driver_ms")
     avg_total = avg("total_ms")
     budget = config.get("agent", {}).get("latency_budget_ms", 3000)
 

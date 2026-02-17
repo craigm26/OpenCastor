@@ -56,7 +56,7 @@ class RURI:
     # Constructors
     # ------------------------------------------------------------------
     @classmethod
-    def parse(cls, uri: str) -> "RURI":
+    def parse(cls, uri: str) -> RURI:
         """Parse a RURI string into a :class:`RURI` object.
 
         Raises:
@@ -74,7 +74,7 @@ class RURI:
         )
 
     @classmethod
-    def from_config(cls, config: dict) -> "RURI":
+    def from_config(cls, config: dict) -> RURI:
         """Auto-generate a RURI from an RCAN config dict.
 
         Resolution order:
@@ -111,7 +111,7 @@ class RURI:
         """Return the RURI without the capability path."""
         return f"rcan://{self.manufacturer}.{self.model}.{self.instance}"
 
-    def with_capability(self, capability: str) -> "RURI":
+    def with_capability(self, capability: str) -> RURI:
         """Return a new RURI with a different capability path."""
         return RURI(
             manufacturer=self.manufacturer,
@@ -123,7 +123,7 @@ class RURI:
     # ------------------------------------------------------------------
     # Pattern matching
     # ------------------------------------------------------------------
-    def matches(self, pattern: "RURI") -> bool:
+    def matches(self, pattern: RURI) -> bool:
         """Check if this RURI matches a pattern RURI (with wildcards).
 
         Each segment of *pattern* can be ``*`` to match any value.

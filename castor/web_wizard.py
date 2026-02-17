@@ -9,12 +9,8 @@ Usage:
     castor wizard --web --port 8080
 """
 
-import json
 import logging
-import os
-import uuid
 import webbrowser
-from datetime import datetime, timezone
 
 logger = logging.getLogger("OpenCastor.WebWizard")
 
@@ -191,7 +187,7 @@ def launch_web_wizard(port: int = 8080):
 
     @app.post("/api/wizard/generate")
     async def generate_config(req: WizardRequest):
-        from castor.wizard import PROVIDERS, generate_preset_config, _write_env_var
+        from castor.wizard import PROVIDERS, _write_env_var, generate_preset_config
 
         agent_config = PROVIDERS.get(req.provider, PROVIDERS["1"])
 

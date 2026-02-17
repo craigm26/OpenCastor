@@ -27,7 +27,6 @@ import json
 import logging
 import os
 import subprocess
-import sys
 
 logger = logging.getLogger("OpenCastor.Schedule")
 

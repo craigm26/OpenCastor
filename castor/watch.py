@@ -37,11 +37,9 @@ def launch_watch(config_path: str, refresh: float = 1.0, gateway_url: str = None
     """
     try:
         from rich.console import Console
-        from rich.layout import Layout
         from rich.live import Live
         from rich.panel import Panel
         from rich.table import Table
-        from rich.text import Text
     except ImportError:
         print("  castor watch requires the 'rich' library.")
         print("  Install with: pip install rich")

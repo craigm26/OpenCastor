@@ -36,7 +36,6 @@ import os
 import sys
 import traceback
 
-
 # ---------------------------------------------------------------------------
 # Command handlers
 # ---------------------------------------------------------------------------
@@ -150,12 +149,12 @@ def cmd_token(args):
         )
         print(f"\n  RCAN JWT Token (role={role.name}, ttl={args.ttl}h)\n")
         print(f"  {token}\n")
-    except ImportError:
+    except ImportError as exc:
         print("Error: PyJWT is not installed. Install with: pip install PyJWT")
-        raise SystemExit(1)
-    except KeyError:
+        raise SystemExit(1) from exc
+    except KeyError as exc:
         print(f"Error: Invalid role '{args.role}'. Valid: GUEST, USER, OPERATOR, ADMIN, CREATOR")
-        raise SystemExit(1)
+        raise SystemExit(1) from exc
 
 
 def cmd_discover(args):
@@ -164,10 +163,10 @@ def cmd_discover(args):
 
     try:
         from castor.rcan.mdns import RCANServiceBrowser
-    except ImportError:
+    except ImportError as exc:
         print("  Error: zeroconf is not installed.")
         print("  Install with: pip install opencastor[rcan]")
-        raise SystemExit(1)
+        raise SystemExit(1) from exc
 
     import time
 
@@ -197,7 +196,7 @@ def cmd_discover(args):
 
 def cmd_doctor(args):
     """Run system health checks."""
-    from castor.doctor import run_all_checks, print_report
+    from castor.doctor import print_report, run_all_checks
 
     print("\n  OpenCastor Doctor\n")
     results = run_all_checks(config_path=args.config)
@@ -265,7 +264,7 @@ def cmd_backup(args):
 
 def cmd_restore(args):
     """Restore OpenCastor configs from a backup archive."""
-    from castor.backup import restore_backup, print_restore_summary
+    from castor.backup import print_restore_summary, restore_backup
 
     if args.dry_run:
         restore_backup(args.archive, dry_run=True)
@@ -294,7 +293,7 @@ def cmd_upgrade(args):
 
     if result.returncode == 0:
         print("  Upgrade complete. Running health check...\n")
-        from castor.doctor import run_all_checks, print_report
+        from castor.doctor import print_report, run_all_checks
 
         results = run_all_checks()
         print_report(results)
@@ -435,12 +434,11 @@ def cmd_record(args):
         print("  Run `castor wizard` to create one first.\n")
         return
 
-    import yaml
+    import time
+
     from castor.main import Camera, get_driver, load_config
     from castor.providers import get_provider
     from castor.record import SessionRecorder
-
-    import time
 
     config = load_config(args.config)
     brain = get_provider(config["agent"])
@@ -515,7 +513,7 @@ def cmd_benchmark(args):
 
 def cmd_lint(args):
     """Deep config validation beyond JSON schema."""
-    from castor.lint import run_lint, print_lint_report
+    from castor.lint import print_lint_report, run_lint
 
     if not os.path.exists(args.config):
         print(f"\n  Config not found: {args.config}")
@@ -594,7 +592,11 @@ def cmd_approvals(args):
 def cmd_schedule(args):
     """Manage scheduled tasks."""
     from castor.schedule import (
-        list_tasks, add_task, remove_task, install_crontab, print_schedule,
+        add_task,
+        install_crontab,
+        list_tasks,
+        print_schedule,
+        remove_task,
     )
 
     action = args.action
@@ -631,7 +633,7 @@ def cmd_configure(args):
 
 def cmd_search(args):
     """Search operational logs and session recordings."""
-    from castor.memory_search import search_logs, print_search_results
+    from castor.memory_search import print_search_results, search_logs
 
     results = search_logs(
         query=args.query,
@@ -644,7 +646,7 @@ def cmd_search(args):
 
 def cmd_network(args):
     """Network configuration and VPN exposure controls."""
-    from castor.network import network_status, expose
+    from castor.network import expose, network_status
 
     action = args.action
 
@@ -661,6 +663,7 @@ def cmd_network(args):
 def cmd_privacy(args):
     """Show or configure privacy policy."""
     import yaml
+
     from castor.privacy import print_privacy_policy
 
     config = {}
@@ -685,8 +688,11 @@ def cmd_update_check(args):
 def cmd_profile(args):
     """Manage named config profiles."""
     from castor.profiles import (
-        list_profiles, save_profile, use_profile,
-        remove_profile, print_profiles,
+        list_profiles,
+        print_profiles,
+        remove_profile,
+        save_profile,
+        use_profile,
     )
 
     action = args.action
@@ -698,7 +704,7 @@ def cmd_profile(args):
         if not args.name:
             print("\n  Usage: castor profile save NAME --config FILE\n")
             return
-        path = save_profile(args.name, args.config)
+        save_profile(args.name, args.config)
         print(f"\n  Profile '{args.name}' saved from {args.config}\n")
     elif action == "use":
         if not args.name:
@@ -776,7 +782,7 @@ def cmd_quickstart(args):
 
 def cmd_plugins(args):
     """List or manage plugins."""
-    from castor.plugins import load_plugins, list_plugins, print_plugins
+    from castor.plugins import list_plugins, load_plugins, print_plugins
 
     load_plugins()
     plugins = list_plugins()

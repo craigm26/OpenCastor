@@ -45,9 +45,9 @@ class BatteryMonitor:
 
         try:
             if self.sensor_type == "ads1115":
+                import adafruit_ads1x15.ads1115 as ADS
                 import board
                 import busio
-                import adafruit_ads1x15.ads1115 as ADS
                 from adafruit_ads1x15.analog_in import AnalogIn
 
                 i2c = busio.I2C(board.SCL, board.SDA)
@@ -55,9 +55,9 @@ class BatteryMonitor:
                 self._adc = AnalogIn(ads, self.channel)
                 logger.info("Battery monitor online (ADS1115)")
             elif self.sensor_type == "ina219":
-                from adafruit_ina219 import INA219
                 import board
                 import busio
+                from adafruit_ina219 import INA219
 
                 i2c = busio.I2C(board.SCL, board.SDA)
                 self._adc = INA219(i2c)

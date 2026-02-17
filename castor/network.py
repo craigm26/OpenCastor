@@ -188,7 +188,7 @@ def expose(mode: str, port: int = 8000):
             )
             if proc.returncode == 0:
                 hostname = ts.get("hostname", "?")
-                print(f"\n  Tailscale serve active (tailnet only).")
+                print("\n  Tailscale serve active (tailnet only).")
                 print(f"  URL: https://{hostname}/\n")
             else:
                 print(f"  Failed: {proc.stderr}\n")
@@ -214,7 +214,7 @@ def expose(mode: str, port: int = 8000):
             )
             if proc.returncode == 0:
                 hostname = ts.get("hostname", "?")
-                print(f"\n  Tailscale funnel active (PUBLIC).")
+                print("\n  Tailscale funnel active (PUBLIC).")
                 print(f"  URL: https://{hostname}/")
                 print("  WARNING: Anyone with this URL can access your robot.\n")
             else:

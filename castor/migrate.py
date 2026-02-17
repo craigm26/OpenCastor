@@ -12,7 +12,6 @@ Usage:
 import copy
 import logging
 import os
-from datetime import datetime, timezone
 
 import yaml
 
@@ -151,7 +150,7 @@ def _apply_structural_fixes(config: dict) -> tuple:
     newer fields.
     """
     changes = []
-    original = copy.deepcopy(config)
+    copy.deepcopy(config)
 
     # Ensure required top-level keys exist
     if "metadata" not in config:
@@ -240,7 +239,7 @@ def migrate_file(config_path: str, dry_run: bool = False, backup: bool = True) -
 
     if dry_run:
         if has_rich:
-            console.print(f"\n  [dim](dry run -- no changes written)[/]\n")
+            console.print("\n  [dim](dry run -- no changes written)[/]\n")
         else:
             print("\n  (dry run -- no changes written)\n")
         return False

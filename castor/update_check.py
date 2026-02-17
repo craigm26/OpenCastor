@@ -139,19 +139,19 @@ def print_update_status():
         console = None
 
     if has_rich:
-        console.print(f"\n[bold cyan]  OpenCastor Update Check[/]\n")
+        console.print("\n[bold cyan]  OpenCastor Update Check[/]\n")
         console.print(f"  Current version:  {result['current']}")
         console.print(f"  Latest on PyPI:   {result['latest']}")
         if result["update_available"]:
-            console.print(f"\n  [yellow]Update available![/]")
-            console.print(f"  Run: [cyan]castor upgrade[/]\n")
+            console.print("\n  [yellow]Update available![/]")
+            console.print("  Run: [cyan]castor upgrade[/]\n")
         else:
-            console.print(f"\n  [green]You're up to date.[/]\n")
+            console.print("\n  [green]You're up to date.[/]\n")
     else:
-        print(f"\n  OpenCastor Update Check\n")
+        print("\n  OpenCastor Update Check\n")
         print(f"  Current version:  {result['current']}")
         print(f"  Latest on PyPI:   {result['latest']}")
         if result["update_available"]:
-            print(f"\n  Update available! Run: castor upgrade\n")
+            print("\n  Update available! Run: castor upgrade\n")
         else:
-            print(f"\n  You're up to date.\n")
+            print("\n  You're up to date.\n")

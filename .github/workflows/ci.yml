@@ -15,10 +15,10 @@ jobs:
         python-version: ['3.10', '3.11', '3.12']
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -28,11 +28,14 @@ jobs:
       - name: Lint
         run: ruff check castor/
 
+      - name: Check formatting
+        run: ruff format --check castor/
+
       - name: Validate RCAN configs
         run: |
           python3 .github/scripts/validate_rcan.py \
             --schema config/rcan.schema.json \
             --dir .
 
-      - name: Run tests
-        run: pytest tests/ -q
+      - name: Run tests with coverage
+        run: pytest tests/ -q --cov=castor --cov-report=term-missing --cov-fail-under=30

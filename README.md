@@ -90,15 +90,21 @@ agent:
 ## Architecture
 
 ```
-[ Claude / Gemini / GPT / Ollama ]      <-- The Brain (Provider Layer)
-               |
-         [ RCAN Config ]                 <-- The Spinal Cord (Validation)
-               |
-     [ PCA9685 / Dynamixel / GPIO ]      <-- The Nervous System (Drivers)
-               |
-         [ Your Robot ]                  <-- The Body
+[ WhatsApp / Telegram / Discord / Slack ]   <-- Messaging Channels
+                    |
+            [ API Gateway ]                 <-- FastAPI (castor gateway)
+                    |
+      [ Claude / Gemini / GPT / Ollama ]    <-- The Brain (Provider Layer)
+                    |
+              [ RCAN Config ]               <-- The Spinal Cord (Validation)
+                    |
+        [ PCA9685 / Dynamixel / GPIO ]      <-- The Nervous System (Drivers)
+                    |
+              [ Your Robot ]                <-- The Body
 ```
 
+- **Messaging Channels**: Control your robot from WhatsApp, Telegram, Discord, or Slack.
+- **API Gateway**: FastAPI server with REST endpoints, webhook receivers, and bearer-token auth.
 - **Provider Layer**: Normalizes AI outputs into a standard `Thought` object (text + action JSON).
 - **RCAN Validation**: Checks actions against physical constraints (speed limits, range of motion, collision).
 - **Driver Layer**: Translates high-level intent (`move_forward`) into low-level signals (PWM, serial, I2C).
@@ -157,13 +163,78 @@ docker compose up             # Launch
 
 ## CLI Reference
 
+### Setup
 ```bash
-castor run       --config robot.rcan.yaml    # Perception-action loop
+castor wizard                                      # Interactive setup wizard
+castor quickstart                                  # One-command: wizard + demo
+castor configure --config robot.rcan.yaml          # Interactive config editor
+castor install-service --config robot.rcan.yaml    # Generate systemd unit file
+castor learn                                       # Interactive step-by-step tutorial
+```
+
+### Run
+```bash
+castor run       --config robot.rcan.yaml          # Perception-action loop
 castor run       --config robot.rcan.yaml --simulate  # No hardware
-castor gateway   --config robot.rcan.yaml    # API server + messaging
-castor wizard                                 # Interactive setup
-castor dashboard                              # Streamlit web UI
-castor status                                 # Provider/channel readiness
+castor gateway   --config robot.rcan.yaml          # API gateway + messaging
+castor dashboard                                   # Streamlit web UI
+castor demo                                        # Simulated demo (no hardware/API keys)
+castor shell     --config robot.rcan.yaml          # Interactive command shell
+castor repl      --config robot.rcan.yaml          # Python REPL with robot objects
+```
+
+### Diagnostics
+```bash
+castor doctor                                      # System health checks
+castor fix                                         # Auto-fix common issues
+castor status                                      # Provider/channel readiness
+castor logs -f                                     # Structured colored logs
+castor lint      --config robot.rcan.yaml          # Deep config validation
+castor benchmark --config robot.rcan.yaml          # Performance profiling
+castor test                                        # Run test suite
+```
+
+### Hardware
+```bash
+castor test-hardware --config robot.rcan.yaml      # Test motors individually
+castor calibrate --config robot.rcan.yaml          # Interactive calibration
+castor record    --config robot.rcan.yaml          # Record a session
+castor replay    session.jsonl                     # Replay a recorded session
+castor watch     --gateway http://127.0.0.1:8000   # Live telemetry dashboard
+```
+
+### Config Management
+```bash
+castor migrate   --config robot.rcan.yaml          # Migrate RCAN config version
+castor backup                                      # Back up configs
+castor restore   backup.tar.gz                     # Restore from backup
+castor export    --config robot.rcan.yaml          # Export config bundle (no secrets)
+castor diff      --config a.yaml --baseline b.yaml # Compare two configs
+castor profile   list                              # Manage named config profiles
+```
+
+### Safety & Compliance
+```bash
+castor approvals                                   # View/approve dangerous commands
+castor privacy   --config robot.rcan.yaml          # Show sensor access policy
+castor audit     --since 24h                       # View append-only audit log
+```
+
+### Network & Fleet
+```bash
+castor discover                                    # Find RCAN peers on LAN
+castor fleet                                       # Multi-robot status (mDNS)
+castor network   status                            # Network config & Tailscale
+castor schedule  list                              # Manage scheduled tasks
+```
+
+### Advanced
+```bash
+castor token     --role operator                   # Issue JWT for RCAN API
+castor search    "battery low" --since 7d          # Search operational logs
+castor plugins                                     # List loaded plugins
+castor upgrade                                     # Self-update + health check
+castor update-check                                # Check for newer versions
 ```
 
 ## Contributing

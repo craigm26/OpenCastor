@@ -65,7 +65,7 @@ class WhatsAppChannel(BaseChannel):
             )
 
         self._session_db = _get_session_db_path(config)
-        self._client: Optional["NewClient"] = None
+        self._client: Optional[NewClient] = None
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._connected = False

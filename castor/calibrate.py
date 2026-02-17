@@ -9,7 +9,6 @@ Usage:
 """
 
 import logging
-import sys
 
 import yaml
 

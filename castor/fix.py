@@ -14,8 +14,6 @@ Usage:
 import logging
 import os
 import shutil
-import subprocess
-import sys
 
 logger = logging.getLogger("OpenCastor.Fix")
 
@@ -128,7 +126,7 @@ def _fix_missing_sdk(name: str) -> str:
         "opencv": ("opencv-python-headless", "pip install opencv-python-headless"),
     }
 
-    for key, (pkg, cmd) in sdk_map.items():
+    for key, (_pkg, cmd) in sdk_map.items():
         if key in name.lower():
             print(f"    Install with: {cmd}")
             return "hint"

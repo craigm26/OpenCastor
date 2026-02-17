@@ -214,7 +214,6 @@ def print_search_results(results: list, query: str):
     """Print search results."""
     try:
         from rich.console import Console
-        from rich.panel import Panel
         console = Console()
         has_rich = True
     except ImportError:

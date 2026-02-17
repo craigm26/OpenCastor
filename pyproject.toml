@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opencastor"
-version = "2026.2.17.3"
+version = "2026.2.17.4"
 description = "The Universal Runtime for Embodied AI"
 readme = "README.md"
 license = "Apache-2.0"
@@ -17,11 +17,15 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: POSIX :: Linux",
+    "Environment :: Console",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Robotics",
     "Topic :: System :: Hardware",
 ]
 
@@ -51,6 +55,7 @@ dependencies = [
     "SpeechRecognition>=3.10.0",
     # CLI & Demo
     "rich>=13.0.0",
+    "argcomplete>=3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -80,8 +85,8 @@ dynamixel = ["dynamixel-sdk>=3.7.31"]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
     "ruff>=0.2.0",
-    "argcomplete>=3.0.0",
     "qrcode>=7.4.0",
 ]
 
@@ -94,6 +99,7 @@ Homepage = "https://opencastor.com"
 Repository = "https://github.com/craigm26/OpenCastor"
 Documentation = "https://github.com/craigm26/OpenCastor#readme"
 "Bug Tracker" = "https://github.com/craigm26/OpenCastor/issues"
+"Changelog" = "https://github.com/craigm26/OpenCastor/blob/main/CHANGELOG.md"
 "Discord" = "https://discord.gg/jMjA8B26Bq"
 
 [tool.setuptools.packages.find]
@@ -104,7 +110,19 @@ line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "W"]
+select = ["E", "F", "I", "W", "B", "UP"]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # function call in default arg (used by FastAPI Depends)
+    "UP006",  # use dict instead of Dict (prefer explicit imports for clarity)
+    "UP007",  # use X | Y for union types (need 3.10 compat)
+    "UP035",  # deprecated typing imports (keep for 3.10 compat)
+    "UP045",  # use X | None (keep Optional for 3.10 compat)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

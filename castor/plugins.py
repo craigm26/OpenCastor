@@ -26,7 +26,6 @@ Plugin file format::
 import importlib.util
 import logging
 import os
-import sys
 
 logger = logging.getLogger("OpenCastor.Plugins")
 
@@ -145,10 +144,10 @@ def print_plugins(plugins: list):
         console = None
 
     if has_rich:
-        console.print(f"\n[bold cyan]  OpenCastor Plugins[/]")
+        console.print("\n[bold cyan]  OpenCastor Plugins[/]")
         console.print(f"  Directory: [dim]{_PLUGINS_DIR}[/]\n")
     else:
-        print(f"\n  OpenCastor Plugins")
+        print("\n  OpenCastor Plugins")
         print(f"  Directory: {_PLUGINS_DIR}\n")
 
     if not plugins:
@@ -181,11 +180,11 @@ def print_plugins(plugins: list):
     # Show registered commands
     if _registry.commands:
         if has_rich:
-            console.print(f"\n  Plugin commands:")
+            console.print("\n  Plugin commands:")
             for name, (_, help_text) in _registry.commands.items():
                 console.print(f"    [cyan]{name}[/]  {help_text}")
         else:
-            print(f"\n  Plugin commands:")
+            print("\n  Plugin commands:")
             for name, (_, help_text) in _registry.commands.items():
                 print(f"    {name}  {help_text}")
 

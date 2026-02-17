@@ -14,7 +14,6 @@ Usage:
 import logging
 import os
 import re
-import sys
 import time
 
 logger = logging.getLogger("OpenCastor.Logs")

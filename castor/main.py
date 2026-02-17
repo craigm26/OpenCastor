@@ -30,13 +30,13 @@ logger = logging.getLogger("OpenCastor")
 def load_config(path: str) -> dict:
     """Loads and validates the RCAN configuration."""
     try:
-        with open(path, "r") as f:
+        with open(path) as f:
             config = yaml.safe_load(f)
             logger.info(f"Loaded Configuration: {config['metadata']['robot_name']}")
             return config
-    except FileNotFoundError:
+    except FileNotFoundError as exc:
         logger.error(f"Config file not found: {path}")
-        raise SystemExit(1)
+        raise SystemExit(1) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +349,7 @@ def main():
         fs.proc.set_driver("none")
     except Exception as e:
         logger.critical(f"Failed to initialize Brain: {e}")
-        raise SystemExit(1)
+        raise SystemExit(1) from e
 
     # 3. INITIALIZE BODY (Drivers)
     driver = None
@@ -395,10 +395,9 @@ def main():
             logger.debug(f"mDNS broadcast skipped: {e}")
 
     # 6b. PRIVACY POLICY (default-deny for sensors)
-    privacy_policy = None
     try:
         from castor.privacy import PrivacyPolicy
-        privacy_policy = PrivacyPolicy(config)
+        PrivacyPolicy(config)
     except Exception as e:
         logger.debug(f"Privacy policy skipped: {e}")
 
@@ -589,6 +588,7 @@ def main():
         # Save crash report for next startup
         try:
             import traceback
+
             from castor.crash import save_crash_report
             last_thought = None
             last_action = None

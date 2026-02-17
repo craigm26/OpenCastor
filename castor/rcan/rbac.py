@@ -46,7 +46,7 @@ class Scope(IntFlag):
     ADMIN = auto()     # Safety overrides, firmware
 
     @classmethod
-    def for_role(cls, role: RCANRole) -> "Scope":
+    def for_role(cls, role: RCANRole) -> Scope:
         """Return the default scope set for a given role."""
         if role == RCANRole.GUEST:
             return cls.STATUS
@@ -61,7 +61,7 @@ class Scope(IntFlag):
         return cls.NONE
 
     @classmethod
-    def from_strings(cls, names: List[str]) -> "Scope":
+    def from_strings(cls, names: List[str]) -> Scope:
         """Parse a list of scope name strings into a Scope flag set."""
         result = cls.NONE
         mapping = {
@@ -151,7 +151,7 @@ class RCANPrincipal:
             self.scopes = Scope.for_role(self.role)
 
     @classmethod
-    def from_legacy(cls, legacy_name: str) -> "RCANPrincipal":
+    def from_legacy(cls, legacy_name: str) -> RCANPrincipal:
         """Map a legacy OpenCastor principal name to an RCANPrincipal.
 
         Legacy names: ``root``, ``brain``, ``api``, ``channel``, ``driver``.

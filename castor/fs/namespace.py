@@ -40,7 +40,7 @@ class FSNode:
         self.node_type = node_type
         self.data = data
         self.meta = meta or {}
-        self.children: Dict[str, "FSNode"] = {} if node_type == "dir" else {}
+        self.children: Dict[str, FSNode] = {} if node_type == "dir" else {}
         now = time.time()
         self.ctime = now
         self.mtime = now

@@ -100,7 +100,7 @@ def print_diff(diffs: list, path_a: str, path_b: str):
         return
 
     if has_rich:
-        console.print(f"\n[bold cyan]  Config Diff[/]")
+        console.print("\n[bold cyan]  Config Diff[/]")
         console.print(f"  [dim]{path_a} vs {path_b}[/]\n")
 
         table = Table(show_header=True, box=None, padding=(0, 1))

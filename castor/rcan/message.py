@@ -92,7 +92,7 @@ class RCANMessage:
         payload: Dict[str, Any],
         priority: int = Priority.NORMAL,
         scope: Optional[List[str]] = None,
-    ) -> "RCANMessage":
+    ) -> RCANMessage:
         """Create a COMMAND message."""
         return cls(
             type=MessageType.COMMAND,
@@ -109,7 +109,7 @@ class RCANMessage:
         source: str,
         target: str,
         payload: Dict[str, Any],
-    ) -> "RCANMessage":
+    ) -> RCANMessage:
         """Create a STATUS message."""
         return cls(
             type=MessageType.STATUS,
@@ -126,7 +126,7 @@ class RCANMessage:
         target: str,
         reply_to: str,
         payload: Optional[Dict[str, Any]] = None,
-    ) -> "RCANMessage":
+    ) -> RCANMessage:
         """Create an ACK for a prior message."""
         return cls(
             type=MessageType.ACK,
@@ -144,7 +144,7 @@ class RCANMessage:
         code: str,
         detail: str,
         reply_to: Optional[str] = None,
-    ) -> "RCANMessage":
+    ) -> RCANMessage:
         """Create an ERROR message."""
         return cls(
             type=MessageType.ERROR,
@@ -166,7 +166,7 @@ class RCANMessage:
         return d
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "RCANMessage":
+    def from_dict(cls, data: Dict[str, Any]) -> RCANMessage:
         """Deserialise from a dict.
 
         Accepts both integer type/priority values and string names.

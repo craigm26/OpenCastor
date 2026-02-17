@@ -14,7 +14,6 @@ Usage:
 
 import code
 import logging
-import sys
 
 import yaml
 
@@ -72,7 +71,7 @@ def launch_repl(config_path: str):
         speaker = Speaker(config)
         namespace["speaker"] = speaker
         print(f"  speaker  = {'online' if speaker.enabled else 'offline'}")
-    except Exception as e:
+    except Exception:
         namespace["speaker"] = None
 
     # Convenience helpers

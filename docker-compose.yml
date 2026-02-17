@@ -17,6 +17,13 @@ services:
     volumes:
       - ./robot.rcan.yaml:/app/robot.rcan.yaml
     restart: unless-stopped
+    networks:
+      - opencastor
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 30s
@@ -30,6 +37,9 @@ services:
     image: opencastor:latest
     container_name: opencastor_runtime
     command: ["python", "-m", "castor.main", "--config", "/app/robot.rcan.yaml"]
+    depends_on:
+      opencastor-gateway:
+        condition: service_healthy
 
     # Grant access to hardware (USB serial, camera)
     privileged: true
@@ -44,6 +54,13 @@ services:
     volumes:
       - ./robot.rcan.yaml:/app/robot.rcan.yaml
     restart: unless-stopped
+    networks:
+      - opencastor
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     profiles:
       - hardware  # Only start with: docker compose --profile hardware up
 
@@ -53,6 +70,9 @@ services:
     image: opencastor:latest
     container_name: opencastor_dashboard
     command: ["python", "-m", "streamlit", "run", "castor/dashboard.py", "--server.port=8501", "--server.headless=true"]
+    depends_on:
+      opencastor-gateway:
+        condition: service_healthy
     ports:
       - "8501:8501"
     env_file:
@@ -60,5 +80,16 @@ services:
     volumes:
       - ./robot.rcan.yaml:/app/robot.rcan.yaml
     restart: unless-stopped
+    networks:
+      - opencastor
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     profiles:
       - dashboard  # Only start with: docker compose --profile dashboard up
+
+networks:
+  opencastor:
+    name: opencastor

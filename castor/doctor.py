@@ -34,7 +34,7 @@ def check_provider_keys(config=None):
     If *config* is provided and has ``agent.provider``, only check that
     provider.  Otherwise check all known providers.
     """
-    from castor.auth import load_dotenv_if_available, list_available_providers
+    from castor.auth import list_available_providers, load_dotenv_if_available
 
     load_dotenv_if_available()
     providers = list_available_providers()
@@ -67,8 +67,8 @@ def check_rcan_config(config_path):
         return False, "RCAN config", f"{config_path} not found"
 
     try:
-        import yaml
         import jsonschema
+        import yaml
 
         schema_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)), "config", "rcan.schema.json"
