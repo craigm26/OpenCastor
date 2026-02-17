@@ -194,7 +194,9 @@ class WorkAuthority:
         self._cleanup_expired()
         order = self._orders.get(order_id)
         if not order:
-            self._audit("approve_failed", order_id=order_id, reason="not_found", principal=principal)
+            self._audit(
+                "approve_failed", order_id=order_id, reason="not_found", principal=principal
+            )
             return False
 
         if order.revoked:
@@ -250,11 +252,7 @@ class WorkAuthority:
     def check_authorization(self, action_type: str, target: str) -> Optional[WorkOrder]:
         self._cleanup_expired()
         for order in self._orders.values():
-            if (
-                order.action_type == action_type
-                and order.target == target
-                and order.is_valid
-            ):
+            if order.action_type == action_type and order.target == target and order.is_valid:
                 return order
         return None
 
@@ -282,9 +280,7 @@ class WorkAuthority:
 
     def list_pending(self) -> list[WorkOrder]:
         self._cleanup_expired()
-        return [
-            wo for wo in self._orders.values() if not wo.is_approved and not wo.revoked
-        ]
+        return [wo for wo in self._orders.values() if not wo.is_approved and not wo.revoked]
 
     def list_active(self) -> list[WorkOrder]:
         self._cleanup_expired()

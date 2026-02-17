@@ -182,7 +182,7 @@ def scan_input(text: str, principal: str = "unknown") -> ScanResult:
         if pattern.search(text):
             matched.append(name)
             reasons.append(f"injection:{name}")
-            if verdict.value > worst.value if _verdict_ord(verdict) > _verdict_ord(worst) else False:
+            if _verdict_ord(verdict) > _verdict_ord(worst):
                 worst = verdict
 
     # --- Forbidden paths ---

@@ -98,6 +98,11 @@ class SafetyLayer:
         # Emergency stop flag
         self._estop = False
 
+        # Safety telemetry
+        from castor.safety.state import SafetyTelemetry
+
+        self._telemetry = SafetyTelemetry()
+
         # Install safety config into the namespace
         self._install_safety_config()
 
@@ -111,6 +116,10 @@ class SafetyLayer:
         self.ns.write("/var/log/actions", [])
         self.ns.write("/var/log/safety", [])
         self.ns.write("/var/log/access", [])
+
+        # Safety telemetry -- on-demand via /proc/safety
+        self.ns.mkdir("/proc")
+        self._update_safety_telemetry()
 
     # ------------------------------------------------------------------
     # Internal helpers

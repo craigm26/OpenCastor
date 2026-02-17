@@ -7,7 +7,6 @@ import time
 import pytest
 
 from castor.safety.authorization import (
-    AUTHORIZED_ROLES,
     DestructiveActionDetector,
     WorkAuthority,
     WorkOrder,
@@ -134,7 +133,7 @@ class TestWorkAuthorityBasic:
 
     def test_list_pending_and_active(self, authority: WorkAuthority) -> None:
         wo1 = authority.request_authorization("cut", "a", "operator_carol")
-        wo2 = authority.request_authorization("burn", "b", "operator_carol")
+        authority.request_authorization("burn", "b", "operator_carol")
         assert len(authority.list_pending()) == 2
         assert len(authority.list_active()) == 0
 
@@ -148,9 +147,7 @@ class TestWorkAuthorityBasic:
 
 class TestExpiration:
     def test_expired_order_not_in_active(self) -> None:
-        auth = WorkAuthority(
-            role_resolver={"c": "CREATOR", "o": "OPERATOR"}, ttl=0.01
-        )
+        auth = WorkAuthority(role_resolver={"c": "CREATOR", "o": "OPERATOR"}, ttl=0.01)
         wo = auth.request_authorization("cut", "x", "o")
         auth.approve(wo.order_id, "c")
         time.sleep(0.02)
@@ -158,9 +155,7 @@ class TestExpiration:
         assert authority_check_gone(auth, "cut", "x")
 
     def test_expired_order_cannot_execute(self) -> None:
-        auth = WorkAuthority(
-            role_resolver={"c": "CREATOR", "o": "OPERATOR"}, ttl=0.01
-        )
+        auth = WorkAuthority(role_resolver={"c": "CREATOR", "o": "OPERATOR"}, ttl=0.01)
         wo = auth.request_authorization("cut", "x", "o")
         auth.approve(wo.order_id, "c")
         time.sleep(0.02)
@@ -185,9 +180,7 @@ class TestRoleGating:
         assert not authority.approve(wo.order_id, "viewer_dave")
 
     def test_owner_can_approve_owner_required(self, authority: WorkAuthority) -> None:
-        wo = authority.request_authorization(
-            "grind", "x", "operator_carol", required_role="OWNER"
-        )
+        wo = authority.request_authorization("grind", "x", "operator_carol", required_role="OWNER")
         assert authority.approve(wo.order_id, "owner_bob")
         assert wo.is_valid
 
@@ -198,9 +191,7 @@ class TestRoleGating:
         assert not authority.approve(wo.order_id, "owner_bob")
 
     def test_creator_can_approve_owner_required(self, authority: WorkAuthority) -> None:
-        wo = authority.request_authorization(
-            "grind", "x", "operator_carol", required_role="OWNER"
-        )
+        wo = authority.request_authorization("grind", "x", "operator_carol", required_role="OWNER")
         assert authority.approve(wo.order_id, "creator_alice")
 
     def test_self_approval_denied(self, authority: WorkAuthority) -> None:
