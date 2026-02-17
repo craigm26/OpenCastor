@@ -1,43 +1,72 @@
 """
-OpenCastor Audit Log -- append-only record of all significant events.
+OpenCastor Audit Log -- append-only, tamper-evident record of all significant events.
 
 Records motor commands, approval decisions, config changes, errors,
 and who/what triggered each event. The log is append-only and cannot
 be truncated by normal operations.
 
+Each entry is hash-chained: the ``prev_hash`` field contains the SHA-256
+digest of the previous entry's JSON line, forming a tamper-evident chain.
+The first entry uses ``prev_hash: "GENESIS"``.
+
 Log format (one JSON object per line)::
 
-    {"ts": "...", "event": "motor_command", "action": {...}, "source": "brain"}
-    {"ts": "...", "event": "approval_granted", "id": 1, "source": "cli"}
-    {"ts": "...", "event": "config_changed", "file": "robot.rcan.yaml", "source": "wizard"}
-    {"ts": "...", "event": "error", "message": "...", "source": "runtime"}
+    {"ts": "...", "event": "motor_command", "action": {...}, "source": "brain", "prev_hash": "..."}
 
 Usage:
     castor audit                          # View recent audit entries
     castor audit --since 24h             # Filter by time
     castor audit --event motor_command   # Filter by event type
+    castor audit --verify                # Verify hash chain integrity
 """
 
+import hashlib
 import json
 import logging
 import os
 import threading
 from datetime import datetime
+from typing import Optional, Tuple
 
 logger = logging.getLogger("OpenCastor.Audit")
 
 _AUDIT_FILE = ".opencastor-audit.log"
 
 
+def _hash_entry(line: str) -> str:
+    """Return the SHA-256 hex digest of *line* (stripped)."""
+    return hashlib.sha256(line.strip().encode("utf-8")).hexdigest()
+
+
 class AuditLog:
-    """Append-only audit logger for significant robot events."""
+    """Append-only, hash-chained audit logger for significant robot events."""
 
     def __init__(self, log_path: str = None):
         self._path = log_path or _AUDIT_FILE
         self._lock = threading.Lock()
 
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _last_line(self) -> Optional[str]:
+        """Return the last non-empty line of the log file, or *None*."""
+        if not os.path.exists(self._path):
+            return None
+        last = None
+        with open(self._path) as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped:
+                    last = stripped
+        return last
+
+    # ------------------------------------------------------------------
+    # Logging
+    # ------------------------------------------------------------------
+
     def log(self, event: str, source: str = "system", **kwargs):
-        """Append an audit entry.
+        """Append a hash-chained audit entry.
 
         Args:
             event: Event type (e.g. ``"motor_command"``, ``"approval_granted"``).
@@ -52,11 +81,22 @@ class AuditLog:
         entry.update(kwargs)
 
         with self._lock:
+            # Compute prev_hash from the last line in the log
+            last = self._last_line()
+            if last is None:
+                entry["prev_hash"] = "GENESIS"
+            else:
+                entry["prev_hash"] = _hash_entry(last)
+
             try:
                 with open(self._path, "a") as f:
                     f.write(json.dumps(entry, default=str) + "\n")
             except Exception as exc:
                 logger.debug(f"Audit write failed: {exc}")
+
+    # ------------------------------------------------------------------
+    # Convenience loggers
+    # ------------------------------------------------------------------
 
     def log_motor_command(self, action: dict, source: str = "brain"):
         """Log a motor command."""
@@ -87,6 +127,82 @@ class AuditLog:
     def log_shutdown(self, reason: str = "normal"):
         """Log a runtime shutdown."""
         self.log("shutdown", source="runtime", reason=reason)
+
+    # ------------------------------------------------------------------
+    # Chain verification
+    # ------------------------------------------------------------------
+
+    def verify_chain(self) -> Tuple[bool, Optional[int]]:
+        """Walk the log and verify every hash link.
+
+        Returns:
+            ``(True, None)`` if the chain is intact (or empty).
+            ``(False, index)`` where *index* is the first broken link.
+        """
+        if not os.path.exists(self._path):
+            return (True, None)
+
+        lines: list[str] = []
+        with open(self._path) as f:
+            for raw in f:
+                stripped = raw.strip()
+                if stripped:
+                    lines.append(stripped)
+
+        if not lines:
+            return (True, None)
+
+        prev_line: Optional[str] = None
+        chaining_started = False
+
+        for idx, line in enumerate(lines):
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                return (False, idx)
+
+            if "prev_hash" not in entry:
+                # Legacy entry without hash — skip, but track for next
+                prev_line = line
+                continue
+
+            # This entry has prev_hash — chaining is active
+            expected_prev = entry["prev_hash"]
+
+            if not chaining_started and prev_line is None:
+                # First entry overall — must be GENESIS
+                if expected_prev != "GENESIS":
+                    return (False, idx)
+                chaining_started = True
+                prev_line = line
+                continue
+
+            if not chaining_started and prev_line is not None:
+                # First chained entry after legacy entries
+                computed = _hash_entry(prev_line)
+                if expected_prev != computed:
+                    return (False, idx)
+                chaining_started = True
+                prev_line = line
+                continue
+
+            # Normal chained entry
+            if prev_line is None:
+                # Should not happen, but guard
+                if expected_prev != "GENESIS":
+                    return (False, idx)
+            else:
+                computed = _hash_entry(prev_line)
+                if expected_prev != computed:
+                    return (False, idx)
+
+            prev_line = line
+
+        return (True, None)
+
+    # ------------------------------------------------------------------
+    # Reading
+    # ------------------------------------------------------------------
 
     def read(self, since: str = None, event: str = None, limit: int = 50) -> list:
         """Read audit entries with optional filters.
@@ -186,7 +302,7 @@ def print_audit(entries: list):
             source = entry.get("source", "?")
 
             # Build details from remaining keys
-            skip_keys = {"ts", "event", "source"}
+            skip_keys = {"ts", "event", "source", "prev_hash"}
             details = ", ".join(
                 f"{k}={v}" for k, v in entry.items() if k not in skip_keys and v is not None
             )
@@ -203,7 +319,7 @@ def print_audit(entries: list):
             ts = entry.get("ts", "?")[:19]
             event = entry.get("event", "?")
             source = entry.get("source", "?")
-            skip_keys = {"ts", "event", "source"}
+            skip_keys = {"ts", "event", "source", "prev_hash"}
             details = ", ".join(
                 f"{k}={v}" for k, v in entry.items() if k not in skip_keys and v is not None
             )

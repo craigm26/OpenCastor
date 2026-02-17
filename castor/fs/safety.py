@@ -16,12 +16,14 @@ read/write/ls API but with enforcement.
 """
 
 import logging
+import os
 import threading
 import time
 from typing import Any, Dict, List, Optional
 
 from castor.fs.namespace import Namespace
 from castor.fs.permissions import Cap, PermissionTable
+from castor.safety.anti_subversion import scan_before_write as _scan_before_write
 
 logger = logging.getLogger("OpenCastor.FS.Safety")
 
@@ -302,6 +304,12 @@ class SafetyLayer:
         if self._is_locked_out(principal):
             logger.warning("READ denied: %s is locked out", principal)
             return None
+        if not self.check_role_rate_limit(principal):
+            self._audit_safety(principal, path, "role_rate_limited", "rate limit exceeded")
+            return None
+        if not self.check_session_timeout(principal):
+            self._audit_safety(principal, path, "session_expired", "session timed out")
+            return None
         if not self.perms.check_access(principal, path, "r"):
             self._audit_access(principal, path, "r", False)
             self._record_violation(principal, path, "r", "permission denied")
@@ -323,11 +331,31 @@ class SafetyLayer:
             logger.warning("WRITE denied: %s is locked out", principal)
             return False
 
+        if not self.check_role_rate_limit(principal):
+            self._audit_safety(principal, path, "role_rate_limited", "rate limit exceeded")
+            return False
+        if not self.check_session_timeout(principal):
+            self._audit_safety(principal, path, "session_expired", "session timed out")
+            return False
+
         if not self.perms.check_access(principal, path, "w"):
             self._audit_access(principal, path, "w", False)
             self._record_violation(principal, path, "w", "permission denied")
             self._audit_safety(principal, path, "deny_write", "permission denied")
             return False
+
+        # Anti-subversion scan for AI-generated /dev/ writes
+        if path.startswith("/dev/"):
+            subversion_result = _scan_before_write(path, data, principal)
+            if not subversion_result.ok:
+                self._audit_safety(
+                    principal,
+                    path,
+                    "anti_subversion",
+                    "; ".join(subversion_result.reasons),
+                )
+                if subversion_result.verdict.value == "block":
+                    return False
 
         # Motor-specific safety enforcement
         if path.startswith("/dev/motor"):
@@ -345,6 +373,12 @@ class SafetyLayer:
         """Append to a list node, checking permissions."""
         if self._is_locked_out(principal):
             return False
+        if not self.check_role_rate_limit(principal):
+            self._audit_safety(principal, path, "role_rate_limited", "rate limit exceeded")
+            return False
+        if not self.check_session_timeout(principal):
+            self._audit_safety(principal, path, "session_expired", "session timed out")
+            return False
         if not self.perms.check_access(principal, path, "w"):
             self._audit_access(principal, path, "w", False)
             self._record_violation(principal, path, "w", "permission denied")
@@ -356,6 +390,12 @@ class SafetyLayer:
         """List directory contents, checking read permission."""
         if self._is_locked_out(principal):
             return None
+        if not self.check_role_rate_limit(principal):
+            self._audit_safety(principal, path, "role_rate_limited", "rate limit exceeded")
+            return None
+        if not self.check_session_timeout(principal):
+            self._audit_safety(principal, path, "session_expired", "session timed out")
+            return None
         if not self.perms.check_access(principal, path, "r"):
             return None
         return self.ns.ls(path)
@@ -364,6 +404,12 @@ class SafetyLayer:
         """Stat a node, checking read permission."""
         if self._is_locked_out(principal):
             return None
+        if not self.check_role_rate_limit(principal):
+            self._audit_safety(principal, path, "role_rate_limited", "rate limit exceeded")
+            return None
+        if not self.check_session_timeout(principal):
+            self._audit_safety(principal, path, "session_expired", "session timed out")
+            return None
         if not self.perms.check_access(principal, path, "r"):
             return None
         return self.ns.stat(path)
@@ -371,6 +417,12 @@ class SafetyLayer:
     def mkdir(self, path: str, principal: str = "root", meta: Optional[Dict] = None) -> bool:
         """Create a directory, checking write permission on parent."""
         if self._is_locked_out(principal):
+            return False
+        if not self.check_role_rate_limit(principal):
+            self._audit_safety(principal, path, "role_rate_limited", "rate limit exceeded")
+            return False
+        if not self.check_session_timeout(principal):
+            self._audit_safety(principal, path, "session_expired", "session timed out")
             return False
         parent = "/".join(path.rstrip("/").split("/")[:-1]) or "/"
         if not self.perms.check_access(principal, parent, "w"):
@@ -397,8 +449,12 @@ class SafetyLayer:
         logger.warning("EMERGENCY STOP activated by %s", principal)
         return True
 
-    def clear_estop(self, principal: str = "root") -> bool:
-        """Clear emergency stop. Requires root or CAP_SAFETY_OVERRIDE."""
+    def clear_estop(self, principal: str = "root", auth_code: Optional[str] = None) -> bool:
+        """Clear emergency stop. Requires root or CAP_SAFETY_OVERRIDE.
+
+        If the ``OPENCASTOR_ESTOP_AUTH`` environment variable is set, the
+        caller must supply a matching *auth_code* to authorise the clear.
+        """
         if principal != "root":
             caps = self.perms.get_caps(principal)
             if not (caps & Cap.SAFETY_OVERRIDE):
@@ -406,6 +462,19 @@ class SafetyLayer:
                     principal, "/dev/motor", "deny_clear_estop", "missing CAP_SAFETY_OVERRIDE"
                 )
                 return False
+
+        required_code = os.environ.get("OPENCASTOR_ESTOP_AUTH")
+        if required_code:
+            if auth_code != required_code:
+                self._audit_safety(
+                    principal,
+                    "/dev/motor",
+                    "deny_clear_estop",
+                    "invalid or missing auth code",
+                )
+                logger.warning("clear_estop denied for %s: bad auth code", principal)
+                return False
+
         self._estop = False
         self.ns.write("/proc/status", "active")
         self._audit_safety(principal, "/dev/motor", "clear_estop", "emergency stop cleared")

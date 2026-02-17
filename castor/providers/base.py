@@ -56,6 +56,19 @@ class BaseProvider(ABC):
         """
         pass
 
+    def check_output_safety(self, text: str, principal: str = "ai_provider") -> bool:
+        """Scan AI output for prompt injection before executing as actions.
+
+        Returns True if safe to proceed.
+        """
+        try:
+            from castor.safety.anti_subversion import check_input_safety, ScanVerdict
+
+            result = check_input_safety(text, principal)
+            return result.verdict != ScanVerdict.BLOCK
+        except ImportError:
+            return True  # graceful fallback if safety module not available
+
     def _clean_json(self, text: str) -> Optional[Dict]:
         """Helper to extract JSON from messy LLM output."""
         try:
