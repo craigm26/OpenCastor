@@ -5,7 +5,6 @@ Exposes a composite view of the safety subsystem's state, available
 via ``/proc/safety`` in the virtual filesystem.
 """
 
-import json
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
@@ -103,9 +102,7 @@ class SafetyTelemetry:
                 cutoff = now - 300  # last 5 minutes
                 for entry in safety_log:
                     if isinstance(entry, dict):
-                        if entry.get("t", 0) > cutoff and "subversion" in entry.get(
-                            "event", ""
-                        ):
+                        if entry.get("t", 0) > cutoff and "subversion" in entry.get("event", ""):
                             anti_sub += 1
         except Exception:
             pass
