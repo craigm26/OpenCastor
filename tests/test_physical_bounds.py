@@ -1,7 +1,5 @@
 """Tests for physical bounds enforcement."""
 
-import math
-
 import pytest
 
 from castor.safety.bounds import (
@@ -16,10 +14,10 @@ from castor.safety.bounds import (
     check_write_bounds,
 )
 
-
 # -----------------------------------------------------------------------
 # BoundsResult
 # -----------------------------------------------------------------------
+
 
 class TestBoundsResult:
     def test_defaults(self):
@@ -29,27 +27,32 @@ class TestBoundsResult:
         assert r.margin == float("inf")
 
     def test_combine_worst_wins(self):
-        r = BoundsResult.combine([
-            BoundsResult("ok", "", 1.0),
-            BoundsResult("violation", "bad", -0.1),
-            BoundsResult("warning", "close", 0.02),
-        ])
+        r = BoundsResult.combine(
+            [
+                BoundsResult("ok", "", 1.0),
+                BoundsResult("violation", "bad", -0.1),
+                BoundsResult("warning", "close", 0.02),
+            ]
+        )
         assert r.status == "violation"
 
     def test_combine_empty(self):
         assert BoundsResult.combine([]).ok
 
     def test_combine_same_status_picks_smaller_margin(self):
-        r = BoundsResult.combine([
-            BoundsResult("warning", "a", 0.05),
-            BoundsResult("warning", "b", 0.01),
-        ])
+        r = BoundsResult.combine(
+            [
+                BoundsResult("warning", "a", 0.05),
+                BoundsResult("warning", "b", 0.01),
+            ]
+        )
         assert r.margin == 0.01
 
 
 # -----------------------------------------------------------------------
 # WorkspaceBounds — sphere
 # -----------------------------------------------------------------------
+
 
 class TestWorkspaceSphere:
     def setup_method(self):
@@ -88,6 +91,7 @@ class TestWorkspaceSphere:
 # WorkspaceBounds — box
 # -----------------------------------------------------------------------
 
+
 class TestWorkspaceBox:
     def setup_method(self):
         self.ws = WorkspaceBounds(
@@ -115,6 +119,7 @@ class TestWorkspaceBox:
 # -----------------------------------------------------------------------
 # Forbidden zones
 # -----------------------------------------------------------------------
+
 
 class TestForbiddenZones:
     def test_inside_forbidden_sphere(self):
@@ -146,12 +151,19 @@ class TestForbiddenZones:
 # JointBounds
 # -----------------------------------------------------------------------
 
+
 class TestJointBounds:
     def setup_method(self):
-        self.jb = JointBounds({
-            "shoulder": JointLimits(position_min=-1.57, position_max=1.57, velocity_max=2.0, torque_max=50.0),
-            "elbow": JointLimits(position_min=-2.0, position_max=2.0, velocity_max=3.0, torque_max=30.0),
-        })
+        self.jb = JointBounds(
+            {
+                "shoulder": JointLimits(
+                    position_min=-1.57, position_max=1.57, velocity_max=2.0, torque_max=50.0
+                ),
+                "elbow": JointLimits(
+                    position_min=-2.0, position_max=2.0, velocity_max=3.0, torque_max=30.0
+                ),
+            }
+        )
 
     def test_within_range(self):
         r = self.jb.check_joint("shoulder", position=0.0, velocity=1.0, torque=20.0)
@@ -186,6 +198,7 @@ class TestJointBounds:
 # -----------------------------------------------------------------------
 # ForceBounds
 # -----------------------------------------------------------------------
+
 
 class TestForceBounds:
     def setup_method(self):
@@ -234,6 +247,7 @@ class TestForceBounds:
 # BoundsChecker integration
 # -----------------------------------------------------------------------
 
+
 class TestBoundsChecker:
     def test_from_robot_type_arm(self):
         bc = BoundsChecker.from_robot_type("arm")
@@ -272,7 +286,14 @@ class TestBoundsChecker:
     def test_from_config(self):
         cfg = {
             "workspace": {"sphere": {"cx": 0, "cy": 0, "cz": 0, "radius": 1.0}},
-            "joints": {"j0": {"position_min": -1.0, "position_max": 1.0, "velocity_max": 2.0, "torque_max": 10.0}},
+            "joints": {
+                "j0": {
+                    "position_min": -1.0,
+                    "position_max": 1.0,
+                    "velocity_max": 2.0,
+                    "torque_max": 10.0,
+                }
+            },
             "force": {"max_ee_force": 30.0, "max_ee_force_human": 8.0},
         }
         bc = BoundsChecker.from_config(cfg)
@@ -283,6 +304,7 @@ class TestBoundsChecker:
 # -----------------------------------------------------------------------
 # Config from virtual FS
 # -----------------------------------------------------------------------
+
 
 class TestVirtualFSConfig:
     def test_from_virtual_fs_with_config(self):
@@ -313,12 +335,15 @@ class TestVirtualFSConfig:
 # check_write_bounds integration
 # -----------------------------------------------------------------------
 
+
 class TestCheckWriteBounds:
     def setup_method(self):
         self.checker = BoundsChecker.from_robot_type("arm")
 
     def test_arm_write_ok(self):
-        r = check_write_bounds(self.checker, "/dev/arm/0", {"position": [0.0, 0.0, 0.5], "force": 10.0})
+        r = check_write_bounds(
+            self.checker, "/dev/arm/0", {"position": [0.0, 0.0, 0.5], "force": 10.0}
+        )
         assert r.ok
 
     def test_arm_write_violation(self):
@@ -326,10 +351,14 @@ class TestCheckWriteBounds:
         assert r.violated
 
     def test_motor_write_velocity(self):
-        r = check_write_bounds(self.checker, "/dev/motor/left", {
-            "joint_id": "left_wheel",
-            "velocity": 100.0,
-        })
+        r = check_write_bounds(
+            self.checker,
+            "/dev/motor/left",
+            {
+                "joint_id": "left_wheel",
+                "velocity": 100.0,
+            },
+        )
         # left_wheel not in arm config → warning (unknown joint)
         assert r.status == "warning"
 

@@ -377,6 +377,17 @@ class SafetyLayer:
                 if subversion_result.verdict.value == "block":
                     return False
 
+        # Physical bounds enforcement for motor and arm paths
+        if path.startswith(("/dev/motor", "/dev/arm")):
+            bounds_result = check_write_bounds(self._bounds_checker, path, data)
+            if bounds_result.violated:
+                logger.warning("WRITE denied: bounds violation on %s: %s", path, bounds_result.details)
+                self._audit_safety(principal, path, "bounds_violation", bounds_result.details)
+                return False
+            if bounds_result.status == "warning":
+                logger.info("Bounds warning on %s: %s", path, bounds_result.details)
+                self._audit_safety(principal, path, "bounds_warning", bounds_result.details)
+
         # Motor-specific safety enforcement
         if path.startswith("/dev/motor"):
             if not self._check_motor_rate():

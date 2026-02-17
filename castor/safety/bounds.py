@@ -7,12 +7,11 @@ the robot from exceeding safe operating boundaries.
 
 from __future__ import annotations
 
-import json
 import logging
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("OpenCastor.Safety.Bounds")
 
@@ -20,6 +19,7 @@ logger = logging.getLogger("OpenCastor.Safety.Bounds")
 # ---------------------------------------------------------------------------
 # Result types
 # ---------------------------------------------------------------------------
+
 
 class BoundsStatus(str, Enum):
     OK = "ok"
@@ -64,6 +64,7 @@ class BoundsResult:
 # Geometry helpers
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Sphere:
     cx: float = 0.0
@@ -98,12 +99,15 @@ def _distance_to_box_surface(x: float, y: float, z: float, b: Box) -> float:
     if dx == 0.0 and dy == 0.0 and dz == 0.0:
         # Inside: distance is negative (closest face)
         return -min(
-            x - b.x_min, b.x_max - x,
-            y - b.y_min, b.y_max - y,
-            z - b.z_min, b.z_max - z,
+            x - b.x_min,
+            b.x_max - x,
+            y - b.y_min,
+            b.y_max - y,
+            z - b.z_min,
+            b.z_max - z,
         )
     # Outside: Euclidean distance to nearest corner/edge/face
-    return math.sqrt(dx ** 2 + dy ** 2 + dz ** 2)
+    return math.sqrt(dx**2 + dy**2 + dz**2)
 
 
 def _point_in_sphere(x: float, y: float, z: float, s: Sphere) -> bool:
@@ -145,9 +149,15 @@ class WorkspaceBounds:
         if self.sphere is not None:
             d = _distance_to_sphere_surface(x, y, z, self.sphere)
             if d > 0:
-                results.append(BoundsResult("violation", f"outside workspace sphere by {d:.4f}m", -d))
+                results.append(
+                    BoundsResult("violation", f"outside workspace sphere by {d:.4f}m", -d)
+                )
             elif -d < self.warning_margin:
-                results.append(BoundsResult("warning", f"near workspace sphere boundary ({-d:.4f}m margin)", -d))
+                results.append(
+                    BoundsResult(
+                        "warning", f"near workspace sphere boundary ({-d:.4f}m margin)", -d
+                    )
+                )
             else:
                 results.append(BoundsResult("ok", "inside workspace sphere", -d))
 
@@ -157,7 +167,9 @@ class WorkspaceBounds:
             if d > 0:
                 results.append(BoundsResult("violation", f"outside workspace box by {d:.4f}m", -d))
             elif -d < self.warning_margin:
-                results.append(BoundsResult("warning", f"near workspace box boundary ({-d:.4f}m margin)", -d))
+                results.append(
+                    BoundsResult("warning", f"near workspace box boundary ({-d:.4f}m margin)", -d)
+                )
             else:
                 results.append(BoundsResult("ok", "inside workspace box", -d))
 
@@ -167,14 +179,18 @@ class WorkspaceBounds:
             if d <= 0:
                 results.append(BoundsResult("violation", f"inside forbidden sphere zone {i}", d))
             elif d < self.warning_margin:
-                results.append(BoundsResult("warning", f"near forbidden sphere zone {i} ({d:.4f}m)", d))
+                results.append(
+                    BoundsResult("warning", f"near forbidden sphere zone {i} ({d:.4f}m)", d)
+                )
 
         for i, fb in enumerate(self.forbidden_boxes):
             d = _distance_to_box_surface(x, y, z, fb)
             if d <= 0:
                 results.append(BoundsResult("violation", f"inside forbidden box zone {i}", d))
             elif d < self.warning_margin:
-                results.append(BoundsResult("warning", f"near forbidden box zone {i} ({d:.4f}m)", d))
+                results.append(
+                    BoundsResult("warning", f"near forbidden box zone {i} ({d:.4f}m)", d)
+                )
 
         return BoundsResult.combine(results) if results else BoundsResult()
 
@@ -183,13 +199,15 @@ class WorkspaceBounds:
 # JointBounds
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class JointLimits:
     """Limits for a single joint."""
+
     position_min: float = -math.pi
     position_max: float = math.pi
     velocity_max: float = 2.0  # rad/s
-    torque_max: float = 50.0   # Nm
+    torque_max: float = 50.0  # Nm
 
 
 class JointBounds:
@@ -209,7 +227,9 @@ class JointBounds:
         torque: Optional[float] = None,
     ) -> BoundsResult:
         if joint_id not in self.joints:
-            return BoundsResult("warning", f"no limits defined for joint '{joint_id}'", float("inf"))
+            return BoundsResult(
+                "warning", f"no limits defined for joint '{joint_id}'", float("inf")
+            )
 
         lim = self.joints[joint_id]
         results: List[BoundsResult] = []
@@ -219,14 +239,32 @@ class JointBounds:
             warning_zone = pos_range * 0.05 if pos_range > 0 else 0.01
             if position < lim.position_min:
                 margin = lim.position_min - position
-                results.append(BoundsResult("violation", f"joint {joint_id} position {position:.4f} below min {lim.position_min:.4f}", -margin))
+                results.append(
+                    BoundsResult(
+                        "violation",
+                        f"joint {joint_id} position {position:.4f} below min {lim.position_min:.4f}",
+                        -margin,
+                    )
+                )
             elif position > lim.position_max:
                 margin = position - lim.position_max
-                results.append(BoundsResult("violation", f"joint {joint_id} position {position:.4f} above max {lim.position_max:.4f}", -margin))
+                results.append(
+                    BoundsResult(
+                        "violation",
+                        f"joint {joint_id} position {position:.4f} above max {lim.position_max:.4f}",
+                        -margin,
+                    )
+                )
             else:
                 margin = min(position - lim.position_min, lim.position_max - position)
                 if margin < warning_zone:
-                    results.append(BoundsResult("warning", f"joint {joint_id} position near limit ({margin:.4f} rad margin)", margin))
+                    results.append(
+                        BoundsResult(
+                            "warning",
+                            f"joint {joint_id} position near limit ({margin:.4f} rad margin)",
+                            margin,
+                        )
+                    )
                 else:
                     results.append(BoundsResult("ok", f"joint {joint_id} position ok", margin))
 
@@ -234,9 +272,21 @@ class JointBounds:
             abs_vel = abs(velocity)
             margin = lim.velocity_max - abs_vel
             if abs_vel > lim.velocity_max:
-                results.append(BoundsResult("violation", f"joint {joint_id} velocity {abs_vel:.4f} exceeds max {lim.velocity_max:.4f}", -abs(margin)))
+                results.append(
+                    BoundsResult(
+                        "violation",
+                        f"joint {joint_id} velocity {abs_vel:.4f} exceeds max {lim.velocity_max:.4f}",
+                        -abs(margin),
+                    )
+                )
             elif margin < lim.velocity_max * 0.1:
-                results.append(BoundsResult("warning", f"joint {joint_id} velocity near limit ({margin:.4f} rad/s margin)", margin))
+                results.append(
+                    BoundsResult(
+                        "warning",
+                        f"joint {joint_id} velocity near limit ({margin:.4f} rad/s margin)",
+                        margin,
+                    )
+                )
             else:
                 results.append(BoundsResult("ok", f"joint {joint_id} velocity ok", margin))
 
@@ -244,9 +294,21 @@ class JointBounds:
             abs_t = abs(torque)
             margin = lim.torque_max - abs_t
             if abs_t > lim.torque_max:
-                results.append(BoundsResult("violation", f"joint {joint_id} torque {abs_t:.4f} exceeds max {lim.torque_max:.4f}", -abs(margin)))
+                results.append(
+                    BoundsResult(
+                        "violation",
+                        f"joint {joint_id} torque {abs_t:.4f} exceeds max {lim.torque_max:.4f}",
+                        -abs(margin),
+                    )
+                )
             elif margin < lim.torque_max * 0.1:
-                results.append(BoundsResult("warning", f"joint {joint_id} torque near limit ({margin:.4f} Nm margin)", margin))
+                results.append(
+                    BoundsResult(
+                        "warning",
+                        f"joint {joint_id} torque near limit ({margin:.4f} Nm margin)",
+                        margin,
+                    )
+                )
             else:
                 results.append(BoundsResult("ok", f"joint {joint_id} torque ok", margin))
 
@@ -256,6 +318,7 @@ class JointBounds:
 # ---------------------------------------------------------------------------
 # ForceBounds
 # ---------------------------------------------------------------------------
+
 
 class ForceBounds:
     """End-effector and gripper force limits with human-proximity mode."""
@@ -281,30 +344,48 @@ class ForceBounds:
 
     def set_human_proximity(self, detected: bool) -> None:
         if detected != self._human_nearby:
-            logger.info("Human proximity %s — EE force limit now %.1fN",
-                        "DETECTED" if detected else "CLEARED",
-                        self.max_ee_force_human if detected else self.max_ee_force)
+            logger.info(
+                "Human proximity %s — EE force limit now %.1fN",
+                "DETECTED" if detected else "CLEARED",
+                self.max_ee_force_human if detected else self.max_ee_force,
+            )
         self._human_nearby = detected
 
     def check_force(self, force_n: float) -> BoundsResult:
         limit = self.effective_ee_limit
         margin = limit - abs(force_n)
         if abs(force_n) > limit:
-            return BoundsResult("violation", f"EE force {abs(force_n):.2f}N exceeds limit {limit:.2f}N", -abs(margin))
+            return BoundsResult(
+                "violation",
+                f"EE force {abs(force_n):.2f}N exceeds limit {limit:.2f}N",
+                -abs(margin),
+            )
         if abs(force_n) > limit * self.warning_fraction:
-            return BoundsResult("warning", f"EE force {abs(force_n):.2f}N near limit {limit:.2f}N ({margin:.2f}N margin)", margin)
+            return BoundsResult(
+                "warning",
+                f"EE force {abs(force_n):.2f}N near limit {limit:.2f}N ({margin:.2f}N margin)",
+                margin,
+            )
         return BoundsResult("ok", "force within limits", margin)
 
     def check_contact_force(self, force_n: float) -> BoundsResult:
         margin = self.max_contact_force - abs(force_n)
         if abs(force_n) > self.max_contact_force:
-            return BoundsResult("violation", f"contact force {abs(force_n):.2f}N exceeds limit {self.max_contact_force:.2f}N", -abs(margin))
+            return BoundsResult(
+                "violation",
+                f"contact force {abs(force_n):.2f}N exceeds limit {self.max_contact_force:.2f}N",
+                -abs(margin),
+            )
         return BoundsResult("ok", "contact force ok", margin)
 
     def check_gripper_force(self, force_n: float) -> BoundsResult:
         margin = self.max_gripper_force - abs(force_n)
         if abs(force_n) > self.max_gripper_force:
-            return BoundsResult("violation", f"gripper force {abs(force_n):.2f}N exceeds limit {self.max_gripper_force:.2f}N", -abs(margin))
+            return BoundsResult(
+                "violation",
+                f"gripper force {abs(force_n):.2f}N exceeds limit {self.max_gripper_force:.2f}N",
+                -abs(margin),
+            )
         return BoundsResult("ok", "gripper force ok", margin)
 
 
@@ -314,29 +395,95 @@ class ForceBounds:
 
 DEFAULT_CONFIGS: Dict[str, Dict[str, Any]] = {
     "differential_drive": {
-        "workspace": {"box": {"x_min": -5.0, "y_min": -5.0, "z_min": 0.0, "x_max": 5.0, "y_max": 5.0, "z_max": 0.5}},
-        "joints": {
-            "left_wheel": {"position_min": -1e9, "position_max": 1e9, "velocity_max": 10.0, "torque_max": 5.0},
-            "right_wheel": {"position_min": -1e9, "position_max": 1e9, "velocity_max": 10.0, "torque_max": 5.0},
+        "workspace": {
+            "box": {
+                "x_min": -5.0,
+                "y_min": -5.0,
+                "z_min": 0.0,
+                "x_max": 5.0,
+                "y_max": 5.0,
+                "z_max": 0.5,
+            }
         },
-        "force": {"max_ee_force": 20.0, "max_ee_force_human": 5.0, "max_contact_force": 30.0, "max_gripper_force": 0.0},
+        "joints": {
+            "left_wheel": {
+                "position_min": -1e9,
+                "position_max": 1e9,
+                "velocity_max": 10.0,
+                "torque_max": 5.0,
+            },
+            "right_wheel": {
+                "position_min": -1e9,
+                "position_max": 1e9,
+                "velocity_max": 10.0,
+                "torque_max": 5.0,
+            },
+        },
+        "force": {
+            "max_ee_force": 20.0,
+            "max_ee_force_human": 5.0,
+            "max_contact_force": 30.0,
+            "max_gripper_force": 0.0,
+        },
     },
     "arm": {
         "workspace": {"sphere": {"cx": 0.0, "cy": 0.0, "cz": 0.5, "radius": 0.8}},
         "joints": {
-            f"joint_{i}": {"position_min": -3.14, "position_max": 3.14, "velocity_max": 2.0, "torque_max": 50.0}
+            f"joint_{i}": {
+                "position_min": -3.14,
+                "position_max": 3.14,
+                "velocity_max": 2.0,
+                "torque_max": 50.0,
+            }
             for i in range(6)
         },
-        "force": {"max_ee_force": 50.0, "max_ee_force_human": 10.0, "max_contact_force": 80.0, "max_gripper_force": 40.0},
+        "force": {
+            "max_ee_force": 50.0,
+            "max_ee_force_human": 10.0,
+            "max_contact_force": 80.0,
+            "max_gripper_force": 40.0,
+        },
     },
     "arm_mobile": {
-        "workspace": {"box": {"x_min": -10.0, "y_min": -10.0, "z_min": 0.0, "x_max": 10.0, "y_max": 10.0, "z_max": 2.0}},
-        "joints": {
-            **{f"joint_{i}": {"position_min": -3.14, "position_max": 3.14, "velocity_max": 2.0, "torque_max": 50.0} for i in range(6)},
-            "left_wheel": {"position_min": -1e9, "position_max": 1e9, "velocity_max": 10.0, "torque_max": 5.0},
-            "right_wheel": {"position_min": -1e9, "position_max": 1e9, "velocity_max": 10.0, "torque_max": 5.0},
+        "workspace": {
+            "box": {
+                "x_min": -10.0,
+                "y_min": -10.0,
+                "z_min": 0.0,
+                "x_max": 10.0,
+                "y_max": 10.0,
+                "z_max": 2.0,
+            }
         },
-        "force": {"max_ee_force": 50.0, "max_ee_force_human": 10.0, "max_contact_force": 80.0, "max_gripper_force": 40.0},
+        "joints": {
+            **{
+                f"joint_{i}": {
+                    "position_min": -3.14,
+                    "position_max": 3.14,
+                    "velocity_max": 2.0,
+                    "torque_max": 50.0,
+                }
+                for i in range(6)
+            },
+            "left_wheel": {
+                "position_min": -1e9,
+                "position_max": 1e9,
+                "velocity_max": 10.0,
+                "torque_max": 5.0,
+            },
+            "right_wheel": {
+                "position_min": -1e9,
+                "position_max": 1e9,
+                "velocity_max": 10.0,
+                "torque_max": 5.0,
+            },
+        },
+        "force": {
+            "max_ee_force": 50.0,
+            "max_ee_force_human": 10.0,
+            "max_contact_force": 80.0,
+            "max_gripper_force": 40.0,
+        },
     },
 }
 
@@ -344,6 +491,7 @@ DEFAULT_CONFIGS: Dict[str, Dict[str, Any]] = {
 # ---------------------------------------------------------------------------
 # BoundsChecker (facade)
 # ---------------------------------------------------------------------------
+
 
 class BoundsChecker:
     """Aggregates workspace, joint, and force bounds checking."""
@@ -382,7 +530,9 @@ class BoundsChecker:
     def from_robot_type(cls, robot_type: str) -> BoundsChecker:
         """Load default config for a known robot type."""
         if robot_type not in DEFAULT_CONFIGS:
-            raise ValueError(f"Unknown robot type '{robot_type}'. Known: {list(DEFAULT_CONFIGS.keys())}")
+            raise ValueError(
+                f"Unknown robot type '{robot_type}'. Known: {list(DEFAULT_CONFIGS.keys())}"
+            )
         return cls.from_config(DEFAULT_CONFIGS[robot_type])
 
     @classmethod
@@ -413,12 +563,14 @@ class BoundsChecker:
         joints = action.get("joints", {})
         for jid, jvals in joints.items():
             if isinstance(jvals, dict):
-                results.append(self.joints.check_joint(
-                    jid,
-                    position=jvals.get("position"),
-                    velocity=jvals.get("velocity"),
-                    torque=jvals.get("torque"),
-                ))
+                results.append(
+                    self.joints.check_joint(
+                        jid,
+                        position=jvals.get("position"),
+                        velocity=jvals.get("velocity"),
+                        torque=jvals.get("torque"),
+                    )
+                )
 
         if "force" in action:
             results.append(self.force.check_force(action["force"]))
@@ -433,6 +585,7 @@ class BoundsChecker:
 # ---------------------------------------------------------------------------
 # Integration helper for SafetyLayer
 # ---------------------------------------------------------------------------
+
 
 def check_write_bounds(
     checker: BoundsChecker,
