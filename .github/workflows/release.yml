@@ -145,14 +145,14 @@ jobs:
 
       - name: Publish to PyPI (Trusted Publisher / OIDC)
         id: publish-oidc
-        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b54571ab1b5012e88f2e346b # v1.12.4
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
         continue-on-error: true
         with:
           skip-existing: true
 
       - name: Publish to PyPI (API token fallback)
         if: steps.publish-oidc.outcome == 'failure'
-        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b54571ab1b5012e88f2e346b # v1.12.4
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
           skip-existing: true
