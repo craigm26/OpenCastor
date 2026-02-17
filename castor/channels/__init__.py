@@ -91,9 +91,7 @@ def create_channel(
 
     cls = _CHANNEL_CLASSES.get(name.lower())
     if cls is None:
-        raise ValueError(
-            f"Unknown channel '{name}'. Available: {list(_CHANNEL_CLASSES.keys())}"
-        )
+        raise ValueError(f"Unknown channel '{name}'. Available: {list(_CHANNEL_CLASSES.keys())}")
 
     # Merge environment credentials into config
     merged = dict(config or {})

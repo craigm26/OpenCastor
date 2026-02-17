@@ -60,8 +60,7 @@ class WhatsAppChannel(BaseChannel):
 
         if not HAS_NEONIZE:
             raise ImportError(
-                "neonize is required for WhatsApp. Install with: "
-                "pip install 'opencastor[whatsapp]'"
+                "neonize is required for WhatsApp. Install with: pip install 'opencastor[whatsapp]'"
             )
 
         self._session_db = _get_session_db_path(config)
@@ -93,9 +92,7 @@ class WhatsAppChannel(BaseChannel):
             self._connected = True
             try:
                 me = client.get_me()
-                self.logger.info(
-                    f"WhatsApp connected as {me.PushName} ({me.JID.User})"
-                )
+                self.logger.info(f"WhatsApp connected as {me.PushName} ({me.JID.User})")
             except Exception:
                 self.logger.info("WhatsApp connected")
 
@@ -205,9 +202,7 @@ class WhatsAppChannel(BaseChannel):
                 jid = build_jid(chat_id, "s.whatsapp.net")
 
             loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                None, lambda: self._client.send_message(jid, text[:4096])
-            )
+            await loop.run_in_executor(None, lambda: self._client.send_message(jid, text[:4096]))
             self.logger.info(f"Sent WhatsApp message to {chat_id}")
         except Exception as e:
             self.logger.error(f"Failed to send WhatsApp message: {e}")

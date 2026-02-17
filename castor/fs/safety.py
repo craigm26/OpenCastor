@@ -31,10 +31,10 @@ logger = logging.getLogger("OpenCastor.FS.Safety")
 DEFAULT_LIMITS = {
     "motor_linear_range": (-1.0, 1.0),
     "motor_angular_range": (-1.0, 1.0),
-    "motor_rate_hz": 20.0,           # Max motor commands per second
+    "motor_rate_hz": 20.0,  # Max motor commands per second
     "max_violations_before_lockout": 5,
     "lockout_duration_s": 30.0,
-    "audit_ring_size": 1000,         # Max audit log entries before rotation
+    "audit_ring_size": 1000,  # Max audit log entries before rotation
 }
 
 # -----------------------------------------------------------------------
@@ -76,8 +76,7 @@ class SafetyLayer:
         limits: Optional dict overriding default safety limits.
     """
 
-    def __init__(self, ns: Namespace, perms: PermissionTable,
-                 limits: Optional[Dict] = None):
+    def __init__(self, ns: Namespace, perms: PermissionTable, limits: Optional[Dict] = None):
         self.ns = ns
         self.perms = perms
         self.limits = {**DEFAULT_LIMITS, **(limits or {})}
@@ -139,13 +138,15 @@ class SafetyLayer:
                 self._lockouts[principal] = time.time() + duration
                 logger.warning(
                     "LOCKOUT %s for %ss after %d violations",
-                    principal, duration, count,
+                    principal,
+                    duration,
+                    count,
                 )
-                self._audit_safety(principal, path, "lockout",
-                                   f"Locked out after {count} violations")
+                self._audit_safety(
+                    principal, path, "lockout", f"Locked out after {count} violations"
+                )
 
-    def _audit_action(self, principal: str, path: str, operation: str,
-                      data: Any = None):
+    def _audit_action(self, principal: str, path: str, operation: str, data: Any = None):
         """Append to /var/log/actions."""
         if not POLICIES["audit_writes"]["enabled"]:
             return
@@ -160,8 +161,7 @@ class SafetyLayer:
         self.ns.append("/var/log/actions", entry)
         self._trim_log("/var/log/actions")
 
-    def _audit_safety(self, principal: str, path: str, event: str,
-                      detail: str = ""):
+    def _audit_safety(self, principal: str, path: str, event: str, detail: str = ""):
         """Append to /var/log/safety."""
         if not POLICIES["audit_denials"]["enabled"]:
             return
@@ -175,8 +175,7 @@ class SafetyLayer:
         self.ns.append("/var/log/safety", entry)
         self._trim_log("/var/log/safety")
 
-    def _audit_access(self, principal: str, path: str, operation: str,
-                      granted: bool):
+    def _audit_access(self, principal: str, path: str, operation: str, granted: bool):
         """Append to /var/log/access."""
         entry = {
             "t": time.time(),
@@ -214,8 +213,12 @@ class SafetyLayer:
                 timestamps = self._role_request_timestamps.get(principal, [])
                 timestamps = [t for t in timestamps if now - t < window]
                 if len(timestamps) >= limit:
-                    self._audit_safety(principal, "/", "role_rate_limited",
-                                       f"Exceeded {limit} req/min for role {p.role.name}")
+                    self._audit_safety(
+                        principal,
+                        "/",
+                        "role_rate_limited",
+                        f"Exceeded {limit} req/min for role {p.role.name}",
+                    )
                     return False
                 timestamps.append(now)
                 self._role_request_timestamps[principal] = timestamps
@@ -243,8 +246,9 @@ class SafetyLayer:
                     self._session_starts[principal] = now
                     return True
                 if now - start > timeout:
-                    self._audit_safety(principal, "/", "session_timeout",
-                                       f"Session expired after {timeout}s")
+                    self._audit_safety(
+                        principal, "/", "session_timeout", f"Session expired after {timeout}s"
+                    )
                     return False
             return True
         except Exception:
@@ -263,9 +267,7 @@ class SafetyLayer:
         max_hz = self.limits["motor_rate_hz"]
         window = 1.0  # 1-second sliding window
         with self._lock:
-            self._motor_timestamps = [
-                t for t in self._motor_timestamps if now - t < window
-            ]
+            self._motor_timestamps = [t for t in self._motor_timestamps if now - t < window]
             if len(self._motor_timestamps) >= max_hz:
                 return False
             self._motor_timestamps.append(now)
@@ -308,13 +310,13 @@ class SafetyLayer:
         self._audit_access(principal, path, "r", True)
         return self.ns.read(path)
 
-    def write(self, path: str, data: Any, principal: str = "root",
-              meta: Optional[Dict] = None) -> bool:
+    def write(
+        self, path: str, data: Any, principal: str = "root", meta: Optional[Dict] = None
+    ) -> bool:
         """Write to a file node, checking permissions and safety."""
         if self._estop and path.startswith("/dev/motor"):
             logger.warning("WRITE denied: emergency stop active")
-            self._audit_safety(principal, path, "deny_estop",
-                               "e-stop active, motor writes blocked")
+            self._audit_safety(principal, path, "deny_estop", "e-stop active, motor writes blocked")
             return False
 
         if self._is_locked_out(principal):
@@ -330,8 +332,7 @@ class SafetyLayer:
         # Motor-specific safety enforcement
         if path.startswith("/dev/motor"):
             if not self._check_motor_rate():
-                self._audit_safety(principal, path, "rate_limited",
-                                   "motor command rate exceeded")
+                self._audit_safety(principal, path, "rate_limited", "motor command rate exceeded")
                 logger.warning("Motor rate limit hit by %s", principal)
                 return False
             data = self._clamp_motor_data(data)
@@ -367,8 +368,7 @@ class SafetyLayer:
             return None
         return self.ns.stat(path)
 
-    def mkdir(self, path: str, principal: str = "root",
-              meta: Optional[Dict] = None) -> bool:
+    def mkdir(self, path: str, principal: str = "root", meta: Optional[Dict] = None) -> bool:
         """Create a directory, checking write permission on parent."""
         if self._is_locked_out(principal):
             return False
@@ -389,8 +389,7 @@ class SafetyLayer:
         """Trigger emergency stop. Requires CAP_ESTOP."""
         caps = self.perms.get_caps(principal)
         if not (caps & Cap.ESTOP) and principal != "root":
-            self._audit_safety(principal, "/dev/motor", "deny_estop",
-                               "missing CAP_ESTOP")
+            self._audit_safety(principal, "/dev/motor", "deny_estop", "missing CAP_ESTOP")
             return False
         self._estop = True
         self.ns.write("/proc/status", "estop")
@@ -403,13 +402,13 @@ class SafetyLayer:
         if principal != "root":
             caps = self.perms.get_caps(principal)
             if not (caps & Cap.SAFETY_OVERRIDE):
-                self._audit_safety(principal, "/dev/motor", "deny_clear_estop",
-                                   "missing CAP_SAFETY_OVERRIDE")
+                self._audit_safety(
+                    principal, "/dev/motor", "deny_clear_estop", "missing CAP_SAFETY_OVERRIDE"
+                )
                 return False
         self._estop = False
         self.ns.write("/proc/status", "active")
-        self._audit_safety(principal, "/dev/motor", "clear_estop",
-                           "emergency stop cleared")
+        self._audit_safety(principal, "/dev/motor", "clear_estop", "emergency stop cleared")
         logger.info("Emergency stop cleared by %s", principal)
         return True
 
@@ -423,8 +422,12 @@ class SafetyLayer:
     def set_policy(self, name: str, enabled: bool, principal: str = "root") -> bool:
         """Enable or disable a safety policy.  Requires root."""
         if principal != "root":
-            self._audit_safety(principal, "/etc/safety/policies", "deny_policy",
-                               f"only root can modify policy {name}")
+            self._audit_safety(
+                principal,
+                "/etc/safety/policies",
+                "deny_policy",
+                f"only root can modify policy {name}",
+            )
             return False
         if name in POLICIES:
             POLICIES[name]["enabled"] = enabled

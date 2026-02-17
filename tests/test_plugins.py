@@ -118,8 +118,10 @@ class TestLoadPlugins:
 
         # Use a fresh registry for this test
         fresh_registry = PluginRegistry()
-        with patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)), \
-             patch("castor.plugins._registry", fresh_registry):
+        with (
+            patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)),
+            patch("castor.plugins._registry", fresh_registry),
+        ):
             load_plugins()
 
         assert "hello" in fresh_registry.commands
@@ -131,8 +133,10 @@ class TestLoadPlugins:
         (plugins_dir / "__init__.py").write_text("")
 
         fresh_registry = PluginRegistry()
-        with patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)), \
-             patch("castor.plugins._registry", fresh_registry):
+        with (
+            patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)),
+            patch("castor.plugins._registry", fresh_registry),
+        ):
             load_plugins()
 
         assert len(fresh_registry.commands) == 0
@@ -143,8 +147,10 @@ class TestLoadPlugins:
         (plugins_dir / "broken.py").write_text("raise RuntimeError('broken plugin')")
 
         fresh_registry = PluginRegistry()
-        with patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)), \
-             patch("castor.plugins._registry", fresh_registry):
+        with (
+            patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)),
+            patch("castor.plugins._registry", fresh_registry),
+        ):
             # Should not raise
             result = load_plugins()
 
@@ -164,8 +170,10 @@ class TestListPlugins:
         (plugins_dir / "_hidden.py").write_text("def register(r): pass")
 
         fresh_registry = PluginRegistry()
-        with patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)), \
-             patch("castor.plugins._registry", fresh_registry):
+        with (
+            patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)),
+            patch("castor.plugins._registry", fresh_registry),
+        ):
             result = list_plugins()
 
         assert len(result) == 2

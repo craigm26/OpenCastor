@@ -70,25 +70,26 @@ def _check_agent(config: dict) -> list:
     if provider in known_combos and known_combos[provider]:
         prefixes = known_combos[provider]
         if not any(model.lower().startswith(p) for p in prefixes):
-            issues.append((
-                "warning",
-                f"Model '{model}' looks unusual for provider '{provider}' "
-                f"(expected prefix: {', '.join(prefixes)})"
-            ))
+            issues.append(
+                (
+                    "warning",
+                    f"Model '{model}' looks unusual for provider '{provider}' "
+                    f"(expected prefix: {', '.join(prefixes)})",
+                )
+            )
 
     budget = agent.get("latency_budget_ms", 3000)
     if budget < 500:
-        issues.append((
-            "warning",
-            f"latency_budget_ms={budget} is very aggressive -- "
-            "most providers need 1000ms+"
-        ))
+        issues.append(
+            (
+                "warning",
+                f"latency_budget_ms={budget} is very aggressive -- most providers need 1000ms+",
+            )
+        )
     elif budget > 30000:
-        issues.append((
-            "info",
-            f"latency_budget_ms={budget} is very generous -- "
-            "robot will be slow to react"
-        ))
+        issues.append(
+            ("info", f"latency_budget_ms={budget} is very generous -- robot will be slow to react")
+        )
 
     return issues
 
@@ -111,27 +112,30 @@ def _check_drivers(config: dict) -> list:
         if "pca9685" in protocol:
             i2c_addr = drv.get("i2c_address", 0x40)
             if i2c_addr not in (0x40, 0x41, 0x42, 0x43, 0x60, 0x70):
-                issues.append((
-                    "warning",
-                    f"drivers[{i}].i2c_address=0x{i2c_addr:02x} is unusual "
-                    "for PCA9685 (expected 0x40-0x43 or 0x60/0x70)"
-                ))
+                issues.append(
+                    (
+                        "warning",
+                        f"drivers[{i}].i2c_address=0x{i2c_addr:02x} is unusual "
+                        "for PCA9685 (expected 0x40-0x43 or 0x60/0x70)",
+                    )
+                )
 
         # Dynamixel checks
         if "dynamixel" in protocol:
             port = drv.get("port", "")
             if not port:
-                issues.append((
-                    "warning",
-                    f"drivers[{i}].port not set -- "
-                    "set DYNAMIXEL_PORT env var or specify in config"
-                ))
+                issues.append(
+                    (
+                        "warning",
+                        f"drivers[{i}].port not set -- "
+                        "set DYNAMIXEL_PORT env var or specify in config",
+                    )
+                )
             baud = drv.get("baudrate", 57600)
             if baud not in (9600, 57600, 115200, 1000000):
-                issues.append((
-                    "warning",
-                    f"drivers[{i}].baudrate={baud} is non-standard for Dynamixel"
-                ))
+                issues.append(
+                    ("warning", f"drivers[{i}].baudrate={baud} is non-standard for Dynamixel")
+                )
 
     return issues
 
@@ -147,17 +151,18 @@ def _check_physics(config: dict) -> list:
 
     max_speed = physics.get("max_speed_ms", 0)
     if max_speed > 2.0:
-        issues.append((
-            "warning",
-            f"max_speed_ms={max_speed} is very fast for an indoor robot -- "
-            "ensure safety measures are in place"
-        ))
+        issues.append(
+            (
+                "warning",
+                f"max_speed_ms={max_speed} is very fast for an indoor robot -- "
+                "ensure safety measures are in place",
+            )
+        )
 
     if not physics.get("safety_stop", True):
-        issues.append((
-            "warning",
-            "safety_stop is disabled -- emergency stop won't trigger automatically"
-        ))
+        issues.append(
+            ("warning", "safety_stop is disabled -- emergency stop won't trigger automatically")
+        )
 
     return issues
 
@@ -168,11 +173,14 @@ def _check_channels(config: dict) -> list:
     channels = config.get("channels", [])
 
     from castor.auth import load_dotenv_if_available
+
     load_dotenv_if_available()
 
     env_requirements = {
         "whatsapp_twilio": [
-            "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_WHATSAPP_NUMBER",
+            "TWILIO_ACCOUNT_SID",
+            "TWILIO_AUTH_TOKEN",
+            "TWILIO_WHATSAPP_NUMBER",
         ],
         "telegram": ["TELEGRAM_BOT_TOKEN"],
         "discord": ["DISCORD_BOT_TOKEN"],
@@ -184,10 +192,9 @@ def _check_channels(config: dict) -> list:
         if ch_type in env_requirements:
             missing = [v for v in env_requirements[ch_type] if not os.getenv(v)]
             if missing:
-                issues.append((
-                    "error",
-                    f"Channel '{ch_type}' requires env vars: {', '.join(missing)}"
-                ))
+                issues.append(
+                    ("error", f"Channel '{ch_type}' requires env vars: {', '.join(missing)}")
+                )
 
     return issues
 
@@ -202,10 +209,7 @@ def _check_network(config: dict) -> list:
 
     port = net.get("port", 8000)
     if port < 1024 and port != 80 and port != 443:
-        issues.append((
-            "warning",
-            f"Port {port} requires root privileges -- consider using 8000+"
-        ))
+        issues.append(("warning", f"Port {port} requires root privileges -- consider using 8000+"))
 
     return issues
 
@@ -214,6 +218,7 @@ def _check_env_vars(config: dict) -> list:
     """Check for missing environment variables needed by the config."""
     issues = []
     from castor.auth import load_dotenv_if_available
+
     load_dotenv_if_available()
 
     provider = config.get("agent", {}).get("provider", "")
@@ -229,10 +234,12 @@ def _check_env_vars(config: dict) -> list:
         if not os.getenv(var):
             # Check if key is inline in config
             if not config.get("agent", {}).get("api_key"):
-                issues.append((
-                    "error",
-                    f"Provider '{provider}' needs {var} in .env or agent.api_key in config"
-                ))
+                issues.append(
+                    (
+                        "error",
+                        f"Provider '{provider}' needs {var} in .env or agent.api_key in config",
+                    )
+                )
 
     return issues
 
@@ -241,6 +248,7 @@ def print_lint_report(issues: list, config_path: str):
     """Print lint results."""
     try:
         from rich.console import Console
+
         console = Console()
         has_rich = True
     except ImportError:

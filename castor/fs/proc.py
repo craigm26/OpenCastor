@@ -56,6 +56,7 @@ class ProcFS:
         # Import version at runtime to avoid circular imports
         try:
             from castor import __version__
+
             self.ns.write("/proc/version", __version__)
         except ImportError:
             self.ns.write("/proc/version", "unknown")
@@ -116,11 +117,14 @@ class ProcFS:
         """Record that the brain produced a thought."""
         count = (self.ns.read("/proc/brain/thoughts") or 0) + 1
         self.ns.write("/proc/brain/thoughts", count)
-        self.ns.write("/proc/brain/last_thought", {
-            "raw_text": raw_text[:200],
-            "action": action,
-            "t": time.time(),
-        })
+        self.ns.write(
+            "/proc/brain/last_thought",
+            {
+                "raw_text": raw_text[:200],
+                "action": action,
+                "t": time.time(),
+            },
+        )
 
     def set_driver(self, driver_type: str):
         """Set /proc/hw/driver to the active driver name."""

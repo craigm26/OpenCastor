@@ -45,7 +45,7 @@ class Geofence:
     def distance_from_start(self) -> float:
         """Current estimated distance from starting position (meters)."""
         with self._lock:
-            return math.sqrt(self._x ** 2 + self._y ** 2)
+            return math.sqrt(self._x**2 + self._y**2)
 
     @property
     def position(self) -> tuple:
@@ -79,7 +79,7 @@ class Geofence:
             new_heading = self._heading + angular * dt
             new_x = self._x + linear * math.cos(new_heading) * dt
             new_y = self._y + linear * math.sin(new_heading) * dt
-            new_dist = math.sqrt(new_x ** 2 + new_y ** 2)
+            new_dist = math.sqrt(new_x**2 + new_y**2)
 
         if new_dist > self.max_radius:
             if self.action == "stop":
@@ -88,9 +88,7 @@ class Geofence:
                 )
                 return {"type": "stop"}
             else:
-                logger.warning(
-                    f"Geofence warning: {new_dist:.1f}m > {self.max_radius}m"
-                )
+                logger.warning(f"Geofence warning: {new_dist:.1f}m > {self.max_radius}m")
 
         # Update position
         self._update_position(action)

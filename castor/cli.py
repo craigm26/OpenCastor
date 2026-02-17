@@ -40,6 +40,7 @@ import traceback
 # Command handlers
 # ---------------------------------------------------------------------------
 
+
 def cmd_run(args) -> None:
     """Run the main perception-action loop."""
     config_path = args.config
@@ -82,8 +83,13 @@ def cmd_gateway(args) -> None:
     from castor.api import main as run_gateway
 
     sys.argv = [
-        "castor.api", "--config", args.config,
-        "--host", args.host, "--port", str(args.port),
+        "castor.api",
+        "--config",
+        args.config,
+        "--host",
+        args.host,
+        "--port",
+        str(args.port),
     ]
     run_gateway()
 
@@ -126,6 +132,7 @@ def cmd_token(args) -> None:
     load_dotenv_if_available()
 
     import os
+
     jwt_secret = os.getenv("OPENCASTOR_JWT_SECRET")
     if not jwt_secret:
         print("Error: OPENCASTOR_JWT_SECRET is not set in environment or .env file.")
@@ -389,6 +396,7 @@ def cmd_status(args) -> None:
 # New command handlers (batch 3)
 # ---------------------------------------------------------------------------
 
+
 def cmd_shell(args) -> None:
     """Launch an interactive command shell with robot objects."""
     from castor.shell import launch_shell
@@ -557,6 +565,7 @@ def cmd_export(args) -> None:
 # OpenClaw-inspired command handlers (batch 4)
 # ---------------------------------------------------------------------------
 
+
 def cmd_approvals(args) -> None:
     """Manage approval queue for dangerous commands."""
     from castor.approvals import ApprovalGate, print_approvals
@@ -565,6 +574,7 @@ def cmd_approvals(args) -> None:
     config = {}
     if args.config and os.path.exists(args.config):
         import yaml
+
         with open(args.config) as f:
             config = yaml.safe_load(f)
 
@@ -677,6 +687,7 @@ def cmd_privacy(args) -> None:
 # ---------------------------------------------------------------------------
 # Batch 5: Polish & quality-of-life command handlers
 # ---------------------------------------------------------------------------
+
 
 def cmd_update_check(args) -> None:
     """Check PyPI for a newer version of OpenCastor."""
@@ -806,6 +817,7 @@ def cmd_audit(args) -> None:
 # Parser setup
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="castor",
@@ -833,7 +845,8 @@ def main() -> None:
 
     # castor run
     p_run = sub.add_parser(
-        "run", help="Run the robot perception-action loop",
+        "run",
+        help="Run the robot perception-action loop",
         epilog="Example: castor run --config robot.rcan.yaml --simulate",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -842,7 +855,8 @@ def main() -> None:
 
     # castor gateway
     p_gw = sub.add_parser(
-        "gateway", help="Start the API gateway server",
+        "gateway",
+        help="Start the API gateway server",
         epilog="Example: castor gateway --config robot.rcan.yaml --host 0.0.0.0 --port 8080",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -852,7 +866,8 @@ def main() -> None:
 
     # castor wizard
     p_wizard = sub.add_parser(
-        "wizard", help="Interactive setup wizard",
+        "wizard",
+        help="Interactive setup wizard",
         epilog="Example: castor wizard --simple --accept-risk",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -866,10 +881,12 @@ def main() -> None:
 
     # castor token
     p_token = sub.add_parser("token", help="Issue a JWT token for RCAN API access")
-    p_token.add_argument("--role", default="user",
-                         help="RCAN role (guest/user/operator/admin/creator)")
-    p_token.add_argument("--scope", default=None,
-                         help="Comma-separated scopes (e.g. status,control)")
+    p_token.add_argument(
+        "--role", default="user", help="RCAN role (guest/user/operator/admin/creator)"
+    )
+    p_token.add_argument(
+        "--scope", default=None, help="Comma-separated scopes (e.g. status,control)"
+    )
     p_token.add_argument("--ttl", default="24", help="Token lifetime in hours (default: 24)")
     p_token.add_argument("--subject", default=None, help="Principal name (default: cli-user)")
 
@@ -879,7 +896,8 @@ def main() -> None:
 
     # castor doctor
     p_doctor = sub.add_parser(
-        "doctor", help="Run system health checks",
+        "doctor",
+        help="Run system health checks",
         epilog="Example: castor doctor --config robot.rcan.yaml",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -887,7 +905,8 @@ def main() -> None:
 
     # castor demo
     p_demo = sub.add_parser(
-        "demo", help="Run a simulated demo (no hardware/API keys)",
+        "demo",
+        help="Run a simulated demo (no hardware/API keys)",
         epilog="Example: castor demo --steps 5 --delay 2.0",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -896,7 +915,8 @@ def main() -> None:
 
     # castor test-hardware
     p_test = sub.add_parser(
-        "test-hardware", help="Test each motor/servo individually",
+        "test-hardware",
+        help="Test each motor/servo individually",
         epilog="Example: castor test-hardware --config robot.rcan.yaml -y",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -905,7 +925,8 @@ def main() -> None:
 
     # castor calibrate
     p_cal = sub.add_parser(
-        "calibrate", help="Interactive servo/motor calibration",
+        "calibrate",
+        help="Interactive servo/motor calibration",
         epilog="Example: castor calibrate --config robot.rcan.yaml",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -913,21 +934,25 @@ def main() -> None:
 
     # castor logs
     p_logs = sub.add_parser(
-        "logs", help="View structured OpenCastor logs",
+        "logs",
+        help="View structured OpenCastor logs",
         epilog="Example: castor logs -f --level WARNING --module providers",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_logs.add_argument("--follow", "-f", action="store_true", help="Follow log output")
-    p_logs.add_argument("--level", default=None,
-                        help="Minimum level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
-    p_logs.add_argument("--module", default=None,
-                        help="Filter by module name (e.g. providers, Gateway)")
+    p_logs.add_argument(
+        "--level", default=None, help="Minimum level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    )
+    p_logs.add_argument(
+        "--module", default=None, help="Filter by module name (e.g. providers, Gateway)"
+    )
     p_logs.add_argument("--lines", "-n", type=int, default=50, help="Number of recent lines")
     p_logs.add_argument("--no-color", action="store_true", help="Disable color output")
 
     # castor backup
     p_backup = sub.add_parser(
-        "backup", help="Back up configs and credentials",
+        "backup",
+        help="Back up configs and credentials",
         epilog="Example: castor backup -o my_backup.tar.gz",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -935,12 +960,15 @@ def main() -> None:
 
     # castor restore
     p_restore = sub.add_parser(
-        "restore", help="Restore configs from a backup archive",
+        "restore",
+        help="Restore configs from a backup archive",
         epilog="Example: castor restore opencastor_backup_20260216.tar.gz",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_restore.add_argument("archive", help="Path to the backup .tar.gz file")
-    p_restore.add_argument("--dry-run", action="store_true", help="List contents without extracting")
+    p_restore.add_argument(
+        "--dry-run", action="store_true", help="List contents without extracting"
+    )
 
     # castor migrate
     p_migrate = sub.add_parser("migrate", help="Migrate RCAN config to current schema version")
@@ -953,7 +981,8 @@ def main() -> None:
 
     # castor install-service
     p_svc = sub.add_parser(
-        "install-service", help="Generate a systemd service unit file",
+        "install-service",
+        help="Generate a systemd service unit file",
         epilog="Example: castor install-service --config robot.rcan.yaml",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -968,7 +997,8 @@ def main() -> None:
 
     # castor shell
     p_shell = sub.add_parser(
-        "shell", help="Interactive command shell with robot objects",
+        "shell",
+        help="Interactive command shell with robot objects",
         epilog="Example: castor shell --config robot.rcan.yaml",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -976,18 +1006,24 @@ def main() -> None:
 
     # castor watch
     p_watch = sub.add_parser(
-        "watch", help="Live telemetry dashboard (Rich)",
+        "watch",
+        help="Live telemetry dashboard (Rich)",
         epilog="Example: castor watch --gateway http://192.168.1.100:8000",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p_watch.add_argument("--gateway", default="http://127.0.0.1:8000",
-                         help="Gateway URL (default: http://127.0.0.1:8000)")
-    p_watch.add_argument("--refresh", type=float, default=2.0,
-                         help="Refresh interval in seconds (default: 2.0)")
+    p_watch.add_argument(
+        "--gateway",
+        default="http://127.0.0.1:8000",
+        help="Gateway URL (default: http://127.0.0.1:8000)",
+    )
+    p_watch.add_argument(
+        "--refresh", type=float, default=2.0, help="Refresh interval in seconds (default: 2.0)"
+    )
 
     # castor fix
     p_fix = sub.add_parser(
-        "fix", help="Auto-fix common issues found by doctor",
+        "fix",
+        help="Auto-fix common issues found by doctor",
         epilog="Example: castor fix --config robot.rcan.yaml",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -995,7 +1031,8 @@ def main() -> None:
 
     # castor repl
     p_repl = sub.add_parser(
-        "repl", help="Python REPL with brain, driver, camera pre-loaded",
+        "repl",
+        help="Python REPL with brain, driver, camera pre-loaded",
         epilog="Example: castor repl --config robot.rcan.yaml",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1003,7 +1040,8 @@ def main() -> None:
 
     # castor record
     p_record = sub.add_parser(
-        "record", help="Record a perception-action session to JSONL",
+        "record",
+        help="Record a perception-action session to JSONL",
         epilog="Example: castor record --config robot.rcan.yaml --output session.jsonl",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1013,30 +1051,32 @@ def main() -> None:
 
     # castor replay
     p_replay = sub.add_parser(
-        "replay", help="Replay a recorded session from JSONL",
+        "replay",
+        help="Replay a recorded session from JSONL",
         epilog="Example: castor replay session.jsonl --execute --config robot.rcan.yaml",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_replay.add_argument("recording", help="Path to the .jsonl recording file")
-    p_replay.add_argument("--execute", action="store_true",
-                          help="Re-execute actions on hardware")
-    p_replay.add_argument("--config", default=None,
-                          help="RCAN config file (required if --execute)")
+    p_replay.add_argument("--execute", action="store_true", help="Re-execute actions on hardware")
+    p_replay.add_argument("--config", default=None, help="RCAN config file (required if --execute)")
 
     # castor benchmark
     p_bench = sub.add_parser(
-        "benchmark", help="Profile perception-action loop performance",
+        "benchmark",
+        help="Profile perception-action loop performance",
         epilog="Example: castor benchmark --config robot.rcan.yaml --iterations 5",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_bench.add_argument("--config", default="robot.rcan.yaml", help="RCAN config file")
-    p_bench.add_argument("--iterations", type=int, default=3,
-                         help="Number of iterations (default: 3)")
+    p_bench.add_argument(
+        "--iterations", type=int, default=3, help="Number of iterations (default: 3)"
+    )
     p_bench.add_argument("--simulate", action="store_true", help="Skip hardware driver")
 
     # castor lint
     p_lint = sub.add_parser(
-        "lint", help="Deep config validation beyond JSON schema",
+        "lint",
+        help="Deep config validation beyond JSON schema",
         epilog="Example: castor lint --config robot.rcan.yaml",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1044,38 +1084,43 @@ def main() -> None:
 
     # castor learn
     p_learn = sub.add_parser(
-        "learn", help="Interactive step-by-step tutorial",
+        "learn",
+        help="Interactive step-by-step tutorial",
         epilog="Example: castor learn --lesson 3",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p_learn.add_argument("--lesson", type=int, default=None,
-                         help="Jump to a specific lesson (1-7)")
+    p_learn.add_argument("--lesson", type=int, default=None, help="Jump to a specific lesson (1-7)")
 
     # castor fleet
     p_fleet = sub.add_parser(
-        "fleet", help="Multi-robot fleet management",
+        "fleet",
+        help="Multi-robot fleet management",
         epilog="Example: castor fleet --timeout 10",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p_fleet.add_argument("--timeout", default="5",
-                         help="mDNS scan duration in seconds (default: 5)")
+    p_fleet.add_argument(
+        "--timeout", default="5", help="mDNS scan duration in seconds (default: 5)"
+    )
 
     # castor export
     p_export = sub.add_parser(
-        "export", help="Export config bundle (secrets redacted)",
+        "export",
+        help="Export config bundle (secrets redacted)",
         epilog="Example: castor export --config robot.rcan.yaml --format json",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_export.add_argument("--config", default="robot.rcan.yaml", help="RCAN config file")
     p_export.add_argument("--output", "-o", default=None, help="Output file path")
-    p_export.add_argument("--format", choices=["zip", "json"], default="zip",
-                          help="Export format (default: zip)")
+    p_export.add_argument(
+        "--format", choices=["zip", "json"], default="zip", help="Export format (default: zip)"
+    )
 
     # --- OpenClaw-inspired commands (batch 4) ---
 
     # castor approvals
     p_approvals = sub.add_parser(
-        "approvals", help="Manage approval queue for dangerous commands",
+        "approvals",
+        help="Manage approval queue for dangerous commands",
         epilog="Example: castor approvals --approve 1",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1086,7 +1131,8 @@ def main() -> None:
 
     # castor schedule
     p_sched = sub.add_parser(
-        "schedule", help="Manage scheduled/recurring tasks",
+        "schedule",
+        help="Manage scheduled/recurring tasks",
         epilog=(
             "Examples:\n"
             "  castor schedule list\n"
@@ -1096,9 +1142,13 @@ def main() -> None:
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p_sched.add_argument("action", nargs="?", default="list",
-                         choices=["list", "add", "remove", "install"],
-                         help="Action to perform")
+    p_sched.add_argument(
+        "action",
+        nargs="?",
+        default="list",
+        choices=["list", "add", "remove", "install"],
+        help="Action to perform",
+    )
     p_sched.add_argument("--name", default=None, help="Task name")
     p_sched.add_argument("--command", dest="task_command", default=None, help="Command to run")
     p_sched.add_argument("--cron", default=None, help="Cron expression (e.g. '*/30 * * * *')")
@@ -1106,7 +1156,8 @@ def main() -> None:
 
     # castor configure
     p_conf = sub.add_parser(
-        "configure", help="Interactive config editor (post-wizard tweaks)",
+        "configure",
+        help="Interactive config editor (post-wizard tweaks)",
         epilog="Example: castor configure --config robot.rcan.yaml",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1114,20 +1165,22 @@ def main() -> None:
 
     # castor search
     p_search = sub.add_parser(
-        "search", help="Search operational logs and session recordings",
+        "search",
+        help="Search operational logs and session recordings",
         epilog="Example: castor search 'battery low' --since 7d",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_search.add_argument("query", help="Search query (keywords or phrases)")
-    p_search.add_argument("--since", default=None,
-                          help="Time window (e.g. 7d, 24h, 1w)")
+    p_search.add_argument("--since", default=None, help="Time window (e.g. 7d, 24h, 1w)")
     p_search.add_argument("--log-file", default=None, help="Specific log file to search")
-    p_search.add_argument("--max-results", type=int, default=20,
-                          help="Maximum results (default: 20)")
+    p_search.add_argument(
+        "--max-results", type=int, default=20, help="Maximum results (default: 20)"
+    )
 
     # castor network
     p_net = sub.add_parser(
-        "network", help="Network config and VPN/Tailscale exposure",
+        "network",
+        help="Network config and VPN/Tailscale exposure",
         epilog=(
             "Examples:\n"
             "  castor network status\n"
@@ -1137,18 +1190,26 @@ def main() -> None:
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p_net.add_argument("action", nargs="?", default="status",
-                       choices=["status", "expose"],
-                       help="Action to perform")
-    p_net.add_argument("--mode", default=None,
-                       choices=["serve", "funnel", "off"],
-                       help="Exposure mode (for expose action)")
+    p_net.add_argument(
+        "action",
+        nargs="?",
+        default="status",
+        choices=["status", "expose"],
+        help="Action to perform",
+    )
+    p_net.add_argument(
+        "--mode",
+        default=None,
+        choices=["serve", "funnel", "off"],
+        help="Exposure mode (for expose action)",
+    )
     p_net.add_argument("--port", type=int, default=8000, help="Gateway port")
     p_net.add_argument("--config", default=None, help="RCAN config file (optional)")
 
     # castor privacy
     p_priv = sub.add_parser(
-        "privacy", help="Show privacy policy (sensor access controls)",
+        "privacy",
+        help="Show privacy policy (sensor access controls)",
         epilog="Example: castor privacy --config robot.rcan.yaml",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1158,14 +1219,16 @@ def main() -> None:
 
     # castor update-check
     sub.add_parser(
-        "update-check", help="Check PyPI for newer versions",
+        "update-check",
+        help="Check PyPI for newer versions",
         epilog="Example: castor update-check",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
     # castor profile
     p_profile = sub.add_parser(
-        "profile", help="Manage named config profiles",
+        "profile",
+        help="Manage named config profiles",
         epilog=(
             "Examples:\n"
             "  castor profile list\n"
@@ -1175,15 +1238,20 @@ def main() -> None:
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p_profile.add_argument("action", nargs="?", default="list",
-                           choices=["list", "save", "use", "remove"],
-                           help="Action to perform")
+    p_profile.add_argument(
+        "action",
+        nargs="?",
+        default="list",
+        choices=["list", "save", "use", "remove"],
+        help="Action to perform",
+    )
     p_profile.add_argument("name", nargs="?", default=None, help="Profile name")
     p_profile.add_argument("--config", default="robot.rcan.yaml", help="RCAN config file")
 
     # castor test
     p_pytest = sub.add_parser(
-        "test", help="Run the test suite (pytest wrapper)",
+        "test",
+        help="Run the test suite (pytest wrapper)",
         epilog="Example: castor test -v -k test_doctor",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1192,7 +1260,8 @@ def main() -> None:
 
     # castor diff
     p_diff = sub.add_parser(
-        "diff", help="Compare two RCAN config files",
+        "diff",
+        help="Compare two RCAN config files",
         epilog="Example: castor diff --config robot.rcan.yaml --baseline robot.rcan.yaml.bak",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1201,21 +1270,24 @@ def main() -> None:
 
     # castor quickstart
     sub.add_parser(
-        "quickstart", help="One-command setup: wizard + demo",
+        "quickstart",
+        help="One-command setup: wizard + demo",
         epilog="Example: castor quickstart",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
     # castor plugins
     sub.add_parser(
-        "plugins", help="List loaded and available plugins",
+        "plugins",
+        help="List loaded and available plugins",
         epilog="Example: castor plugins",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
     # castor audit
     p_audit = sub.add_parser(
-        "audit", help="View the append-only audit log",
+        "audit",
+        help="View the append-only audit log",
         epilog=(
             "Examples:\n"
             "  castor audit\n"
@@ -1225,14 +1297,15 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_audit.add_argument("--since", default=None, help="Time window (e.g. 24h, 7d)")
-    p_audit.add_argument("--event", default=None,
-                         help="Filter by event type (motor_command, approval, error, etc.)")
-    p_audit.add_argument("--limit", type=int, default=50,
-                         help="Max entries to show (default: 50)")
+    p_audit.add_argument(
+        "--event", default=None, help="Filter by event type (motor_command, approval, error, etc.)"
+    )
+    p_audit.add_argument("--limit", type=int, default=50, help="Max entries to show (default: 50)")
 
     # Shell completions (argcomplete)
     try:
         import argcomplete
+
         argcomplete.autocomplete(parser)
     except ImportError:
         pass
@@ -1289,6 +1362,7 @@ def main() -> None:
     # Load plugins and merge any plugin-provided commands
     try:
         from castor.plugins import load_plugins
+
         registry = load_plugins()
         for name, (handler_fn, _) in registry.commands.items():
             if name not in commands:

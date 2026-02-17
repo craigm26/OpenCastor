@@ -14,11 +14,11 @@ Usage:
 """
 
 
-
 def run_learn(lesson: int = None):
     """Run the interactive tutorial."""
     try:
         from rich.console import Console
+
         console = Console()
         has_rich = True
     except ImportError:
@@ -65,12 +65,15 @@ def _print_lesson(title, content, has_rich, console):
     """Print a lesson with optional Rich formatting."""
     if has_rich:
         from rich.panel import Panel
-        console.print(Panel(
-            content,
-            title=f"[bold]{title}[/]",
-            border_style="cyan",
-            padding=(1, 2),
-        ))
+
+        console.print(
+            Panel(
+                content,
+                title=f"[bold]{title}[/]",
+                border_style="cyan",
+                padding=(1, 2),
+            )
+        )
     else:
         print(f"\n  === {title} ===\n")
         for line in content.split("\n"):
@@ -90,7 +93,8 @@ def _lesson_welcome(has_rich, console):
         "  4. Running the perception-action loop\n"
         "  5. Adding messaging channels\n\n"
         "No hardware or API keys needed to start -- we'll use simulation mode.",
-        has_rich, console,
+        has_rich,
+        console,
     )
 
 

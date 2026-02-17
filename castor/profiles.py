@@ -37,11 +37,13 @@ def list_profiles() -> list:
     for f in sorted(os.listdir(_PROFILES_DIR)):
         if f.endswith(".rcan.yaml"):
             name = f.replace(".rcan.yaml", "")
-            profiles.append({
-                "name": name,
-                "path": os.path.join(_PROFILES_DIR, f),
-                "active": name == active,
-            })
+            profiles.append(
+                {
+                    "name": name,
+                    "path": os.path.join(_PROFILES_DIR, f),
+                    "active": name == active,
+                }
+            )
 
     return profiles
 
@@ -124,6 +126,7 @@ def print_profiles(profiles: list):
     try:
         from rich.console import Console
         from rich.table import Table
+
         console = Console()
         has_rich = True
     except ImportError:

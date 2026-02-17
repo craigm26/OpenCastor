@@ -53,8 +53,7 @@ class TestIssueToken:
         assert "config" in claims["scope"]
 
     def test_custom_scopes(self, manager):
-        token = manager.issue("user1", role=RCANRole.USER,
-                              scopes=["status"])
+        token = manager.issue("user1", role=RCANRole.USER, scopes=["status"])
         claims = manager.decode_claims(token)
         assert claims["scope"] == ["status"]
 

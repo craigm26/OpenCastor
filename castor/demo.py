@@ -18,14 +18,32 @@ logger = logging.getLogger("OpenCastor.Demo")
 
 # Simulated AI responses (no API key needed)
 _MOCK_THOUGHTS = [
-    {"raw_text": "I see a clear path ahead. Moving forward slowly.", "action": {"type": "move", "linear": 0.3, "angular": 0.0}},
-    {"raw_text": "Obstacle detected on the right. Turning left.", "action": {"type": "move", "linear": 0.2, "angular": -0.5}},
-    {"raw_text": "Open space ahead. Increasing speed.", "action": {"type": "move", "linear": 0.6, "angular": 0.0}},
+    {
+        "raw_text": "I see a clear path ahead. Moving forward slowly.",
+        "action": {"type": "move", "linear": 0.3, "angular": 0.0},
+    },
+    {
+        "raw_text": "Obstacle detected on the right. Turning left.",
+        "action": {"type": "move", "linear": 0.2, "angular": -0.5},
+    },
+    {
+        "raw_text": "Open space ahead. Increasing speed.",
+        "action": {"type": "move", "linear": 0.6, "angular": 0.0},
+    },
     {"raw_text": "Wall approaching. Stopping to reassess.", "action": {"type": "stop"}},
-    {"raw_text": "Narrow corridor. Proceeding with caution.", "action": {"type": "move", "linear": 0.15, "angular": 0.1}},
+    {
+        "raw_text": "Narrow corridor. Proceeding with caution.",
+        "action": {"type": "move", "linear": 0.15, "angular": 0.1},
+    },
     {"raw_text": "Person detected ahead. Stopping safely.", "action": {"type": "stop"}},
-    {"raw_text": "Turning around to explore the other direction.", "action": {"type": "move", "linear": 0.1, "angular": 0.8}},
-    {"raw_text": "Found an interesting object. Moving closer.", "action": {"type": "move", "linear": 0.4, "angular": -0.1}},
+    {
+        "raw_text": "Turning around to explore the other direction.",
+        "action": {"type": "move", "linear": 0.1, "angular": 0.8},
+    },
+    {
+        "raw_text": "Found an interesting object. Moving closer.",
+        "action": {"type": "move", "linear": 0.4, "angular": -0.1},
+    },
 ]
 
 
@@ -102,9 +120,7 @@ def run_demo(steps: int = 10, delay: float = 1.5):
             table.add_row("Latency", f"{latency_ms:.0f} ms")
 
             color = "green" if latency_ms < 200 else "yellow"
-            console.print(
-                Panel(table, title=f"[bold]Step {i}/{steps}[/]", border_style=color)
-            )
+            console.print(Panel(table, title=f"[bold]Step {i}/{steps}[/]", border_style=color))
         else:
             print(f"  --- Step {i}/{steps} ---")
             print(f"  Frame:   {frame['size_bytes']:,} bytes ({frame['resolution']})")

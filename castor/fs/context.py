@@ -32,7 +32,7 @@ from castor.fs.namespace import Namespace
 logger = logging.getLogger("OpenCastor.FS.Context")
 
 # Default context window settings
-DEFAULT_WINDOW_DEPTH = 20      # Max entries in the sliding window
+DEFAULT_WINDOW_DEPTH = 20  # Max entries in the sliding window
 DEFAULT_SUMMARY_THRESHOLD = 15  # Summarise when this many entries exist
 
 
@@ -52,9 +52,13 @@ class ContextWindow:
                            concatenation of observations.
     """
 
-    def __init__(self, ns: Namespace, max_depth: int = DEFAULT_WINDOW_DEPTH,
-                 summary_threshold: int = DEFAULT_SUMMARY_THRESHOLD,
-                 summariser: Optional[Callable] = None):
+    def __init__(
+        self,
+        ns: Namespace,
+        max_depth: int = DEFAULT_WINDOW_DEPTH,
+        summary_threshold: int = DEFAULT_SUMMARY_THRESHOLD,
+        summariser: Optional[Callable] = None,
+    ):
         self.ns = ns
         self.max_depth = max_depth
         self.summary_threshold = summary_threshold
@@ -153,8 +157,9 @@ class ContextWindow:
 
         self.ns.write("/tmp/context/summary", combined)
         self.ns.write("/tmp/context/window", to_keep)
-        logger.debug("Context summarised: %d entries -> summary, keeping %d",
-                     len(to_summarise), len(to_keep))
+        logger.debug(
+            "Context summarised: %d entries -> summary, keeping %d", len(to_summarise), len(to_keep)
+        )
 
     @staticmethod
     def _default_summariser(entries: List[Dict]) -> str:
@@ -222,8 +227,7 @@ class Pipeline:
                   .run())
     """
 
-    def __init__(self, name: str, ns: Namespace, principal: str = "brain",
-                 safety=None):
+    def __init__(self, name: str, ns: Namespace, principal: str = "brain", safety=None):
         self.name = name
         self.ns = ns
         self.principal = principal
@@ -255,24 +259,30 @@ class Pipeline:
     # Builder methods
     def read(self, path: str) -> "Pipeline":
         """Add a read stage that reads data from a filesystem path."""
+
         def _read(_input):
             return self._do_read(path)
+
         _read.__name__ = f"read({path})"
         return self.add_stage(PipelineStage(_read))
 
     def write(self, path: str) -> "Pipeline":
         """Add a write stage that writes the pipeline data to a path."""
+
         def _write(data):
             self._do_write(path, data)
             return data
+
         _write.__name__ = f"write({path})"
         return self.add_stage(PipelineStage(_write))
 
     def append(self, path: str) -> "Pipeline":
         """Add an append stage that appends pipeline data to a list at path."""
+
         def _append(data):
             self._do_append(path, data)
             return data
+
         _append.__name__ = f"append({path})"
         return self.add_stage(PipelineStage(_append))
 
@@ -288,8 +298,7 @@ class Pipeline:
         """
         data = initial
         self._results = []
-        logger.debug("Pipeline '%s' starting with %d stages", self.name,
-                     len(self._stages))
+        logger.debug("Pipeline '%s' starting with %d stages", self.name, len(self._stages))
 
         for i, stage in enumerate(self._stages):
             try:
@@ -303,15 +312,16 @@ class Pipeline:
                         self._do_write(stage.operation, data)
                 self._results.append({"stage": repr(stage), "ok": True})
             except Exception as exc:
-                logger.error("Pipeline '%s' failed at stage %d (%s): %s",
-                             self.name, i, stage, exc)
-                self._results.append({"stage": repr(stage), "ok": False,
-                                      "error": str(exc)})
+                logger.error("Pipeline '%s' failed at stage %d (%s): %s", self.name, i, stage, exc)
+                self._results.append({"stage": repr(stage), "ok": False, "error": str(exc)})
                 break
 
-        logger.debug("Pipeline '%s' complete: %d/%d stages succeeded",
-                     self.name, sum(1 for r in self._results if r["ok"]),
-                     len(self._stages))
+        logger.debug(
+            "Pipeline '%s' complete: %d/%d stages succeeded",
+            self.name,
+            sum(1 for r in self._results if r["ok"]),
+            len(self._stages),
+        )
         return data
 
     @property

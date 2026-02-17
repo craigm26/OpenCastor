@@ -34,9 +34,7 @@ def check_tailscale() -> dict:
 
     # Check if tailscale binary exists
     try:
-        proc = subprocess.run(
-            ["tailscale", "version"], capture_output=True, text=True, timeout=5
-        )
+        proc = subprocess.run(["tailscale", "version"], capture_output=True, text=True, timeout=5)
         if proc.returncode == 0:
             result["installed"] = True
             result["version"] = proc.stdout.strip().split("\n")[0]
@@ -50,6 +48,7 @@ def check_tailscale() -> dict:
         )
         if proc.returncode == 0:
             import json
+
             status = json.loads(proc.stdout)
             self_node = status.get("Self", {})
             if self_node:
@@ -67,6 +66,7 @@ def check_tailscale() -> dict:
 def get_lan_ip() -> str:
     """Get the local LAN IP address."""
     import socket
+
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
@@ -82,6 +82,7 @@ def network_status(config_path: str = None):
     try:
         from rich.console import Console
         from rich.table import Table
+
         console = Console()
         has_rich = True
     except ImportError:
@@ -96,6 +97,7 @@ def network_status(config_path: str = None):
     if config_path and os.path.exists(config_path):
         try:
             import yaml
+
             with open(config_path) as f:
                 config = yaml.safe_load(f)
             port = config.get("rcan_protocol", {}).get("port", 8000)
@@ -121,8 +123,7 @@ def network_status(config_path: str = None):
                 table.add_row("Tailscale IP", ts["ip"] or "?")
                 table.add_row("Tailscale Hostname", ts["hostname"] or "?")
                 table.add_row(
-                    "Tailnet URL",
-                    f"http://{ts['hostname']}:{port}" if ts["hostname"] else "?"
+                    "Tailnet URL", f"http://{ts['hostname']}:{port}" if ts["hostname"] else "?"
                 )
             table.add_row("Tailscale Version", ts["version"] or "?")
 
@@ -171,9 +172,7 @@ def expose(mode: str, port: int = 8000):
     if mode == "off":
         # Remove any existing serve/funnel
         try:
-            subprocess.run(
-                ["tailscale", "serve", "reset"], capture_output=True, timeout=10
-            )
+            subprocess.run(["tailscale", "serve", "reset"], capture_output=True, timeout=10)
             print("  Tailscale exposure removed.\n")
         except Exception as exc:
             print(f"  Failed to reset: {exc}\n")
@@ -184,7 +183,9 @@ def expose(mode: str, port: int = 8000):
         try:
             proc = subprocess.run(
                 ["tailscale", "serve", "--bg", f"http://127.0.0.1:{port}"],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             if proc.returncode == 0:
                 hostname = ts.get("hostname", "?")
@@ -210,7 +211,9 @@ def expose(mode: str, port: int = 8000):
         try:
             proc = subprocess.run(
                 ["tailscale", "funnel", "--bg", f"http://127.0.0.1:{port}"],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             if proc.returncode == 0:
                 hostname = ts.get("hostname", "?")

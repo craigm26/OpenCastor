@@ -34,8 +34,9 @@ class FSNode:
 
     __slots__ = ("name", "node_type", "data", "meta", "children", "ctime", "mtime")
 
-    def __init__(self, name: str, node_type: str = "file", data: Any = None,
-                 meta: Optional[Dict] = None):
+    def __init__(
+        self, name: str, node_type: str = "file", data: Any = None, meta: Optional[Dict] = None
+    ):
         self.name = name
         self.node_type = node_type
         self.data = data

@@ -38,41 +38,97 @@ def _get_test_sequence(config: dict) -> list:
     if "pca9685_rc" in protocol:
         # RC car: test steering left, center, right, then throttle
         steps = [
-            {"name": "Steering LEFT", "action": {"type": "move", "linear": 0.0, "angular": -0.5}, "duration": 1.0},
-            {"name": "Steering CENTER", "action": {"type": "move", "linear": 0.0, "angular": 0.0}, "duration": 0.5},
-            {"name": "Steering RIGHT", "action": {"type": "move", "linear": 0.0, "angular": 0.5}, "duration": 1.0},
-            {"name": "Steering CENTER", "action": {"type": "move", "linear": 0.0, "angular": 0.0}, "duration": 0.5},
-            {"name": "Throttle FORWARD (slow)", "action": {"type": "move", "linear": 0.15, "angular": 0.0}, "duration": 1.0},
+            {
+                "name": "Steering LEFT",
+                "action": {"type": "move", "linear": 0.0, "angular": -0.5},
+                "duration": 1.0,
+            },
+            {
+                "name": "Steering CENTER",
+                "action": {"type": "move", "linear": 0.0, "angular": 0.0},
+                "duration": 0.5,
+            },
+            {
+                "name": "Steering RIGHT",
+                "action": {"type": "move", "linear": 0.0, "angular": 0.5},
+                "duration": 1.0,
+            },
+            {
+                "name": "Steering CENTER",
+                "action": {"type": "move", "linear": 0.0, "angular": 0.0},
+                "duration": 0.5,
+            },
+            {
+                "name": "Throttle FORWARD (slow)",
+                "action": {"type": "move", "linear": 0.15, "angular": 0.0},
+                "duration": 1.0,
+            },
             {"name": "Throttle STOP", "action": {"type": "stop"}, "duration": 0.5},
-            {"name": "Throttle REVERSE (slow)", "action": {"type": "move", "linear": -0.15, "angular": 0.0}, "duration": 1.0},
+            {
+                "name": "Throttle REVERSE (slow)",
+                "action": {"type": "move", "linear": -0.15, "angular": 0.0},
+                "duration": 1.0,
+            },
             {"name": "Throttle STOP", "action": {"type": "stop"}, "duration": 0.5},
         ]
     elif "pca9685" in protocol:
         # Differential drive: test each side
         steps = [
-            {"name": "Left motors FORWARD", "action": {"type": "move", "linear": 0.2, "angular": -0.3}, "duration": 1.0},
+            {
+                "name": "Left motors FORWARD",
+                "action": {"type": "move", "linear": 0.2, "angular": -0.3},
+                "duration": 1.0,
+            },
             {"name": "STOP", "action": {"type": "stop"}, "duration": 0.5},
-            {"name": "Right motors FORWARD", "action": {"type": "move", "linear": 0.2, "angular": 0.3}, "duration": 1.0},
+            {
+                "name": "Right motors FORWARD",
+                "action": {"type": "move", "linear": 0.2, "angular": 0.3},
+                "duration": 1.0,
+            },
             {"name": "STOP", "action": {"type": "stop"}, "duration": 0.5},
-            {"name": "Both motors FORWARD", "action": {"type": "move", "linear": 0.2, "angular": 0.0}, "duration": 1.0},
+            {
+                "name": "Both motors FORWARD",
+                "action": {"type": "move", "linear": 0.2, "angular": 0.0},
+                "duration": 1.0,
+            },
             {"name": "STOP", "action": {"type": "stop"}, "duration": 0.5},
         ]
     elif "dynamixel" in protocol:
         # Dynamixel: test each servo position
         steps = [
-            {"name": "Servo sweep FORWARD", "action": {"type": "move", "linear": 0.1, "angular": 0.0}, "duration": 1.5},
+            {
+                "name": "Servo sweep FORWARD",
+                "action": {"type": "move", "linear": 0.1, "angular": 0.0},
+                "duration": 1.5,
+            },
             {"name": "STOP", "action": {"type": "stop"}, "duration": 0.5},
-            {"name": "Servo sweep LEFT", "action": {"type": "move", "linear": 0.0, "angular": -0.3}, "duration": 1.5},
+            {
+                "name": "Servo sweep LEFT",
+                "action": {"type": "move", "linear": 0.0, "angular": -0.3},
+                "duration": 1.5,
+            },
             {"name": "STOP", "action": {"type": "stop"}, "duration": 0.5},
-            {"name": "Servo sweep RIGHT", "action": {"type": "move", "linear": 0.0, "angular": 0.3}, "duration": 1.5},
+            {
+                "name": "Servo sweep RIGHT",
+                "action": {"type": "move", "linear": 0.0, "angular": 0.3},
+                "duration": 1.5,
+            },
             {"name": "STOP", "action": {"type": "stop"}, "duration": 0.5},
         ]
     else:
         # Generic: basic forward/stop
         steps = [
-            {"name": "FORWARD (slow)", "action": {"type": "move", "linear": 0.15, "angular": 0.0}, "duration": 1.0},
+            {
+                "name": "FORWARD (slow)",
+                "action": {"type": "move", "linear": 0.15, "angular": 0.0},
+                "duration": 1.0,
+            },
             {"name": "STOP", "action": {"type": "stop"}, "duration": 0.5},
-            {"name": "TURN LEFT", "action": {"type": "move", "linear": 0.0, "angular": -0.3}, "duration": 1.0},
+            {
+                "name": "TURN LEFT",
+                "action": {"type": "move", "linear": 0.0, "angular": -0.3},
+                "duration": 1.0,
+            },
             {"name": "STOP", "action": {"type": "stop"}, "duration": 0.5},
         ]
 
@@ -100,12 +156,14 @@ def run_test(config_path: str, skip_confirm: bool = False):
 
     if has_rich:
         console.print()
-        console.print(Panel.fit(
-            f"[bold cyan]Hardware Test: {robot_name}[/]\n"
-            "Each motor/servo will be tested individually.\n"
-            "Keep hands clear of moving parts!",
-            border_style="yellow",
-        ))
+        console.print(
+            Panel.fit(
+                f"[bold cyan]Hardware Test: {robot_name}[/]\n"
+                "Each motor/servo will be tested individually.\n"
+                "Keep hands clear of moving parts!",
+                border_style="yellow",
+            )
+        )
     else:
         print(f"\n  Hardware Test: {robot_name}")
         print("  Each motor/servo will be tested individually.")
@@ -143,7 +201,11 @@ def run_test(config_path: str, skip_confirm: bool = False):
                 print(f"\n  Step {i}/{len(steps)}: {step['name']}")
 
             if not skip_confirm:
-                response = input("  Press Enter to execute (or 's' to skip, 'q' to quit): ").strip().lower()
+                response = (
+                    input("  Press Enter to execute (or 's' to skip, 'q' to quit): ")
+                    .strip()
+                    .lower()
+                )
                 if response == "q":
                     print("  Test aborted by user.")
                     break
@@ -181,7 +243,11 @@ def run_test(config_path: str, skip_confirm: bool = False):
 
     # Summary
     if has_rich:
-        status = "[green]All tests passed!" if failed == 0 else f"[yellow]{passed} passed, {failed} failed"
+        status = (
+            "[green]All tests passed!"
+            if failed == 0
+            else f"[yellow]{passed} passed, {failed} failed"
+        )
         console.print(f"\n  {status}[/]\n")
     else:
         print(f"\n  {passed} passed, {failed} failed\n")

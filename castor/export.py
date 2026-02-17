@@ -80,6 +80,7 @@ def export_bundle(config_path: str, output_path: str = None, fmt: str = "zip") -
 def _sanitize_config(config: dict) -> dict:
     """Remove secrets from a config dict (deep copy)."""
     import copy
+
     sanitized = copy.deepcopy(config)
 
     # Remove API keys
@@ -107,17 +108,14 @@ def _find_preset_files(config_path: str) -> list:
     if not os.path.isdir(preset_dir):
         return []
 
-    return [
-        os.path.join(preset_dir, f)
-        for f in os.listdir(preset_dir)
-        if f.endswith(".rcan.yaml")
-    ]
+    return [os.path.join(preset_dir, f) for f in os.listdir(preset_dir) if f.endswith(".rcan.yaml")]
 
 
 def print_export_summary(output_path: str, fmt: str):
     """Print export results."""
     try:
         from rich.console import Console
+
         console = Console()
         has_rich = True
     except ImportError:
@@ -139,6 +137,7 @@ def print_export_summary(output_path: str, fmt: str):
 # ---------------------------------------------------------------------------
 # Webhook notifications
 # ---------------------------------------------------------------------------
+
 
 def send_webhook(url: str, event: str, data: dict = None) -> bool:
     """Send a webhook notification.

@@ -71,9 +71,7 @@ class ApprovalGate:
         angular = abs(action.get("angular", 0))
 
         if linear > self.max_safe_linear:
-            reasons.append(
-                f"Linear speed {linear:.2f} exceeds safe limit {self.max_safe_linear}"
-            )
+            reasons.append(f"Linear speed {linear:.2f} exceeds safe limit {self.max_safe_linear}")
         if angular > self.max_safe_angular:
             reasons.append(
                 f"Angular speed {angular:.2f} exceeds safe limit {self.max_safe_angular}"
@@ -97,10 +95,7 @@ class ApprovalGate:
             self._queue.append(entry)
             self._save()
 
-            logger.warning(
-                f"Action queued for approval (ID={approval_id}): "
-                + "; ".join(reasons)
-            )
+            logger.warning(f"Action queued for approval (ID={approval_id}): " + "; ".join(reasons))
 
             return {"status": "pending", "approval_id": approval_id, "reasons": reasons}
 
@@ -166,6 +161,7 @@ def print_approvals(pending: list):
     try:
         from rich.console import Console
         from rich.table import Table
+
         console = Console()
         has_rich = True
     except ImportError:
@@ -213,9 +209,11 @@ def print_approvals(pending: list):
         for entry in pending:
             action = entry.get("action", {})
             print(f"  ID {entry['id']}:")
-            print(f"    Action:  {action.get('type', '?')} "
-                  f"L={action.get('linear', 0):.2f} "
-                  f"A={action.get('angular', 0):.2f}")
+            print(
+                f"    Action:  {action.get('type', '?')} "
+                f"L={action.get('linear', 0):.2f} "
+                f"A={action.get('angular', 0):.2f}"
+            )
             print(f"    Reasons: {'; '.join(entry.get('reasons', []))}")
             print(f"    Time:    {entry.get('timestamp', '?')[:19]}")
             print()

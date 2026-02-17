@@ -171,6 +171,7 @@ def launch_shell(config_path: str):
     brain = None
     try:
         from castor.providers import get_provider
+
         brain = get_provider(config["agent"])
         print("  Brain: online")
     except Exception as e:
@@ -180,6 +181,7 @@ def launch_shell(config_path: str):
     driver = None
     try:
         from castor.main import get_driver
+
         driver = get_driver(config)
         if driver:
             print("  Driver: online")
@@ -192,6 +194,7 @@ def launch_shell(config_path: str):
     camera = None
     try:
         from castor.main import Camera
+
         camera = Camera(config)
         status = "online" if camera.is_available() else "offline"
         print(f"  Camera: {status}")
@@ -202,6 +205,7 @@ def launch_shell(config_path: str):
     speaker = None
     try:
         from castor.main import Speaker
+
         speaker = Speaker(config)
         status = "online" if speaker.enabled else "offline"
         print(f"  Speaker: {status}")

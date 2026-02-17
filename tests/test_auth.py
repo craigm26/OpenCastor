@@ -103,9 +103,7 @@ class TestResolveChannelCredentials:
 
     @patch.dict(os.environ, {}, clear=True)
     def test_partial_creds(self):
-        creds = resolve_channel_credentials(
-            "whatsapp_twilio", {"account_sid": "from-config"}
-        )
+        creds = resolve_channel_credentials("whatsapp_twilio", {"account_sid": "from-config"})
         assert creds["account_sid"] == "from-config"
         assert "auth_token" not in creds
 

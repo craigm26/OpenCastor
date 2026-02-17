@@ -82,6 +82,7 @@ def print_diff(diffs: list, path_a: str, path_b: str):
     try:
         from rich.console import Console
         from rich.table import Table
+
         console = Console()
         has_rich = True
     except ImportError:
@@ -116,7 +117,7 @@ def print_diff(diffs: list, path_a: str, path_b: str):
     else:
         print(f"\n  Config Diff: {path_a} vs {path_b}\n")
         print(f"  {'Key':<40s} {label_a:<25s} {label_b:<25s}")
-        print(f"  {'-'*40} {'-'*25} {'-'*25}")
+        print(f"  {'-' * 40} {'-' * 25} {'-' * 25}")
         for key_path, val_a, val_b in diffs:
             print(f"  {key_path:<40s} {str(val_a):<25s} {str(val_b):<25s}")
         print(f"\n  {len(diffs)} difference(s)\n")

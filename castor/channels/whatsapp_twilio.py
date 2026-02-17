@@ -45,8 +45,7 @@ class WhatsAppTwilioChannel(BaseChannel):
         auth_token = config.get("auth_token")
         if not account_sid or not auth_token:
             raise ValueError(
-                "TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN are required. "
-                "Set them in your .env file."
+                "TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN are required. Set them in your .env file."
             )
 
         self.client = TwilioClient(account_sid, auth_token)
@@ -59,8 +58,7 @@ class WhatsAppTwilioChannel(BaseChannel):
             POST http://<host>:8000/webhooks/whatsapp
         """
         self.logger.info(
-            "WhatsApp channel ready. "
-            "Ensure your Twilio webhook points to /webhooks/whatsapp"
+            "WhatsApp channel ready. Ensure your Twilio webhook points to /webhooks/whatsapp"
         )
 
     async def stop(self):

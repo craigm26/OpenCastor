@@ -58,6 +58,7 @@ def list_tasks(config_path: str = None) -> list:
     if config_path and os.path.exists(config_path):
         try:
             import yaml
+
             with open(config_path) as f:
                 config = yaml.safe_load(f)
             config_tasks = config.get("schedule", [])
@@ -128,18 +129,13 @@ def install_crontab(config_path: str = None):
 
     # Read existing crontab
     try:
-        result = subprocess.run(
-            ["crontab", "-l"], capture_output=True, text=True
-        )
+        result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
         existing = result.stdout if result.returncode == 0 else ""
     except Exception:
         existing = ""
 
     # Remove old opencastor entries
-    lines = [
-        line for line in existing.splitlines()
-        if "# opencastor:" not in line
-    ]
+    lines = [line for line in existing.splitlines() if "# opencastor:" not in line]
 
     # Add new entries
     lines.extend(entries)
@@ -148,7 +144,9 @@ def install_crontab(config_path: str = None):
     # Write to crontab
     try:
         proc = subprocess.run(
-            ["crontab", "-"], input=new_crontab, text=True,
+            ["crontab", "-"],
+            input=new_crontab,
+            text=True,
             capture_output=True,
         )
         if proc.returncode == 0:
@@ -167,6 +165,7 @@ def print_schedule(tasks: list):
     try:
         from rich.console import Console
         from rich.table import Table
+
         console = Console()
         has_rich = True
     except ImportError:

@@ -82,9 +82,7 @@ class CapabilityRegistry:
                 self.register(Capability.TELEOP, description="Remote teleoperation")
 
         # Has camera -> vision
-        if config.get("camera") or any(
-            d.get("protocol", "").startswith("camera") for d in drivers
-        ):
+        if config.get("camera") or any(d.get("protocol", "").startswith("camera") for d in drivers):
             self.register(Capability.VISION, description="Visual perception")
 
         # Has agent -> chat

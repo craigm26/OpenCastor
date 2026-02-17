@@ -327,7 +327,8 @@ async def issue_token(req: TokenRequest):
     jwt_secret = os.getenv("OPENCASTOR_JWT_SECRET")
     if not jwt_secret:
         raise HTTPException(
-            status_code=501, detail="JWT not configured. Set OPENCASTOR_JWT_SECRET.",
+            status_code=501,
+            detail="JWT not configured. Set OPENCASTOR_JWT_SECRET.",
         )
     try:
         from castor.rcan.jwt_auth import RCANTokenManager
@@ -586,8 +587,7 @@ def _handle_channel_message(channel_name: str, chat_id: str, text: str) -> str:
 
     # Push the incoming message into the context window
     if state.fs:
-        state.fs.context.push("user", text,
-                              metadata={"channel": channel_name, "chat_id": chat_id})
+        state.fs.context.push("user", text, metadata={"channel": channel_name, "chat_id": chat_id})
 
     # Build instruction with memory context
     instruction = text
@@ -628,8 +628,7 @@ def _handle_channel_message(channel_name: str, chat_id: str, text: str) -> str:
             outcome=thought.raw_text[:100],
             tags=[channel_name],
         )
-        state.fs.context.push("brain", thought.raw_text[:200],
-                              metadata=thought.action)
+        state.fs.context.push("brain", thought.raw_text[:200], metadata=thought.action)
         state.fs.proc.record_thought(thought.raw_text, thought.action)
 
     # Speak the reply out loud
@@ -674,9 +673,7 @@ async def on_startup():
         try:
             with open(config_path) as f:
                 state.config = yaml.safe_load(f)
-            logger.info(
-                f"Loaded config: {state.config['metadata']['robot_name']}"
-            )
+            logger.info(f"Loaded config: {state.config['metadata']['robot_name']}")
 
             # Initialize virtual filesystem (use shared FS if runtime started it)
             from castor.main import get_shared_fs, set_shared_fs
@@ -708,8 +705,11 @@ async def on_startup():
                 from castor.rcan.ruri import RURI as RURIClass
 
                 state.capability_registry = CapabilityRegistry(state.config)
-                ruri_obj = (RURIClass.parse(state.ruri) if state.ruri
-                           else RURIClass.from_config(state.config))
+                ruri_obj = (
+                    RURIClass.parse(state.ruri)
+                    if state.ruri
+                    else RURIClass.from_config(state.config)
+                )
                 state.rcan_router = MessageRouter(ruri_obj, state.capability_registry)
 
                 # Register default handlers
@@ -770,16 +770,12 @@ async def on_startup():
             state.camera = Camera(state.config)
             set_shared_camera(state.camera)
             if state.fs:
-                state.fs.proc.set_camera(
-                    "online" if state.camera.is_available() else "offline"
-                )
+                state.fs.proc.set_camera("online" if state.camera.is_available() else "offline")
 
             state.speaker = Speaker(state.config)
             set_shared_speaker(state.speaker)
             if state.fs:
-                state.fs.proc.set_speaker(
-                    "online" if state.speaker.enabled else "offline"
-                )
+                state.fs.proc.set_speaker("online" if state.speaker.enabled else "offline")
         except Exception as e:
             logger.warning(f"Config load error (gateway still operational): {e}")
     else:
@@ -868,6 +864,7 @@ async def on_shutdown():
 # ---------------------------------------------------------------------------
 def _setup_signal_handlers() -> None:
     """Register signal handlers for graceful shutdown."""
+
     def _handle_signal(signum, frame):
         sig_name = signal.Signals(signum).name
         logger.info(f"Received {sig_name}, initiating graceful shutdown...")

@@ -131,6 +131,7 @@ def client():
 def api_mod():
     """Return the castor.api module for direct state manipulation."""
     import castor.api as mod
+
     return mod
 
 

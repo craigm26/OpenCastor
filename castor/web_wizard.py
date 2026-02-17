@@ -168,6 +168,7 @@ def launch_web_wizard(port: int = 8080):
         print("  Web wizard requires FastAPI and uvicorn (already installed).")
         print("  Falling back to terminal wizard...")
         from castor.wizard import main as run_wizard
+
         run_wizard()
         return
 
@@ -214,6 +215,7 @@ def launch_web_wizard(port: int = 8080):
 
     # Open browser after a short delay
     import threading
+
     threading.Timer(1.0, lambda: webbrowser.open(f"http://localhost:{port}")).start()
 
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")

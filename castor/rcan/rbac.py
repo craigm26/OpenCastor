@@ -39,11 +39,11 @@ class Scope(IntFlag):
     """RCAN permission scopes (bit flags)."""
 
     NONE = 0
-    STATUS = auto()    # Read /proc, telemetry
-    CONTROL = auto()   # Motor commands, teleop
-    CONFIG = auto()    # Read/write config
+    STATUS = auto()  # Read /proc, telemetry
+    CONTROL = auto()  # Motor commands, teleop
+    CONFIG = auto()  # Read/write config
     TRAINING = auto()  # Memory writes, context writes
-    ADMIN = auto()     # Safety overrides, firmware
+    ADMIN = auto()  # Safety overrides, firmware
 
     @classmethod
     def for_role(cls, role: RCANRole) -> Scope:
@@ -122,11 +122,11 @@ ROLE_RATE_LIMITS: Dict[RCANRole, int] = {
 
 # Session timeout per role (seconds, 0 = no timeout)
 ROLE_SESSION_TIMEOUT: Dict[RCANRole, int] = {
-    RCANRole.GUEST: 300,       # 5 minutes
-    RCANRole.USER: 3600,       # 1 hour
-    RCANRole.OPERATOR: 7200,   # 2 hours
-    RCANRole.ADMIN: 28800,     # 8 hours
-    RCANRole.CREATOR: 0,       # no timeout
+    RCANRole.GUEST: 300,  # 5 minutes
+    RCANRole.USER: 3600,  # 1 hour
+    RCANRole.OPERATOR: 7200,  # 2 hours
+    RCANRole.ADMIN: 28800,  # 8 hours
+    RCANRole.CREATOR: 0,  # no timeout
 }
 
 

@@ -34,6 +34,7 @@ def launch_repl(config_path: str):
     # Initialize brain
     try:
         from castor.providers import get_provider
+
         brain = get_provider(config["agent"])
         namespace["brain"] = brain
         print(f"  brain    = {config['agent'].get('provider')}/{config['agent'].get('model')}")
@@ -44,6 +45,7 @@ def launch_repl(config_path: str):
     # Initialize driver
     try:
         from castor.main import get_driver
+
         driver = get_driver(config)
         namespace["driver"] = driver
         if driver:
@@ -58,6 +60,7 @@ def launch_repl(config_path: str):
     # Initialize camera
     try:
         from castor.main import Camera
+
         camera = Camera(config)
         namespace["camera"] = camera
         print(f"  camera   = {'online' if camera.is_available() else 'offline'}")
@@ -68,6 +71,7 @@ def launch_repl(config_path: str):
     # Initialize speaker
     try:
         from castor.main import Speaker
+
         speaker = Speaker(config)
         namespace["speaker"] = speaker
         print(f"  speaker  = {'online' if speaker.enabled else 'offline'}")

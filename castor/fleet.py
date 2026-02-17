@@ -20,6 +20,7 @@ def fleet_status(timeout: float = 5.0):
     try:
         from rich.console import Console
         from rich.table import Table
+
         console = Console()
         has_rich = True
     except ImportError:
@@ -142,8 +143,6 @@ def _check_peer_health(peers: list, has_rich: bool, console):
                 continue
 
     if has_rich:
-        console.print(
-            f"\n  [dim]Health check: {reachable}/{len(peers)} reachable via HTTP[/]"
-        )
+        console.print(f"\n  [dim]Health check: {reachable}/{len(peers)} reachable via HTTP[/]")
     else:
         print(f"\n  Health check: {reachable}/{len(peers)} reachable via HTTP")

@@ -109,7 +109,9 @@ class RCANServiceBroadcaster:
             self._zeroconf.register_service(self._info)
             logger.info(
                 "mDNS broadcasting: %s on %s:%d",
-                self.ruri, local_ip, self.port,
+                self.ruri,
+                local_ip,
+                self.port,
             )
         except Exception as e:
             logger.warning("mDNS broadcast failed: %s", e)

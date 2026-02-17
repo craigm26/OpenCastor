@@ -27,6 +27,7 @@ def run_fix(config_path: str = None):
 
     try:
         from rich.console import Console
+
         console = Console()
         has_rich = True
     except ImportError:

@@ -35,15 +35,12 @@ class DiscordChannel(BaseChannel):
 
         if not HAS_DISCORD:
             raise ImportError(
-                "discord.py required for Discord. Install with: "
-                "pip install 'opencastor[discord]'"
+                "discord.py required for Discord. Install with: pip install 'opencastor[discord]'"
             )
 
         self.bot_token = config.get("bot_token")
         if not self.bot_token:
-            raise ValueError(
-                "DISCORD_BOT_TOKEN is required. Set it in your .env file."
-            )
+            raise ValueError("DISCORD_BOT_TOKEN is required. Set it in your .env file.")
 
         intents = discord.Intents.default()
         intents.message_content = True

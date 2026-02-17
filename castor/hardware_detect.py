@@ -40,7 +40,9 @@ def scan_i2c() -> list:
         try:
             result = subprocess.run(
                 ["i2cdetect", "-y", str(bus)],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if result.returncode != 0:
                 continue
@@ -84,15 +86,18 @@ def scan_cameras() -> list:
     # Check for CSI camera via video devices
     for entry in sorted(os.listdir("/dev")) if os.path.isdir("/dev") else []:
         if entry.startswith("video"):
-            cameras.append({
-                "type": "usb",
-                "device": f"/dev/{entry}",
-                "accessible": os.access(f"/dev/{entry}", os.R_OK),
-            })
+            cameras.append(
+                {
+                    "type": "usb",
+                    "device": f"/dev/{entry}",
+                    "accessible": os.access(f"/dev/{entry}", os.R_OK),
+                }
+            )
 
     # Check for picamera2 availability (CSI)
     try:
         from picamera2 import Picamera2
+
         cam = Picamera2()
         cam.close()
         cameras.insert(0, {"type": "csi", "device": "CSI ribbon cable", "accessible": True})

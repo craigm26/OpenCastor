@@ -72,19 +72,48 @@ def _extract_keywords(query: str) -> list:
     """Extract meaningful keywords from a search query."""
     # Remove common stop words
     stop_words = {
-        "the", "a", "an", "is", "was", "were", "did", "do", "does",
-        "when", "what", "where", "how", "why", "which", "that", "this",
-        "from", "to", "in", "on", "at", "for", "of", "with", "and",
-        "or", "but", "not", "my", "your", "it", "its",
+        "the",
+        "a",
+        "an",
+        "is",
+        "was",
+        "were",
+        "did",
+        "do",
+        "does",
+        "when",
+        "what",
+        "where",
+        "how",
+        "why",
+        "which",
+        "that",
+        "this",
+        "from",
+        "to",
+        "in",
+        "on",
+        "at",
+        "for",
+        "of",
+        "with",
+        "and",
+        "or",
+        "but",
+        "not",
+        "my",
+        "your",
+        "it",
+        "its",
     }
-    words = re.findall(r'\w+', query.lower())
+    words = re.findall(r"\w+", query.lower())
     return [w for w in words if w not in stop_words and len(w) > 1]
 
 
 def _parse_since(since: str) -> datetime:
     """Parse a time window string into a datetime cutoff."""
     now = datetime.now()
-    match = re.match(r'^(\d+)([dhwm])$', since.strip())
+    match = re.match(r"^(\d+)([dhwm])$", since.strip())
     if not match:
         return None
 
@@ -142,11 +171,13 @@ def _search_file(path: str, keywords: list, cutoff: datetime, max_results: int) 
 
             score = _score_line(line, keywords)
             if score > 0:
-                results.append({
-                    "line": line[:200],
-                    "score": score,
-                    "source": f"{path}:{line_num}",
-                })
+                results.append(
+                    {
+                        "line": line[:200],
+                        "score": score,
+                        "source": f"{path}:{line_num}",
+                    }
+                )
 
             if len(results) >= max_results * 2:
                 break
@@ -172,14 +203,16 @@ def _search_recording(path: str, keywords: list, cutoff: datetime, max_results: 
                 continue
 
             # Combine thought + action for searching
-            text = (entry.get("thought", "") + " " + str(entry.get("action", "")))
+            text = entry.get("thought", "") + " " + str(entry.get("action", ""))
             score = _score_line(text, keywords)
             if score > 0:
-                results.append({
-                    "line": entry.get("thought", "")[:200],
-                    "score": score,
-                    "source": f"{path} (step {entry.get('step', '?')})",
-                })
+                results.append(
+                    {
+                        "line": entry.get("thought", "")[:200],
+                        "score": score,
+                        "source": f"{path} (step {entry.get('step', '?')})",
+                    }
+                )
 
             if len(results) >= max_results * 2:
                 break
@@ -201,7 +234,7 @@ def _score_line(line: str, keywords: list) -> float:
 def _extract_timestamp(line: str) -> datetime:
     """Try to extract a timestamp from a log line."""
     # Common log format: 2026-02-16 14:30:00
-    match = re.match(r'^(\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2})', line)
+    match = re.match(r"^(\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2})", line)
     if match:
         try:
             return datetime.fromisoformat(match.group(1))
@@ -214,6 +247,7 @@ def print_search_results(results: list, query: str):
     """Print search results."""
     try:
         from rich.console import Console
+
         console = Console()
         has_rich = True
     except ImportError:
@@ -244,10 +278,7 @@ def print_search_results(results: list, query: str):
         score = result["score"]
 
         if has_rich:
-            console.print(
-                f"  [bold]{i}.[/] [dim]({score:.1f})[/] {source}\n"
-                f"     {line}\n"
-            )
+            console.print(f"  [bold]{i}.[/] [dim]({score:.1f})[/] {source}\n     {line}\n")
         else:
             print(f"  {i}. ({score:.1f}) {source}")
             print(f"     {line}")

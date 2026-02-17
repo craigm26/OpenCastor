@@ -27,9 +27,11 @@ _MIGRATIONS = []
 
 def _register_migration(from_ver, to_ver):
     """Decorator to register a migration function."""
+
     def wrapper(fn):
         _MIGRATIONS.append((from_ver, to_ver, fn))
         return fn
+
     return wrapper
 
 
@@ -248,6 +250,7 @@ def migrate_file(config_path: str, dry_run: bool = False, backup: bool = True) -
     if backup:
         backup_path = config_path + ".bak"
         import shutil
+
         shutil.copy2(config_path, backup_path)
         print(f"\n  Backup: {backup_path}")
 

@@ -60,6 +60,7 @@ def launch_watch(config_path: str, refresh: float = 1.0, gateway_url: str = None
         """Poll the gateway API for status."""
         try:
             import httpx
+
             resp = httpx.get(f"{gateway_url}/health", timeout=2)
             if resp.status_code == 200:
                 return resp.json()
@@ -71,6 +72,7 @@ def launch_watch(config_path: str, refresh: float = 1.0, gateway_url: str = None
         """Poll the gateway API for /proc telemetry."""
         try:
             import httpx
+
             resp = httpx.get(f"{gateway_url}/api/fs/proc", timeout=2)
             if resp.status_code == 200:
                 return resp.json()

@@ -83,9 +83,13 @@ class MemoryStore:
     # ------------------------------------------------------------------
     # Episodic memory
     # ------------------------------------------------------------------
-    def record_episode(self, observation: str, action: Optional[Dict] = None,
-                       outcome: Optional[str] = None,
-                       tags: Optional[List[str]] = None) -> Dict:
+    def record_episode(
+        self,
+        observation: str,
+        action: Optional[Dict] = None,
+        outcome: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+    ) -> Dict:
         """Record a timestamped episode.
 
         Returns the episode dict that was stored.
@@ -158,8 +162,7 @@ class MemoryStore:
     # ------------------------------------------------------------------
     # Procedural memory
     # ------------------------------------------------------------------
-    def store_behavior(self, name: str, steps: List[Dict],
-                       description: str = ""):
+    def store_behavior(self, name: str, steps: List[Dict], description: str = ""):
         """Store a named action sequence (compound behavior).
 
         Args:
@@ -221,18 +224,18 @@ class MemoryStore:
             facts = self.ns.read("/var/memory/semantic/facts") or {}
             if len(facts) > limit:
                 # Evict oldest entries
-                sorted_keys = sorted(facts.keys(),
-                                     key=lambda k: facts[k].get("updated", 0))
-                for key in sorted_keys[:len(facts) - limit]:
+                sorted_keys = sorted(facts.keys(), key=lambda k: facts[k].get("updated", 0))
+                for key in sorted_keys[: len(facts) - limit]:
                     del facts[key]
                 self.ns.write("/var/memory/semantic/facts", facts)
         elif tier == "procedural":
             behaviors = self.ns.read("/var/memory/procedural/behaviors") or {}
             if len(behaviors) > limit:
                 # Evict least-executed
-                sorted_names = sorted(behaviors.keys(),
-                                      key=lambda n: behaviors[n].get("executions", 0))
-                for name in sorted_names[:len(behaviors) - limit]:
+                sorted_names = sorted(
+                    behaviors.keys(), key=lambda n: behaviors[n].get("executions", 0)
+                )
+                for name in sorted_names[: len(behaviors) - limit]:
                     del behaviors[name]
                 self.ns.write("/var/memory/procedural/behaviors", behaviors)
 
@@ -274,16 +277,14 @@ class MemoryStore:
                         tier_data = json.load(f)
                     for key, value in tier_data.items():
                         self.ns.write(f"/var/memory/{tier}/{key}", value)
-                    logger.info("Loaded %s memory from disk (%d entries)",
-                                tier, len(tier_data))
+                    logger.info("Loaded %s memory from disk (%d entries)", tier, len(tier_data))
                 except Exception as exc:
                     logger.warning("Failed to load %s memory: %s", tier, exc)
 
     # ------------------------------------------------------------------
     # Context summary (for provider system prompts)
     # ------------------------------------------------------------------
-    def build_context_summary(self, max_episodes: int = 5,
-                              max_facts: int = 10) -> str:
+    def build_context_summary(self, max_episodes: int = 5, max_facts: int = 10) -> str:
         """Build a compact text summary of relevant memory for the LLM.
 
         This is injected into the system prompt so the brain has
@@ -318,7 +319,8 @@ class MemoryStore:
             for name in behaviors:
                 beh = self.get_behavior(name)
                 desc = beh.get("description", "") if beh else ""
-                parts.append(f"- {name}: {desc} ({beh.get('executions', 0)} runs)"
-                             if beh else f"- {name}")
+                parts.append(
+                    f"- {name}: {desc} ({beh.get('executions', 0)} runs)" if beh else f"- {name}"
+                )
 
         return "\n".join(parts) if parts else ""

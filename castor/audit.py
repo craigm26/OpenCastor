@@ -102,6 +102,7 @@ class AuditLog:
         cutoff = None
         if since:
             from castor.memory_search import _parse_since
+
             cutoff = _parse_since(since)
 
         entries = []
@@ -148,6 +149,7 @@ def print_audit(entries: list):
     try:
         from rich.console import Console
         from rich.table import Table
+
         console = Console()
         has_rich = True
     except ImportError:
@@ -186,8 +188,7 @@ def print_audit(entries: list):
             # Build details from remaining keys
             skip_keys = {"ts", "event", "source"}
             details = ", ".join(
-                f"{k}={v}" for k, v in entry.items()
-                if k not in skip_keys and v is not None
+                f"{k}={v}" for k, v in entry.items() if k not in skip_keys and v is not None
             )
 
             color = event_colors.get(event, "white")
@@ -204,8 +205,7 @@ def print_audit(entries: list):
             source = entry.get("source", "?")
             skip_keys = {"ts", "event", "source"}
             details = ", ".join(
-                f"{k}={v}" for k, v in entry.items()
-                if k not in skip_keys and v is not None
+                f"{k}={v}" for k, v in entry.items() if k not in skip_keys and v is not None
             )
             print(f"  {ts}  {event:20s} [{source}] {details[:50]}")
         print()

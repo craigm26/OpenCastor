@@ -110,8 +110,7 @@ class CastorFS:
         limits:       Optional dict overriding safety limits.
     """
 
-    def __init__(self, persist_dir: Optional[str] = None,
-                 limits: Optional[Dict] = None):
+    def __init__(self, persist_dir: Optional[str] = None, limits: Optional[Dict] = None):
         # Core layers
         self.ns = Namespace()
         self.perms = PermissionTable()
@@ -127,8 +126,7 @@ class CastorFS:
 
     def _bootstrap_tree(self):
         """Create the standard directory hierarchy."""
-        for d in ("/dev", "/etc", "/mnt", "/mnt/channels", "/mnt/providers",
-                  "/tmp/scratch"):
+        for d in ("/dev", "/etc", "/mnt", "/mnt/channels", "/mnt/providers", "/tmp/scratch"):
             self.ns.mkdir(d)
         # Device nodes are files, not directories, so data can be written to them
         self.ns.write("/dev/motor", None)
@@ -249,8 +247,7 @@ class CastorFS:
         self._tree_recursive(path, "", depth, lines)
         return "\n".join(lines)
 
-    def _tree_recursive(self, path: str, prefix: str, depth: int,
-                        lines: List[str]):
+    def _tree_recursive(self, path: str, prefix: str, depth: int, lines: List[str]):
         if depth < 0:
             return
 
@@ -268,7 +265,7 @@ class CastorFS:
                 return
             children = sorted(children)
             for i, child in enumerate(children):
-                is_last = (i == len(children) - 1)
+                is_last = i == len(children) - 1
                 child_prefix = prefix + ("    " if is_last else "|   ")
                 connector = "`-- " if is_last else "|-- "
                 child_path = f"{path.rstrip('/')}/{child}"
@@ -278,8 +275,7 @@ class CastorFS:
                 child_is_dir = child_stat.get("type") == "dir"
                 if child_is_dir:
                     lines.append(f"{prefix}{connector}{child}/")
-                    self._tree_recursive(child_path, child_prefix, depth - 1,
-                                         lines)
+                    self._tree_recursive(child_path, child_prefix, depth - 1, lines)
                 else:
                     data = self.ns.read(child_path)
                     data_preview = repr(data)[:40]

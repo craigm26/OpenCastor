@@ -51,9 +51,11 @@ class TestUseProfile:
 
         active_file = str(tmp_path / "active-profile")
 
-        with patch.object(profiles, "_PROFILES_DIR", str(profiles_dir)), \
-             patch.object(profiles, "_ACTIVE_FILE", active_file), \
-             patch("os.getcwd", return_value=str(tmp_path)):
+        with (
+            patch.object(profiles, "_PROFILES_DIR", str(profiles_dir)),
+            patch.object(profiles, "_ACTIVE_FILE", active_file),
+            patch("os.getcwd", return_value=str(tmp_path)),
+        ):
             result = use_profile("indoor")
 
         assert result == str(profile_file)
@@ -85,8 +87,10 @@ class TestListProfiles:
         with open(active_file, "w") as f:
             f.write("indoor")
 
-        with patch.object(profiles, "_PROFILES_DIR", str(profiles_dir)), \
-             patch.object(profiles, "_ACTIVE_FILE", active_file):
+        with (
+            patch.object(profiles, "_PROFILES_DIR", str(profiles_dir)),
+            patch.object(profiles, "_ACTIVE_FILE", active_file),
+        ):
             result = list_profiles()
 
         assert len(result) == 2
@@ -104,8 +108,10 @@ class TestListProfiles:
         profiles_dir = tmp_path / "profiles"
         profiles_dir.mkdir()
 
-        with patch.object(profiles, "_PROFILES_DIR", str(profiles_dir)), \
-             patch.object(profiles, "_ACTIVE_FILE", str(tmp_path / "active-profile")):
+        with (
+            patch.object(profiles, "_PROFILES_DIR", str(profiles_dir)),
+            patch.object(profiles, "_ACTIVE_FILE", str(tmp_path / "active-profile")),
+        ):
             result = list_profiles()
 
         assert result == []
@@ -121,8 +127,10 @@ class TestRemoveProfile:
         profile_file = profiles_dir / "old.rcan.yaml"
         profile_file.write_text("test: true")
 
-        with patch.object(profiles, "_PROFILES_DIR", str(profiles_dir)), \
-             patch.object(profiles, "_ACTIVE_FILE", str(tmp_path / "active-profile")):
+        with (
+            patch.object(profiles, "_PROFILES_DIR", str(profiles_dir)),
+            patch.object(profiles, "_ACTIVE_FILE", str(tmp_path / "active-profile")),
+        ):
             result = remove_profile("old")
 
         assert result is True
@@ -132,8 +140,10 @@ class TestRemoveProfile:
         profiles_dir = tmp_path / "profiles"
         profiles_dir.mkdir()
 
-        with patch.object(profiles, "_PROFILES_DIR", str(profiles_dir)), \
-             patch.object(profiles, "_ACTIVE_FILE", str(tmp_path / "active-profile")):
+        with (
+            patch.object(profiles, "_PROFILES_DIR", str(profiles_dir)),
+            patch.object(profiles, "_ACTIVE_FILE", str(tmp_path / "active-profile")),
+        ):
             result = remove_profile("does_not_exist")
 
         assert result is False

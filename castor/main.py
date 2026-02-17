@@ -317,6 +317,7 @@ def main():
     # 0. CRASH RECOVERY CHECK
     try:
         from castor.crash import handle_crash_on_startup
+
         if not handle_crash_on_startup():
             return
     except Exception:
@@ -397,6 +398,7 @@ def main():
     # 6b. PRIVACY POLICY (default-deny for sensors)
     try:
         from castor.privacy import PrivacyPolicy
+
         PrivacyPolicy(config)
     except Exception as e:
         logger.debug(f"Privacy policy skipped: {e}")
@@ -405,6 +407,7 @@ def main():
     approval_gate = None
     try:
         from castor.approvals import ApprovalGate
+
         approval_gate = ApprovalGate(config)
         if approval_gate.require_approval:
             logger.info("Approval gate active -- dangerous commands will be queued")
@@ -436,6 +439,7 @@ def main():
     watchdog = None
     try:
         from castor.watchdog import BrainWatchdog
+
         stop_fn = driver.stop if driver else None
         watchdog = BrainWatchdog(config, stop_fn=stop_fn)
         watchdog.start()
@@ -446,6 +450,7 @@ def main():
     geofence = None
     try:
         from castor.geofence import Geofence
+
         geofence = Geofence(config)
     except Exception as e:
         logger.debug(f"Geofence skipped: {e}")
@@ -454,6 +459,7 @@ def main():
     audit = None
     try:
         from castor.audit import get_audit
+
         audit = get_audit()
         audit.log_startup(args.config)
     except Exception as e:
@@ -544,8 +550,7 @@ def main():
                 )
 
                 # Push to context window
-                fs.context.push("brain", thought.raw_text[:200],
-                                metadata=thought.action)
+                fs.context.push("brain", thought.raw_text[:200], metadata=thought.action)
 
                 # Speak the raw reasoning (truncated)
                 speaker.say(thought.raw_text[:120])
@@ -557,9 +562,7 @@ def main():
             fs.proc.record_loop_iteration(latency)
             if latency > latency_budget:
                 _latency_overrun_count += 1
-                logger.warning(
-                    f"Loop Lag: {latency:.2f}ms (Budget: {latency_budget}ms)"
-                )
+                logger.warning(f"Loop Lag: {latency:.2f}ms (Budget: {latency_budget}ms)")
                 # Sustained overrun warning with suggestions
                 if _latency_overrun_count == _LATENCY_WARN_THRESHOLD:
                     model = config.get("agent", {}).get("model", "unknown")
@@ -590,6 +593,7 @@ def main():
             import traceback
 
             from castor.crash import save_crash_report
+
             last_thought = None
             last_action = None
             try:
@@ -597,8 +601,8 @@ def main():
                 last_action = fs.ns.read("/proc/last_action")
             except Exception:
                 pass
-            uptime = time.time() - loop_start if 'loop_start' in dir() else 0
-            loop_count = fs.proc._loop_count if hasattr(fs.proc, '_loop_count') else 0
+            uptime = time.time() - loop_start if "loop_start" in dir() else 0
+            loop_count = fs.proc._loop_count if hasattr(fs.proc, "_loop_count") else 0
             save_crash_report(
                 config_path=args.config,
                 error=traceback.format_exc(),

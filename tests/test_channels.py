@@ -393,7 +393,9 @@ class TestLazyImports:
 _telegram_mod, _telegram_err = _try_import_channel_module("castor.channels.telegram_channel")
 
 
-@pytest.mark.skipif(_telegram_mod is None, reason=f"telegram_channel cannot be imported: {_telegram_err}")
+@pytest.mark.skipif(
+    _telegram_mod is None, reason=f"telegram_channel cannot be imported: {_telegram_err}"
+)
 class TestTelegramChannelLoaded:
     """Tests that run only when TelegramChannel module loads successfully."""
 
@@ -448,7 +450,9 @@ class TestTelegramChannelUnloaded:
 _discord_mod, _discord_err = _try_import_channel_module("castor.channels.discord_channel")
 
 
-@pytest.mark.skipif(_discord_mod is None, reason=f"discord_channel cannot be imported: {_discord_err}")
+@pytest.mark.skipif(
+    _discord_mod is None, reason=f"discord_channel cannot be imported: {_discord_err}"
+)
 class TestDiscordChannelLoaded:
     """Tests that run only when DiscordChannel module loads successfully."""
 
@@ -564,7 +568,9 @@ class TestSlackChannelUnloaded:
 _whatsapp_mod, _whatsapp_err = _try_import_channel_module("castor.channels.whatsapp_neonize")
 
 
-@pytest.mark.skipif(_whatsapp_mod is None, reason=f"whatsapp_neonize cannot be imported: {_whatsapp_err}")
+@pytest.mark.skipif(
+    _whatsapp_mod is None, reason=f"whatsapp_neonize cannot be imported: {_whatsapp_err}"
+)
 class TestWhatsAppChannelLoaded:
     """Tests that run only when WhatsAppChannel module loads successfully."""
 

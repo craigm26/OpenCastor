@@ -46,9 +46,7 @@ class TelegramChannel(BaseChannel):
 
         self.bot_token = config.get("bot_token")
         if not self.bot_token:
-            raise ValueError(
-                "TELEGRAM_BOT_TOKEN is required. Set it in your .env file."
-            )
+            raise ValueError("TELEGRAM_BOT_TOKEN is required. Set it in your .env file.")
 
         self.app: Optional[Application] = None
         self.logger.info("Telegram channel initialized")
@@ -59,9 +57,7 @@ class TelegramChannel(BaseChannel):
 
         # Register handlers
         self.app.add_handler(CommandHandler("start", self._cmd_start))
-        self.app.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND, self._on_text)
-        )
+        self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._on_text))
 
         await self.app.initialize()
         await self.app.start()

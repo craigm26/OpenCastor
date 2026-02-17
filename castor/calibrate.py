@@ -54,12 +54,14 @@ def run_calibration(config_path: str):
 
     if has_rich:
         console.print()
-        console.print(Panel.fit(
-            f"[bold cyan]Calibration: {robot_name}[/]\n"
-            f"Driver: {protocol}\n\n"
-            "Use +/- to adjust values, Enter to confirm, q to quit.",
-            border_style="cyan",
-        ))
+        console.print(
+            Panel.fit(
+                f"[bold cyan]Calibration: {robot_name}[/]\n"
+                f"Driver: {protocol}\n\n"
+                "Use +/- to adjust values, Enter to confirm, q to quit.",
+                border_style="cyan",
+            )
+        )
     else:
         print(f"\n  Calibration: {robot_name}")
         print(f"  Driver: {protocol}")

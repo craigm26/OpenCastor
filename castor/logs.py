@@ -20,10 +20,10 @@ logger = logging.getLogger("OpenCastor.Logs")
 
 # ANSI color codes for log levels
 LEVEL_COLORS = {
-    "DEBUG": "\033[36m",     # Cyan
-    "INFO": "\033[32m",      # Green
-    "WARNING": "\033[33m",   # Yellow
-    "ERROR": "\033[31m",     # Red
+    "DEBUG": "\033[36m",  # Cyan
+    "INFO": "\033[32m",  # Green
+    "WARNING": "\033[33m",  # Yellow
+    "ERROR": "\033[31m",  # Red
     "CRITICAL": "\033[91m",  # Bright red
 }
 RESET = "\033[0m"
@@ -35,11 +35,11 @@ DIM = "\033[2m"
 LOG_PATTERN = re.compile(
     r"^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2},\d{3})"  # timestamp
     r"\s+-\s+"
-    r"([\w.]+)"                                            # logger name
+    r"([\w.]+)"  # logger name
     r"\s+-\s+"
-    r"(\w+)"                                               # level
+    r"(\w+)"  # level
     r"\s+-\s+"
-    r"(.+)$"                                               # message
+    r"(.+)$"  # message
 )
 
 LEVEL_ORDER = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
@@ -76,10 +76,7 @@ def _colorize_line(line: str) -> str:
     color = LEVEL_COLORS.get(log_level.upper(), "")
 
     return (
-        f"{DIM}{timestamp}{RESET} "
-        f"{BOLD}{log_module}{RESET} "
-        f"{color}{log_level:8s}{RESET} "
-        f"{message}"
+        f"{DIM}{timestamp}{RESET} {BOLD}{log_module}{RESET} {color}{log_level:8s}{RESET} {message}"
     )
 
 
@@ -166,7 +163,10 @@ def _tail_journalctl(follow: bool, level: str, module: str, lines: int, no_color
 
     try:
         proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
         )
 
         for line in proc.stdout:

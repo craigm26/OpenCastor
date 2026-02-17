@@ -4,7 +4,6 @@ These tests verify the mDNS module structure and graceful degradation
 without requiring a live network or the zeroconf library.
 """
 
-
 from castor.rcan.mdns import (
     SERVICE_TYPE,
     RCANServiceBroadcaster,

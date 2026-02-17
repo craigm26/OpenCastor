@@ -123,11 +123,13 @@ def list_plugins() -> list:
         if not filename.endswith(".py") or filename.startswith("_"):
             continue
         name = filename[:-3]
-        plugins.append({
-            "name": name,
-            "path": os.path.join(_PLUGINS_DIR, filename),
-            "loaded": name in _registry._loaded,
-        })
+        plugins.append(
+            {
+                "name": name,
+                "path": os.path.join(_PLUGINS_DIR, filename),
+                "loaded": name in _registry._loaded,
+            }
+        )
 
     return plugins
 
@@ -137,6 +139,7 @@ def print_plugins(plugins: list):
     try:
         from rich.console import Console
         from rich.table import Table
+
         console = Console()
         has_rich = True
     except ImportError:
@@ -151,10 +154,7 @@ def print_plugins(plugins: list):
         print(f"  Directory: {_PLUGINS_DIR}\n")
 
     if not plugins:
-        msg = (
-            "  No plugins found.\n"
-            f"  Create a plugin: {_PLUGINS_DIR}/my_plugin.py\n"
-        )
+        msg = f"  No plugins found.\n  Create a plugin: {_PLUGINS_DIR}/my_plugin.py\n"
         if has_rich:
             console.print(f"  [dim]{msg}[/]")
         else:

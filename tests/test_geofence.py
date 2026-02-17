@@ -1,6 +1,5 @@
 """Tests for castor.geofence -- limit robot operating radius."""
 
-
 from castor.geofence import Geofence
 
 

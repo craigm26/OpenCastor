@@ -69,9 +69,7 @@ def create_backup(output_path: str = None, work_dir: str = None) -> str:
         "/tmp/opencastor.service",
     ]:
         if os.path.exists(svc_path):
-            files_to_backup.append(
-                (os.path.basename(svc_path), svc_path)
-            )
+            files_to_backup.append((os.path.basename(svc_path), svc_path))
             break
 
     if not files_to_backup:
@@ -149,16 +147,22 @@ def print_backup_summary(archive_path: str, files_backed_up: list):
         has_rich = False
 
     if has_rich:
-        file_list = "\n".join(f"  [green]+[/] {f}" for f in files_backed_up) if files_backed_up else "  (none)"
+        file_list = (
+            "\n".join(f"  [green]+[/] {f}" for f in files_backed_up)
+            if files_backed_up
+            else "  (none)"
+        )
         size = os.path.getsize(archive_path) if os.path.exists(archive_path) else 0
-        console.print(Panel.fit(
-            f"[bold green]Backup created[/]\n\n"
-            f"  Archive: [cyan]{archive_path}[/]\n"
-            f"  Size:    {size:,} bytes\n"
-            f"  Files:   {len(files_backed_up)}\n\n"
-            f"{file_list}",
-            border_style="green",
-        ))
+        console.print(
+            Panel.fit(
+                f"[bold green]Backup created[/]\n\n"
+                f"  Archive: [cyan]{archive_path}[/]\n"
+                f"  Size:    {size:,} bytes\n"
+                f"  Files:   {len(files_backed_up)}\n\n"
+                f"{file_list}",
+                border_style="green",
+            )
+        )
     else:
         print(f"\n  Backup created: {archive_path}")
         print(f"  Files: {len(files_backed_up)}")

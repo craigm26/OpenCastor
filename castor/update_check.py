@@ -49,6 +49,7 @@ def check_for_update(quiet: bool = False) -> dict:
     # Query PyPI
     try:
         import httpx
+
         resp = httpx.get(
             "https://pypi.org/pypi/opencastor/json",
             timeout=3.0,
@@ -73,6 +74,7 @@ def _is_newer(latest: str, current: str) -> bool:
     """Compare version strings (supports semver and date-based versions)."""
     try:
         from packaging.version import Version
+
         return Version(latest) > Version(current)
     except Exception:
         pass
@@ -85,16 +87,14 @@ def _print_hint(current: str, latest: str):
     """Print a one-line update hint."""
     try:
         from rich.console import Console
+
         console = Console(stderr=True)
-        console.print(
-            f"  [dim]Update available: {current} -> {latest} "
-            f"(run: castor upgrade)[/]"
-        )
+        console.print(f"  [dim]Update available: {current} -> {latest} (run: castor upgrade)[/]")
     except ImportError:
         import sys
+
         print(
-            f"  Update available: {current} -> {latest} "
-            f"(run: castor upgrade)",
+            f"  Update available: {current} -> {latest} (run: castor upgrade)",
             file=sys.stderr,
         )
 
@@ -132,6 +132,7 @@ def print_update_status():
 
     try:
         from rich.console import Console
+
         console = Console()
         has_rich = True
     except ImportError:

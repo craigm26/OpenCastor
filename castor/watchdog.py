@@ -64,9 +64,7 @@ class BrainWatchdog:
 
         self._running = True
         self._last_heartbeat = time.time()
-        self._thread = threading.Thread(
-            target=self._monitor_loop, daemon=True, name="watchdog"
-        )
+        self._thread = threading.Thread(target=self._monitor_loop, daemon=True, name="watchdog")
         self._thread.start()
 
     def stop(self):

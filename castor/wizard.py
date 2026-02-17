@@ -70,24 +70,34 @@ BANNER = f"""{Colors.BLUE}
 
 PROVIDERS = {
     "1": {
-        "provider": "anthropic", "model": "claude-opus-4-6",
-        "label": "Anthropic Claude Opus 4.6", "env_var": "ANTHROPIC_API_KEY",
+        "provider": "anthropic",
+        "model": "claude-opus-4-6",
+        "label": "Anthropic Claude Opus 4.6",
+        "env_var": "ANTHROPIC_API_KEY",
     },
     "2": {
-        "provider": "google", "model": "gemini-2.5-flash",
-        "label": "Google Gemini 2.5 Flash", "env_var": "GOOGLE_API_KEY",
+        "provider": "google",
+        "model": "gemini-2.5-flash",
+        "label": "Google Gemini 2.5 Flash",
+        "env_var": "GOOGLE_API_KEY",
     },
     "3": {
-        "provider": "google", "model": "gemini-3-flash-preview",
-        "label": "Google Gemini 3 Flash (Preview)", "env_var": "GOOGLE_API_KEY",
+        "provider": "google",
+        "model": "gemini-3-flash-preview",
+        "label": "Google Gemini 3 Flash (Preview)",
+        "env_var": "GOOGLE_API_KEY",
     },
     "4": {
-        "provider": "openai", "model": "gpt-4.1",
-        "label": "OpenAI GPT-4.1", "env_var": "OPENAI_API_KEY",
+        "provider": "openai",
+        "model": "gpt-4.1",
+        "label": "OpenAI GPT-4.1",
+        "env_var": "OPENAI_API_KEY",
     },
     "5": {
-        "provider": "ollama", "model": "llava:13b",
-        "label": "Local Llama (Ollama)", "env_var": None,
+        "provider": "ollama",
+        "model": "llava:13b",
+        "label": "Local Llama (Ollama)",
+        "env_var": None,
     },
 }
 
@@ -162,21 +172,25 @@ def _validate_api_key(provider: str, api_key: str) -> bool:
     try:
         if provider == "anthropic":
             import anthropic
+
             client = anthropic.Anthropic(api_key=api_key)
             client.models.list(limit=1)
             return True
         elif provider == "google":
             import google.generativeai as genai
+
             genai.configure(api_key=api_key)
             list(genai.list_models())
             return True
         elif provider == "openai":
             import openai
+
             client = openai.OpenAI(api_key=api_key)
             client.models.list()
             return True
         elif provider == "openrouter":
             import httpx
+
             resp = httpx.get(
                 "https://openrouter.ai/api/v1/models",
                 headers={"Authorization": f"Bearer {api_key}"},
@@ -531,17 +545,19 @@ def _safety_acknowledgment(accept_risk):
         return
 
     if HAS_RICH:
-        _console.print(Panel(
-            "[bold yellow]SAFETY WARNING[/]\n\n"
-            "  OpenCastor controls [bold]PHYSICAL MOTORS[/] and [bold]SERVOS[/].\n"
-            "  Before continuing, please ensure:\n\n"
-            "    [yellow]-[/] Keep hands and cables clear of moving parts\n"
-            "    [yellow]-[/] Have a power switch or kill-cord within reach\n"
-            "    [yellow]-[/] Never leave a running robot unattended\n"
-            "    [yellow]-[/] Start with low speed/torque settings",
-            border_style="yellow",
-            title="[bold]Safety First[/]",
-        ))
+        _console.print(
+            Panel(
+                "[bold yellow]SAFETY WARNING[/]\n\n"
+                "  OpenCastor controls [bold]PHYSICAL MOTORS[/] and [bold]SERVOS[/].\n"
+                "  Before continuing, please ensure:\n\n"
+                "    [yellow]-[/] Keep hands and cables clear of moving parts\n"
+                "    [yellow]-[/] Have a power switch or kill-cord within reach\n"
+                "    [yellow]-[/] Never leave a running robot unattended\n"
+                "    [yellow]-[/] Start with low speed/torque settings",
+                border_style="yellow",
+                title="[bold]Safety First[/]",
+            )
+        )
     else:
         print(f"{Colors.WARNING}{Colors.BOLD}--- SAFETY WARNING ---{Colors.ENDC}")
         print(f"{Colors.WARNING}")
@@ -585,10 +601,7 @@ def main():
         _console.print("Generating spec compliant with [bold]rcan.dev/spec[/]\n")
     else:
         print(f"{Colors.HEADER}OpenCastor Setup Wizard v2026.2.17.3{Colors.ENDC}")
-        print(
-            f"Generating spec compliant with "
-            f"{Colors.BOLD}rcan.dev/spec{Colors.ENDC}\n"
-        )
+        print(f"Generating spec compliant with {Colors.BOLD}rcan.dev/spec{Colors.ENDC}\n")
 
     # --- Safety Acknowledgment ---
     _safety_acknowledgment(args.accept_risk)
@@ -632,9 +645,12 @@ def main():
     # --- Auto-generate Gateway Auth Token ---
     if not os.getenv("OPENCASTOR_API_TOKEN"):
         import secrets
+
         token = secrets.token_hex(24)  # 48-char hex token
         _write_env_var("OPENCASTOR_API_TOKEN", token)
-        print(f"\n  {Colors.GREEN}[AUTO]{Colors.ENDC} Gateway auth token generated and saved to .env")
+        print(
+            f"\n  {Colors.GREEN}[AUTO]{Colors.ENDC} Gateway auth token generated and saved to .env"
+        )
         print(f"  {Colors.BOLD}OPENCASTOR_API_TOKEN{Colors.ENDC}={token[:8]}...")
 
     # --- Generate Config ---
@@ -675,9 +691,7 @@ def main():
             _console.print("\n[bold magenta]--- Running Health Check ---[/]")
         else:
             print(f"\n{Colors.HEADER}--- Running Health Check ---{Colors.ENDC}")
-        results = run_post_wizard_checks(
-            filename, rcan_data, agent_config["provider"]
-        )
+        results = run_post_wizard_checks(filename, rcan_data, agent_config["provider"])
         print_report(results, colors_class=Colors)
     except Exception:
         pass  # Health check failure should never block wizard completion
@@ -699,8 +713,12 @@ def main():
         _console.print(f"  2. Start the gateway:    [cyan]castor gateway --config {filename}[/]")
         _console.print("  3. Open the dashboard:   [cyan]castor dashboard[/]")
         _console.print("  4. Check status:         [cyan]castor status[/]")
-        _console.print(f"  5. Auto-start on boot:   [cyan]castor install-service --config {filename}[/]")
-        _console.print(f"  6. Test your hardware:   [cyan]castor test-hardware --config {filename}[/]")
+        _console.print(
+            f"  5. Auto-start on boot:   [cyan]castor install-service --config {filename}[/]"
+        )
+        _console.print(
+            f"  6. Test your hardware:   [cyan]castor test-hardware --config {filename}[/]"
+        )
         _console.print(f"  7. Calibrate servos:     [cyan]castor calibrate --config {filename}[/]")
         _console.print("\n  Or with Docker:          [cyan]docker compose up[/]")
         _console.print("  Validate config:         https://rcan.dev/spec/")
@@ -716,8 +734,12 @@ def main():
             print(f"  Channels:     {names}")
 
         print(f"\n{Colors.BOLD}Next Steps:{Colors.ENDC}")
-        print(f"  1. Run the robot:        {Colors.BLUE}castor run --config {filename}{Colors.ENDC}")
-        print(f"  2. Start the gateway:    {Colors.BLUE}castor gateway --config {filename}{Colors.ENDC}")
+        print(
+            f"  1. Run the robot:        {Colors.BLUE}castor run --config {filename}{Colors.ENDC}"
+        )
+        print(
+            f"  2. Start the gateway:    {Colors.BLUE}castor gateway --config {filename}{Colors.ENDC}"
+        )
         print(f"  3. Open the dashboard:   {Colors.BLUE}castor dashboard{Colors.ENDC}")
         print(f"  4. Check status:         {Colors.BLUE}castor status{Colors.ENDC}")
         print(

@@ -89,17 +89,19 @@ def display_crash_report(report: dict):
         from rich.panel import Panel
 
         console = Console()
-        console.print(Panel(
-            f"[bold yellow]Previous crash detected[/]\n\n"
-            f"  Time:      {report.get('timestamp', '?')}\n"
-            f"  Config:    {report.get('config_path', '?')}\n"
-            f"  Uptime:    {report.get('uptime_seconds', 0):.0f}s\n"
-            f"  Loops:     {report.get('loop_count', 0)}\n"
-            f"  Error:     {report.get('error', '?')[:200]}\n"
-            f"  Last:      {(report.get('last_thought') or 'none')[:100]}",
-            border_style="yellow",
-            title="[bold]Crash Report[/]",
-        ))
+        console.print(
+            Panel(
+                f"[bold yellow]Previous crash detected[/]\n\n"
+                f"  Time:      {report.get('timestamp', '?')}\n"
+                f"  Config:    {report.get('config_path', '?')}\n"
+                f"  Uptime:    {report.get('uptime_seconds', 0):.0f}s\n"
+                f"  Loops:     {report.get('loop_count', 0)}\n"
+                f"  Error:     {report.get('error', '?')[:200]}\n"
+                f"  Last:      {(report.get('last_thought') or 'none')[:100]}",
+                border_style="yellow",
+                title="[bold]Crash Report[/]",
+            )
+        )
     except ImportError:
         print("\n  --- Previous Crash Detected ---")
         print(f"  Time:    {report.get('timestamp', '?')}")

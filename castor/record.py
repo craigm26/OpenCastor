@@ -28,11 +28,13 @@ class SessionRecorder:
         self._start = time.time()
 
         # Write header
-        self._write({
-            "type": "header",
-            "timestamp": datetime.now().isoformat(),
-            "version": "1.0",
-        })
+        self._write(
+            {
+                "type": "header",
+                "timestamp": datetime.now().isoformat(),
+                "version": "1.0",
+            }
+        )
 
     def record_step(
         self,
@@ -44,24 +46,28 @@ class SessionRecorder:
     ):
         """Record a single perception-action step."""
         self._step += 1
-        self._write({
-            "type": "step",
-            "step": self._step,
-            "elapsed_s": round(time.time() - self._start, 3),
-            "frame_size": frame_size,
-            "instruction": instruction[:500],
-            "thought": thought_text[:1000],
-            "action": action,
-            "latency_ms": round(latency_ms, 1),
-        })
+        self._write(
+            {
+                "type": "step",
+                "step": self._step,
+                "elapsed_s": round(time.time() - self._start, 3),
+                "frame_size": frame_size,
+                "instruction": instruction[:500],
+                "thought": thought_text[:1000],
+                "action": action,
+                "latency_ms": round(latency_ms, 1),
+            }
+        )
 
     def close(self):
         """Close the recording file."""
-        self._write({
-            "type": "footer",
-            "total_steps": self._step,
-            "total_time_s": round(time.time() - self._start, 2),
-        })
+        self._write(
+            {
+                "type": "footer",
+                "total_steps": self._step,
+                "total_time_s": round(time.time() - self._start, 2),
+            }
+        )
         self._file.close()
         logger.info(f"Session recorded: {self._step} steps to {self.output_path}")
 
@@ -86,6 +92,7 @@ def replay_session(recording_path: str, execute: bool = False, config_path: str 
         from rich.console import Console
         from rich.panel import Panel
         from rich.table import Table
+
         console = Console()
         has_rich = True
     except ImportError:
@@ -97,6 +104,7 @@ def replay_session(recording_path: str, execute: bool = False, config_path: str 
         import yaml
 
         from castor.main import get_driver
+
         with open(config_path) as f:
             config = yaml.safe_load(f)
         driver = get_driver(config)
@@ -170,6 +178,8 @@ def replay_session(recording_path: str, execute: bool = False, config_path: str 
 
     total_time = footer.get("total_time_s", 0)
     if has_rich:
-        console.print(f"\n  [green]Replay complete.[/] {len(steps)} steps, {total_time:.1f}s original runtime.\n")
+        console.print(
+            f"\n  [green]Replay complete.[/] {len(steps)} steps, {total_time:.1f}s original runtime.\n"
+        )
     else:
         print(f"\n  Replay complete. {len(steps)} steps, {total_time:.1f}s original runtime.\n")

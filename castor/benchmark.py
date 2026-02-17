@@ -29,6 +29,7 @@ def run_benchmark(config_path: str, iterations: int = 3, simulate: bool = False)
 
     try:
         from rich.console import Console
+
         console = Console()
         has_rich = True
     except ImportError:
@@ -82,9 +83,7 @@ def run_benchmark(config_path: str, iterations: int = 3, simulate: bool = False)
         else:
             timings["driver_ms"] = 0.0
 
-        timings["total_ms"] = (
-            timings["capture_ms"] + timings["inference_ms"] + timings["driver_ms"]
-        )
+        timings["total_ms"] = timings["capture_ms"] + timings["inference_ms"] + timings["driver_ms"]
         timings["frame_size"] = len(frame)
         timings["thought_len"] = len(thought.raw_text)
 
@@ -103,6 +102,7 @@ def run_benchmark(config_path: str, iterations: int = 3, simulate: bool = False)
 def _print_results(results, config, has_rich, console):
     """Print benchmark results as a summary table."""
     n = len(results)
+
     def avg(key):
         return sum(r[key] for r in results) / n
 
@@ -130,7 +130,7 @@ def _print_results(results, config, has_rich, console):
             vals = [r[key] for r in results]
             table.add_row(
                 label,
-                f"{sum(vals)/n:.1f}",
+                f"{sum(vals) / n:.1f}",
                 f"{min(vals):.1f}",
                 f"{max(vals):.1f}",
             )
@@ -139,16 +139,14 @@ def _print_results(results, config, has_rich, console):
         console.print(table)
 
         status = "[green]PASS[/]" if avg_total < budget else "[red]OVER BUDGET[/]"
-        console.print(
-            f"\n  Latency budget: {budget}ms | Average: {avg_total:.0f}ms | {status}"
-        )
+        console.print(f"\n  Latency budget: {budget}ms | Average: {avg_total:.0f}ms | {status}")
         console.print(
             f"  Model: {config.get('agent', {}).get('model', '?')} | "
             f"Frame: {avg('frame_size'):.0f} bytes\n"
         )
     else:
         print(f"\n  {'Phase':<20} {'Avg':>8} {'Min':>8} {'Max':>8}")
-        print(f"  {'-'*20} {'-'*8} {'-'*8} {'-'*8}")
+        print(f"  {'-' * 20} {'-' * 8} {'-' * 8} {'-' * 8}")
         for label, key in [
             ("Camera Capture", "capture_ms"),
             ("AI Inference", "inference_ms"),
@@ -156,9 +154,7 @@ def _print_results(results, config, has_rich, console):
             ("Total", "total_ms"),
         ]:
             vals = [r[key] for r in results]
-            print(
-                f"  {label:<20} {sum(vals)/n:>7.1f} {min(vals):>7.1f} {max(vals):>7.1f}"
-            )
+            print(f"  {label:<20} {sum(vals) / n:>7.1f} {min(vals):>7.1f} {max(vals):>7.1f}")
 
         status = "PASS" if avg_total < budget else "OVER BUDGET"
         print(f"\n  Latency budget: {budget}ms | Average: {avg_total:.0f}ms | {status}")

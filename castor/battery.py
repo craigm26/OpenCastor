@@ -100,9 +100,7 @@ class BatteryMonitor:
             return
 
         self._running = True
-        self._thread = threading.Thread(
-            target=self._monitor_loop, args=(interval,), daemon=True
-        )
+        self._thread = threading.Thread(target=self._monitor_loop, args=(interval,), daemon=True)
         self._thread.start()
 
     def stop(self):
@@ -119,16 +117,12 @@ class BatteryMonitor:
             if voltage > 0:
                 if voltage <= self.critical_voltage:
                     logger.critical(
-                        f"BATTERY CRITICAL: {voltage}V "
-                        f"(threshold: {self.critical_voltage}V)"
+                        f"BATTERY CRITICAL: {voltage}V (threshold: {self.critical_voltage}V)"
                     )
                     if self._on_critical:
                         self._on_critical(voltage)
                 elif voltage <= self.warn_voltage and not self._warned:
-                    logger.warning(
-                        f"Battery low: {voltage}V "
-                        f"(threshold: {self.warn_voltage}V)"
-                    )
+                    logger.warning(f"Battery low: {voltage}V (threshold: {self.warn_voltage}V)")
                     self._warned = True
                     if self._on_warn:
                         self._on_warn(voltage)

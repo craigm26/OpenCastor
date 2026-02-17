@@ -32,28 +32,35 @@ from typing import Dict, Optional
 
 logger = logging.getLogger("OpenCastor.FS.Perm")
 
+
 # -----------------------------------------------------------------------
 # Capabilities (like Linux CAP_*)
 # -----------------------------------------------------------------------
 class Cap(Flag):
     """Fine-grained capability flags for safety-critical operations."""
+
     NONE = 0
-    MOTOR_WRITE = auto()      # Can send motor commands
-    ESTOP = auto()            # Can trigger emergency stop
-    CONFIG_WRITE = auto()     # Can modify /etc config
-    MEMORY_READ = auto()      # Can read /var/memory
-    MEMORY_WRITE = auto()     # Can write /var/memory
-    CHANNEL_SEND = auto()     # Can send messages via channels
+    MOTOR_WRITE = auto()  # Can send motor commands
+    ESTOP = auto()  # Can trigger emergency stop
+    CONFIG_WRITE = auto()  # Can modify /etc config
+    MEMORY_READ = auto()  # Can read /var/memory
+    MEMORY_WRITE = auto()  # Can write /var/memory
+    CHANNEL_SEND = auto()  # Can send messages via channels
     PROVIDER_SWITCH = auto()  # Can change the active AI provider
     SAFETY_OVERRIDE = auto()  # Can override safety limits (root only)
-    DEVICE_ACCESS = auto()    # Can interact with /dev nodes
-    CONTEXT_WRITE = auto()    # Can modify context window
+    DEVICE_ACCESS = auto()  # Can interact with /dev nodes
+    CONTEXT_WRITE = auto()  # Can modify context window
 
     # Convenient compound sets
     @classmethod
     def brain_default(cls) -> "Cap":
-        return (cls.MOTOR_WRITE | cls.MEMORY_READ | cls.MEMORY_WRITE
-                | cls.DEVICE_ACCESS | cls.CONTEXT_WRITE)
+        return (
+            cls.MOTOR_WRITE
+            | cls.MEMORY_READ
+            | cls.MEMORY_WRITE
+            | cls.DEVICE_ACCESS
+            | cls.CONTEXT_WRITE
+        )
 
     @classmethod
     def channel_default(cls) -> "Cap":
@@ -61,8 +68,14 @@ class Cap(Flag):
 
     @classmethod
     def api_default(cls) -> "Cap":
-        return (cls.MOTOR_WRITE | cls.ESTOP | cls.MEMORY_READ
-                | cls.CHANNEL_SEND | cls.DEVICE_ACCESS | cls.SAFETY_OVERRIDE)
+        return (
+            cls.MOTOR_WRITE
+            | cls.ESTOP
+            | cls.MEMORY_READ
+            | cls.CHANNEL_SEND
+            | cls.DEVICE_ACCESS
+            | cls.SAFETY_OVERRIDE
+        )
 
     @classmethod
     def driver_default(cls) -> "Cap":
@@ -100,11 +113,7 @@ def _parse_mode(mode_str: str) -> int:
 
 def _mode_str(bits: int) -> str:
     """Convert mode bits back to a string like ``rw-``."""
-    return (
-        ("r" if bits & _R else "-")
-        + ("w" if bits & _W else "-")
-        + ("x" if bits & _X else "-")
-    )
+    return ("r" if bits & _R else "-") + ("w" if bits & _W else "-") + ("x" if bits & _X else "-")
 
 
 # -----------------------------------------------------------------------
@@ -117,8 +126,7 @@ class ACL:
     capabilities.
     """
 
-    def __init__(self, entries: Optional[Dict[str, str]] = None,
-                 required_caps: Cap = Cap.NONE):
+    def __init__(self, entries: Optional[Dict[str, str]] = None, required_caps: Cap = Cap.NONE):
         self.entries: Dict[str, int] = {}
         if entries:
             for principal, mode in entries.items():
@@ -160,55 +168,85 @@ class PermissionTable:
     def _install_defaults(self):
         """Install the default Unix-style permission layout."""
         # /proc -- read-only for everyone
-        self.set_acl("/proc", ACL(
-            {"brain": "r--", "channel": "r--", "api": "r--", "driver": "r--"},
-        ))
+        self.set_acl(
+            "/proc",
+            ACL(
+                {"brain": "r--", "channel": "r--", "api": "r--", "driver": "r--"},
+            ),
+        )
 
         # /dev -- brain and driver get rw, api read-only, channels no access
-        self.set_acl("/dev", ACL(
-            {"brain": "rw-", "driver": "rw-", "api": "r--", "channel": "---"},
-            required_caps=Cap.DEVICE_ACCESS,
-        ))
+        self.set_acl(
+            "/dev",
+            ACL(
+                {"brain": "rw-", "driver": "rw-", "api": "r--", "channel": "---"},
+                required_caps=Cap.DEVICE_ACCESS,
+            ),
+        )
         # /dev/motor -- needs MOTOR_WRITE to write
-        self.set_acl("/dev/motor", ACL(
-            {"brain": "rw-", "driver": "rw-", "api": "r--", "channel": "---"},
-            required_caps=Cap.MOTOR_WRITE,
-        ))
+        self.set_acl(
+            "/dev/motor",
+            ACL(
+                {"brain": "rw-", "driver": "rw-", "api": "r--", "channel": "---"},
+                required_caps=Cap.MOTOR_WRITE,
+            ),
+        )
 
         # /etc -- read-only for most; root to modify
-        self.set_acl("/etc", ACL(
-            {"brain": "r--", "channel": "r--", "api": "r--", "driver": "r--"},
-        ))
-        self.set_acl("/etc/safety", ACL(
-            {"brain": "r--", "channel": "r--", "api": "r--", "driver": "r--"},
-        ))
+        self.set_acl(
+            "/etc",
+            ACL(
+                {"brain": "r--", "channel": "r--", "api": "r--", "driver": "r--"},
+            ),
+        )
+        self.set_acl(
+            "/etc/safety",
+            ACL(
+                {"brain": "r--", "channel": "r--", "api": "r--", "driver": "r--"},
+            ),
+        )
 
         # /var/log -- append-only for brain/api, read for all
-        self.set_acl("/var/log", ACL(
-            {"brain": "rw-", "channel": "r--", "api": "rw-", "driver": "r--"},
-        ))
+        self.set_acl(
+            "/var/log",
+            ACL(
+                {"brain": "rw-", "channel": "r--", "api": "rw-", "driver": "r--"},
+            ),
+        )
 
         # /var/memory -- brain rw, channel/api read-only
-        self.set_acl("/var/memory", ACL(
-            {"brain": "rw-", "channel": "r--", "api": "r--", "driver": "---"},
-            required_caps=Cap.MEMORY_READ,
-        ))
+        self.set_acl(
+            "/var/memory",
+            ACL(
+                {"brain": "rw-", "channel": "r--", "api": "r--", "driver": "---"},
+                required_caps=Cap.MEMORY_READ,
+            ),
+        )
 
         # /tmp -- everyone full access (working memory)
-        self.set_acl("/tmp", ACL(
-            {"brain": "rwx", "channel": "rwx", "api": "rwx", "driver": "rwx"},
-        ))
+        self.set_acl(
+            "/tmp",
+            ACL(
+                {"brain": "rwx", "channel": "rwx", "api": "rwx", "driver": "rwx"},
+            ),
+        )
 
         # /mnt/channels -- channel send, api read
-        self.set_acl("/mnt/channels", ACL(
-            {"brain": "rw-", "channel": "rwx", "api": "r--", "driver": "---"},
-            required_caps=Cap.CHANNEL_SEND,
-        ))
+        self.set_acl(
+            "/mnt/channels",
+            ACL(
+                {"brain": "rw-", "channel": "rwx", "api": "r--", "driver": "---"},
+                required_caps=Cap.CHANNEL_SEND,
+            ),
+        )
 
         # /mnt/providers -- brain full, api read
-        self.set_acl("/mnt/providers", ACL(
-            {"brain": "rwx", "channel": "r--", "api": "r--", "driver": "---"},
-        ))
+        self.set_acl(
+            "/mnt/providers",
+            ACL(
+                {"brain": "rwx", "channel": "r--", "api": "r--", "driver": "---"},
+            ),
+        )
 
         # Default capabilities per principal
         self._caps["root"] = Cap.root_caps()
@@ -270,8 +308,9 @@ class PermissionTable:
                 return False
         return True
 
-    def register_principal(self, name: str, role: Optional[int] = None,
-                           scopes: Optional[object] = None):
+    def register_principal(
+        self, name: str, role: Optional[int] = None, scopes: Optional[object] = None
+    ):
         """Register an RCAN principal with role-derived capabilities.
 
         This bridges RCAN RBAC roles to the legacy Cap-based system.
@@ -328,7 +367,5 @@ class PermissionTable:
         """Dump the full permission table for inspection."""
         return {
             "acls": {path: acl.dump() for path, acl in sorted(self._acls.items())},
-            "capabilities": {
-                p: str(c) for p, c in self._caps.items()
-            },
+            "capabilities": {p: str(c) for p, c in self._caps.items()},
         }

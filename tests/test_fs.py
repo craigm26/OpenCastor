@@ -419,21 +419,16 @@ class TestPipeline:
     def test_basic_pipeline(self):
         ns = Namespace()
         ns.write("/input", 42)
-        result = (Pipeline("test", ns)
-                  .read("/input")
-                  .transform(lambda x: x * 2)
-                  .write("/output")
-                  .run())
+        result = (
+            Pipeline("test", ns).read("/input").transform(lambda x: x * 2).write("/output").run()
+        )
         assert result == 84
         assert ns.read("/output") == 84
 
     def test_pipeline_with_append(self):
         ns = Namespace()
         ns.write("/log", [])
-        (Pipeline("log", ns)
-         .transform(lambda _: {"action": "move"})
-         .append("/log")
-         .run())
+        (Pipeline("log", ns).transform(lambda _: {"action": "move"}).append("/log").run())
         log = ns.read("/log")
         assert len(log) == 1
 
@@ -471,8 +466,9 @@ class TestProc:
     def test_bootstrap_with_config(self):
         ns = Namespace()
         proc = ProcFS(ns)
-        proc.bootstrap({"agent": {"provider": "google", "model": "gemini-2.5-flash",
-                                   "latency_budget_ms": 500}})
+        proc.bootstrap(
+            {"agent": {"provider": "google", "model": "gemini-2.5-flash", "latency_budget_ms": 500}}
+        )
         assert ns.read("/proc/brain/provider") == "google"
         assert ns.read("/proc/loop/budget_ms") == 500
 
@@ -512,8 +508,7 @@ class TestCastorFS:
     def test_boot(self):
         fs = CastorFS()
         config = {
-            "agent": {"provider": "google", "model": "gemini-2.5-flash",
-                      "latency_budget_ms": 200},
+            "agent": {"provider": "google", "model": "gemini-2.5-flash", "latency_budget_ms": 200},
             "metadata": {"robot_name": "test"},
         }
         fs.boot(config)
@@ -588,8 +583,7 @@ class TestCastorFS:
         assert fs.write("/dev/motor", action, principal="brain")
 
         # Record in memory
-        fs.memory.record_episode("open hallway", action=action,
-                                 outcome="moved forward")
+        fs.memory.record_episode("open hallway", action=action, outcome="moved forward")
         fs.context.push("brain", "moving forward cautiously", metadata=action)
 
         # Telemetry

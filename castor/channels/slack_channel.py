@@ -35,16 +35,14 @@ class SlackChannel(BaseChannel):
 
         if not HAS_SLACK:
             raise ImportError(
-                "slack-bolt required for Slack. Install with: "
-                "pip install 'opencastor[slack]'"
+                "slack-bolt required for Slack. Install with: pip install 'opencastor[slack]'"
             )
 
         self.bot_token = config.get("bot_token")
         self.app_token = config.get("app_token")
         if not self.bot_token or not self.app_token:
             raise ValueError(
-                "SLACK_BOT_TOKEN and SLACK_APP_TOKEN are required. "
-                "Set them in your .env file."
+                "SLACK_BOT_TOKEN and SLACK_APP_TOKEN are required. Set them in your .env file."
             )
 
         self.app = AsyncApp(token=self.bot_token)

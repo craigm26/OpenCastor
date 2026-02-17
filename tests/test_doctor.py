@@ -93,7 +93,9 @@ class TestCheckRcanConfig:
     def test_valid_preset(self):
         preset = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
-            "config", "presets", "rpi_rc_car.rcan.yaml",
+            "config",
+            "presets",
+            "rpi_rc_car.rcan.yaml",
         )
         if os.path.exists(preset):
             ok, name, detail = check_rcan_config(preset)

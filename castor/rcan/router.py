@@ -122,7 +122,7 @@ class MessageRouter:
                 target=message.source,
                 code="UNAUTHORIZED",
                 detail=f"Missing scope for capability '{capability}': "
-                       f"need {required_scope.to_strings()}, have {principal.scopes.to_strings()}",
+                f"need {required_scope.to_strings()}, have {principal.scopes.to_strings()}",
                 reply_to=message.id,
             )
 
@@ -133,7 +133,7 @@ class MessageRouter:
                 target=message.source,
                 code="CAPABILITY_NOT_FOUND",
                 detail=f"Capability '{capability}' is not available. "
-                       f"Available: {self.capabilities.names}",
+                f"Available: {self.capabilities.names}",
                 reply_to=message.id,
             )
 

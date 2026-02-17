@@ -122,6 +122,7 @@ def print_privacy_policy(config: dict):
     try:
         from rich.console import Console
         from rich.table import Table
+
         console = Console()
         has_rich = True
     except ImportError:

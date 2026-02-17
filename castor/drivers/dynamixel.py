@@ -80,9 +80,7 @@ class DynamixelDriver(DriverBase):
         if self.portHandler is None:
             return
         for mid in motor_ids:
-            self.packetHandler.write1ByteTxRx(
-                self.portHandler, mid, self.ADDR_TORQUE_ENABLE, 0
-            )
+            self.packetHandler.write1ByteTxRx(self.portHandler, mid, self.ADDR_TORQUE_ENABLE, 0)
 
     def move(self, motor_id: int, angle_deg: float):
         """

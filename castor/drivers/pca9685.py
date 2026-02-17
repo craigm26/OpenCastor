@@ -44,7 +44,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Pulse-width safety bounds (microseconds)
 # ---------------------------------------------------------------------------
-PULSE_MIN_US = 500   # absolute minimum -- below this risks damaging servos/ESCs
+PULSE_MIN_US = 500  # absolute minimum -- below this risks damaging servos/ESCs
 PULSE_MAX_US = 2500  # absolute maximum -- above this risks damaging servos/ESCs
 
 

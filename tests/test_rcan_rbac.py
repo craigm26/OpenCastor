@@ -1,6 +1,5 @@
 """Tests for RCAN RBAC (Role-Based Access Control)."""
 
-
 from castor.fs.permissions import Cap
 from castor.rcan.rbac import (
     RCANPrincipal,
@@ -93,8 +92,7 @@ class TestRCANPrincipal:
         assert not p.has_scope(Scope.CONFIG)
 
     def test_explicit_scopes_override(self):
-        p = RCANPrincipal(name="test", role=RCANRole.USER,
-                          scopes=Scope.STATUS)
+        p = RCANPrincipal(name="test", role=RCANRole.USER, scopes=Scope.STATUS)
         assert p.has_scope(Scope.STATUS)
         assert not p.has_scope(Scope.CONTROL)
 
@@ -167,6 +165,5 @@ class TestRCANPrincipal:
         assert p.fleet == []
 
     def test_fleet_custom(self):
-        p = RCANPrincipal(name="test", role=RCANRole.USER,
-                          fleet=["rcan://opencastor.*.*/nav"])
+        p = RCANPrincipal(name="test", role=RCANRole.USER, fleet=["rcan://opencastor.*.*/nav"])
         assert len(p.fleet) == 1

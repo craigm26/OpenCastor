@@ -32,7 +32,8 @@ class TestMessageCreation:
 
     def test_ack_message(self):
         original = RCANMessage.command(
-            source="rcan://a.b.c", target="rcan://d.e.f",
+            source="rcan://a.b.c",
+            target="rcan://d.e.f",
             payload={"type": "stop"},
         )
         ack = RCANMessage.ack(
@@ -139,7 +140,8 @@ class TestMessageTTL:
 
     def test_no_ttl_never_expires(self):
         msg = RCANMessage.command(
-            source="rcan://a.b.c", target="rcan://d.e.f",
+            source="rcan://a.b.c",
+            target="rcan://d.e.f",
             payload={},
         )
         assert not msg.is_expired()

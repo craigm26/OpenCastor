@@ -32,6 +32,7 @@ def run_configure(config_path: str):
 
     try:
         from rich.console import Console
+
         console = Console()
         has_rich = True
     except ImportError:
@@ -88,6 +89,7 @@ def run_configure(config_path: str):
         backup_path = config_path + ".bak"
         try:
             import shutil
+
             shutil.copy2(config_path, backup_path)
             print(f"  Backup saved: {backup_path}")
         except Exception:
@@ -282,6 +284,7 @@ def _show_config(config: dict, has_rich: bool, console):
 
     if has_rich:
         from rich.syntax import Syntax
+
         console.print()
         console.print(Syntax(text, "yaml", theme="monokai", line_numbers=True))
         console.print()
