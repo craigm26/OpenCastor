@@ -25,7 +25,10 @@ VISION_MODELS = {
     "llava-hf/llava-v1.6-mistral-7b-hf",
     "llava-hf/llava-v1.6-34b-hf",
     "Qwen/Qwen2.5-VL-72B-Instruct",
+    "Qwen/Qwen2.5-VL-7B-Instruct",
+    "Qwen/Qwen2.5-VL-3B-Instruct",
     "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
 }
 
 
