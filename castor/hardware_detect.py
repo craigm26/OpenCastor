@@ -13,6 +13,7 @@ Usage (from wizard):
 import logging
 import os
 import subprocess
+import sys
 
 logger = logging.getLogger("OpenCastor.HardwareDetect")
 
@@ -23,6 +24,9 @@ def scan_i2c() -> list:
     Returns a list of dicts: ``{"bus": int, "address": "0xNN"}``.
     """
     devices = []
+
+    if sys.platform != "linux":
+        return devices
 
     # Find available I2C buses
     i2c_buses = []
@@ -68,6 +72,8 @@ def scan_usb_serial() -> list:
     Returns a list of port paths, e.g. ``["/dev/ttyUSB0", "/dev/ttyACM0"]``.
     """
     ports = []
+    if sys.platform != "linux":
+        return ports
     dev_dir = "/dev"
     if os.path.isdir(dev_dir):
         for entry in sorted(os.listdir(dev_dir)):

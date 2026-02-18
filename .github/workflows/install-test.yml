@@ -1,0 +1,53 @@
+name: Install Test
+
+on:
+  push:
+    paths:
+      - 'scripts/install*'
+      - '.github/workflows/install-test.yml'
+  pull_request:
+    paths:
+      - 'scripts/install*'
+      - '.github/workflows/install-test.yml'
+
+jobs:
+  install-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run installer
+        run: bash scripts/install.sh --no-rpi --skip-wizard
+        env:
+          OPENCASTOR_DIR: ${{ github.workspace }}
+      - name: Verify
+        run: |
+          source venv/bin/activate
+          bash scripts/install-check.sh
+
+  install-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run installer
+        run: bash scripts/install.sh --no-rpi --skip-wizard
+        env:
+          OPENCASTOR_DIR: ${{ github.workspace }}
+      - name: Verify
+        run: |
+          source venv/bin/activate
+          bash scripts/install-check.sh
+
+  install-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run installer
+        shell: pwsh
+        run: .\scripts\install.ps1 -SkipWizard
+        env:
+          OPENCASTOR_DIR: ${{ github.workspace }}
+      - name: Verify
+        shell: pwsh
+        run: |
+          .\venv\Scripts\Activate.ps1
+          powershell -File scripts\install-check.ps1

@@ -5,8 +5,8 @@ Implements the 5-tier RCAN role hierarchy::
 
     GUEST   (1) -- Read-only status, no control.
     USER    (2) -- Basic teleoperation, chat.
-    OPERATOR(3) -- Full control, config reads.
-    ADMIN   (4) -- Config writes, training, provider switching.
+    LEASEE  (3) -- Full control, config reads.
+    OWNER   (4) -- Config writes, training, provider switching.
     CREATOR (5) -- Safety overrides, firmware, full access.
 
 Each role maps to a set of scopes that determine what actions
@@ -18,20 +18,41 @@ are mapped to RCAN roles via :meth:`RCANPrincipal.from_legacy`.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from enum import IntEnum, IntFlag, auto
 from typing import Dict, List
 
 from castor.fs.permissions import Cap
 
+logger = logging.getLogger(__name__)
+
+# Backward compatibility: map deprecated role names to new RCAN spec names
+_DEPRECATED_ROLE_NAMES: Dict[str, str] = {
+    "ADMIN": "OWNER",
+    "OPERATOR": "LEASEE",
+}
+
+
+def resolve_role_name(name: str) -> str:
+    """Resolve a role name, emitting a deprecation warning for old names."""
+    upper = name.upper()
+    if upper in _DEPRECATED_ROLE_NAMES:
+        new_name = _DEPRECATED_ROLE_NAMES[upper]
+        logger.warning(
+            "Role '%s' is deprecated, use '%s' (RCAN spec alignment)", upper, new_name
+        )
+        return new_name
+    return upper
+
 
 class RCANRole(IntEnum):
-    """RCAN 5-tier role hierarchy."""
+    """RCAN 5-tier role hierarchy (RCAN spec: CREATOR, OWNER, LEASEE, USER, GUEST)."""
 
     GUEST = 1
     USER = 2
-    OPERATOR = 3
-    ADMIN = 4
+    LEASEE = 3
+    OWNER = 4
     CREATOR = 5
 
 
@@ -52,9 +73,9 @@ class Scope(IntFlag):
             return cls.STATUS
         if role == RCANRole.USER:
             return cls.STATUS | cls.CONTROL
-        if role == RCANRole.OPERATOR:
+        if role == RCANRole.LEASEE:
             return cls.STATUS | cls.CONTROL | cls.CONFIG
-        if role == RCANRole.ADMIN:
+        if role == RCANRole.OWNER:
             return cls.STATUS | cls.CONTROL | cls.CONFIG | cls.TRAINING
         if role == RCANRole.CREATOR:
             return cls.STATUS | cls.CONTROL | cls.CONFIG | cls.TRAINING | cls.ADMIN
@@ -105,8 +126,8 @@ _SCOPE_TO_CAPS: Dict[Scope, Cap] = {
 # Mapping from legacy principal names to RCAN roles
 _LEGACY_ROLE_MAP: Dict[str, RCANRole] = {
     "root": RCANRole.CREATOR,
-    "brain": RCANRole.ADMIN,
-    "api": RCANRole.OPERATOR,
+    "brain": RCANRole.OWNER,
+    "api": RCANRole.LEASEE,
     "channel": RCANRole.USER,
     "driver": RCANRole.GUEST,
 }
@@ -115,8 +136,8 @@ _LEGACY_ROLE_MAP: Dict[str, RCANRole] = {
 ROLE_RATE_LIMITS: Dict[RCANRole, int] = {
     RCANRole.GUEST: 10,
     RCANRole.USER: 100,
-    RCANRole.OPERATOR: 500,
-    RCANRole.ADMIN: 1000,
+    RCANRole.LEASEE: 500,
+    RCANRole.OWNER: 1000,
     RCANRole.CREATOR: 0,  # 0 = unlimited
 }
 

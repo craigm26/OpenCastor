@@ -17,13 +17,15 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
     "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
     "Environment :: Console",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: System :: Hardware",
 ]
@@ -62,10 +64,11 @@ dependencies = [
 
 [project.optional-dependencies]
 # The recommended stack: RPi + PCA9685 RC car + CSI camera + WhatsApp + Claude
+core = []
 rpi = [
-    "adafruit-circuitpython-pca9685>=3.4.0",
-    "adafruit-circuitpython-motor>=3.4.0",
-    "picamera2>=0.3.17",
+    "adafruit-circuitpython-pca9685>=3.4.0; sys_platform == 'linux'",
+    "adafruit-circuitpython-motor>=3.4.0; sys_platform == 'linux'",
+    "picamera2>=0.3.17; sys_platform == 'linux'",
     "neonize>=1.0.0",
 ]
 whatsapp = ["neonize>=1.0.0"]
@@ -84,6 +87,9 @@ rcan = [
     "zeroconf>=0.131.0",
 ]
 dynamixel = ["dynamixel-sdk>=3.7.31"]
+all = [
+    "opencastor[rpi,whatsapp,telegram,discord,slack,rcan,dynamixel,dev]",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",

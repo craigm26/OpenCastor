@@ -23,15 +23,41 @@ Whether you have a $50 Amazon robot kit or a $50,000 industrial arm, OpenCastor 
 
 ### 1. Install
 
+**Linux / macOS (one-liner):**
 ```bash
-# One-liner (Raspberry Pi / Linux)
-curl -sL https://opencastor.com/install | bash
+curl -fsSL https://raw.githubusercontent.com/craigm26/OpenCastor/main/scripts/install.sh | bash
+```
 
-# Or manually
+**Windows 11 (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/craigm26/OpenCastor/main/scripts/install.ps1 | iex
+```
+
+**Manual install (any platform):**
+```bash
 git clone https://github.com/craigm26/OpenCastor.git
 cd OpenCastor
+python3 -m venv venv && source venv/bin/activate
 pip install -e ".[dev]"
 ```
+
+<details>
+<summary>Platform-specific notes</summary>
+
+| Platform | Package Manager | Notes |
+|---|---|---|
+| **macOS** | Homebrew (auto-installed) | Apple Silicon & Intel supported |
+| **Ubuntu / Debian** | apt | Includes RPi auto-detection |
+| **Fedora / RHEL** | dnf | |
+| **Arch Linux** | pacman | |
+| **Alpine** | apk | |
+| **Raspberry Pi** | apt | Enables I2C & camera automatically |
+| **Windows 11** | winget / choco | Native PowerShell, no WSL needed |
+
+**Installer flags:** `--dry-run` (preview), `--no-rpi` (skip RPi detection), `--skip-wizard`
+
+**Verify installation:** `bash scripts/install-check.sh` (or `install-check.ps1` on Windows)
+</details>
 
 ### 2. Run the Wizard
 

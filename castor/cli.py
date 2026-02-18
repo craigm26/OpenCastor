@@ -314,6 +314,9 @@ def cmd_upgrade(args) -> None:
 
 def cmd_install_service(args) -> None:
     """Generate a systemd service unit file for OpenCastor."""
+    if sys.platform != "linux":
+        print("\n  install-service is only available on Linux (systemd).\n")
+        return
     import getpass
 
     user = getpass.getuser()

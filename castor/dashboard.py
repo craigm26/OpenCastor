@@ -112,8 +112,16 @@ with col1:
             from gtts import gTTS
 
             tts = gTTS(text=reply[:200], lang="en")
-            tts.save("/tmp/castor_response.mp3")
-            os.system("mpg321 /tmp/castor_response.mp3 2>/dev/null &")
+            import tempfile
+
+            tmp_mp3 = os.path.join(tempfile.gettempdir(), "castor_response.mp3")
+            tts.save(tmp_mp3)
+            if sys.platform == "darwin":
+                os.system(f"afplay {tmp_mp3} &")
+            elif sys.platform == "win32":
+                os.system(f'start /b "" "{tmp_mp3}"')
+            else:
+                os.system(f"mpg321 {tmp_mp3} 2>/dev/null &")
         except Exception:
             pass
 
