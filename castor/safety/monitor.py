@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import logging
 import os
-import platform
 import shutil
 import threading
 import time
@@ -223,7 +222,9 @@ class SensorMonitor:
         readings: List[SensorReading] = []
         worst = "normal"
 
-        def classify(val: Optional[float], warn: float, crit: float, name: str, unit: str) -> SensorReading:
+        def classify(
+            val: Optional[float], warn: float, crit: float, name: str, unit: str
+        ) -> SensorReading:
             if val is None:
                 return SensorReading(name=name, value=0.0, unit=unit, status="unavailable")
             status = "normal"
@@ -243,21 +244,33 @@ class SensorMonitor:
 
         # CPU Temperature
         snap.cpu_temp_c = self._read_cpu_temp()
-        r = classify(snap.cpu_temp_c, self.thresholds.cpu_temp_warn, self.thresholds.cpu_temp_critical, "cpu_temp", "°C")
+        r = classify(
+            snap.cpu_temp_c,
+            self.thresholds.cpu_temp_warn,
+            self.thresholds.cpu_temp_critical,
+            "cpu_temp",
+            "°C",
+        )
         readings.append(r)
         update_worst(r.status)
 
         # Memory
         snap.memory_percent = self._read_memory_percent()
         r = classify(
-            snap.memory_percent, self.thresholds.memory_warn, self.thresholds.memory_critical, "memory", "%"
+            snap.memory_percent,
+            self.thresholds.memory_warn,
+            self.thresholds.memory_critical,
+            "memory",
+            "%",
         )
         readings.append(r)
         update_worst(r.status)
 
         # Disk
         snap.disk_percent = self._read_disk_percent()
-        r = classify(snap.disk_percent, self.thresholds.disk_warn, self.thresholds.disk_critical, "disk", "%")
+        r = classify(
+            snap.disk_percent, self.thresholds.disk_warn, self.thresholds.disk_critical, "disk", "%"
+        )
         readings.append(r)
         update_worst(r.status)
 
@@ -276,7 +289,9 @@ class SensorMonitor:
                 snap.force_n = self._force_reader()
             except Exception:
                 snap.force_n = None
-        r = classify(snap.force_n, self.thresholds.force_warn_n, self.thresholds.force_max_n, "force", "N")
+        r = classify(
+            snap.force_n, self.thresholds.force_warn_n, self.thresholds.force_max_n, "force", "N"
+        )
         readings.append(r)
         if r.status != "unavailable":
             update_worst(r.status)
@@ -300,8 +315,14 @@ class SensorMonitor:
                             cb(snap)
                         except Exception:
                             logger.exception("Critical callback error")
-                    if self._consecutive_critical_count >= self.consecutive_critical and self._estop_callback:
-                        logger.critical("Auto e-stop: %d consecutive critical readings", self._consecutive_critical_count)
+                    if (
+                        self._consecutive_critical_count >= self.consecutive_critical
+                        and self._estop_callback
+                    ):
+                        logger.critical(
+                            "Auto e-stop: %d consecutive critical readings",
+                            self._consecutive_critical_count,
+                        )
                         try:
                             self._estop_callback()
                         except Exception:
@@ -328,7 +349,9 @@ class SensorMonitor:
             return
         self._stop_event.clear()
         self._consecutive_critical_count = 0
-        self._thread = threading.Thread(target=self._monitor_loop, daemon=True, name="SensorMonitor")
+        self._thread = threading.Thread(
+            target=self._monitor_loop, daemon=True, name="SensorMonitor"
+        )
         self._thread.start()
         logger.info("Sensor monitor started (interval=%.1fs)", self.interval)
 
@@ -377,14 +400,18 @@ def cli_monitor(args) -> None:
 
     def _print_snapshot(snap: MonitorSnapshot) -> None:
         print(f"\n{'─' * 50}")
-        print(f"  Sensor Monitor  [{time.strftime('%H:%M:%S')}]  Status: {snap.overall_status.upper()}")
+        print(
+            f"  Sensor Monitor  [{time.strftime('%H:%M:%S')}]  Status: {snap.overall_status.upper()}"
+        )
         print(f"{'─' * 50}")
         for r in snap.readings:
             if r.status == "unavailable":
                 val_str = "n/a"
             else:
                 val_str = f"{r.value:.1f}{r.unit}"
-            indicator = {"normal": "✓", "warning": "⚠", "critical": "✗", "unavailable": "–"}.get(r.status, "?")
+            indicator = {"normal": "✓", "warning": "⚠", "critical": "✗", "unavailable": "–"}.get(
+                r.status, "?"
+            )
             print(f"  {indicator} {r.name:<12} {val_str:<12} [{r.status}]")
         print()
 

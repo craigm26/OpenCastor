@@ -5,15 +5,12 @@ from __future__ import annotations
 import time
 from unittest.mock import MagicMock
 
-import pytest
-
 from castor.safety.monitor import (
     MonitorSnapshot,
     MonitorThresholds,
     SensorMonitor,
     SensorReading,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

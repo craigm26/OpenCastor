@@ -2,18 +2,12 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
-import pytest
-
 from castor.safety.protocol import (
-    RuleViolation,
     SafetyProtocol,
-    SafetyRule,
     check_write_protocol,
 )
-
 
 # ---------------------------------------------------------------------------
 # Default rules loading

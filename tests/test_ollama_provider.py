@@ -16,9 +16,9 @@ from castor.providers.ollama_provider import (
     OllamaConnectionError,
     OllamaModelNotFoundError,
     OllamaProvider,
-    _ModelCache,
     _http_request,
     _is_vision_model,
+    _ModelCache,
     _resolve_host,
     _resolve_model_alias,
 )

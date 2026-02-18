@@ -89,9 +89,7 @@ def _check_max_angular_velocity(
             rule_id="MOTION_002",
             category="motion",
             severity="violation",
-            message=(
-                f"Angular velocity {abs(velocity):.2f} rad/s exceeds limit {limit:.2f} rad/s"
-            ),
+            message=(f"Angular velocity {abs(velocity):.2f} rad/s exceeds limit {limit:.2f} rad/s"),
         )
     return None
 
@@ -113,9 +111,7 @@ def _check_estop_response(
     return None
 
 
-def _check_contact_force(
-    action: Dict[str, Any], params: Dict[str, Any]
-) -> Optional[RuleViolation]:
+def _check_contact_force(action: Dict[str, Any], params: Dict[str, Any]) -> Optional[RuleViolation]:
     force = action.get("contact_force")
     if force is None:
         return None
@@ -367,9 +363,7 @@ class SafetyProtocol:
         if config:
             self._apply_config(config)
 
-    def _load_config(
-        self, config_path: Optional[str], ns: Any
-    ) -> Optional[Dict[str, Any]]:
+    def _load_config(self, config_path: Optional[str], ns: Any) -> Optional[Dict[str, Any]]:
         """Load YAML config from file path or virtual FS."""
         # Try virtual FS first
         if ns is not None:
@@ -493,9 +487,7 @@ class SafetyProtocol:
 # ---------------------------------------------------------------------------
 
 
-def check_write_protocol(
-    protocol: SafetyProtocol, path: str, data: Any
-) -> List[RuleViolation]:
+def check_write_protocol(protocol: SafetyProtocol, path: str, data: Any) -> List[RuleViolation]:
     """Translate a /dev/ write into an action dict and check protocol rules.
 
     This bridges the virtual filesystem write path to the protocol engine.
