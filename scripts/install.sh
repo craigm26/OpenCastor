@@ -161,8 +161,12 @@ install_deps_debian() {
   run $SUDO apt-get install -y -qq libgl1 2>/dev/null || \
     run $SUDO apt-get install -y -qq libgl1-mesa-glx 2>/dev/null || true
 
-  # Optional: libatlas for older ARM numpy
-  run $SUDO apt-get install -y -qq libatlas-base-dev 2>/dev/null || true
+  # Optional: libatlas for older ARM numpy (not available on Bookworm/RPi5 — safe to skip)
+  if apt-cache show libatlas-base-dev &>/dev/null; then
+    run $SUDO apt-get install -y -qq libatlas-base-dev
+  else
+    info "libatlas-base-dev not available (not needed on Bookworm/RPi5, skipping)"
+  fi
 
   if [ "$IS_RPI" = true ]; then
     info "Raspberry Pi detected: installing camera packages..."
@@ -288,6 +292,19 @@ if [ "$SKIP_WIZARD" = false ] && [ "$DRY_RUN" = false ]; then
   $PYTHON -m castor.wizard 2>/dev/null || warn "Wizard skipped (run 'castor wizard' later)"
 fi
 
+# Ensure a default config exists even if wizard was skipped/failed
+if ! ls *.rcan.yaml &>/dev/null; then
+  DEFAULT_PRESET="config/presets/rpi_rc_car.rcan.yaml"
+  if [ "$IS_RPI" = true ] && [ -f "$DEFAULT_PRESET" ]; then
+    run cp "$DEFAULT_PRESET" robot.rcan.yaml
+    info "Copied default RPi RC Car preset → robot.rcan.yaml"
+  elif [ -f "config/presets/sunfounder_picar.rcan.yaml" ]; then
+    run cp "config/presets/sunfounder_picar.rcan.yaml" robot.rcan.yaml
+    info "Copied default preset → robot.rcan.yaml"
+  fi
+  info "Edit robot.rcan.yaml to customize, or run 'castor wizard' to generate a new one."
+fi
+
 # ── Done ──────────────────────────────────────────────
 echo ""
 echo "${GREEN}================================================${RESET}"
@@ -296,7 +313,7 @@ echo ""
 echo "  Quick Start:"
 echo "    1. cd $INSTALL_DIR && source venv/bin/activate"
 echo "    2. Edit .env and add your ANTHROPIC_API_KEY"
-echo "    3. castor run --config config/presets/rpi_rc_car.rcan.yaml"
+echo "    3. castor run --config robot.rcan.yaml"
 echo ""
 echo "  Verify:  bash scripts/install-check.sh"
 echo "${GREEN}================================================${RESET}"
