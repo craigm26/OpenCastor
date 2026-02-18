@@ -511,10 +511,14 @@ def _anthropic_auth_flow(env_var):
     print(f"\n{Colors.GREEN}--- AUTHENTICATION (Anthropic) ---{Colors.ENDC}")
     print("  Choose how to authenticate with Anthropic Claude:")
     print()
-    print(f"  [1] Setup-token {Colors.BOLD}(Recommended — uses your Max/Pro subscription){Colors.ENDC}")
+    print(
+        f"  [1] Setup-token {Colors.BOLD}(Recommended — uses your Max/Pro subscription){Colors.ENDC}"
+    )
     print("      Run 'claude setup-token' and paste the token. No per-token billing.")
     print("  [2] API key (pay-as-you-go)")
-    print(f"      Get one at: {Colors.BOLD}https://console.anthropic.com/settings/keys{Colors.ENDC}")
+    print(
+        f"      Get one at: {Colors.BOLD}https://console.anthropic.com/settings/keys{Colors.ENDC}"
+    )
     print("  [3] I'll set it later (skip)")
 
     auth_choice = input_default("Selection", "1").strip()
