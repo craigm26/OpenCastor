@@ -50,6 +50,7 @@ def run_startup_checks(config: dict, simulate: bool = False) -> dict:
         checks.append(_check_spi())
         checks.append(_check_serial_ports())
         checks.append(_check_usb_devices())
+        checks.append(_check_ai_accelerator())
         checks.append(_check_speaker(config))
         checks.append(_check_drivers())
 
@@ -490,3 +491,98 @@ def _check_drivers():
     if len(found) > 5:
         detail += f" (+{len(found) - 5} more)"
     return {"name": "Kernel drivers", "status": "ok", "detail": detail}
+
+
+def _check_ai_accelerator():
+    """Detect AI accelerators: Hailo, Coral TPU, Intel NCS/Movidius, Nvidia Jetson."""
+    import glob
+    import subprocess
+
+    accelerators = []
+
+    # Hailo AI Hat / M.2 (hailo_pci or hailort device)
+    hailo_devs = glob.glob("/dev/hailo*")
+    if hailo_devs:
+        # Try to get Hailo model info
+        try:
+            result = subprocess.run(
+                ["hailortcli", "fw-control", "identify"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0 and "Device" in result.stdout:
+                # Extract device info
+                for line in result.stdout.split("\n"):
+                    if "Device:" in line or "Board Name" in line:
+                        accelerators.append(f"Hailo ({line.split(':')[-1].strip()})")
+                        break
+                else:
+                    accelerators.append(
+                        f"Hailo ({', '.join(os.path.basename(d) for d in hailo_devs)})"
+                    )
+            else:
+                accelerators.append(f"Hailo ({', '.join(os.path.basename(d) for d in hailo_devs)})")
+        except (FileNotFoundError, Exception):
+            accelerators.append(f"Hailo ({', '.join(os.path.basename(d) for d in hailo_devs)})")
+
+    # Also check for Hailo via PCIe
+    try:
+        result = subprocess.run(["lspci"], capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            for line in result.stdout.split("\n"):
+                if "hailo" in line.lower():
+                    desc = line.split(":")[-1].strip() if ":" in line else "Hailo PCIe"
+                    if not any("Hailo" in a for a in accelerators):
+                        accelerators.append(f"Hailo PCIe ({desc})")
+    except (FileNotFoundError, Exception):
+        pass
+
+    # Google Coral TPU (USB or M.2)
+    coral_devs = glob.glob("/dev/apex_*")
+    if coral_devs:
+        accelerators.append(
+            f"Coral TPU ({len(coral_devs)} device{'s' if len(coral_devs) > 1 else ''})"
+        )
+    # Also check USB for Coral
+    try:
+        result = subprocess.run(["lsusb"], capture_output=True, text=True, timeout=5)
+        if result.returncode == 0 and "global unichip" in result.stdout.lower():
+            if not any("Coral" in a for a in accelerators):
+                accelerators.append("Coral TPU (USB)")
+    except (FileNotFoundError, Exception):
+        pass
+
+    # Intel Movidius / NCS (detected via USB — typically "Intel Movidius MyriadX")
+    try:
+        result = subprocess.run(["lsusb"], capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            for line in result.stdout.split("\n"):
+                low = line.lower()
+                if "movidius" in low or "myriad" in low:
+                    accelerators.append("Intel Movidius MyriadX (USB)")
+                    break
+    except (FileNotFoundError, Exception):
+        pass
+
+    # Nvidia Jetson (check for tegra)
+    if os.path.exists("/proc/device-tree/compatible"):
+        try:
+            with open("/proc/device-tree/compatible", "rb") as f:
+                compat = f.read().decode("utf-8", errors="replace")
+            if "tegra" in compat or "nvidia" in compat:
+                # Try to get Jetson model
+                model = "Jetson"
+                model_path = "/proc/device-tree/model"
+                if os.path.exists(model_path):
+                    with open(model_path) as f:
+                        model = f.read().strip().rstrip("\x00")
+                accelerators.append(f"Nvidia {model}")
+        except Exception:
+            pass
+
+    if not accelerators:
+        return {"name": "AI accelerator", "status": "ok", "detail": "None detected"}
+
+    detail = "; ".join(accelerators)
+    return {"name": "AI accelerator", "status": "ok", "detail": detail}

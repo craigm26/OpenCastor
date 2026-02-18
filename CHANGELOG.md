@@ -5,6 +5,16 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.18.8] - 2026-02-18
+
+### Added
+- **AI accelerator detection** — health check now detects Hailo AI Hat (PCIe + /dev/hailo*), Google Coral TPU, Intel Movidius/MyriadX (OAK-D), and Nvidia Jetson
+- **Auth module knows about token store** — `check_provider_ready("anthropic")` now checks `~/.opencastor/anthropic-token`, fixing the "no key set" false positive in post-wizard health check
+
+### Fixed
+- Post-wizard health check no longer says "FAIL: Provider key (anthropic) no key set" when setup-token is stored
+- Removed stale `ANTHROPIC_AUTH_MODE=oauth` check from auth module
+
 ## [2026.2.18.7] - 2026-02-18
 
 ### Fixed

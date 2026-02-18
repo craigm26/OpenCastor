@@ -112,10 +112,16 @@ def check_provider_ready(provider: str, config: Optional[Dict] = None) -> bool:
     if provider.lower() == "ollama":
         return True  # Ollama doesn't need an API key
 
-    # Check for OAuth/ADC auth modes
-    auth_mode = os.getenv("ANTHROPIC_AUTH_MODE", "").lower()
-    if provider.lower() == "anthropic" and auth_mode == "oauth":
-        return True
+    # Check OpenCastor's own token store for Anthropic
+    if provider.lower() == "anthropic":
+        token_path = os.path.expanduser("~/.opencastor/anthropic-token")
+        if os.path.exists(token_path):
+            try:
+                with open(token_path) as f:
+                    if f.read().strip():
+                        return True
+            except Exception:
+                pass
 
     google_auth_mode = os.getenv("GOOGLE_AUTH_MODE", "").lower()
     if provider.lower() == "google" and google_auth_mode == "adc":

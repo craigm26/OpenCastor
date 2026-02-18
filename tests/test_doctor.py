@@ -70,7 +70,8 @@ class TestCheckProviderKeys:
         assert results[0][0] is True
 
     @patch.dict(os.environ, {}, clear=True)
-    def test_config_scoped_missing(self):
+    @patch("castor.auth.os.path.expanduser", return_value="/tmp/nonexistent/.opencastor/anthropic-token")
+    def test_config_scoped_missing(self, mock_expand):
         config = {"agent": {"provider": "anthropic"}}
         results = check_provider_keys(config)
         assert len(results) == 1
