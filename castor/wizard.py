@@ -211,6 +211,51 @@ def _validate_api_key(provider: str, api_key: str) -> bool:
     return False
 
 
+def _check_claude_oauth():
+    """Check if Claude CLI is installed and authenticated (Max/Pro plan)."""
+    import shutil
+    import subprocess
+
+    if not shutil.which("claude"):
+        return None
+    try:
+        result = subprocess.run(
+            ["claude", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return None
+    except Exception:
+        return None
+
+    # Check for stored OAuth credentials
+    claude_creds = os.path.expanduser("~/.claude/credentials.json")
+    claude_settings = os.path.expanduser("~/.claude/settings.json")
+    if os.path.exists(claude_creds) or os.path.exists(claude_settings):
+        return True
+
+    return "installed"  # CLI exists but not authenticated
+
+
+def _run_claude_login():
+    """Run claude CLI OAuth login flow."""
+    import subprocess
+
+    print(f"\n  {Colors.BOLD}Launching Claude login...{Colors.ENDC}")
+    print("  A browser window will open. Sign in with your Anthropic account.\n")
+    try:
+        result = subprocess.run(
+            ["claude", "login"],
+            timeout=120,
+        )
+        return result.returncode == 0
+    except Exception as e:
+        print(f"  {Colors.WARNING}Login failed: {e}{Colors.ENDC}")
+        return False
+
+
 def collect_api_key(agent_config):
     """Prompt the user for their provider API key and write it to .env."""
     env_var = agent_config.get("env_var")
@@ -222,6 +267,75 @@ def collect_api_key(agent_config):
         print(f"\n  {Colors.GREEN}[OK]{Colors.ENDC} {env_var} already set in environment.")
         return
 
+    # For Anthropic: offer Max plan OAuth as an option
+    if agent_config.get("provider") == "anthropic":
+        oauth_status = _check_claude_oauth()
+
+        print(f"\n{Colors.GREEN}--- AUTHENTICATION ---{Colors.ENDC}")
+        print("  How would you like to authenticate with Anthropic?")
+        print("  [1] Claude Max/Pro plan (sign in with your account)")
+        print("  [2] API key (pay-as-you-go)")
+
+        auth_choice = input_default("Selection", "1").strip()
+
+        if auth_choice == "1":
+            if oauth_status is True:
+                print(
+                    f"\n  {Colors.GREEN}[OK]{Colors.ENDC} Claude CLI already "
+                    f"authenticated (Max/Pro plan)."
+                )
+                # Set a marker so the provider knows to use OAuth
+                _write_env_var("ANTHROPIC_AUTH_MODE", "oauth")
+                return
+            elif oauth_status == "installed":
+                print("\n  Claude CLI found but not signed in.")
+                if _run_claude_login():
+                    print(
+                        f"\n  {Colors.GREEN}[OK]{Colors.ENDC} Signed in! Using your Max/Pro plan."
+                    )
+                    _write_env_var("ANTHROPIC_AUTH_MODE", "oauth")
+                    return
+                else:
+                    print(f"  {Colors.WARNING}Login failed.{Colors.ENDC} Falling back to API key.")
+            else:
+                # Claude CLI not installed
+                print("\n  Claude CLI not found. Installing...")
+                import subprocess
+
+                try:
+                    result = subprocess.run(
+                        ["npm", "install", "-g", "@anthropic-ai/claude-code"],
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                    )
+                    if result.returncode == 0:
+                        print(f"  {Colors.GREEN}[OK]{Colors.ENDC} Claude CLI installed.")
+                        if _run_claude_login():
+                            print(
+                                f"\n  {Colors.GREEN}[OK]{Colors.ENDC} Signed in! "
+                                f"Using your Max/Pro plan."
+                            )
+                            _write_env_var("ANTHROPIC_AUTH_MODE", "oauth")
+                            return
+                    else:
+                        print(
+                            f"  {Colors.WARNING}Install failed.{Colors.ENDC} "
+                            f"Falling back to API key."
+                        )
+                except Exception:
+                    print(
+                        f"  {Colors.WARNING}npm not available.{Colors.ENDC} "
+                        f"Falling back to API key."
+                    )
+                    print(
+                        f"  Install manually: "
+                        f"{Colors.BOLD}npm install -g @anthropic-ai/claude-code"
+                        f"{Colors.ENDC}"
+                    )
+                    print(f"  Then run: {Colors.BOLD}claude login{Colors.ENDC}\n")
+
+    # Standard API key flow
     print(f"\n{Colors.GREEN}--- API KEY ---{Colors.ENDC}")
     print(f"  Your {agent_config['label']} API key is needed.")
     print(

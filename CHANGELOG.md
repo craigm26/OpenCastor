@@ -13,6 +13,12 @@ and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH
 ### Fixed
 - **Post-install instructions** — simplified Quick Start to `cd && source venv/bin/activate && castor run` (castor requires venv active)
 
+## [2026.2.17.18] - 2026-02-17
+
+### Added
+- **Claude Max/Pro plan support** — wizard offers OAuth sign-in as option 1 when choosing Anthropic. Auto-detects Claude CLI, installs if needed, runs `claude login` for browser-based auth. Falls back to API key gracefully.
+- **Uninstall script** — `curl -sL opencastor.com/uninstall | bash`
+
 ## [2026.2.17.16] - 2026-02-17
 
 ### Added

@@ -20,10 +20,26 @@ class AnthropicProvider(BaseProvider):
         super().__init__(config)
         import anthropic
 
-        api_key = os.getenv("ANTHROPIC_API_KEY") or config.get("api_key")
-        if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY not found in environment or config")
-        self.client = anthropic.Anthropic(api_key=api_key)
+        auth_mode = os.getenv("ANTHROPIC_AUTH_MODE", "").lower()
+
+        if auth_mode == "oauth":
+            # Claude Max/Pro plan — use OAuth via claude CLI credentials
+            auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN")
+            if auth_token:
+                self.client = anthropic.Anthropic(api_key=auth_token)
+            else:
+                # Try to read from claude CLI stored credentials
+                self.client = anthropic.Anthropic()
+                logger.info("Using Claude OAuth credentials (Max/Pro plan)")
+        else:
+            # Standard API key auth
+            api_key = os.getenv("ANTHROPIC_API_KEY") or config.get("api_key")
+            if not api_key:
+                raise ValueError(
+                    "ANTHROPIC_API_KEY not found. Set it in .env or run "
+                    "'castor wizard' to authenticate with your Claude Max plan."
+                )
+            self.client = anthropic.Anthropic(api_key=api_key)
 
     def think(self, image_bytes: bytes, instruction: str) -> Thought:
         b64_image = base64.b64encode(image_bytes).decode("utf-8")
