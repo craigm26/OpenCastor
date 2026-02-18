@@ -5,6 +5,13 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.18.2] - 2026-02-18
+
+### Added
+- **Dynamic model lists** — Anthropic and OpenAI model selection now fetches live from their APIs, showing the 3 latest models with an option to expand the full list
+- Falls back gracefully to built-in static list if API is unreachable or no key is available
+- 6 new tests for dynamic model fetching (1271 total)
+
 ## [2026.2.18.1] - 2026-02-18
 
 ### Changed

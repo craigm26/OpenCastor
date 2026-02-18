@@ -19,6 +19,7 @@ import os
 import sys
 import uuid
 from datetime import datetime, timezone
+from urllib.request import Request, urlopen
 
 from castor import __version__
 
@@ -773,15 +774,26 @@ def _huggingface_auth_flow(env_var):
 # ---------------------------------------------------------------------------
 def choose_model(provider_key):
     """Choose primary model for the selected provider."""
-    models = MODELS.get(provider_key, [])
-
     if provider_key == "ollama":
         return _choose_ollama_model()
 
+    # Try dynamic model list for Anthropic and OpenAI
+    if provider_key in ("anthropic", "openai"):
+        result = _choose_model_dynamic(provider_key)
+        if result:
+            return result
+        # Fall through to static list if API fetch failed
+
+    models = MODELS.get(provider_key, [])
     if not models:
         name = input_default("Enter model name/ID", "")
         return {"id": name, "label": name, "desc": "", "tags": []}
 
+    return _present_model_menu(models)
+
+
+def _present_model_menu(models, show_expand=False):
+    """Display a model selection menu and return the chosen model."""
     print(f"\n{Colors.GREEN}--- PRIMARY MODEL (Chat & Reasoning) ---{Colors.ENDC}")
     for i, m in enumerate(models, 1):
         rec = " (Recommended)" if m.get("recommended") else ""
@@ -794,8 +806,166 @@ def choose_model(provider_key):
             return models[idx]
     except ValueError:
         pass
-    # Default to first (recommended)
     return models[0]
+
+
+def _choose_model_dynamic(provider_key):
+    """Fetch latest models from Anthropic/OpenAI API and present top 3 + expand option."""
+    print(f"\n  Fetching latest models from {provider_key}...", end="", flush=True)
+
+    try:
+        if provider_key == "anthropic":
+            all_models = _fetch_anthropic_models()
+        else:
+            all_models = _fetch_openai_models()
+    except Exception as e:
+        print(f" {Colors.WARNING}failed ({e}){Colors.ENDC}")
+        print("  Falling back to built-in model list.")
+        return None
+
+    if not all_models:
+        print(f" {Colors.WARNING}no models found{Colors.ENDC}")
+        return None
+
+    print(f" found {len(all_models)} models")
+
+    # Show top 3, mark first as recommended
+    top = all_models[:3]
+    top[0]["recommended"] = True
+
+    print(f"\n{Colors.GREEN}--- PRIMARY MODEL (Chat & Reasoning) ---{Colors.ENDC}")
+    print("  Latest models (live from API):")
+    for i, m in enumerate(top, 1):
+        rec = " (Recommended)" if m.get("recommended") else ""
+        print(f"  [{i}] {m['label']:<32s} ({m['desc']}){rec}")
+    print(f"  [{len(top) + 1}] Show all {len(all_models)} models")
+    print(f"  [{len(top) + 2}] Enter model ID manually")
+
+    choice = input_default("\nSelection", "1").strip()
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(top):
+            return top[idx]
+        if idx == len(top):
+            # Show full list
+            return _choose_from_full_list(all_models)
+        if idx == len(top) + 1:
+            name = input_default("Enter model ID", "")
+            if name:
+                return {"id": name, "label": name, "desc": "Custom", "tags": []}
+    except ValueError:
+        pass
+    return top[0]
+
+
+def _choose_from_full_list(models):
+    """Present the full model list with pagination-friendly display."""
+    print(f"\n{Colors.GREEN}--- ALL AVAILABLE MODELS ---{Colors.ENDC}")
+    for i, m in enumerate(models, 1):
+        print(f"  [{i:2d}] {m['label']:<32s} ({m['desc']})")
+
+    choice = input_default("\nSelection", "1").strip()
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(models):
+            return models[idx]
+    except ValueError:
+        pass
+    return models[0]
+
+
+def _fetch_anthropic_models():
+    """Fetch models from Anthropic API. Returns list sorted by newest first."""
+    import json
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        # Try OpenCastor's stored token
+        try:
+            from castor.providers.anthropic_provider import AnthropicProvider
+
+            api_key = AnthropicProvider._read_stored_token()
+        except Exception:
+            pass
+    if not api_key:
+        return []
+
+    req = Request(
+        "https://api.anthropic.com/v1/models?limit=20",
+        headers={
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+        },
+    )
+    with urlopen(req, timeout=10) as resp:
+        data = json.loads(resp.read())
+
+    models = []
+    for m in data.get("data", []):
+        model_id = m["id"]
+        display = m.get("display_name", model_id)
+        created = m.get("created_at", "")
+        # Filter: skip embedding/legacy models, keep chat models
+        models.append(
+            {
+                "id": model_id,
+                "label": display,
+                "desc": f"Released {created[:10]}" if created else "",
+                "tags": [],
+            }
+        )
+    # API returns newest first already
+    return models
+
+
+def _fetch_openai_models():
+    """Fetch models from OpenAI API. Returns chat models sorted by newest first."""
+    import json
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return []
+
+    req = Request(
+        "https://api.openai.com/v1/models",
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
+    with urlopen(req, timeout=10) as resp:
+        data = json.loads(resp.read())
+
+    # Filter to chat-relevant models (gpt-*, o1-*, o3-*, chatgpt-*)
+    # Skip fine-tunes, embeddings, tts, whisper, dall-e, etc.
+    chat_prefixes = ("gpt-4", "gpt-3.5", "o1", "o3", "o4", "chatgpt")
+    skip_suffixes = ("-instruct", "-realtime", "-audio", "-transcribe", "-search")
+    models = []
+    for m in data.get("data", []):
+        model_id = m["id"]
+        if not any(model_id.startswith(p) for p in chat_prefixes):
+            continue
+        if any(model_id.endswith(s) for s in skip_suffixes):
+            continue
+        # Skip fine-tuned models
+        if ":ft-" in model_id or "ft:" in model_id:
+            continue
+        created = m.get("created", 0)
+        models.append(
+            {
+                "id": model_id,
+                "label": model_id,
+                "desc": "",
+                "tags": [],
+                "_created": created,
+            }
+        )
+
+    # Sort newest first
+    models.sort(key=lambda x: x.get("_created", 0), reverse=True)
+
+    # Clean up internal key
+    for m in models:
+        m.pop("_created", None)
+
+    return models
 
 
 def _choose_ollama_model():

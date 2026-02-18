@@ -245,3 +245,143 @@ class TestProviderAuthFlags:
 
     def test_ollama_no_oauth(self):
         assert PROVIDER_AUTH["ollama"].get("has_oauth") is None
+
+
+class TestDynamicModelFetch:
+    """Tests for dynamic model fetching from Anthropic/OpenAI APIs."""
+
+    def test_fetch_anthropic_models_parses_response(self):
+        """Should parse Anthropic /v1/models response into model dicts."""
+        import json
+        from unittest.mock import MagicMock
+
+        from castor.wizard import _fetch_anthropic_models
+
+        mock_data = json.dumps(
+            {
+                "data": [
+                    {
+                        "id": "claude-opus-4-6",
+                        "display_name": "Claude Opus 4.6",
+                        "created_at": "2026-01-15T00:00:00Z",
+                    },
+                    {
+                        "id": "claude-sonnet-4-5-20250929",
+                        "display_name": "Claude Sonnet 4.5",
+                        "created_at": "2025-09-29T00:00:00Z",
+                    },
+                ]
+            }
+        ).encode()
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = mock_data
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("castor.wizard.urlopen", return_value=mock_resp):
+            with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test"}):
+                models = _fetch_anthropic_models()
+
+        assert len(models) == 2
+        assert models[0]["id"] == "claude-opus-4-6"
+        assert models[0]["label"] == "Claude Opus 4.6"
+        assert "2026-01-15" in models[0]["desc"]
+
+    def test_fetch_anthropic_models_no_key(self):
+        """Should return empty list when no API key available."""
+        from castor.wizard import _fetch_anthropic_models
+
+        with patch.dict("os.environ", {}, clear=True):
+            with patch(
+                "os.environ.get", side_effect=lambda k, d=None: None
+            ):
+                # Ensure no stored token either
+                with patch(
+                    "castor.providers.anthropic_provider.AnthropicProvider._read_stored_token",
+                    return_value=None,
+                ):
+                    models = _fetch_anthropic_models()
+        assert models == []
+
+    def test_fetch_openai_models_filters_chat_models(self):
+        """Should only return chat-relevant models, not embeddings/tts/etc."""
+        import json
+        from unittest.mock import MagicMock
+
+        from castor.wizard import _fetch_openai_models
+
+        mock_data = json.dumps(
+            {
+                "data": [
+                    {"id": "gpt-4.1", "created": 1700000003},
+                    {"id": "gpt-4.1-mini", "created": 1700000002},
+                    {"id": "text-embedding-3-large", "created": 1700000001},
+                    {"id": "tts-1", "created": 1700000000},
+                    {"id": "dall-e-3", "created": 1699999999},
+                    {"id": "o3-mini", "created": 1700000004},
+                ]
+            }
+        ).encode()
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = mock_data
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("castor.wizard.urlopen", return_value=mock_resp):
+            with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
+                models = _fetch_openai_models()
+
+        ids = [m["id"] for m in models]
+        assert "gpt-4.1" in ids
+        assert "gpt-4.1-mini" in ids
+        assert "o3-mini" in ids
+        assert "text-embedding-3-large" not in ids
+        assert "tts-1" not in ids
+        assert "dall-e-3" not in ids
+
+    def test_fetch_openai_models_sorted_newest_first(self):
+        """Models should be sorted by creation date, newest first."""
+        import json
+        from unittest.mock import MagicMock
+
+        from castor.wizard import _fetch_openai_models
+
+        mock_data = json.dumps(
+            {
+                "data": [
+                    {"id": "gpt-4.1-mini", "created": 100},
+                    {"id": "gpt-4.1", "created": 300},
+                    {"id": "gpt-4o", "created": 200},
+                ]
+            }
+        ).encode()
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = mock_data
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("castor.wizard.urlopen", return_value=mock_resp):
+            with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
+                models = _fetch_openai_models()
+
+        assert models[0]["id"] == "gpt-4.1"
+        assert models[1]["id"] == "gpt-4o"
+        assert models[2]["id"] == "gpt-4.1-mini"
+
+    def test_choose_model_falls_back_on_api_failure(self):
+        """Should fall back to static MODELS list when API fetch fails."""
+        with patch("castor.wizard._fetch_anthropic_models", side_effect=Exception("timeout")):
+            with patch("builtins.input", return_value="1"):
+                model = choose_model("anthropic")
+        assert model["id"] in [m["id"] for m in MODELS["anthropic"]]
+
+    def test_fetch_openai_models_no_key(self):
+        """Should return empty list when no API key available."""
+        from castor.wizard import _fetch_openai_models
+
+        with patch.dict("os.environ", {}, clear=True):
+            models = _fetch_openai_models()
+        assert models == []
