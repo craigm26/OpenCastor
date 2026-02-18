@@ -5,6 +5,23 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.17.11] - 2026-02-17
+
+### Added
+- **Cross-platform installer** — `install.sh` supports macOS (Homebrew), Fedora (dnf), Arch (pacman), Alpine (apk) alongside Debian/Ubuntu/RPi. New `install.ps1` for native Windows PowerShell. Post-install verification scripts (`install-check.sh`, `install-check.ps1`). CI matrix testing on ubuntu/macos/windows.
+- **Safety Protocol Engine** (`castor/safety/protocol.py`) — 10 configurable rules adapted from Protocol 66, YAML config overrides, `castor safety rules` CLI
+- **Continuous sensor monitoring** (`castor/safety/monitor.py`) — CPU temp, memory, disk, CPU load with background thread, auto e-stop after 3 consecutive criticals, `/proc/sensors` in virtual FS, `castor monitor --watch` CLI
+- **Ollama provider improvements** — model cache with TTL, auto-pull, model aliases, remote host profiles via `OLLAMA_HOST`, configurable timeouts, helpful error messages
+
+### Changed
+- **BREAKING: RCAN role alignment** — `ADMIN` → `OWNER`, `OPERATOR` → `LEASEE` per RCAN spec. Backward compatibility layer accepts old names with deprecation warning.
+- **Cross-platform Python** — platform markers on RPi deps (`; sys_platform == 'linux'`), `[core]`/`[all]` extras groups, conditional imports for hardware modules, cross-platform TTS/crontab/service commands
+
+### Fixed
+- **Installer** — friendly skip for `libatlas-base-dev` on Bookworm/RPi5, default config fallback (`robot.rcan.yaml`) when wizard is skipped
+- **Safety module polish** — wrapped integration points in try/except, fixed CLI syntax error, cleaned imports, reformatted files
+- **Website** — shrunk oversized wizard-creates icons, fixed mobile nav hamburger menu cutoff
+
 ## [2026.2.17.10] - 2026-02-17
 
 ### Added
