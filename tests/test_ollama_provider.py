@@ -280,30 +280,36 @@ class TestOllamaProviderInit:
     @patch("castor.providers.ollama_provider.urlopen")
     def test_custom_model_alias(self, mock_urlopen_fn):
         mock_urlopen_fn.return_value = _mock_urlopen({"status": "ok"})
-        provider = OllamaProvider({
-            "provider": "ollama",
-            "model": "mybot",
-            "model_aliases": {"mybot": "mistral:7b"},
-        })
+        provider = OllamaProvider(
+            {
+                "provider": "ollama",
+                "model": "mybot",
+                "model_aliases": {"mybot": "mistral:7b"},
+            }
+        )
         assert provider.model_name == "mistral:7b"
 
     @patch("castor.providers.ollama_provider.urlopen")
     def test_vision_override_via_config(self, mock_urlopen_fn):
         mock_urlopen_fn.return_value = _mock_urlopen({"status": "ok"})
-        provider = OllamaProvider({
-            "provider": "ollama",
-            "model": "custom-model",
-            "vision_enabled": True,
-        })
+        provider = OllamaProvider(
+            {
+                "provider": "ollama",
+                "model": "custom-model",
+                "vision_enabled": True,
+            }
+        )
         assert provider.is_vision is True
 
     @patch("castor.providers.ollama_provider.urlopen")
     def test_custom_host(self, mock_urlopen_fn):
         mock_urlopen_fn.return_value = _mock_urlopen({"status": "ok"})
-        provider = OllamaProvider({
-            "provider": "ollama",
-            "ollama_host": "http://192.168.1.50:11434",
-        })
+        provider = OllamaProvider(
+            {
+                "provider": "ollama",
+                "ollama_host": "http://192.168.1.50:11434",
+            }
+        )
         assert provider.host == "http://192.168.1.50:11434"
 
     @patch("castor.providers.ollama_provider.urlopen")
@@ -335,22 +341,26 @@ class TestOllamaProviderInit:
     @patch("castor.providers.ollama_provider.urlopen")
     def test_connection_profile(self, mock_urlopen_fn):
         mock_urlopen_fn.return_value = _mock_urlopen({"status": "ok"})
-        provider = OllamaProvider({
-            "provider": "ollama",
-            "ollama_profile": "homeserver",
-            "ollama_profiles": {
-                "homeserver": {"host": "http://192.168.1.50:11434"},
-            },
-        })
+        provider = OllamaProvider(
+            {
+                "provider": "ollama",
+                "ollama_profile": "homeserver",
+                "ollama_profiles": {
+                    "homeserver": {"host": "http://192.168.1.50:11434"},
+                },
+            }
+        )
         assert provider.host == "http://192.168.1.50:11434"
 
     @patch("castor.providers.ollama_provider.urlopen")
     def test_custom_system_prompt(self, mock_urlopen_fn):
         mock_urlopen_fn.return_value = _mock_urlopen({"status": "ok"})
-        provider = OllamaProvider({
-            "provider": "ollama",
-            "system_prompt": "You are a helpful robot.",
-        })
+        provider = OllamaProvider(
+            {
+                "provider": "ollama",
+                "system_prompt": "You are a helpful robot.",
+            }
+        )
         assert provider.system_prompt == "You are a helpful robot."
 
     @patch("castor.providers.ollama_provider.urlopen")
@@ -645,9 +655,9 @@ class TestAutoPull:
     @patch("castor.providers.ollama_provider.urlopen")
     def test_ensure_model_auto_pulls(self, mock_urlopen_fn):
         mock_urlopen_fn.side_effect = [
-            _mock_urlopen({"status": "ok"}),       # ping
-            _mock_urlopen({"models": []}),          # list_models (empty)
-            _mock_urlopen({"status": "success"}),   # pull
+            _mock_urlopen({"status": "ok"}),  # ping
+            _mock_urlopen({"models": []}),  # list_models (empty)
+            _mock_urlopen({"status": "success"}),  # pull
         ]
         provider = OllamaProvider({"provider": "ollama", "auto_pull": True})
         # Should pull and not raise
@@ -697,7 +707,9 @@ class TestOllamaPullModel:
 
         progress_calls = []
         provider = OllamaProvider({"provider": "ollama"})
-        provider.pull_model("llama3:8b", progress_callback=lambda s, f: progress_calls.append((s, f)))
+        provider.pull_model(
+            "llama3:8b", progress_callback=lambda s, f: progress_calls.append((s, f))
+        )
 
         assert len(progress_calls) >= 2
         assert progress_calls[-1][0] == "success"
@@ -794,10 +806,12 @@ class TestProviderAliasResolution:
     @patch("castor.providers.ollama_provider.urlopen")
     def test_custom_alias_overrides_default(self, mock_urlopen_fn):
         mock_urlopen_fn.return_value = _mock_urlopen({"status": "ok"})
-        provider = OllamaProvider({
-            "provider": "ollama",
-            "model_aliases": {"vision": "minicpm-v:latest"},
-        })
+        provider = OllamaProvider(
+            {
+                "provider": "ollama",
+                "model_aliases": {"vision": "minicpm-v:latest"},
+            }
+        )
         assert provider.resolve_alias("vision") == "minicpm-v:latest"
 
 
@@ -839,9 +853,11 @@ class TestSystemPrompt:
     @patch("castor.providers.ollama_provider.urlopen")
     def test_custom_system_prompt_config(self, mock_urlopen_fn):
         mock_urlopen_fn.return_value = _mock_urlopen({"status": "ok"})
-        provider = OllamaProvider({
-            "provider": "ollama",
-            "system_prompt": "You are a friendly helper bot.",
-        })
+        provider = OllamaProvider(
+            {
+                "provider": "ollama",
+                "system_prompt": "You are a friendly helper bot.",
+            }
+        )
         assert provider.system_prompt == "You are a friendly helper bot."
         assert "OpenCastor" not in provider.system_prompt

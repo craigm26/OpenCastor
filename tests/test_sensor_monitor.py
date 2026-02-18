@@ -268,7 +268,7 @@ class TestCustomThresholds:
 class TestGracefulFailure:
     def test_sensor_exception(self):
         """Sensor reader that throws should result in None/unavailable."""
-        m = _make_monitor(
+        _make_monitor(
             cpu_temp=lambda: (_ for _ in ()).throw(OSError("no sysfs")),  # type: ignore
         )
         # The reader raises, but read_once wraps via the lambda returning None

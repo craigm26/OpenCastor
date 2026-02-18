@@ -410,9 +410,7 @@ class SafetyLayer:
                 return False
             for v in protocol_violations:
                 if v.severity == "violation":
-                    logger.warning(
-                        "WRITE denied: protocol violation on %s: %s", path, v.message
-                    )
+                    logger.warning("WRITE denied: protocol violation on %s: %s", path, v.message)
                     self._audit_safety(principal, path, "protocol_violation", v.message)
                     return False
                 if v.severity == "warning":

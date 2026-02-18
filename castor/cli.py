@@ -1183,6 +1183,13 @@ def cmd_safety(args) -> None:
         )
 
 
+def _cmd_monitor(args) -> None:
+    """Show sensor readings."""
+    from castor.safety.monitor import cli_monitor
+
+    cli_monitor(args)
+
+
 def cmd_audit(args) -> None:
     """View or verify the audit log."""
     from castor.audit import get_audit, print_audit

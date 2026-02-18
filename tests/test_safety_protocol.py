@@ -22,9 +22,16 @@ class TestDefaultRules:
     def test_expected_rule_ids(self):
         proto = SafetyProtocol()
         expected = {
-            "MOTION_001", "MOTION_002", "MOTION_003",
-            "FORCE_001", "WORKSPACE_001", "THERMAL_001",
-            "SOFTWARE_001", "EMERGENCY_001", "PROPERTY_001", "PRIVACY_001",
+            "MOTION_001",
+            "MOTION_002",
+            "MOTION_003",
+            "FORCE_001",
+            "WORKSPACE_001",
+            "THERMAL_001",
+            "SOFTWARE_001",
+            "EMERGENCY_001",
+            "PROPERTY_001",
+            "PRIVACY_001",
         }
         assert set(proto.rules.keys()) == expected
 
@@ -268,7 +275,12 @@ class TestOtherRules:
     def test_workspace_bounds(self):
         proto = SafetyProtocol()
         proto.rules["WORKSPACE_001"].params["bounds"] = {
-            "x_min": -1, "x_max": 1, "y_min": -1, "y_max": 1, "z_min": 0, "z_max": 2,
+            "x_min": -1,
+            "x_max": 1,
+            "y_min": -1,
+            "y_max": 1,
+            "z_min": 0,
+            "z_max": 2,
         }
         v = proto.check_action({"position": [5.0, 0.0, 1.0]})
         assert len(v) == 1
@@ -277,7 +289,10 @@ class TestOtherRules:
     def test_workspace_ok(self):
         proto = SafetyProtocol()
         proto.rules["WORKSPACE_001"].params["bounds"] = {
-            "x_min": -1, "x_max": 1, "y_min": -1, "y_max": 1,
+            "x_min": -1,
+            "x_max": 1,
+            "y_min": -1,
+            "y_max": 1,
         }
         assert proto.check_action({"position": [0.0, 0.0, 0.0]}) == []
 
@@ -372,11 +387,13 @@ class TestWriteProtocol:
 class TestMultipleViolations:
     def test_combined(self):
         proto = SafetyProtocol()
-        v = proto.check_action({
-            "linear_velocity": 5.0,
-            "angular_velocity": 10.0,
-            "temperature_c": 95,
-        })
+        v = proto.check_action(
+            {
+                "linear_velocity": 5.0,
+                "angular_velocity": 10.0,
+                "temperature_c": 95,
+            }
+        )
         ids = {r.rule_id for r in v}
         assert "MOTION_001" in ids
         assert "MOTION_002" in ids
