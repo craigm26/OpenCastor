@@ -5,6 +5,13 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.18.10] - 2026-02-18
+
+### Added
+- **WhatsApp setup flow** — wizard now verifies neonize is installed (auto-installs if missing), checks for existing session, explains QR pairing flow, and optionally starts a live QR pairing session right from the wizard
+- **Telegram bot verification** — wizard collects bot token and verifies it by calling Telegram's `getMe` API, showing bot name and username on success
+- **Generic channel setup** — all channels now get proper credential collection and validation
+
 ## [2026.2.18.9] - 2026-02-18
 
 ### Changed

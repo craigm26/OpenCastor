@@ -1275,20 +1275,28 @@ def choose_channels():
 
 
 def collect_channel_credentials(channels):
-    """Prompt for credentials for each selected channel."""
+    """Set up and verify each selected messaging channel."""
     if not channels:
         return
 
     print(f"\n{Colors.GREEN}--- CHANNEL CREDENTIALS ---{Colors.ENDC}")
-    print(f"  Credentials will be saved to your local {Colors.BOLD}.env{Colors.ENDC} file.\n")
+    print(f"  Credentials will be saved to {Colors.BOLD}~/.opencastor/env{Colors.ENDC}.\n")
 
     for ch in channels:
+        name = ch["name"]
         print(f"  {Colors.BOLD}{ch['label']}{Colors.ENDC}")
+
+        if name == "whatsapp":
+            _setup_whatsapp()
+            continue
+
+        if name == "telegram":
+            _setup_telegram()
+            continue
+
+        # Generic: collect env vars
         if not ch["env_vars"]:
-            print(
-                f"    {Colors.GREEN}[OK]{Colors.ENDC} No credentials needed -- "
-                "QR code will appear when you run castor gateway"
-            )
+            print(f"    {Colors.GREEN}[OK]{Colors.ENDC} No credentials needed")
             print()
             continue
         for env_var in ch["env_vars"]:
@@ -1302,6 +1310,169 @@ def collect_channel_credentials(channels):
             else:
                 print(f"    {Colors.WARNING}Skipped{Colors.ENDC}")
         print()
+
+
+def _setup_whatsapp():
+    """Set up WhatsApp channel: verify neonize, check session, explain QR flow."""
+
+    print()
+
+    # 1. Check if neonize is installed
+    neonize_ok = False
+    try:
+        import neonize  # noqa: F401
+
+        neonize_ok = True
+        print(f"    {Colors.GREEN}[OK]{Colors.ENDC} neonize package installed")
+    except ImportError:
+        print(f"    {Colors.WARNING}[WARN]{Colors.ENDC} neonize not installed")
+        print("    Installing neonize (WhatsApp Web protocol)...")
+        import subprocess
+
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "neonize>=0.3.10"],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0:
+                neonize_ok = True
+                print(f"    {Colors.GREEN}[OK]{Colors.ENDC} neonize installed successfully")
+            else:
+                print(f"    {Colors.FAIL}[FAIL]{Colors.ENDC} Could not install neonize")
+                print("    Try manually: pip install 'opencastor[whatsapp]'")
+        except Exception as e:
+            print(f"    {Colors.FAIL}[FAIL]{Colors.ENDC} Install failed: {e}")
+
+    # 2. Check for existing WhatsApp session
+    session_paths = [
+        os.path.expanduser("~/.opencastor/whatsapp_session.db"),
+        "whatsapp_session.db",
+    ]
+    session_exists = any(os.path.exists(p) for p in session_paths)
+    if session_exists:
+        print(
+            f"    {Colors.GREEN}[OK]{Colors.ENDC} Existing WhatsApp session found (already paired)"
+        )
+    else:
+        print(f"    {Colors.BLUE}[INFO]{Colors.ENDC} No existing session — QR pairing needed")
+
+    # 3. Explain the QR flow
+    print()
+    print(f"    {Colors.BOLD}How WhatsApp pairing works:{Colors.ENDC}")
+    print("    1. Run: castor gateway --config <your-config>.rcan.yaml")
+    print("    2. A QR code will appear in your terminal")
+    print("    3. Open WhatsApp on your phone → Settings → Linked Devices → Link a Device")
+    print("    4. Scan the QR code — your robot is now connected!")
+    print()
+
+    if neonize_ok and not session_exists:
+        print("    Would you like to pair WhatsApp now?")
+        pair_now = input_default("    Start QR pairing? (y/n)", "n").strip().lower()
+        if pair_now in ("y", "yes"):
+            _run_whatsapp_pairing()
+    print()
+
+
+def _run_whatsapp_pairing():
+    """Start a quick WhatsApp pairing session to scan QR code."""
+    import subprocess
+
+    print()
+    print(f"    {Colors.BOLD}Starting WhatsApp pairing...{Colors.ENDC}")
+    print("    A QR code will appear below. Scan it with your phone.")
+    print("    Press Ctrl+C when pairing is complete.\n")
+
+    try:
+        # Run a minimal neonize client that just does QR pairing
+        pairing_script = """
+import os, sys
+try:
+    from neonize.client import NewClient
+    from neonize.events import ConnectedEv, PairStatusEv
+
+    db_path = os.path.expanduser("~/.opencastor/whatsapp_session.db")
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    client = NewClient(db_path)
+
+    @client.event(ConnectedEv)
+    def on_connected(client, event):
+        print("\\n    ✅ WhatsApp connected successfully!")
+        print("    You can now close this with Ctrl+C.\\n")
+
+    @client.event(PairStatusEv)
+    def on_pair(client, event):
+        print("    📱 Pairing status update received")
+
+    print("    Waiting for QR code scan...")
+    client.connect()
+except KeyboardInterrupt:
+    print("\\n    Pairing session ended.")
+except Exception as e:
+    print(f"\\n    ⚠️  Pairing error: {e}")
+"""
+        subprocess.run(
+            [sys.executable, "-c", pairing_script],
+            timeout=120,
+        )
+    except subprocess.TimeoutExpired:
+        print("    ⚠️  Pairing timed out (2 min). Try again with: castor gateway")
+    except KeyboardInterrupt:
+        print("\n    Pairing session ended.")
+    except Exception as e:
+        print(f"    ⚠️  Could not start pairing: {e}")
+
+
+def _setup_telegram():
+    """Set up Telegram bot: collect token and verify via Bot API."""
+    print()
+
+    existing_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if existing_token:
+        print(f"    {Colors.GREEN}[OK]{Colors.ENDC} TELEGRAM_BOT_TOKEN already set")
+        # Verify it works
+        _verify_telegram_token(existing_token)
+        print()
+        return
+
+    print("    To create a Telegram bot:")
+    print(f"    1. Open Telegram and message {Colors.BOLD}@BotFather{Colors.ENDC}")
+    print("    2. Send /newbot and follow the prompts")
+    print("    3. Copy the API token (looks like: 123456789:ABCdefGHI...)")
+    print()
+
+    token = input_secret("TELEGRAM_BOT_TOKEN")
+    if not token:
+        print(f"    {Colors.WARNING}Skipped.{Colors.ENDC} Set TELEGRAM_BOT_TOKEN later.")
+        print()
+        return
+
+    _write_env_var("TELEGRAM_BOT_TOKEN", token)
+    print(f"    {Colors.GREEN}[OK]{Colors.ENDC} Token saved")
+
+    # Verify
+    _verify_telegram_token(token)
+    print()
+
+
+def _verify_telegram_token(token):
+    """Verify a Telegram bot token by calling getMe."""
+    import json
+
+    try:
+        req = Request(f"https://api.telegram.org/bot{token}/getMe")
+        with urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+        if data.get("ok"):
+            bot = data["result"]
+            name = bot.get("first_name", "Unknown")
+            username = bot.get("username", "?")
+            print(f"    {Colors.GREEN}[OK]{Colors.ENDC} Bot verified: {name} (@{username})")
+        else:
+            print(f"    {Colors.WARNING}[WARN]{Colors.ENDC} Token not recognized by Telegram")
+    except Exception as e:
+        print(f"    {Colors.WARNING}[WARN]{Colors.ENDC} Could not verify token: {e}")
 
 
 def choose_hardware():
