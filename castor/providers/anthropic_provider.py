@@ -24,18 +24,18 @@ class AnthropicProvider(BaseProvider):
         import anthropic
 
         # Resolution order:
-        # 1. ANTHROPIC_API_KEY env var (works for both API keys and setup-tokens)
-        # 2. config api_key
-        # 3. OpenCastor's own stored setup-token (~/.opencastor/anthropic-token)
+        # 1. OpenCastor's own stored token (~/.opencastor/anthropic-token)
+        #    — This takes priority because it's explicitly set via `castor login`
+        # 2. ANTHROPIC_API_KEY env var
+        # 3. config api_key
         #
         # NOTE: We do NOT read from ~/.claude/.credentials.json — that belongs
         # to Claude CLI / OpenClaw. Reading it risks token invalidation (the
         # "token sink" problem where refreshing one client's token kills another's).
-        api_key = os.getenv("ANTHROPIC_API_KEY") or config.get("api_key")
+        api_key = self._read_stored_token()
 
         if not api_key:
-            # Try reading OpenCastor's own stored token
-            api_key = self._read_stored_token()
+            api_key = os.getenv("ANTHROPIC_API_KEY") or config.get("api_key")
 
         if not api_key:
             raise ValueError(

@@ -201,49 +201,53 @@ class TestGetProvider:
 class TestAnthropicSetupToken:
     """Test Anthropic provider setup-token (subscription auth) support."""
 
-    def _make_provider(self, config, monkeypatch=None):
+    def _make_provider(self, config, token_path=None):
         """Create AnthropicProvider with mocked anthropic module."""
         import sys
 
         mock_mod = MagicMock()
         with patch.dict(sys.modules, {"anthropic": mock_mod}):
-            # Force reimport to pick up mock
             import importlib
             import castor.providers.anthropic_provider as mod
 
             importlib.reload(mod)
+            # Override token path to avoid reading real stored tokens
+            if token_path is not None:
+                mod.AnthropicProvider.TOKEN_PATH = token_path
             provider = mod.AnthropicProvider(config)
         return provider, mock_mod
 
-    def test_setup_token_via_env(self, monkeypatch):
-        """Setup-token in ANTHROPIC_API_KEY env var should work."""
+    def test_setup_token_via_env(self, monkeypatch, tmp_path):
+        """Setup-token in ANTHROPIC_API_KEY env var should work when no stored token."""
         token = "sk-ant-oat01-" + "x" * 80
         monkeypatch.setenv("ANTHROPIC_API_KEY", token)
-        provider, mock_mod = self._make_provider({"provider": "anthropic"})
+        np = str(tmp_path / "nonexistent")
+        provider, mock_mod = self._make_provider({"provider": "anthropic"}, token_path=np)
         mock_mod.Anthropic.assert_called_once_with(api_key=token)
         assert provider.client is not None
 
-    def test_api_key_via_env(self, monkeypatch):
-        """Standard API key should still work."""
+    def test_api_key_via_env(self, monkeypatch, tmp_path):
+        """Standard API key should still work when no stored token."""
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-test-key-1234")
-        provider, mock_mod = self._make_provider({"provider": "anthropic"})
+        np = str(tmp_path / "nonexistent")
+        provider, mock_mod = self._make_provider({"provider": "anthropic"}, token_path=np)
         mock_mod.Anthropic.assert_called_once_with(api_key="sk-ant-api03-test-key-1234")
 
-    def test_api_key_from_config(self, monkeypatch):
-        """API key from config dict should work."""
+    def test_api_key_from_config(self, monkeypatch, tmp_path):
+        """API key from config dict should work when no stored token."""
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        _, mock_mod = self._make_provider({"provider": "anthropic", "api_key": "sk-ant-test"})
+        np = str(tmp_path / "nonexistent")
+        _, mock_mod = self._make_provider(
+            {"provider": "anthropic", "api_key": "sk-ant-test"}, token_path=np
+        )
         mock_mod.Anthropic.assert_called_once_with(api_key="sk-ant-test")
 
     def test_no_credentials_raises(self, monkeypatch, tmp_path):
         """Should raise ValueError when no credentials found anywhere."""
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.setattr(
-            "os.path.expanduser",
-            lambda p: str(tmp_path / "nonexistent"),
-        )
+        np = str(tmp_path / "nonexistent")
         with pytest.raises(ValueError, match="No Anthropic credentials found"):
-            self._make_provider({"provider": "anthropic"})
+            self._make_provider({"provider": "anthropic"}, token_path=np)
 
     def test_setup_token_prefix_constant(self):
         """Verify setup-token prefix matches Claude CLI format."""
@@ -255,14 +259,9 @@ class TestAnthropicSetupToken:
         """Should read setup-token from ~/.opencastor/anthropic-token."""
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         token = "sk-ant-oat01-" + "a" * 80
-        token_file = tmp_path / ".opencastor" / "anthropic-token"
-        token_file.parent.mkdir(parents=True)
+        token_file = tmp_path / "anthropic-token"
         token_file.write_text(token)
-        monkeypatch.setattr(
-            "os.path.expanduser",
-            lambda p: str(token_file) if "anthropic-token" in p else p,
-        )
-        _, mock_mod = self._make_provider({"provider": "anthropic"})
+        _, mock_mod = self._make_provider({"provider": "anthropic"}, token_path=str(token_file))
         mock_mod.Anthropic.assert_called_once_with(api_key=token)
 
     def test_save_token(self, tmp_path):

@@ -465,15 +465,16 @@ def _detect_existing_keys():
 
     sources = {}
 
-    # Check OpenClaw config
+    # Check OpenClaw config (but NOT for Anthropic — use OpenCastor's own token)
     openclaw_config = os.path.expanduser("~/.openclaw/openclaw.json")
     if os.path.exists(openclaw_config):
         try:
             with open(openclaw_config) as f:
                 data = json.load(f)
             env_vars = data.get("env", {}).get("vars", {})
+            # Deliberately exclude ANTHROPIC_API_KEY — OpenClaw and OpenCastor
+            # need separate Anthropic tokens to avoid the token sink problem.
             for key in [
-                "ANTHROPIC_API_KEY",
                 "GOOGLE_API_KEY",
                 "OPENAI_API_KEY",
                 "HF_TOKEN",
@@ -502,18 +503,23 @@ def _detect_existing_keys():
 
 def _anthropic_auth_flow(env_var):
     """Handle Anthropic auth: detect existing key or ask for one."""
-    existing = _detect_existing_keys()
 
-    # Auto-detect from OpenClaw or environment
-    if env_var in existing:
-        source, key = existing[env_var]
-        masked = key[:12] + "..." + key[-4:]
+    # Check for existing OpenCastor stored token first
+    from castor.providers.anthropic_provider import AnthropicProvider
+
+    stored = AnthropicProvider._read_stored_token()
+    if stored:
+        is_setup = stored.startswith(AnthropicProvider.SETUP_TOKEN_PREFIX)
+        label = "setup-token (subscription)" if is_setup else "token"
+        masked = stored[:16] + "..." + stored[-4:]
         print(f"\n{Colors.GREEN}--- AUTHENTICATION (Anthropic) ---{Colors.ENDC}")
-        print(f"  Found API key from {Colors.BOLD}{source}{Colors.ENDC}: {masked}")
-        use_it = input_default("Use this key? (y/n)", "y").strip().lower()
+        print(
+            f"  Found existing {label} in "
+            f"{Colors.BOLD}~/.opencastor/anthropic-token{Colors.ENDC}: {masked}"
+        )
+        use_it = input_default("Use this token? (y/n)", "y").strip().lower()
         if use_it in ("y", "yes", ""):
-            _write_env_var(env_var, key)
-            print(f"  {Colors.GREEN}[OK]{Colors.ENDC} Key imported from {source} and saved to .env")
+            print(f"  {Colors.GREEN}[OK]{Colors.ENDC} Using existing {label}")
             return True
 
     print(f"\n{Colors.GREEN}--- AUTHENTICATION (Anthropic) ---{Colors.ENDC}")

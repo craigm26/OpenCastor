@@ -5,6 +5,14 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.18.5] - 2026-02-18
+
+### Fixed
+- **Token priority fix** — OpenCastor stored token (`~/.opencastor/anthropic-token`) now takes priority over `ANTHROPIC_API_KEY` env var and `.env` file. Prevents using OpenClaw's stale API key instead of the setup-token you just saved.
+- **Stop importing OpenClaw's Anthropic key** — wizard no longer auto-detects `ANTHROPIC_API_KEY` from OpenClaw config (other provider keys like Google/OpenAI are still imported). This prevents the token sink problem.
+- **Wizard detects existing setup-token** — on re-run, if `~/.opencastor/anthropic-token` exists, offers to reuse it instead of asking for a new one.
+- **Health check shows correct auth source** — now reports "setup-token stored" when using token store, not "ANTHROPIC_API_KEY set" from the wrong source.
+
 ## [2026.2.18.4] - 2026-02-18
 
 ### Added

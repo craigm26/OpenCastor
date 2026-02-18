@@ -172,11 +172,7 @@ def _check_provider_auth(config):
     if not env_var:
         return {"name": "AI Provider auth", "status": "ok", "detail": f"{provider} (no key needed)"}
 
-    # Check env var
-    if os.getenv(env_var):
-        return {"name": "AI Provider auth", "status": "ok", "detail": f"{provider} ({env_var} set)"}
-
-    # Check OpenCastor token store for Anthropic
+    # Check OpenCastor token store first for Anthropic (takes priority over env)
     if provider == "anthropic":
         token_path = os.path.expanduser("~/.opencastor/anthropic-token")
         if os.path.exists(token_path):
@@ -185,6 +181,10 @@ def _check_provider_auth(config):
                 "status": "ok",
                 "detail": "anthropic (setup-token stored)",
             }
+
+    # Check env var
+    if os.getenv(env_var):
+        return {"name": "AI Provider auth", "status": "ok", "detail": f"{provider} ({env_var} set)"}
 
     # Check .env file
     if os.path.exists(".env"):
