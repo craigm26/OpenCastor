@@ -32,7 +32,7 @@ sudo apt-get install -y -qq \
     git
 
 # libgl1-mesa-glx was renamed in Ubuntu 22.04+; fall back to libgl1
-if apt-cache show libgl1-mesa-glx &>/dev/null; then
+if apt-cache policy libgl1-mesa-glx 2>/dev/null | grep -q 'Candidate:' && ! apt-cache policy libgl1-mesa-glx 2>/dev/null | grep -q 'Candidate: (none)'; then
     sudo apt-get install -y -qq libgl1-mesa-glx
 else
     sudo apt-get install -y -qq libgl1
