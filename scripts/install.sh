@@ -243,7 +243,8 @@ step "[3/6] Cloning OpenCastor..."
 
 if [ -d "$INSTALL_DIR" ]; then
   info "Directory exists. Pulling latest..."
-  run git -C "$INSTALL_DIR" pull
+  run git -C "$INSTALL_DIR" checkout main 2>/dev/null || true
+  run git -C "$INSTALL_DIR" pull origin main 2>/dev/null || warn "git pull failed (offline or detached HEAD); continuing with existing files"
 else
   run git clone "$REPO_URL" "$INSTALL_DIR"
 fi
