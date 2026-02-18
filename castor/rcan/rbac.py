@@ -145,8 +145,8 @@ ROLE_RATE_LIMITS: Dict[RCANRole, int] = {
 ROLE_SESSION_TIMEOUT: Dict[RCANRole, int] = {
     RCANRole.GUEST: 300,  # 5 minutes
     RCANRole.USER: 3600,  # 1 hour
-    RCANRole.OPERATOR: 7200,  # 2 hours
-    RCANRole.ADMIN: 28800,  # 8 hours
+    RCANRole.LEASEE: 7200,  # 2 hours
+    RCANRole.OWNER: 28800,  # 8 hours
     RCANRole.CREATOR: 0,  # no timeout
 }
 

@@ -1706,7 +1706,7 @@ class TestCmdToken:
         mock_mgr = MagicMock()
         mock_mgr.issue.return_value = "jwt-token-string"
         mock_role = MagicMock()
-        mock_role.name = "ADMIN"
+        mock_role.name = "OWNER"
 
         with patch.dict(
             "sys.modules",
@@ -1715,7 +1715,7 @@ class TestCmdToken:
                 "castor.rcan.jwt_auth": MagicMock(
                     RCANTokenManager=MagicMock(return_value=mock_mgr)
                 ),
-                "castor.rcan.rbac": MagicMock(RCANRole={"ADMIN": mock_role}),
+                "castor.rcan.rbac": MagicMock(RCANRole={"OWNER": mock_role}),
             },
         ):
             with patch.dict(os.environ, {"OPENCASTOR_JWT_SECRET": "secret123"}):

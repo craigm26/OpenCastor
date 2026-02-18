@@ -9,7 +9,7 @@ JWT claims follow the RCAN spec::
     sub   -- Principal name (e.g. ``operator1``).
     iss   -- Issuer RURI (the robot that issued the token).
     aud   -- Audience RURI pattern (which robots this token is valid for).
-    role  -- RCAN role name (GUEST, USER, OPERATOR, ADMIN, CREATOR).
+    role  -- RCAN role name (GUEST, USER, LEASEE, OWNER, CREATOR).
     scope -- List of scope strings (status, control, config, training, admin).
     fleet -- Optional list of RURI patterns for fleet-scoped access.
     exp   -- Expiration timestamp (Unix epoch).

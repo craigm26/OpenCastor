@@ -696,7 +696,7 @@ class TestWhoamiEndpoint:
         assert resp.status_code == 200
         body = resp.json()
         assert body["name"] == "api"
-        assert body["role"] == "OPERATOR"
+        assert body["role"] == "LEASEE"
         assert body["auth_method"] == "bearer_token"
 
 

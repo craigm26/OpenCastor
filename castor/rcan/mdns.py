@@ -87,7 +87,7 @@ class RCANServiceBroadcaster:
                 "ruri": self.ruri,
                 "model": self.model,
                 "caps": ",".join(self.capabilities),
-                "roles": "GUEST,USER,OPERATOR,ADMIN,CREATOR",
+                "roles": "GUEST,USER,LEASEE,OWNER,CREATOR",
                 "version": "1.0.0",
                 "name": self.robot_name,
                 "status": self._status_fn(),

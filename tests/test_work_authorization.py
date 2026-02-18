@@ -18,7 +18,7 @@ def roles() -> dict[str, str]:
     return {
         "creator_alice": "CREATOR",
         "owner_bob": "OWNER",
-        "operator_carol": "OPERATOR",
+        "leasee_carol": "LEASEE",
         "viewer_dave": "VIEWER",
     }
 
@@ -147,7 +147,7 @@ class TestWorkAuthorityBasic:
 
 class TestExpiration:
     def test_expired_order_not_in_active(self) -> None:
-        auth = WorkAuthority(role_resolver={"c": "CREATOR", "o": "OPERATOR"}, ttl=0.01)
+        auth = WorkAuthority(role_resolver={"c": "CREATOR", "o": "LEASEE"}, ttl=0.01)
         wo = auth.request_authorization("cut", "x", "o")
         auth.approve(wo.order_id, "c")
         time.sleep(0.02)
@@ -155,7 +155,7 @@ class TestExpiration:
         assert authority_check_gone(auth, "cut", "x")
 
     def test_expired_order_cannot_execute(self) -> None:
-        auth = WorkAuthority(role_resolver={"c": "CREATOR", "o": "OPERATOR"}, ttl=0.01)
+        auth = WorkAuthority(role_resolver={"c": "CREATOR", "o": "LEASEE"}, ttl=0.01)
         wo = auth.request_authorization("cut", "x", "o")
         auth.approve(wo.order_id, "c")
         time.sleep(0.02)
@@ -200,7 +200,7 @@ class TestRoleGating:
 
     def test_invalid_required_role_rejected(self, authority: WorkAuthority) -> None:
         with pytest.raises(ValueError, match="required_role"):
-            authority.request_authorization("cut", "x", "a", required_role="OPERATOR")
+            authority.request_authorization("cut", "x", "a", required_role="LEASEE")
 
 
 # --- Revocation ---

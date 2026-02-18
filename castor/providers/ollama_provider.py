@@ -90,9 +90,7 @@ class OllamaModelNotFoundError(ValueError):
 
 def _connection_hint(host: str, original: Optional[Exception] = None) -> str:
     """Build a genuinely helpful error message for connection failures."""
-    is_localhost = any(
-        h in host for h in ("localhost", "127.0.0.1", "0.0.0.0")
-    )
+    is_localhost = any(h in host for h in ("localhost", "127.0.0.1", "0.0.0.0"))
 
     if isinstance(original, ConnectionRefusedError):
         if is_localhost:
@@ -127,15 +125,10 @@ def _connection_hint(host: str, original: Optional[Exception] = None) -> str:
                 f"Set OLLAMA_HOST env var or use 'castor login ollama --host <host>'."
             )
 
-    return (
-        f"Cannot connect to Ollama at {host}. "
-        f"Is Ollama running? Start it with: ollama serve"
-    )
+    return f"Cannot connect to Ollama at {host}. Is Ollama running? Start it with: ollama serve"
 
 
-def _resolve_host(
-    config: Dict[str, Any], profile: Optional[str] = None
-) -> str:
+def _resolve_host(config: Dict[str, Any], profile: Optional[str] = None) -> str:
     """Resolve the Ollama host URL from env, config, or named profile."""
     # Named profile takes precedence if specified
     if profile:
@@ -157,9 +150,7 @@ def _resolve_host(
     return host.rstrip("/")
 
 
-def _resolve_model_alias(
-    model: str, aliases: Dict[str, str]
-) -> str:
+def _resolve_model_alias(model: str, aliases: Dict[str, str]) -> str:
     """Resolve a model alias to its full name."""
     return aliases.get(model, model)
 
@@ -301,30 +292,20 @@ class OllamaProvider(BaseProvider):
         if self.model_name == "default-model":
             self.model_name = DEFAULT_MODEL
         else:
-            self.model_name = _resolve_model_alias(
-                self.model_name, self._aliases
-            )
+            self.model_name = _resolve_model_alias(self.model_name, self._aliases)
 
-        self.is_vision = _is_vision_model(self.model_name) or config.get(
-            "vision_enabled", False
-        )
+        self.is_vision = _is_vision_model(self.model_name) or config.get("vision_enabled", False)
 
         # Timeouts
         self.timeout = config.get("timeout", DEFAULT_GENERATION_TIMEOUT)
-        self.health_timeout = config.get(
-            "health_timeout", DEFAULT_HEALTH_TIMEOUT
-        )
+        self.health_timeout = config.get("health_timeout", DEFAULT_HEALTH_TIMEOUT)
 
         # Auto-pull
         self.auto_pull = config.get("auto_pull", False)
-        self._pull_progress_callback: Optional[
-            Callable[[str, float], None]
-        ] = None
+        self._pull_progress_callback: Optional[Callable[[str, float], None]] = None
 
         # Model cache
-        self._model_cache = _ModelCache(
-            ttl=config.get("model_cache_ttl", DEFAULT_MODEL_CACHE_TTL)
-        )
+        self._model_cache = _ModelCache(ttl=config.get("model_cache_ttl", DEFAULT_MODEL_CACHE_TTL))
 
         # Custom system prompt
         custom_prompt = config.get("system_prompt")
@@ -357,9 +338,7 @@ class OllamaProvider(BaseProvider):
         """Whether Ollama was reachable at init time."""
         return self._available is True
 
-    def set_pull_progress_callback(
-        self, callback: Callable[[str, float], None]
-    ) -> None:
+    def set_pull_progress_callback(self, callback: Callable[[str, float], None]) -> None:
         """Set a callback for model pull progress.
 
         Args:
@@ -405,9 +384,7 @@ class OllamaProvider(BaseProvider):
             models = self.list_models()
             names = [m["name"] for m in models]
             # Check both exact match and base name match
-            if any(
-                model == n or model == n.split(":")[0] for n in names
-            ):
+            if any(model == n or model == n.split(":")[0] for n in names):
                 return
         except OllamaConnectionError:
             raise
@@ -490,9 +467,7 @@ class OllamaProvider(BaseProvider):
         action = self._clean_json(text)
         return Thought(text, action)
 
-    def think_stream(
-        self, image_bytes: bytes, instruction: str
-    ) -> Iterator[str]:
+    def think_stream(self, image_bytes: bytes, instruction: str) -> Iterator[str]:
         """Stream tokens from the Ollama model.
 
         Yields individual text chunks as they arrive.
@@ -553,9 +528,7 @@ class OllamaProvider(BaseProvider):
         if cached is not None:
             return cached
 
-        response = _http_request(
-            f"{self.host}/api/tags", timeout=self.health_timeout
-        )
+        response = _http_request(f"{self.host}/api/tags", timeout=self.health_timeout)
         raw_models = response.get("models", [])
         models = [
             {

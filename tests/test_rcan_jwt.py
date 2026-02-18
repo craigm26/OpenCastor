@@ -44,10 +44,10 @@ class TestIssueToken:
         assert len(token) > 20
 
     def test_issue_operator_token(self, manager):
-        token = manager.issue("op1", role=RCANRole.OPERATOR)
+        token = manager.issue("op1", role=RCANRole.LEASEE)
         claims = manager.decode_claims(token)
         assert claims["sub"] == "op1"
-        assert claims["role"] == "OPERATOR"
+        assert claims["role"] == "LEASEE"
         assert "status" in claims["scope"]
         assert "control" in claims["scope"]
         assert "config" in claims["scope"]
@@ -78,10 +78,10 @@ class TestVerifyToken:
     """Token verification."""
 
     def test_verify_valid_token(self, manager):
-        token = manager.issue("op1", role=RCANRole.OPERATOR)
+        token = manager.issue("op1", role=RCANRole.LEASEE)
         principal = manager.verify(token)
         assert principal.name == "op1"
-        assert principal.role == RCANRole.OPERATOR
+        assert principal.role == RCANRole.LEASEE
         assert principal.has_scope(Scope.STATUS)
         assert principal.has_scope(Scope.CONTROL)
         assert principal.has_scope(Scope.CONFIG)

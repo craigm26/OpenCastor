@@ -25,6 +25,7 @@ from castor.fs.namespace import Namespace
 from castor.fs.permissions import Cap, PermissionTable
 from castor.safety.anti_subversion import scan_before_write as _scan_before_write
 from castor.safety.bounds import BoundsChecker, check_write_bounds
+from castor.safety.protocol import check_write_protocol
 
 logger = logging.getLogger("OpenCastor.FS.Safety")
 
@@ -106,6 +107,11 @@ class SafetyLayer:
 
         # Physical bounds checker
         self._bounds_checker = BoundsChecker.from_virtual_fs(ns)
+
+        # Safety protocol engine
+        from castor.safety.protocol import SafetyProtocol
+
+        self._protocol = SafetyProtocol(ns=ns)
 
         # Install safety config into the namespace
         self._install_safety_config()
@@ -389,6 +395,29 @@ class SafetyLayer:
             if bounds_result.status == "warning":
                 logger.info("Bounds warning on %s: %s", path, bounds_result.details)
                 self._audit_safety(principal, path, "bounds_warning", bounds_result.details)
+
+        # Safety protocol rules for /dev/ writes
+        if path.startswith("/dev/"):
+            protocol_violations = check_write_protocol(self._protocol, path, data)
+            critical = [v for v in protocol_violations if v.severity == "critical"]
+            if critical:
+                logger.warning(
+                    "WRITE denied: protocol violation on %s: %s",
+                    path,
+                    critical[0].message,
+                )
+                self._audit_safety(principal, path, "protocol_violation", critical[0].message)
+                return False
+            for v in protocol_violations:
+                if v.severity == "violation":
+                    logger.warning(
+                        "WRITE denied: protocol violation on %s: %s", path, v.message
+                    )
+                    self._audit_safety(principal, path, "protocol_violation", v.message)
+                    return False
+                if v.severity == "warning":
+                    logger.info("Protocol warning on %s: %s", path, v.message)
+                    self._audit_safety(principal, path, "protocol_warning", v.message)
 
         # Motor-specific safety enforcement
         if path.startswith("/dev/motor"):

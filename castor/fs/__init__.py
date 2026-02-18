@@ -164,8 +164,8 @@ class CastorFS:
 
             defaults = {
                 "root": (RCANRole.CREATOR, Scope.for_role(RCANRole.CREATOR)),
-                "brain": (RCANRole.ADMIN, Scope.for_role(RCANRole.ADMIN)),
-                "api": (RCANRole.OPERATOR, Scope.for_role(RCANRole.OPERATOR)),
+                "brain": (RCANRole.OWNER, Scope.for_role(RCANRole.OWNER)),
+                "api": (RCANRole.LEASEE, Scope.for_role(RCANRole.LEASEE)),
                 "channel": (RCANRole.USER, Scope.for_role(RCANRole.USER)),
                 "driver": (RCANRole.GUEST, Scope.for_role(RCANRole.GUEST)),
             }

@@ -357,7 +357,7 @@ async def whoami(request: Request):
         return principal.to_dict()
     # No JWT -- return based on static token or anonymous
     if API_TOKEN and request.headers.get("Authorization") == f"Bearer {API_TOKEN}":
-        return {"name": "api", "role": "OPERATOR", "auth_method": "bearer_token"}
+        return {"name": "api", "role": "LEASEE", "auth_method": "bearer_token"}
     return {"name": "anonymous", "role": "GUEST", "auth_method": "none"}
 
 

@@ -1,10 +1,13 @@
 """Tests for RCAN RBAC (Role-Based Access Control)."""
 
+import logging
+
 from castor.fs.permissions import Cap
 from castor.rcan.rbac import (
     RCANPrincipal,
     RCANRole,
     Scope,
+    resolve_role_name,
 )
 
 
@@ -12,8 +15,8 @@ class TestRCANRole:
     """Role hierarchy."""
 
     def test_role_ordering(self):
-        assert RCANRole.GUEST < RCANRole.USER < RCANRole.OPERATOR
-        assert RCANRole.OPERATOR < RCANRole.ADMIN < RCANRole.CREATOR
+        assert RCANRole.GUEST < RCANRole.USER < RCANRole.LEASEE
+        assert RCANRole.LEASEE < RCANRole.OWNER < RCANRole.CREATOR
 
     def test_role_values(self):
         assert RCANRole.GUEST == 1
@@ -37,15 +40,15 @@ class TestScope:
         assert s & Scope.CONTROL
         assert not (s & Scope.CONFIG)
 
-    def test_scope_for_operator(self):
-        s = Scope.for_role(RCANRole.OPERATOR)
+    def test_scope_for_leasee(self):
+        s = Scope.for_role(RCANRole.LEASEE)
         assert s & Scope.STATUS
         assert s & Scope.CONTROL
         assert s & Scope.CONFIG
         assert not (s & Scope.TRAINING)
 
-    def test_scope_for_admin(self):
-        s = Scope.for_role(RCANRole.ADMIN)
+    def test_scope_for_owner(self):
+        s = Scope.for_role(RCANRole.OWNER)
         assert s & Scope.TRAINING
         assert not (s & Scope.ADMIN)
 
@@ -103,12 +106,12 @@ class TestRCANPrincipal:
 
     def test_from_legacy_brain(self):
         p = RCANPrincipal.from_legacy("brain")
-        assert p.role == RCANRole.ADMIN
+        assert p.role == RCANRole.OWNER
         assert p.has_scope(Scope.TRAINING)
 
     def test_from_legacy_api(self):
         p = RCANPrincipal.from_legacy("api")
-        assert p.role == RCANRole.OPERATOR
+        assert p.role == RCANRole.LEASEE
         assert p.has_scope(Scope.CONFIG)
 
     def test_from_legacy_channel(self):
@@ -151,10 +154,10 @@ class TestRCANPrincipal:
         assert RCANPrincipal(name="c", role=RCANRole.CREATOR).session_timeout == 0
 
     def test_to_dict(self):
-        p = RCANPrincipal(name="operator1", role=RCANRole.OPERATOR)
+        p = RCANPrincipal(name="leasee1", role=RCANRole.LEASEE)
         d = p.to_dict()
-        assert d["name"] == "operator1"
-        assert d["role"] == "OPERATOR"
+        assert d["name"] == "leasee1"
+        assert d["role"] == "LEASEE"
         assert d["role_level"] == 3
         assert "status" in d["scopes"]
         assert "control" in d["scopes"]
@@ -167,3 +170,42 @@ class TestRCANPrincipal:
     def test_fleet_custom(self):
         p = RCANPrincipal(name="test", role=RCANRole.USER, fleet=["rcan://opencastor.*.*/nav"])
         assert len(p.fleet) == 1
+
+
+class TestRCANSpecRoles:
+    """Verify all 5 RCAN spec roles exist."""
+
+    def test_all_five_rcan_spec_roles(self):
+        expected = {"CREATOR", "OWNER", "LEASEE", "USER", "GUEST"}
+        actual = {r.name for r in RCANRole}
+        assert actual == expected
+
+
+class TestBackwardCompatibility:
+    """Old role names (ADMIN, OPERATOR) still work with deprecation warning."""
+
+    def test_resolve_admin_to_owner(self, caplog):
+        with caplog.at_level(logging.WARNING, logger="castor.rcan.rbac"):
+            result = resolve_role_name("ADMIN")
+        assert result == "OWNER"
+        assert "deprecated" in caplog.text
+        assert "OWNER" in caplog.text
+
+    def test_resolve_operator_to_leasee(self, caplog):
+        with caplog.at_level(logging.WARNING, logger="castor.rcan.rbac"):
+            result = resolve_role_name("OPERATOR")
+        assert result == "LEASEE"
+        assert "deprecated" in caplog.text
+        assert "LEASEE" in caplog.text
+
+    def test_resolve_new_names_unchanged(self, caplog):
+        with caplog.at_level(logging.WARNING, logger="castor.rcan.rbac"):
+            assert resolve_role_name("OWNER") == "OWNER"
+            assert resolve_role_name("LEASEE") == "LEASEE"
+            assert resolve_role_name("CREATOR") == "CREATOR"
+        assert caplog.text == ""
+
+    def test_resolve_case_insensitive(self, caplog):
+        with caplog.at_level(logging.WARNING, logger="castor.rcan.rbac"):
+            assert resolve_role_name("admin") == "OWNER"
+            assert resolve_role_name("operator") == "LEASEE"

@@ -143,7 +143,10 @@ def cmd_token(args) -> None:
         from castor.rcan.jwt_auth import RCANTokenManager
         from castor.rcan.rbac import RCANRole
 
-        role = RCANRole[args.role.upper()]
+        from castor.rcan.rbac import resolve_role_name
+
+            role_name = resolve_role_name(args.role)
+            role = RCANRole[role_name]
         scopes = args.scope.split(",") if args.scope else None
 
         ruri = os.getenv("OPENCASTOR_RURI", "rcan://opencastor.unknown.00000000")
@@ -1158,6 +1161,28 @@ def _interactive_share(args) -> None:
     print()
 
 
+def cmd_safety(args) -> None:
+    """List safety protocol rules."""
+    from castor.safety.protocol import SafetyProtocol
+
+    proto = SafetyProtocol(config_path=getattr(args, "config", None))
+    rules = proto.list_rules()
+    cat_filter = getattr(args, "category", None)
+    if cat_filter:
+        rules = [r for r in rules if r["category"] == cat_filter]
+
+    if not rules:
+        print("No rules found.")
+        return
+
+    # Print table
+    print(f"{'ID':<15} {'Category':<12} {'Severity':<10} {'Enabled':<8} Description")
+    print("-" * 80)
+    for r in rules:
+        enabled = "✓" if r["enabled"] else "✗"
+        print(f"{r['rule_id']:<15} {r['category']:<12} {r['severity']:<10} {enabled:<8} {r['description']}")
+
+
 def cmd_audit(args) -> None:
     """View or verify the audit log."""
     from castor.audit import get_audit, print_audit
@@ -1714,6 +1739,22 @@ def main() -> None:
     p_hub.add_argument("--output", "-o", default=None, help="Output directory for install/share")
 
     # castor audit
+    # castor safety
+    p_safety = sub.add_parser(
+        "safety",
+        help="Safety protocol management",
+        epilog="Examples:\n  castor safety rules\n  castor safety rules --category motion\n",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_safety.add_argument(
+        "safety_action", nargs="?", default="rules", choices=["rules"],
+        help="Safety sub-command (default: rules)",
+    )
+    p_safety.add_argument("--category", default=None, help="Filter by category")
+    p_safety.add_argument(
+        "--config", default=None, help="Path to safety protocol YAML config",
+    )
+
     p_audit = sub.add_parser(
         "audit",
         help="View the append-only audit log",
@@ -1820,6 +1861,7 @@ def main() -> None:
         "quickstart": cmd_quickstart,
         "plugins": cmd_plugins,
         "audit": cmd_audit,
+        "safety": cmd_safety,
         "login": cmd_login,
         "hub": cmd_hub,
     }

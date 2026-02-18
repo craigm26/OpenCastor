@@ -133,7 +133,7 @@ class WorkAuthority:
         detector: DestructiveActionDetector | None = None,
     ):
         self._orders: dict[str, WorkOrder] = {}
-        # Maps principal -> role (e.g. {"alice": "CREATOR", "bob": "OPERATOR"})
+        # Maps principal -> role (e.g. {"alice": "CREATOR", "bob": "LEASEE"})
         self._roles: dict[str, str] = role_resolver or {}
         self._ttl = ttl
         self._audit_log: list[dict] = []
