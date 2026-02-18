@@ -390,6 +390,20 @@ def authenticate_provider(provider_key, *, already_authed=None):
             already_authed.add(provider_key)
         return result
 
+    # Check for existing keys from OpenClaw/environment
+    existing = _detect_existing_keys()
+    if env_var in existing:
+        source, key = existing[env_var]
+        masked = key[:12] + "..." + key[-4:]
+        print(f"\n{Colors.GREEN}--- AUTHENTICATION ({info['label']}) ---{Colors.ENDC}")
+        print(f"  Found API key from {Colors.BOLD}{source}{Colors.ENDC}: {masked}")
+        use_it = input_default("Use this key? (y/n)", "y").strip().lower()
+        if use_it in ("y", "yes", ""):
+            _write_env_var(env_var, key)
+            print(f"  {Colors.GREEN}[OK]{Colors.ENDC} Key imported from {source} and saved to .env")
+            already_authed.add(provider_key)
+            return True
+
     # Standard API key flow
     print(f"\n{Colors.GREEN}--- AUTHENTICATION ({info['label']}) ---{Colors.ENDC}")
     print(f"  Your {info['label']} API key is needed.")
@@ -437,8 +451,62 @@ def _check_ollama_connection():
         )
 
 
+def _detect_existing_keys():
+    """Detect API keys from known sources (OpenClaw, environment, etc.)."""
+    import json
+
+    sources = {}
+
+    # Check OpenClaw config
+    openclaw_config = os.path.expanduser("~/.openclaw/openclaw.json")
+    if os.path.exists(openclaw_config):
+        try:
+            with open(openclaw_config) as f:
+                data = json.load(f)
+            env_vars = data.get("env", {}).get("vars", {})
+            for key in [
+                "ANTHROPIC_API_KEY",
+                "GOOGLE_API_KEY",
+                "OPENAI_API_KEY",
+                "HF_TOKEN",
+                "GEMINI_API_KEY",
+            ]:
+                val = env_vars.get(key)
+                if val and not val.startswith("__") and len(val) > 10:
+                    sources[key] = ("OpenClaw", val)
+        except Exception:
+            pass
+
+    # Check environment
+    for key in [
+        "ANTHROPIC_API_KEY",
+        "GOOGLE_API_KEY",
+        "OPENAI_API_KEY",
+        "HF_TOKEN",
+        "GEMINI_API_KEY",
+    ]:
+        val = os.getenv(key)
+        if val and key not in sources and len(val) > 10:
+            sources[key] = ("environment", val)
+
+    return sources
+
+
 def _anthropic_auth_flow(env_var):
-    """Handle Anthropic auth: OAuth or API key."""
+    """Handle Anthropic auth: detect existing key or ask for one."""
+    existing = _detect_existing_keys()
+
+    # Auto-detect from OpenClaw or environment
+    if env_var in existing:
+        source, key = existing[env_var]
+        masked = key[:12] + "..." + key[-4:]
+        print(f"\n{Colors.GREEN}--- AUTHENTICATION (Anthropic) ---{Colors.ENDC}")
+        print(f"  Found API key from {Colors.BOLD}{source}{Colors.ENDC}: {masked}")
+        use_it = input_default("Use this key? (y/n)", "y").strip().lower()
+        if use_it in ("y", "yes", ""):
+            _write_env_var(env_var, key)
+            print(f"  {Colors.GREEN}[OK]{Colors.ENDC} Key imported from {source} and saved to .env")
+            return True
 
     print(f"\n{Colors.GREEN}--- AUTHENTICATION (Anthropic) ---{Colors.ENDC}")
     print("  An Anthropic API key is required for robot control.")
