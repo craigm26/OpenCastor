@@ -293,9 +293,7 @@ class TestDynamicModelFetch:
         from castor.wizard import _fetch_anthropic_models
 
         with patch.dict("os.environ", {}, clear=True):
-            with patch(
-                "os.environ.get", side_effect=lambda k, d=None: None
-            ):
+            with patch("os.environ.get", side_effect=lambda k, d=None: None):
                 # Ensure no stored token either
                 with patch(
                     "castor.providers.anthropic_provider.AnthropicProvider._read_stored_token",

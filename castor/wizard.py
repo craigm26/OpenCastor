@@ -316,25 +316,32 @@ def input_secret(prompt):
 # ---------------------------------------------------------------------------
 # Provider selection (Step 2)
 # ---------------------------------------------------------------------------
-def choose_provider_step():
+def choose_provider_step(default=None):
     """Select AI provider (separate from model)."""
     print(f"\n{Colors.GREEN}--- AI PROVIDER ---{Colors.ENDC}")
     print("Which AI provider do you want to use?\n")
+
+    # Determine default selection number
+    default_idx = "1"
+    if default and default in PROVIDER_ORDER:
+        default_idx = str(PROVIDER_ORDER.index(default) + 1)
+
     for i, key in enumerate(PROVIDER_ORDER, 1):
         info = PROVIDER_AUTH[key]
-        rec = " (Recommended)" if key == "anthropic" else ""
+        prev_marker = " (previous)" if key == default else ""
+        rec = " (Recommended)" if key == "anthropic" and not default else ""
         label = f"{info['label']}"
         desc = f"— {info['desc']}"
-        print(f"  [{i}] {label:<28s} {desc}{rec}")
+        print(f"  [{i}] {label:<28s} {desc}{rec}{prev_marker}")
 
-    choice = input_default("\nSelection", "1").strip()
+    choice = input_default("\nSelection", default_idx).strip()
     try:
         idx = int(choice) - 1
         if 0 <= idx < len(PROVIDER_ORDER):
             return PROVIDER_ORDER[idx]
     except ValueError:
         pass
-    return "anthropic"
+    return default or "anthropic"
 
 
 # ---------------------------------------------------------------------------
@@ -1580,6 +1587,32 @@ def _safety_acknowledgment(accept_risk):
     print()
 
 
+WIZARD_STATE_PATH = os.path.expanduser("~/.opencastor/wizard-state.yaml")
+
+
+def _load_previous_state() -> dict:
+    """Load previously saved wizard state for re-run defaults."""
+    try:
+        if os.path.exists(WIZARD_STATE_PATH):
+            with open(WIZARD_STATE_PATH) as f:
+                state = yaml.safe_load(f) or {}
+            return state
+    except Exception:
+        pass
+    return {}
+
+
+def _save_wizard_state(state: dict) -> None:
+    """Save wizard state for future re-runs."""
+    try:
+        state_dir = os.path.dirname(WIZARD_STATE_PATH)
+        os.makedirs(state_dir, mode=0o700, exist_ok=True)
+        with open(WIZARD_STATE_PATH, "w") as f:
+            yaml.dump(state, f, sort_keys=False)
+    except Exception:
+        pass
+
+
 def main():
     parser = argparse.ArgumentParser(description="OpenCastor Setup Wizard")
     parser.add_argument(
@@ -1616,15 +1649,22 @@ def main():
         quickstart = mode != "2"
         print()
 
+    # --- Load previous state for defaults ---
+    prev = _load_previous_state()
+    if prev:
+        print(
+            f"  {Colors.GREEN}[RECALL]{Colors.ENDC} Found previous config — values shown as defaults."
+        )
+
     # --- Step 1: Project Name ---
-    robot_name = input_default("Project Name", "MyRobot")
+    robot_name = input_default("Project Name", prev.get("robot_name", "MyRobot"))
 
     if quickstart:
         # -- QuickStart: New multi-step flow --
         already_authed = set()
 
         # Step 2: Provider
-        provider_key = choose_provider_step()
+        provider_key = choose_provider_step(default=prev.get("provider"))
 
         # Step 3: Authentication
         authenticate_provider(provider_key, already_authed=already_authed)
@@ -1682,6 +1722,15 @@ def main():
             f"\n  {Colors.GREEN}[AUTO]{Colors.ENDC} Gateway auth token generated and saved to .env"
         )
         print(f"  {Colors.BOLD}OPENCASTOR_API_TOKEN{Colors.ENDC}={token[:8]}...")
+
+    # --- Save wizard state for future re-runs ---
+    _save_wizard_state(
+        {
+            "robot_name": robot_name,
+            "provider": agent_config.get("provider", ""),
+            "model": agent_config.get("model", ""),
+        }
+    )
 
     # --- Generate Config ---
     filename = f"{robot_name.lower().replace(' ', '_')}.rcan.yaml"

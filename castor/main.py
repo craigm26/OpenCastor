@@ -327,6 +327,18 @@ def main():
     logger.info("Booting OpenCastor Runtime...")
     config = load_config(args.config)
 
+    # 1a. STARTUP HEALTH CHECK
+    try:
+        from castor.healthcheck import print_health_report, run_startup_checks
+
+        health = run_startup_checks(config, simulate=args.simulate)
+        print_health_report(health)
+        if health["status"] == "critical":
+            logger.critical("Health check CRITICAL — resolve issues before continuing")
+            # Don't block, but warn loudly
+    except Exception as e:
+        logger.debug(f"Health check skipped: {e}")
+
     # 1b. INITIALIZE VIRTUAL FILESYSTEM
     fs = CastorFS(persist_dir=args.memory_dir)
     fs.boot(config)

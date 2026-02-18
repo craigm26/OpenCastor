@@ -5,6 +5,17 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.18.4] - 2026-02-18
+
+### Added
+- **Startup health check** — `castor run` now performs a full system health check at boot: Python version, package version, dependencies, config validation, AI provider auth, camera, GPIO, I2C, speaker, disk space, memory, CPU temperature. Prints a formatted health card with ✅⚠️❌ status.
+- **Wizard state memory** — wizard remembers previous selections (project name, provider, model) and shows them as defaults on re-run. Saved to `~/.opencastor/wizard-state.yaml`.
+- **Dynamic version** — `__version__` now reads from installed package metadata via `importlib.metadata` instead of a hardcoded string. Falls back to current version if not pip-installed.
+- 21 new tests (1286 total)
+
+### Fixed
+- Wizard version display was stuck on old version due to hardcoded `__version__` in `__init__.py`
+
 ## [2026.2.18.3] - 2026-02-18
 
 ### Fixed
