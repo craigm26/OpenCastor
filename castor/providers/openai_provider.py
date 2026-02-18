@@ -15,9 +15,21 @@ class OpenAIProvider(BaseProvider):
         from openai import OpenAI
 
         api_key = os.getenv("OPENAI_API_KEY") or config.get("api_key")
-        if not api_key:
+        base_url = os.getenv("OPENAI_BASE_URL") or config.get("base_url")
+
+        if not api_key and not base_url:
             raise ValueError("OPENAI_API_KEY not found in environment or config")
-        self.client = OpenAI(api_key=api_key)
+
+        kwargs = {}
+        if base_url:
+            kwargs["base_url"] = base_url
+        if api_key:
+            kwargs["api_key"] = api_key
+        else:
+            # Some local proxies don't need a key
+            kwargs["api_key"] = "not-needed"
+
+        self.client = OpenAI(**kwargs)
 
     def think(self, image_bytes: bytes, instruction: str) -> Thought:
         b64_image = base64.b64encode(image_bytes).decode("utf-8")

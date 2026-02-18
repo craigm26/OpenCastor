@@ -126,7 +126,10 @@ class TestCheckProviderReady:
         assert check_provider_ready("anthropic") is True
 
     @patch.dict(os.environ, {}, clear=True)
-    @patch("castor.auth.os.path.expanduser", return_value="/tmp/nonexistent/.opencastor/anthropic-token")
+    @patch(
+        "castor.auth.os.path.expanduser",
+        return_value="/tmp/nonexistent/.opencastor/anthropic-token",
+    )
     def test_not_ready_without_key(self, mock_expand):
         assert check_provider_ready("anthropic") is False
 

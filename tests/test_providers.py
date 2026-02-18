@@ -218,13 +218,16 @@ class TestAnthropicSetupToken:
         return provider, mock_mod
 
     def test_setup_token_via_env(self, monkeypatch, tmp_path):
-        """Setup-token in ANTHROPIC_API_KEY env var should work when no stored token."""
+        """Setup-token in ANTHROPIC_API_KEY env var routes through proxy or CLI fallback."""
         token = "sk-ant-oat01-" + "x" * 80
         monkeypatch.setenv("ANTHROPIC_API_KEY", token)
         np = str(tmp_path / "nonexistent")
         provider, mock_mod = self._make_provider({"provider": "anthropic"}, token_path=np)
-        mock_mod.Anthropic.assert_called_once_with(api_key=token)
-        assert provider.client is not None
+        # OAuth tokens don't create anthropic.Anthropic client directly
+        # They route through proxy (OpenAI client) or CLI fallback
+        mock_mod.Anthropic.assert_not_called()
+        assert provider.client is None
+        assert getattr(provider, "_use_proxy", False) or getattr(provider, "_use_cli", False)
 
     def test_api_key_via_env(self, monkeypatch, tmp_path):
         """Standard API key should still work when no stored token."""
@@ -256,13 +259,17 @@ class TestAnthropicSetupToken:
         assert AnthropicProvider.SETUP_TOKEN_PREFIX == "sk-ant-oat01-"
 
     def test_reads_stored_token(self, monkeypatch, tmp_path):
-        """Should read setup-token from ~/.opencastor/anthropic-token."""
+        """Should read setup-token from ~/.opencastor/anthropic-token and use proxy/CLI."""
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         token = "sk-ant-oat01-" + "a" * 80
         token_file = tmp_path / "anthropic-token"
         token_file.write_text(token)
-        _, mock_mod = self._make_provider({"provider": "anthropic"}, token_path=str(token_file))
-        mock_mod.Anthropic.assert_called_once_with(api_key=token)
+        provider, mock_mod = self._make_provider(
+            {"provider": "anthropic"}, token_path=str(token_file)
+        )
+        # OAuth tokens route through proxy or CLI, not direct SDK
+        mock_mod.Anthropic.assert_not_called()
+        assert getattr(provider, "_use_proxy", False) or getattr(provider, "_use_cli", False)
 
     def test_save_token(self, tmp_path):
         """save_token should write to file with restricted permissions."""
