@@ -629,11 +629,26 @@ def main():
 
     if quickstart:
         # -- QuickStart Path --
-        agent_config = PROVIDERS["1"]  # Claude Opus 4.6
+        agent_config = choose_provider()
         collect_api_key(agent_config)
+
+        # Messaging channel (optional)
+        print(f"\n{Colors.GREEN}--- MESSAGING (optional) ---{Colors.ENDC}")
+        print("  Connect a messaging app to talk to your robot.")
+        print("  [0] Skip for now")
+        print("  [1] WhatsApp (scan QR code — no account needed!)")
+        print("  [2] Telegram Bot")
+        ch_choice = input_default("Selection", "0").strip()
+        selected_channels = []
+        if ch_choice == "1":
+            selected_channels = [CHANNELS["1"]]
+        elif ch_choice == "2":
+            selected_channels = [CHANNELS["3"]]
+        if selected_channels:
+            collect_channel_credentials(selected_channels)
+
         preset = "rpi_rc_car"
         rcan_data = generate_preset_config(preset, robot_name, agent_config)
-        selected_channels = []
     else:
         # -- Advanced Path --
         agent_config = choose_provider()

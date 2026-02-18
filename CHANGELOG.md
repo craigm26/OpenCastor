@@ -5,6 +5,14 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.17.16] - 2026-02-17
+
+### Added
+- **QuickStart now includes provider + messaging choice** — users pick their AI provider (Anthropic, Google, OpenAI, HuggingFace, Ollama) and optionally connect WhatsApp or Telegram, all in the streamlined QuickStart flow
+
+### Fixed
+- **RCAN schema** — added `created_at` to metadata schema (was causing validation error)
+
 ## [2026.2.17.15] - 2026-02-17
 
 ### Fixed
