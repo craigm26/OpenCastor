@@ -150,6 +150,8 @@ install_deps_macos() {
 }
 
 install_deps_debian() {
+  export DEBIAN_FRONTEND=noninteractive
+  export NEEDRESTART_MODE=a
   run $SUDO apt-get update -qq
   run $SUDO apt-get install -y -qq \
     python3 python3-pip python3-venv python3-dev \

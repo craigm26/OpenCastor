@@ -35,8 +35,12 @@ for mod in cv2 numpy pydantic yaml; do
   check "import $mod" $PY -c "import $mod"
 done
 
-# Check castor CLI
-check "castor CLI" $PY -m castor --help
+# Check castor CLI (try binary first, then python -m)
+if command -v castor &>/dev/null; then
+  check "castor CLI" castor --help
+else
+  check "castor CLI" $PY -m castor --help
+fi
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
