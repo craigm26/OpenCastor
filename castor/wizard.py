@@ -18,6 +18,8 @@ import sys
 import uuid
 from datetime import datetime, timezone
 
+from castor import __version__
+
 try:
     import yaml
 except ImportError:
@@ -603,10 +605,10 @@ def main():
     print(BANNER)
 
     if HAS_RICH:
-        _console.print("[bold magenta]OpenCastor Setup Wizard v2026.2.17.3[/]")
+        _console.print("[bold magenta]OpenCastor Setup Wizard v{__version__}[/]")
         _console.print("Generating spec compliant with [bold]rcan.dev/spec[/]\n")
     else:
-        print(f"{Colors.HEADER}OpenCastor Setup Wizard v2026.2.17.3{Colors.ENDC}")
+        print(f"{Colors.HEADER}OpenCastor Setup Wizard v{__version__}{Colors.ENDC}")
         print(f"Generating spec compliant with {Colors.BOLD}rcan.dev/spec{Colors.ENDC}\n")
 
     # --- Safety Acknowledgment ---
