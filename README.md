@@ -333,5 +333,5 @@ Apache 2.0 — built for the community, ready for the enterprise.
 ---
 
 <p align="center">
-  Built on the <a href="https://rcan.dev/spec/">RCAN Spec</a> by <a href="https://github.com/craigm26">Continuon AI</a>
+  Built on the <a href="https://rcan.dev/spec/">RCAN Spec</a> by <a href="https://github.com/craigm26">Craig Merry</a>
 </p>
