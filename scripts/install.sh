@@ -296,14 +296,8 @@ if [ ! -f .env ] && [ -f .env.example ]; then
 fi
 
 if [ "$SKIP_WIZARD" = false ] && [ "$DRY_RUN" = false ]; then
-  if [ -t 0 ]; then
-    # Interactive terminal — run wizard normally
-    $PYTHON -m castor.wizard 2>/dev/null || warn "Wizard skipped (run 'castor wizard' later)"
-  else
-    # Piped install (curl | bash) — skip interactive wizard
-    info "Non-interactive install detected. Skipping wizard."
-    info "Run 'castor wizard' after install to configure your robot."
-  fi
+  # Always run wizard with --accept-risk (safety prompt handled inline)
+  $PYTHON -m castor.wizard --accept-risk 2>/dev/null || warn "Wizard skipped (run 'castor wizard' later)"
 fi
 
 # Ensure a default config exists even if wizard was skipped/failed

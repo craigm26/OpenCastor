@@ -605,7 +605,7 @@ def main():
     print(BANNER)
 
     if HAS_RICH:
-        _console.print("[bold magenta]OpenCastor Setup Wizard v{__version__}[/]")
+        _console.print(f"[bold magenta]OpenCastor Setup Wizard v{__version__}[/]")
         _console.print("Generating spec compliant with [bold]rcan.dev/spec[/]\n")
     else:
         print(f"{Colors.HEADER}OpenCastor Setup Wizard v{__version__}{Colors.ENDC}")
