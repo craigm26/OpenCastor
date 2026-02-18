@@ -5,6 +5,16 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.17.19] - 2026-02-17
+
+### Added
+- **Wizard redesign** — QuickStart now has distinct steps: Provider → Auth → Primary Model → Secondary Models → Messaging
+- **Provider-specific auth flows** — Anthropic (Max/Pro OAuth or API key), Google (ADC via `gcloud` or API key), HuggingFace (`huggingface-cli login` or paste token), OpenAI (API key), Ollama (connection check)
+- **Primary model selection** — curated model list per provider with recommendations and descriptions
+- **Secondary models** — optional specialized models (Gemini Robotics ER 1.5, GPT-4o vision, custom) with cross-provider auth
+- **Uninstall script** — `curl -sL opencastor.com/uninstall | bash`
+- 21 new wizard tests (1244 total)
+
 ## [2026.2.17.17] - 2026-02-17
 
 ### Added
