@@ -25,12 +25,20 @@ class AnthropicProvider(BaseProvider):
         if auth_mode == "oauth":
             # Claude Max/Pro plan — use OAuth via claude CLI credentials
             auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN")
+            if not auth_token:
+                # Read from Claude CLI stored credentials
+                auth_token = self._read_claude_oauth_token()
             if auth_token:
-                self.client = anthropic.Anthropic(api_key=auth_token)
-            else:
-                # Try to read from claude CLI stored credentials
-                self.client = anthropic.Anthropic()
+                self.client = anthropic.Anthropic(
+                    api_key=auth_token,
+                    default_headers={"anthropic-beta": "interleaved-thinking-2025-05-14"},
+                )
                 logger.info("Using Claude OAuth credentials (Max/Pro plan)")
+            else:
+                raise ValueError(
+                    "Claude OAuth token not found. Run 'claude auth login' to sign in, "
+                    "or set ANTHROPIC_API_KEY in .env for API key auth."
+                )
         else:
             # Standard API key auth
             api_key = os.getenv("ANTHROPIC_API_KEY") or config.get("api_key")
@@ -40,6 +48,25 @@ class AnthropicProvider(BaseProvider):
                     "'castor wizard' to authenticate with your Claude Max plan."
                 )
             self.client = anthropic.Anthropic(api_key=api_key)
+
+    @staticmethod
+    def _read_claude_oauth_token():
+        """Read OAuth access token from Claude CLI credentials file."""
+        import json
+
+        creds_path = os.path.expanduser("~/.claude/.credentials.json")
+        try:
+            if os.path.exists(creds_path):
+                with open(creds_path) as f:
+                    data = json.load(f)
+                oauth = data.get("claudeAiOauth", {})
+                token = oauth.get("accessToken")
+                if token:
+                    logger.debug("Read OAuth token from Claude CLI credentials")
+                    return token
+        except Exception as e:
+            logger.debug(f"Could not read Claude credentials: {e}")
+        return None
 
     def think(self, image_bytes: bytes, instruction: str) -> Thought:
         b64_image = base64.b64encode(image_bytes).decode("utf-8")
