@@ -5,7 +5,7 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
-## [2026.2.17.19] - 2026-02-17
+## [2026.2.17.20] - 2026-02-17
 
 ### Added
 - **Wizard redesign** — QuickStart now has distinct steps: Provider → Auth → Primary Model → Secondary Models → Messaging
