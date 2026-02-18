@@ -31,6 +31,7 @@ class AnthropicProvider(BaseProvider):
             if auth_token:
                 self.client = anthropic.Anthropic(
                     auth_token=auth_token,
+                    api_key=None,
                 )
                 logger.info("Using Claude OAuth credentials (Max/Pro plan)")
             else:
