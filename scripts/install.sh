@@ -14,7 +14,7 @@ echo " | (_) | '_ \\ / -_) '_ \\ (__/ _\` (_-<  _/ _ \\ '_|"
 echo "  \\___/| .__/ \\___|_| |_|\\___\\__,_/__/\\__\\___/_|"
 echo "       |_|"
 echo ""
-echo "OpenCastor Installer v2026.2.17.3"
+echo "OpenCastor Installer v2026.2.17.10"
 echo "RPi RC Car + Claude Opus + WhatsApp Stack"
 echo ""
 
@@ -25,11 +25,16 @@ sudo apt-get update -qq
 # Core packages (all platforms)
 sudo apt-get install -y -qq \
     python3-pip python3-venv python3-dev \
-    portaudio19-dev libatlas-base-dev \
+    portaudio19-dev \
     libglib2.0-0 \
     libsdl2-mixer-2.0-0 libsdl2-2.0-0 \
     i2c-tools \
     git
+
+# libatlas-base-dev provides BLAS for numpy on older ARM systems;
+# RPi 5 (Bookworm) ships numpy with its own BLAS so this is optional
+sudo apt-get install -y -qq libatlas-base-dev 2>/dev/null || \
+    echo "  -> libatlas-base-dev not available (not needed on Bookworm/RPi5, skipping)"
 
 # libgl1-mesa-glx was renamed in Ubuntu 22.04+; fall back to libgl1
 if apt-cache policy libgl1-mesa-glx 2>/dev/null | grep -q 'Candidate:' && ! apt-cache policy libgl1-mesa-glx 2>/dev/null | grep -q 'Candidate: (none)'; then
