@@ -298,7 +298,7 @@ fi
 if [ "$SKIP_WIZARD" = false ] && [ "$DRY_RUN" = false ]; then
   # Run wizard with --accept-risk (skip safety prompt, go straight to config)
   set +e
-  $PYTHON -m castor.wizard --accept-risk
+  $PYTHON -m castor.wizard --accept-risk </dev/tty
   WIZARD_EXIT=$?
   set -e
   if [ "$WIZARD_EXIT" -ne 0 ]; then
