@@ -439,66 +439,25 @@ def _check_ollama_connection():
 
 def _anthropic_auth_flow(env_var):
     """Handle Anthropic auth: OAuth or API key."""
-    oauth_status = _check_claude_oauth()
 
     print(f"\n{Colors.GREEN}--- AUTHENTICATION (Anthropic) ---{Colors.ENDC}")
-    print("  How would you like to authenticate with Anthropic?")
-    print("  [1] Claude Max/Pro plan (sign in with your account)")
-    print("  [2] API key (pay-as-you-go)")
+    print("  An Anthropic API key is required for robot control.")
+    print(f"  Get one at: {Colors.BOLD}https://console.anthropic.com/settings/keys{Colors.ENDC}")
+    print("  (Works with both pay-as-you-go and Max/Pro plan accounts)")
+    print()
+    print("  [1] Paste API key")
+    print("  [2] I'll set it later (skip)")
 
     auth_choice = input_default("Selection", "1").strip()
 
-    if auth_choice == "1":
-        if oauth_status is True:
-            print(
-                f"\n  {Colors.GREEN}[OK]{Colors.ENDC} Claude CLI already "
-                f"authenticated (Max/Pro plan)."
-            )
-            _write_env_var("ANTHROPIC_AUTH_MODE", "oauth")
-            return True
-        elif oauth_status == "installed":
-            print("\n  Claude CLI found but not signed in.")
-            if _run_claude_login():
-                print(f"\n  {Colors.GREEN}[OK]{Colors.ENDC} Signed in! Using your Max/Pro plan.")
-                _write_env_var("ANTHROPIC_AUTH_MODE", "oauth")
-                return True
-            else:
-                print(f"  {Colors.WARNING}Login failed.{Colors.ENDC} Falling back to API key.")
-        else:
-            print("\n  Claude CLI not found. Installing...")
-            import subprocess
+    if auth_choice == "2":
+        print(
+            f"  {Colors.WARNING}Skipped.{Colors.ENDC} Set ANTHROPIC_API_KEY in .env before running."
+        )
+        return False
 
-            try:
-                result = subprocess.run(
-                    ["npm", "install", "-g", "@anthropic-ai/claude-code"],
-                    capture_output=True,
-                    text=True,
-                    timeout=120,
-                )
-                if result.returncode == 0:
-                    print(f"  {Colors.GREEN}[OK]{Colors.ENDC} Claude CLI installed.")
-                    if _run_claude_login():
-                        print(
-                            f"\n  {Colors.GREEN}[OK]{Colors.ENDC} "
-                            f"Signed in! Using your Max/Pro plan."
-                        )
-                        _write_env_var("ANTHROPIC_AUTH_MODE", "oauth")
-                        return True
-                else:
-                    print(
-                        f"  {Colors.WARNING}Install failed.{Colors.ENDC} Falling back to API key."
-                    )
-            except Exception:
-                print(f"  {Colors.WARNING}npm not available.{Colors.ENDC} Falling back to API key.")
-                print(
-                    f"  Install manually: "
-                    f"{Colors.BOLD}npm install -g @anthropic-ai/claude-code"
-                    f"{Colors.ENDC}"
-                )
-                print(f"  Then run: ${Colors.BOLD}claude auth login{Colors.ENDC}\n")
-
-    # Fall through to API key
-    print("\n  Your Anthropic API key is needed.")
+    # API key flow
+    print()
     print(
         f"  It will be saved to your local "
         f"{Colors.BOLD}.env{Colors.ENDC} file (never committed to git)."

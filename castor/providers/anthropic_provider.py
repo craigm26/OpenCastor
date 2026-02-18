@@ -23,22 +23,18 @@ class AnthropicProvider(BaseProvider):
         auth_mode = os.getenv("ANTHROPIC_AUTH_MODE", "").lower()
 
         if auth_mode == "oauth":
-            # Claude Max/Pro plan — use OAuth via claude CLI credentials
-            auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN")
-            if not auth_token:
-                # Read from Claude CLI stored credentials
-                auth_token = self._read_claude_oauth_token()
-            if auth_token:
-                self.client = anthropic.Anthropic(
-                    auth_token=auth_token,
-                    api_key=None,
-                )
-                logger.info("Using Claude OAuth credentials (Max/Pro plan)")
-            else:
+            # Claude Max/Pro — OAuth tokens don't work with the public API.
+            # Fall through to standard API key auth with a helpful message.
+            api_key = os.getenv("ANTHROPIC_API_KEY") or config.get("api_key")
+            if not api_key:
                 raise ValueError(
-                    "Claude OAuth token not found. Run 'claude auth login' to sign in, "
-                    "or set ANTHROPIC_API_KEY in .env for API key auth."
+                    "Anthropic API key required. Claude Max/Pro OAuth tokens "
+                    "cannot be used with the Anthropic API directly. "
+                    "Get an API key at https://console.anthropic.com/settings/keys "
+                    "and set ANTHROPIC_API_KEY in your .env file."
                 )
+            self.client = anthropic.Anthropic(api_key=api_key)
+            logger.info("Using Anthropic API key (Max plan OAuth not supported for API access)")
         else:
             # Standard API key auth
             api_key = os.getenv("ANTHROPIC_API_KEY") or config.get("api_key")
