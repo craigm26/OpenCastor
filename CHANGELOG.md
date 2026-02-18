@@ -5,6 +5,13 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.17.12] - 2026-02-17
+
+### Fixed
+- **Installer** — `libatlas-base-dev` detection uses `apt-cache policy` (handles Bookworm "no candidate" correctly), `DEBIAN_FRONTEND=noninteractive` suppresses kernel upgrade dialogs, detached HEAD handled in `git pull`
+- **`python -m castor`** — Added `__main__.py` so the package is runnable as a module
+- **Install verification** — `install-check.sh` tries `castor` binary before `python -m castor` fallback
+
 ## [2026.2.17.11] - 2026-02-17
 
 ### Added
