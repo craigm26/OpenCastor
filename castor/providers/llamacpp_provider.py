@@ -17,7 +17,6 @@ Config:
 import json
 import logging
 import os
-import re
 from typing import Any, Dict
 
 from .base import BaseProvider, Thought
@@ -48,11 +47,11 @@ class LlamaCppProvider(BaseProvider):
                 )
                 self._use_ollama = False
                 logger.info(f"llama.cpp direct: {model} (ctx={n_ctx})")
-            except ImportError:
+            except ImportError as exc:
                 raise ImportError(
                     "llama-cpp-python required for GGUF models. "
                     "Install: pip install llama-cpp-python"
-                )
+                ) from exc
         else:
             # Use Ollama's OpenAI-compatible API
             self._base_url = base_url.rstrip("/")

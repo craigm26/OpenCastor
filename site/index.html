@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenCastor — Give Any Robot a Brain</title>
-  <meta name="description" content="The open-source runtime that connects AI models to robot hardware. Pick your AI. Pick your robot. One config. Go.">
-  <meta property="og:title" content="OpenCastor — Give Any Robot a Brain">
-  <meta property="og:description" content="The open-source runtime that connects AI to robot hardware. Gemini, Claude, GPT — one config file.">
+  <title>OpenCastor — The Universal Runtime for Embodied AI</title>
+  <meta name="description" content="Give any robot a brain. 7 AI providers, $0 primary brain, 36K+ lines of battle-tested code. Open source, Apache 2.0.">
+  <meta property="og:title" content="OpenCastor — The Universal Runtime for Embodied AI">
+  <meta property="og:description" content="Give any robot a brain. 7 AI providers, Hailo-8 NPU vision, OAK-D depth. Open source.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://opencastor.com">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="OpenCastor — Give Any Robot a Brain">
+  <meta name="twitter:title" content="OpenCastor — The Universal Runtime for Embodied AI">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,16 +27,16 @@
         <path d="M11 26 A11 11 0 1 1 23 8 L20 11 A7 7 0 1 0 14 22 Z" fill="currentColor"/>
         <path d="M23 8 L26 5 L23 2 L20 5 Z" fill="currentColor" opacity="0.7"/>
         <path d="M11 26 L8 29 L5 26 L8 23 Z" fill="currentColor" opacity="0.7"/>
-        <circle cx="16" cy="16" r="3.5" fill="#4285F4" opacity="0.9"/>
+        <circle cx="16" cy="16" r="3.5" fill="#6366f1" opacity="0.9"/>
         <circle cx="16" cy="16" r="1.8" fill="#fff" opacity="0.3"/>
       </svg>
       <span>OpenCastor</span>
     </a>
     <div class="nav-links">
-      <a href="/hardware">Hardware</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#features">Features</a>
+      <a href="#cost">Pricing</a>
       <a href="/docs">Docs</a>
-      <a href="/hub">Hub</a>
-      <a href="/about">About</a>
       <a href="https://github.com/craigm26/OpenCastor" class="btn-nav">
         GitHub
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg>
@@ -54,20 +54,20 @@
 <section class="hero">
   <div class="badge reveal">
     <span class="dot"></span>
-    Now Open Source &middot; v2026.2.17.20
+    v2026.2.19.0 Released
   </div>
 
   <h1 class="hero-title reveal reveal-d1">
-    Give Any Robot<br><span class="gradient-text">a Brain.</span>
+    The Universal Runtime for<br><span class="gradient-text">Embodied AI.</span>
   </h1>
 
   <p class="hero-sub reveal reveal-d2">
-    The open-source runtime that connects AI to robot hardware.<br>
-    Pick your AI. Pick your robot. One config. Go.
+    Give any robot a brain. 7 AI providers, tiered cognitive architecture,<br>
+    hardware-accelerated vision. One config file. Zero lock-in.
   </p>
 
   <div class="hero-actions reveal reveal-d3">
-    <a href="/docs" class="btn btn-primary btn-lg">
+    <a href="#quickstart" class="btn btn-primary btn-lg">
       Get Started
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
     </a>
@@ -81,234 +81,231 @@
     <code id="install-cmd">curl -sL opencastor.com/install | bash</code>
     <button onclick="copyInstall()">Copy</button>
   </div>
+
+  <div class="hero-links reveal reveal-d5">
+    <a href="https://pypi.org/project/opencastor/">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.585 11.692h4.328s2.432.039 2.432-2.35V5.391S16.714 3 11.936 3C7.362 3 7.647 4.983 7.647 4.983l.006 2.055h4.363v.617H5.92S3 7.28 3 11.874s2.547 4.456 2.547 4.456h1.521v-2.143s-.083-2.547 2.508-2.547l-.001.052zm-.282-4.444a.812.812 0 110-1.624.812.812 0 010 1.624z"/><path d="M14.415 12.308h-4.328s-2.432-.039-2.432 2.35v3.951S7.286 21 12.064 21c4.574 0 4.289-1.983 4.289-1.983l-.006-2.055h-4.363v-.617h6.096S21 16.72 21 12.126s-2.547-4.456-2.547-4.456h-1.521v2.143s.083 2.547-2.508 2.547l.001-.052zm.282 4.444a.812.812 0 110 1.624.812.812 0 010-1.624z"/></svg>
+      PyPI
+    </a>
+    <a href="https://github.com/craigm26/OpenCastor">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.09.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+      GitHub
+    </a>
+    <a href="/docs">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      Docs
+    </a>
+  </div>
 </section>
 
-<!-- ======== TRUST BAR ======== -->
-<section class="trust-bar">
-  <p>Works with every major AI &middot; 1M+ models on Hugging Face</p>
-  <div class="trust-logos">
-    <div class="trust-logo"><span class="logo-dot" style="background:#4285F4"></span>Google Gemini</div>
-    <div class="trust-logo"><span class="logo-dot" style="background:#10A37F"></span>OpenAI</div>
-    <div class="trust-logo"><span class="logo-dot" style="background:#D97706"></span>Anthropic Claude</div>
-    <div class="trust-logo"><span class="logo-dot" style="background:#FFD21E"></span>Hugging Face</div>
-    <div class="trust-logo"><span class="logo-dot" style="background:#888"></span>Ollama</div>
+<!-- ======== PROVIDER BAR ======== -->
+<section class="provider-bar">
+  <p class="provider-bar-label">Works with 7 AI providers &middot; 1M+ models on Hugging Face</p>
+  <div class="provider-grid">
+    <div class="provider-item"><span class="provider-dot" style="background:#D97706"></span>Anthropic</div>
+    <div class="provider-item"><span class="provider-dot" style="background:#4285F4"></span>Google Gemini</div>
+    <div class="provider-item"><span class="provider-dot" style="background:#10A37F"></span>OpenAI</div>
+    <div class="provider-item"><span class="provider-dot" style="background:#FFD21E"></span>Hugging Face</div>
+    <div class="provider-item"><span class="provider-dot" style="background:#888"></span>Ollama</div>
+    <div class="provider-item"><span class="provider-dot" style="background:#aaa"></span>llama.cpp</div>
+    <div class="provider-item"><span class="provider-dot" style="background:#D97706"></span>Claude OAuth</div>
+  </div>
+</section>
+
+<!-- ======== ARCHITECTURE ======== -->
+<section class="section alt-section" id="architecture">
+  <div class="container">
+    <div class="section-header center reveal">
+      <p class="section-label">Architecture</p>
+      <h2 class="section-title">Tiered Cognitive Architecture</h2>
+      <p class="section-desc">Three layers of intelligence — from reflexive safety to long-horizon planning. Each tier runs independently with automatic fallback.</p>
+    </div>
+
+    <div class="arch-visual reveal reveal-d1">
+      <div class="arch-tier" style="background: linear-gradient(135deg, rgba(168,85,247,0.08), var(--bg-card));">
+        <div class="arch-tier-icon" style="background: var(--purple-light);">🧠</div>
+        <div class="arch-tier-content">
+          <h3>Planner</h3>
+          <p>Long-horizon reasoning, task decomposition, and strategic planning. Claude, GPT-4.1, Gemini.</p>
+        </div>
+        <span class="arch-tier-badge" style="background: var(--purple-light); color: var(--purple);">~2s latency</span>
+      </div>
+      <div class="arch-tier" style="background: linear-gradient(135deg, rgba(99,102,241,0.08), var(--bg-card));">
+        <div class="arch-tier-icon" style="background: var(--accent-glow);">⚡</div>
+        <div class="arch-tier-content">
+          <h3>Fast Brain</h3>
+          <p>Real-time perception and quick decisions. Open-source models via HuggingFace, Ollama, or llama.cpp.</p>
+        </div>
+        <span class="arch-tier-badge" style="background: var(--accent-glow); color: var(--accent);">~100ms</span>
+      </div>
+      <div class="arch-tier" style="background: linear-gradient(135deg, rgba(34,197,94,0.08), var(--bg-card));">
+        <div class="arch-tier-icon" style="background: var(--green-light);">🛡️</div>
+        <div class="arch-tier-content">
+          <h3>Reactive Layer</h3>
+          <p>Hardware-level safety reflexes, emergency stop, collision avoidance. No AI latency — pure code.</p>
+        </div>
+        <span class="arch-tier-badge" style="background: var(--green-light); color: var(--green);">&lt;1ms</span>
+      </div>
+    </div>
   </div>
 </section>
 
 <!-- ======== FEATURES ======== -->
-<section class="section alt-section" id="features">
+<section class="section" id="features">
   <div class="container">
-    <div class="section-header reveal">
+    <div class="section-header center reveal">
       <p class="section-label">Features</p>
-      <h2 class="section-title">Stop writing firmware.<br>Start building agents.</h2>
-      <p class="section-desc">OpenCastor decouples the brain from the body. Define your robot in YAML, pick your AI, and let the framework handle everything else.</p>
+      <h2 class="section-title">Everything you need to build<br>intelligent robots.</h2>
+      <p class="section-desc">From vision to safety, from hardware drivers to community configs — it's all here.</p>
     </div>
 
-    <div class="bento">
+    <div class="feature-grid">
       <div class="card reveal">
-        <div class="card-icon" style="background:var(--accent-light)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><path d="M9.663 17h4.674M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
-        </div>
-        <h3>Swap AI Brains Instantly</h3>
-        <p>Switch between Gemini, GPT-4.1, Claude, Hugging Face, and Ollama with a single line change in your config. Zero code rewrites. Your robot behavior stays the same — only the brain changes.</p>
+        <div class="card-icon" style="background: var(--cyan-light);">🎯</div>
+        <h3>Hailo-8 NPU Vision</h3>
+        <p>Hardware-accelerated object detection at 30+ FPS on edge. 80+ COCO classes out of the box. YOLOv8 on dedicated AI accelerator — no GPU required.</p>
       </div>
 
       <div class="card reveal reveal-d1">
-        <div class="card-icon" style="background:var(--blue-light)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="1.5"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z"/><circle cx="12" cy="12" r="3"/></svg>
-        </div>
-        <h3>Hardware Agnostic</h3>
-        <p>Built-in drivers for PCA9685, Dynamixel, Serial, and GPIO. From $50 kits to $50K arms.</p>
-      </div>
-
-      <div class="card reveal reveal-d1">
-        <div class="card-icon" style="background:var(--green-light)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="1.5"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        </div>
-        <h3>5-Minute Setup</h3>
-        <p>Interactive wizard with presets for popular Amazon robot kits. One command to install, one to run.</p>
+        <div class="card-icon" style="background: var(--accent-glow);">📷</div>
+        <h3>OAK-D Depth Camera</h3>
+        <p>Stereo depth perception with on-device neural inference. Spatial awareness, obstacle mapping, and 3D understanding for autonomous navigation.</p>
       </div>
 
       <div class="card reveal reveal-d2">
-        <div class="card-icon" style="background:var(--orange-light)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="1.5"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-        </div>
-        <h3>Safety First</h3>
-        <p>Multi-layered safety kernel: anti-subversion defense, work authorization for destructive actions, physical bounds enforcement, tamper-evident audit logs, and real-time safety telemetry. Emergency stop in every loop.</p>
+        <div class="card-icon" style="background: var(--orange-light);">🛡️</div>
+        <h3>Safety Modules</h3>
+        <p>Multi-layered safety kernel: anti-subversion defense, work authorization, physical bounds enforcement, tamper-evident audit logs, and emergency stop in every loop.</p>
       </div>
 
       <div class="card reveal reveal-d3">
-        <div class="card-icon" style="background:var(--purple-light)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="1.5"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-        </div>
-        <h3>RCAN Standard</h3>
-        <p>Open spec for robot configs. Portable, validated, ecosystem-ready. Your YAML works everywhere.</p>
+        <div class="card-icon" style="background: var(--green-light);">🌐</div>
+        <h3>Community Hub</h3>
+        <p>Share and discover robot configurations, behaviors, and presets. Pull community-tested RCAN configs with one command. Build on what others have proven.</p>
       </div>
 
       <div class="card reveal reveal-d4">
-        <div class="card-icon" style="background:var(--blue-light)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="1.5"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-        </div>
-        <h3>Live Dashboard</h3>
-        <p>Web UI with voice control, chat, and live camera feed. Works on any screen — phone, tablet, or HDMI display.</p>
+        <div class="card-icon" style="background: var(--purple-light);">💻</div>
+        <h3>Cross-Platform</h3>
+        <p>Runs on Raspberry Pi, Jetson, x86 Linux, and macOS. ARM64 native. From $35 Pi Zero to workstation-class machines — same codebase, same config.</p>
+      </div>
+
+      <div class="card reveal reveal-d5">
+        <div class="card-icon" style="background: var(--red-light);">🔄</div>
+        <h3>Hot-Swap AI Brains</h3>
+        <p>Switch between 7 providers with a single config line. Zero code rewrites. Your robot behavior stays the same — only the brain changes.</p>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ======== HOW IT WORKS ======== -->
-<section class="section dark-section" id="how">
+<!-- ======== COST ======== -->
+<section class="section alt-section" id="cost">
   <div class="container">
-    <div class="section-header reveal" style="text-align:center;margin-left:auto;margin-right:auto">
-      <p class="section-label">How It Works</p>
-      <h2 class="section-title" style="color:var(--dark-text)">Three steps to intelligent.</h2>
-      <p class="section-desc" style="margin-left:auto;margin-right:auto">No PhD required. No firmware. No custom drivers. Just config and go.</p>
+    <div class="section-header center reveal">
+      <p class="section-label">Cost</p>
+      <h2 class="section-title">Your primary brain costs $0.</h2>
+      <p class="section-desc">Open-source models via Hugging Face free API power the fast brain. Paid providers are optional fallbacks for planning tasks.</p>
     </div>
 
-    <div class="steps">
-      <div class="step reveal">
-        <div class="step-num">01</div>
-        <h3>Choose Your AI</h3>
-        <p>Pick from Gemini, Claude, GPT-4.1, Hugging Face (1M+ models), or run locally with Ollama. Switch anytime — one line in your config.</p>
+    <div class="cost-grid reveal reveal-d1">
+      <div class="cost-card featured">
+        <h3>Primary Brain</h3>
+        <div class="cost-price free">$0</div>
+        <div class="cost-label">forever</div>
+        <ul class="cost-features">
+          <li>HuggingFace free inference API</li>
+          <li>Ollama local models</li>
+          <li>llama.cpp on-device</li>
+          <li>Full vision pipeline</li>
+          <li>All safety modules</li>
+          <li>Community configs</li>
+        </ul>
       </div>
-      <div class="step reveal reveal-d1">
-        <div class="step-num">02</div>
-        <h3>Define Your Robot</h3>
-        <p>Describe your hardware in a simple YAML file. Use a community preset or build your own from scratch.</p>
+      <div class="cost-card">
+        <h3>Planner Fallback</h3>
+        <div class="cost-price">Pay-per-use</div>
+        <div class="cost-label">only when you need it</div>
+        <ul class="cost-features">
+          <li>Anthropic Claude</li>
+          <li>Google Gemini</li>
+          <li>OpenAI GPT-4.1</li>
+          <li>Complex task planning</li>
+          <li>Long-horizon reasoning</li>
+        </ul>
       </div>
-      <div class="step reveal reveal-d2">
-        <div class="step-num">03</div>
-        <h3>Deploy</h3>
-        <p>One command to install, one to run. Your robot is now an AI-powered agent. Send it commands via WhatsApp, voice, or chat.</p>
+      <div class="cost-card">
+        <h3>Claude OAuth</h3>
+        <div class="cost-price">Free*</div>
+        <div class="cost-label">with Claude Pro subscription</div>
+        <ul class="cost-features">
+          <li>Use your existing Claude sub</li>
+          <li>No separate API keys needed</li>
+          <li>OAuth-based authentication</li>
+          <li>Full Claude capabilities</li>
+        </ul>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ======== CODE SHOWCASE ======== -->
-<section class="section" id="config">
+<!-- ======== QUICK START ======== -->
+<section class="section" id="quickstart">
   <div class="container">
-    <div class="code-showcase">
-      <div class="reveal">
-        <p class="section-label">The Magic</p>
-        <h2 class="section-title">One config file.<br>Infinite possibilities.</h2>
-        <p class="section-desc">Your robot's brain, body, and behavior defined in plain YAML. Swap providers, tune safety, change hardware — no recompilation. No code changes. Ever.</p>
-        <div style="margin-top:24px;display:flex;gap:12px;flex-wrap:wrap">
-          <a href="https://rcan.dev/spec/" class="btn btn-secondary btn-sm">
-            View RCAN Spec
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
-          </a>
-          <a href="/docs" class="btn btn-ghost btn-sm">Read the docs</a>
-        </div>
-      </div>
-
-      <div class="code-block reveal reveal-d2">
-        <div class="code-header">
-          <div class="code-dots"><span></span><span></span><span></span></div>
-          <span class="code-filename">robot.rcan.yaml</span>
-        </div>
-        <div class="code-body"><span class="cm"># Swap the brain in one line</span>
-<span class="k">agent</span>:
-  <span class="k">provider</span>: <span class="s">"anthropic"</span>
-  <span class="k">model</span>: <span class="s">"claude-opus-4-6"</span>
-  <span class="k">vision_enabled</span>: <span class="v">true</span>
-  <span class="k">safety_stop</span>: <span class="v">true</span>
-
-<span class="cm"># Define the body once</span>
-<span class="k">physics</span>:
-  <span class="k">type</span>: <span class="s">"differential_drive"</span>
-  <span class="k">dof</span>: <span class="n">2</span>
-
-<span class="k">drivers</span>:
-  - <span class="k">protocol</span>: <span class="s">"pca9685_i2c"</span>
-    <span class="k">address</span>: <span class="s">"0x40"</span>
-    <span class="k">channels</span>:
-      <span class="k">steering</span>: <span class="n">0</span>
-      <span class="k">throttle</span>: <span class="n">1</span></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ======== HARDWARE PREVIEW ======== -->
-<section class="section alt-section" id="hardware">
-  <div class="container">
-    <div class="section-header reveal">
-      <p class="section-label">Hardware</p>
-      <h2 class="section-title">From $50 toy to $50K arm.</h2>
-      <p class="section-desc">Pre-built presets for popular robot kits. Or bring your own config for anything with a motor.</p>
+    <div class="section-header center reveal">
+      <p class="section-label">Quick Start</p>
+      <h2 class="section-title">Three steps to intelligent.</h2>
+      <p class="section-desc">No PhD required. No firmware. No custom drivers.</p>
     </div>
 
-    <div class="hw-grid">
-      <div class="hw-card reveal">
-        <div class="hw-card-top">
-          <div class="hw-card-icon">&#x1F916;</div>
-          <span class="status status-green">Supported</span>
+    <div class="quickstart reveal reveal-d1">
+      <div class="quickstart-step">
+        <div class="quickstart-num">01</div>
+        <div>
+          <h4>Install</h4>
+          <p>One command installs OpenCastor and all dependencies.</p>
+          <code>curl -sL opencastor.com/install | bash</code>
         </div>
-        <h3>Waveshare AlphaBot</h3>
-        <p>Raspberry Pi-compatible tracked robot with camera and sensors.</p>
-        <div class="hw-card-meta">Driver: PCA9685 &middot; I2C</div>
       </div>
-
-      <div class="hw-card reveal reveal-d1">
-        <div class="hw-card-top">
-          <div class="hw-card-icon">&#x1F3CE;</div>
-          <span class="status status-green">Supported</span>
+      <div class="quickstart-step">
+        <div class="quickstart-num">02</div>
+        <div>
+          <h4>Configure</h4>
+          <p>Interactive wizard walks you through setup. Or use a community preset.</p>
+          <code>opencastor init</code>
         </div>
-        <h3>SunFounder PiCar-X</h3>
-        <p>Smart car with camera pan/tilt, line following, and obstacle avoidance.</p>
-        <div class="hw-card-meta">Driver: PCA9685 &middot; I2C</div>
       </div>
-
-      <div class="hw-card reveal reveal-d2">
-        <div class="hw-card-top">
-          <div class="hw-card-icon">&#x1F9BE;</div>
-          <span class="status status-green">Supported</span>
+      <div class="quickstart-step">
+        <div class="quickstart-num">03</div>
+        <div>
+          <h4>Run</h4>
+          <p>Your robot is now an AI-powered agent. Send commands via voice, chat, or WhatsApp.</p>
+          <code>opencastor run</code>
         </div>
-        <h3>Dynamixel Arms</h3>
-        <p>Professional-grade servo arms with high-precision position control.</p>
-        <div class="hw-card-meta">Driver: Dynamixel v2 &middot; Serial</div>
       </div>
-
-      <div class="hw-card reveal reveal-d3">
-        <div class="hw-card-top">
-          <div class="hw-card-icon">&#x1F3CE;</div>
-          <span class="status status-green">Supported</span>
-        </div>
-        <h3>RC Cars (1:16 / 1:10)</h3>
-        <p>Standard RC cars with PCA9685 servo steering and ESC throttle control.</p>
-        <div class="hw-card-meta">Driver: PCA9685 RC &middot; I2C</div>
-      </div>
-    </div>
-
-    <div style="text-align:center;margin-top:40px" class="reveal">
-      <a href="/hardware" class="btn btn-secondary">
-        View all hardware
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </a>
     </div>
   </div>
 </section>
 
 <!-- ======== STATS ======== -->
-<section class="dark-section" style="padding:72px 0">
+<section class="alt-section" style="padding: 72px 0">
   <div class="container">
     <div class="stats-grid">
       <div class="reveal">
-        <div class="stat-number">5</div>
-        <div class="stat-label">AI Providers</div>
+        <div class="stat-number">36,758</div>
+        <div class="stat-label">Lines of Code</div>
       </div>
       <div class="reveal reveal-d1">
-        <div class="stat-number">20+</div>
-        <div class="stat-label">Robot Kits Supported</div>
+        <div class="stat-number">1,319</div>
+        <div class="stat-label">Tests</div>
       </div>
       <div class="reveal reveal-d2">
-        <div class="stat-number">1</div>
-        <div class="stat-label">Config File</div>
+        <div class="stat-number">7</div>
+        <div class="stat-label">AI Providers</div>
       </div>
       <div class="reveal reveal-d3">
-        <div class="stat-number">&lt;5m</div>
-        <div class="stat-label">To First Command</div>
+        <div class="stat-number">80+</div>
+        <div class="stat-label">COCO Classes</div>
       </div>
     </div>
   </div>
@@ -319,7 +316,7 @@
   <h2 class="reveal">Start building today.</h2>
   <p class="reveal reveal-d1">Open source. Apache 2.0. Free forever.</p>
   <div class="hero-actions reveal reveal-d2">
-    <a href="/docs" class="btn btn-primary btn-lg">
+    <a href="#quickstart" class="btn btn-primary btn-lg">
       Get Started
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
     </a>
@@ -341,7 +338,7 @@
             <path d="M11 26 A11 11 0 1 1 23 8 L20 11 A7 7 0 1 0 14 22 Z" fill="currentColor" style="color:var(--accent)"/>
             <path d="M23 8 L26 5 L23 2 L20 5 Z" fill="currentColor" style="color:var(--accent)" opacity="0.7"/>
             <path d="M11 26 L8 29 L5 26 L8 23 Z" fill="currentColor" style="color:var(--accent)" opacity="0.7"/>
-            <circle cx="16" cy="16" r="3.5" fill="#4285F4" opacity="0.9"/>
+            <circle cx="16" cy="16" r="3.5" fill="#6366f1" opacity="0.9"/>
             <circle cx="16" cy="16" r="1.8" fill="#fff" opacity="0.3"/>
           </svg>
           <span>OpenCastor</span>
@@ -353,6 +350,7 @@
         <a href="/docs">Documentation</a>
         <a href="/hardware">Hardware</a>
         <a href="https://rcan.dev/spec/">RCAN Spec</a>
+        <a href="https://pypi.org/project/opencastor/">PyPI</a>
       </div>
       <div class="footer-col">
         <h4>Resources</h4>
@@ -364,7 +362,7 @@
       <div class="footer-col">
         <h4>Company</h4>
         <a href="/hub">Hub</a>
-      <a href="/about">About</a>
+        <a href="/about">About</a>
         <a href="mailto:hello@opencastor.com">Contact</a>
       </div>
     </div>
@@ -386,7 +384,6 @@
 </footer>
 
 <script>
-// Mobile menu
 const toggle = document.querySelector('.mobile-toggle');
 const navLinks = document.querySelector('.nav-links');
 toggle.addEventListener('click', function() {
@@ -395,26 +392,19 @@ toggle.addEventListener('click', function() {
   document.body.style.overflow = navLinks.classList.contains('open') ? 'hidden' : '';
 });
 document.querySelectorAll('.nav-links a').forEach(a => {
-  a.addEventListener('click', () => {
-    navLinks.classList.remove('open');
-    toggle.classList.remove('active');
-    document.body.style.overflow = '';
-  });
+  a.addEventListener('click', () => { navLinks.classList.remove('open'); toggle.classList.remove('active'); document.body.style.overflow = ''; });
 });
 
-// Nav scroll
 const nav = document.querySelector('.site-nav');
 const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 20);
 window.addEventListener('scroll', onScroll, { passive: true });
 onScroll();
 
-// Scroll reveal
 const ro = new IntersectionObserver((entries) => {
   entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); ro.unobserve(e.target); } });
 }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
 document.querySelectorAll('.reveal').forEach(el => ro.observe(el));
 
-// Smooth scroll
 document.querySelectorAll('a[href^="#"]').forEach(a => {
   a.addEventListener('click', e => {
     e.preventDefault();
@@ -423,7 +413,6 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
   });
 });
 
-// Copy install
 function copyInstall() {
   const cmd = document.getElementById('install-cmd').textContent;
   navigator.clipboard.writeText(cmd).then(() => {

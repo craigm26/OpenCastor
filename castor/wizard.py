@@ -1089,6 +1089,159 @@ def _add_custom_secondary(already_authed):
 
 
 # ---------------------------------------------------------------------------
+# Brain Architecture (Step 6)
+# ---------------------------------------------------------------------------
+
+# Pre-built tiered brain configurations
+BRAIN_PRESETS = [
+    {
+        "name": "Free & Open Source",
+        "desc": "$0/mo — HuggingFace API + Ollama fallback",
+        "primary": {"provider": "huggingface", "model": "Qwen/Qwen2.5-VL-7B-Instruct"},
+        "planner": None,
+        "cost": "free",
+    },
+    {
+        "name": "Budget Smart",
+        "desc": "~$0/mo — HF primary + Gemini Flash-Lite fallback (free tiers)",
+        "primary": {"provider": "huggingface", "model": "Qwen/Qwen2.5-VL-7B-Instruct"},
+        "planner": {"provider": "google", "model": "gemini-2.5-flash-lite"},
+        "cost": "free",
+    },
+    {
+        "name": "Balanced (Recommended)",
+        "desc": "~$5/mo — HF primary + Claude planner for complex reasoning",
+        "primary": {"provider": "huggingface", "model": "Qwen/Qwen2.5-VL-7B-Instruct"},
+        "planner": {"provider": "anthropic", "model": "claude-sonnet-4-6"},
+        "cost": "low",
+    },
+    {
+        "name": "Performance",
+        "desc": "~$10-20/mo — Gemini Flash primary + Claude planner",
+        "primary": {"provider": "google", "model": "gemini-2.5-flash-lite"},
+        "planner": {"provider": "anthropic", "model": "claude-sonnet-4-6"},
+        "cost": "medium",
+    },
+    {
+        "name": "Maximum Intelligence",
+        "desc": "$$$ — Claude primary + Claude Opus planner",
+        "primary": {"provider": "anthropic", "model": "claude-sonnet-4-6"},
+        "planner": {"provider": "anthropic", "model": "claude-opus-4-6"},
+        "cost": "high",
+    },
+]
+
+
+def choose_brain_architecture(primary_provider, secondary_models, already_authed):
+    """Guide user through tiered brain setup for cost-effective AI."""
+    print(f"\n{Colors.GREEN}{'=' * 60}{Colors.ENDC}")
+    print(f"{Colors.BOLD}  🧠 BRAIN ARCHITECTURE{Colors.ENDC}")
+    print(f"{Colors.GREEN}{'=' * 60}{Colors.ENDC}")
+    print()
+    print("  OpenCastor uses a tiered brain for cost-effective AI:")
+    print()
+    print(f"  {Colors.BOLD}Layer 0:{Colors.ENDC} Reactive    (<1ms)   — Rule-based safety, free")
+    print(
+        f"  {Colors.BOLD}Layer 1:{Colors.ENDC} Fast Brain  (~500ms) — Primary perception + action"
+    )
+    print(
+        f"  {Colors.BOLD}Layer 2:{Colors.ENDC} Planner     (~10s)   — Complex reasoning (periodic)"
+    )
+    print()
+    print("  The fast brain handles every frame. The planner runs every")
+    print("  ~15 ticks or when the fast brain is uncertain.")
+    print()
+    print(f"  {Colors.GREEN}Choose a cost tier:{Colors.ENDC}")
+    print()
+
+    for i, preset in enumerate(BRAIN_PRESETS, 1):
+        marker = " ★" if "Recommended" in preset["name"] else ""
+        print(f"  [{i}] {preset['name']:<28s} {preset['desc']}{marker}")
+
+    print("  [0] Skip (use primary model for everything)")
+    print()
+
+    choice = input_default("Selection", "3").strip()
+
+    if choice == "0":
+        return {}
+
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(BRAIN_PRESETS):
+            preset = BRAIN_PRESETS[idx]
+        else:
+            return {}
+    except ValueError:
+        return {}
+
+    result = {
+        "tiered_brain": {
+            "planner_interval": 15,
+            "uncertainty_threshold": 0.3,
+        },
+    }
+
+    # If preset primary differs from wizard primary, inform user
+    bp = preset["primary"]
+    if bp["provider"] != primary_provider:
+        print(f"\n  This preset uses {Colors.BOLD}{bp['provider']}/{bp['model']}{Colors.ENDC}")
+        print("  as the fast brain (overrides your primary provider selection).")
+        # Auth the fast brain provider
+        authenticate_provider(bp["provider"], already_authed=already_authed)
+
+    # Override the agent config with the fast brain
+    result["agent_override"] = {
+        "provider": bp["provider"],
+        "model": bp["model"],
+        "vision_enabled": True,
+    }
+
+    # Set up planner as secondary
+    if preset["planner"]:
+        pp = preset["planner"]
+        if pp["provider"] not in already_authed and pp["provider"] != primary_provider:
+            authenticate_provider(pp["provider"], already_authed=already_authed)
+
+        # Add planner to secondary models if not already there
+        planner_entry = {
+            "provider": pp["provider"],
+            "model": pp["model"],
+            "tags": ["planning", "reasoning"],
+        }
+        result["planner_secondary"] = planner_entry
+
+    # Hailo-8 vision (auto-detect)
+    try:
+        import hailo_platform  # noqa: F401
+
+        if os.path.exists("/usr/share/hailo-models/yolov8s_h8.hef"):
+            print(f"\n  {Colors.GREEN}✓ Hailo-8 NPU detected!{Colors.ENDC}")
+            print("    Enabling hardware-accelerated object detection (~250ms)")
+            print("    80 COCO classes • obstacle avoidance • zero API cost")
+            result["reactive"] = {
+                "hailo_vision": True,
+                "hailo_confidence": 0.4,
+                "min_obstacle_m": 0.3,
+            }
+    except ImportError:
+        pass
+
+    print(f"\n  {Colors.GREEN}✓ Brain architecture configured!{Colors.ENDC}")
+    cost = preset["cost"]
+    if cost == "free":
+        print(f"    Estimated cost: {Colors.BOLD}$0/month{Colors.ENDC} 🎉")
+    elif cost == "low":
+        print(f"    Estimated cost: {Colors.BOLD}~$5/month{Colors.ENDC}")
+    elif cost == "medium":
+        print(f"    Estimated cost: {Colors.BOLD}~$10-20/month{Colors.ENDC}")
+    else:
+        print(f"    Estimated cost: {Colors.BOLD}varies (pay-per-use){Colors.ENDC}")
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Legacy choose_provider — used by Advanced flow
 # ---------------------------------------------------------------------------
 def choose_provider():
@@ -1882,7 +2035,10 @@ def main():
         # Step 5: Secondary models
         secondary_models = choose_secondary_models(provider_key, already_authed)
 
-        # Step 6: Messaging channel (optional)
+        # Step 6: Brain Architecture
+        tiered_config = choose_brain_architecture(provider_key, secondary_models, already_authed)
+
+        # Step 7: Messaging channel (optional)
         print(f"\n{Colors.GREEN}--- MESSAGING (optional) ---{Colors.ENDC}")
         print("  Connect a messaging app to talk to your robot.")
         print("  [0] Skip for now")
@@ -1901,6 +2057,21 @@ def main():
         rcan_data = generate_preset_config(
             preset, robot_name, agent_config, secondary_models=secondary_models
         )
+        # Merge tiered brain config if selected
+        if tiered_config:
+            # Apply agent override (fast brain becomes primary)
+            if "agent_override" in tiered_config:
+                for k, v in tiered_config.pop("agent_override").items():
+                    rcan_data.setdefault("agent", {})[k] = v
+
+            # Add planner to secondary models
+            if "planner_secondary" in tiered_config:
+                planner = tiered_config.pop("planner_secondary")
+                rcan_data.setdefault("agent", {}).setdefault("secondary_models", [])
+                rcan_data["agent"]["secondary_models"].insert(0, planner)
+
+            # Merge remaining keys (tiered_brain, reactive)
+            rcan_data.update(tiered_config)
     else:
         # -- Advanced Path (legacy) --
         agent_config = choose_provider()

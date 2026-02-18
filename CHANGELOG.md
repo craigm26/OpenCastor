@@ -5,6 +5,79 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.19.0] - 2026-02-19 🚀 Major Release
+
+### Highlights
+OpenCastor v2026.2.19.0 is a landmark release that transforms the framework into a
+production-ready, cost-effective AI robotics runtime. **7 AI providers**, a **tiered
+brain architecture** that starts at $0/month, **Hailo-8 NPU vision**, **OAK-D depth
+camera** support, and an interactive wizard that guides users through optimal setup.
+
+### Added
+- **Tiered Brain Architecture** (`castor/tiered_brain.py`): Three-layer system —
+  Reactive (<1ms rules), Fast Brain (~500ms HF/Gemini), Planner (~12s Claude).
+  Configurable planner interval, uncertainty escalation, per-layer stats.
+- **Hailo-8 NPU Vision** (`castor/hailo_vision.py`): YOLOv8s object detection at
+  ~250ms on Hailo-8. 80 COCO classes, obstacle classification, clear-path analysis.
+  Zero API cost for reactive obstacle avoidance.
+- **OAK-D Stereo Depth Camera**: RGB + depth streaming via DepthAI v3 API.
+  Depth-based obstacle distance (5th percentile center region). Camera type `oakd`
+  with `depth_enabled: true` in config.
+- **llama.cpp Provider** (`castor/providers/llamacpp_provider.py`): Local LLM
+  inference via Ollama OpenAI API or direct GGUF loading. Model pre-loading with
+  keep-alive. Provider aliases: `llamacpp`, `llama.cpp`, `llama-cpp`.
+- **HuggingFace Vision Models**: Added Qwen2.5-VL-7B/3B, Llama-4-Scout/Maverick
+  to vision model registry. Free Inference API = $0 robot brain.
+- **Brain Architecture Wizard**: New Step 6 in wizard — 5 cost-tier presets from
+  Free ($0) to Maximum Intelligence. Auto-detects Hailo-8 NPU. Shows estimated
+  monthly cost. Explains the tiered approach to new users.
+- **Graceful Shutdown**: SIGTERM/SIGINT handler with phased cleanup — motors →
+  watchdog → battery → hardware → speaker → camera → filesystem → audit.
+- **Claude OAuth Proxy** (`castor/claude_proxy.py`): Native `ClaudeOAuthClient`
+  wraps `claude -p` CLI for setup-token auth without per-token billing.
+- 16 new tests (1319 total across Python 3.10-3.12)
+
+### Changed
+- Primary brain defaults to open-source model (Qwen2.5-VL via HuggingFace)
+- Tiered brain wiring: primary config = fast brain, secondary[0] = planner
+- Camera class supports three modes: OAK-D, CSI (picamera2), USB (OpenCV)
+- Watchdog timeout increased to 30s for Claude CLI latency on ARM
+- Hailo vision defaults to opt-in (`hailo_vision: false`) to avoid CI segfaults
+- Doctor test patched for env file leak from credential store
+
+### Fixed
+- Anthropic provider auto-routes OAuth tokens through Claude CLI
+- OpenAI provider supports `base_url` for custom endpoints (Ollama, etc.)
+- Installer version synced to release version
+
+### Architecture
+```
+┌─────────────────────────────────────────────────────┐
+│  Layer 0: Reactive (<1ms)                           │
+│  ├─ Blank frame → wait                              │
+│  ├─ Depth obstacle < 0.3m → stop                    │
+│  ├─ Battery critical → stop                         │
+│  └─ Hailo-8 YOLOv8 (~250ms) → avoid/stop          │
+├─────────────────────────────────────────────────────┤
+│  Layer 1: Fast Brain (~500ms)                       │
+│  └─ Qwen2.5-VL / Gemini Flash / Ollama             │
+├─────────────────────────────────────────────────────┤
+│  Layer 2: Planner (~10-15s, every N ticks)          │
+│  └─ Claude Sonnet / Opus                            │
+└─────────────────────────────────────────────────────┘
+```
+
+### Providers (7 total)
+| Provider | Models | Auth |
+|----------|--------|------|
+| Anthropic | Claude 4 family | API key or setup-token (OAuth) |
+| Google | Gemini 2.5 Flash/Pro | API key |
+| OpenAI | GPT-4o, o1 | API key |
+| HuggingFace | Qwen-VL, Llama 4, any Hub model | HF token (free) |
+| Ollama | Any GGUF model | Local (no auth) |
+| llama.cpp | Direct GGUF or Ollama API | Local (no auth) |
+| Claude OAuth | Max/Pro subscription | setup-token |
+
 ## [2026.2.18.13] - 2026-02-18
 
 ### Added

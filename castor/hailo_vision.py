@@ -8,9 +8,8 @@ Uses per-call context managers to avoid segfaults from persistent VDevice.
 """
 
 import logging
-import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import numpy as np
 
@@ -114,11 +113,11 @@ class HailoVision:
             import cv2
             from hailo_platform import (
                 HEF,
-                VDevice,
-                InputVStreamParams,
-                OutputVStreamParams,
                 FormatType,
                 InferVStreams,
+                InputVStreamParams,
+                OutputVStreamParams,
+                VDevice,
             )
 
             h, w = self._input_hw

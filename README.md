@@ -1,39 +1,45 @@
-# OpenCastor
+<p align="center">
+  <img src="docs/assets/opencastor-logo.png" alt="OpenCastor" width="200"/>
+</p>
 
-**The Universal Runtime for Embodied AI.**
+<h1 align="center">OpenCastor</h1>
+<h3 align="center">The Universal Runtime for Embodied AI</h3>
 
-> Stop writing boilerplate. Start building robot agents.
+<p align="center">
+  <a href="https://pypi.org/project/opencastor/"><img src="https://img.shields.io/pypi/v/opencastor?color=blue&label=PyPI" alt="PyPI"></a>
+  <a href="https://github.com/craigm26/OpenCastor/actions"><img src="https://img.shields.io/github/actions/workflow/status/craigm26/OpenCastor/ci.yml?label=CI" alt="CI"></a>
+  <a href="https://github.com/craigm26/OpenCastor/blob/main/LICENSE"><img src="https://img.shields.io/github/license/craigm26/OpenCastor?color=green" alt="License"></a>
+  <a href="https://pypi.org/project/opencastor/"><img src="https://img.shields.io/pypi/pyversions/opencastor" alt="Python"></a>
+  <a href="https://discord.gg/jMjA8B26Bq"><img src="https://img.shields.io/discord/1234567890?label=Discord&color=5865F2" alt="Discord"></a>
+</p>
 
-OpenCastor connects any AI model to any robot hardware through a single YAML config file. Swap brains (Claude, Gemini, GPT, Ollama) or bodies (Raspberry Pi, Jetson, Arduino) without changing a line of code.
+<p align="center">
+  <b>36,758 lines of code · 1,319 tests · Python 3.10–3.12</b><br/>
+  <i>Connect any AI model to any robot hardware through a single YAML config.</i>
+</p>
 
-Whether you have a $50 Amazon robot kit or a $50,000 industrial arm, OpenCastor makes it work.
+---
 
-## Why OpenCastor?
+## 🚀 Install in 10 Seconds
 
-| Feature | What it means |
-|---|---|
-| **Universal Adapter** | Switch between Claude, Gemini, GPT, or Ollama with one config change |
-| **Hardware Agnostic** | Built-in drivers for PCA9685, Dynamixel, Serial, and more |
-| **Zero Friction** | Unbox to agent in under 5 minutes |
-| **Safety First** | Hard-coded safety layers prevent LLM hallucinations from causing physical damage |
-| **RCAN Compliant** | Built on the open [RCAN Standard](https://rcan.dev/spec/) for interoperability |
-| **Messaging Built-in** | Control your robot via WhatsApp, Telegram, Discord, or Slack |
-
-## Quick Start
-
-### 1. Install
-
-**Linux / macOS (one-liner):**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/craigm26/OpenCastor/main/scripts/install.sh | bash
+curl -sL opencastor.com/install | bash
 ```
+
+<details>
+<summary>Other platforms</summary>
 
 **Windows 11 (PowerShell):**
 ```powershell
 irm https://raw.githubusercontent.com/craigm26/OpenCastor/main/scripts/install.ps1 | iex
 ```
 
-**Manual install (any platform):**
+**Docker:**
+```bash
+docker compose up
+```
+
+**Manual:**
 ```bash
 git clone https://github.com/craigm26/OpenCastor.git
 cd OpenCastor
@@ -41,112 +47,264 @@ python3 -m venv venv && source venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-<details>
-<summary>Platform-specific notes</summary>
-
-| Platform | Package Manager | Notes |
-|---|---|---|
-| **macOS** | Homebrew (auto-installed) | Apple Silicon & Intel supported |
-| **Ubuntu / Debian** | apt | Includes RPi auto-detection |
-| **Fedora / RHEL** | dnf | |
-| **Arch Linux** | pacman | |
-| **Alpine** | apk | |
-| **Raspberry Pi** | apt | Enables I2C & camera automatically |
-| **Windows 11** | winget / choco | Native PowerShell, no WSL needed |
-
-**Installer flags:** `--dry-run` (preview), `--no-rpi` (skip RPi detection), `--skip-wizard`
-
-**Verify installation:** `bash scripts/install-check.sh` (or `install-check.ps1` on Windows)
+Supports **Linux, macOS (Apple Silicon & Intel), Windows 11, Raspberry Pi, Docker**.
+Installer flags: `--dry-run`, `--no-rpi`, `--skip-wizard`
 </details>
 
-### 2. Run the Wizard
+## ✨ What's New in v2026.2.19.0
+
+- **7 AI providers** — Anthropic, Google, OpenAI, HuggingFace, Ollama, llama.cpp, Claude OAuth proxy
+- **Tiered brain architecture** — reactive rules → fast inference → deep planning
+- **Hailo-8 NPU vision** — on-device YOLOv8 object detection at ~250ms
+- **OAK-D stereo depth camera** — RGB + depth via DepthAI v3
+- **Community Hub** — browse, install, and share robot recipes with `castor hub`
+- **Interactive wizard** — provider selection, auth, messaging setup with recall of previous choices
+- **`castor doctor`** — full system health diagnostic
+
+## 🧠 Tiered Brain Architecture
+
+OpenCastor doesn't send every decision to a $0.015/request cloud API. Instead, it routes through three layers — only escalating when needed:
 
 ```
-$ castor wizard
-
-OpenCastor Setup Wizard v2026.2.17.11
-
-Which Brain do you want to use?
-[1] Anthropic Claude Opus 4.6 (Recommended)
-[2] Google Gemini 2.5 Flash
-[3] Google Gemini 3 Flash (Preview)
-[4] OpenAI GPT-4.1
-[5] Local Llama (via Ollama)
-
-> Selection: 1
+┌─────────────────────────────────────────────────────────┐
+│                    MESSAGING LAYER                       │
+│         WhatsApp · Telegram · Discord · Slack            │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────────┐
+│                   API GATEWAY                            │
+│            FastAPI · REST · Webhooks · JWT               │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────────┐
+│               TIERED BRAIN STACK                         │
+│                                                          │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │  Layer 3: PLANNER         Claude Opus · ~12s       │  │
+│  │  Complex reasoning, multi-step plans, novel tasks  │  │
+│  ├────────────────────────────────────────────────────┤  │
+│  │  Layer 2: FAST BRAIN      HF / Gemini · ~500ms    │  │
+│  │  Classification, simple Q&A, routine decisions     │  │
+│  ├────────────────────────────────────────────────────┤  │
+│  │  Layer 1: REACTIVE        Rule engine · <1ms       │  │
+│  │  Obstacle stop, boundary enforce, emergency halt   │  │
+│  └────────────────────────────────────────────────────┘  │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────────┐
+│                  PERCEPTION                              │
+│  Hailo-8 NPU (YOLOv8) · OAK-D Depth · Camera · IMU    │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────────┐
+│               RCAN SAFETY KERNEL                         │
+│    Physical bounds · Anti-subversion · Audit chain       │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────────┐
+│                  DRIVER LAYER                            │
+│       PCA9685 · Dynamixel · GPIO · Serial · I2C         │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+                  [ YOUR ROBOT ]
 ```
 
-The wizard generates an RCAN config file, collects your API key, and optionally sets up messaging channels.
+**Cost-effective by default.** The reactive layer handles 80% of decisions at zero cost. The fast brain handles another 15%. The planner only fires for genuinely complex tasks.
 
-### 3. Run
+## 🤖 Supported AI Providers
+
+| Provider | Models | Latency | Best For |
+|---|---|---|---|
+| **Anthropic** | `claude-opus-4-6`, `claude-sonnet-4-5` | ~12s | Complex planning, safety-critical reasoning |
+| **Google** | `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3-flash-preview` | ~500ms | Multimodal, video, speed |
+| **OpenAI** | `gpt-4.1`, `gpt-4.1-mini`, `gpt-5` | ~2s | Instruction following, 1M context |
+| **HuggingFace** | Transformers, any hosted model | ~500ms | Fast brain layer, classification |
+| **Ollama** | `llava:13b`, any local model | Varies | Privacy, offline, zero cost |
+| **llama.cpp** | GGUF models | ~200ms | Edge inference, Raspberry Pi |
+| **Claude OAuth** | Proxy-authenticated Claude | ~12s | Team/org deployments |
+
+Swap providers with one YAML change:
+
+```yaml
+agent:
+  provider: "anthropic"
+  model: "claude-opus-4-6"
+```
+
+## 👁️ Vision & Perception
+
+### Hailo-8 NPU — On-Device Object Detection
+
+No cloud API calls needed. The Hailo-8 neural processing unit runs YOLOv8 locally:
+
+- **80 COCO object classes** — people, vehicles, animals, furniture, and more
+- **~250ms inference** — fast enough for real-time obstacle avoidance
+- **Zero API cost** — all processing happens on the edge
+
+### OAK-D Stereo Depth Camera
+
+RGB + depth streaming via DepthAI v3. Get 3D spatial awareness for navigation, manipulation, and mapping.
+
+```yaml
+perception:
+  camera:
+    type: "oakd"
+    depth: true
+    resolution: "1080p"
+  npu:
+    type: "hailo8"
+    model: "yolov8n"
+    confidence: 0.5
+```
+
+## 🛡️ Safety First
+
+OpenCastor implements defense-in-depth safety, inspired by [ContinuonAI](https://github.com/craigm26) principles and fully [RCAN spec](https://rcan.dev/spec/) compliant:
+
+| Layer | What It Does |
+|---|---|
+| **Physical Bounds** | Workspace limits, joint constraints, force capping |
+| **Anti-Subversion** | Prompt injection defense, input sanitization |
+| **Work Authorization** | Dangerous commands require explicit approval |
+| **Tamper-Evident Audit** | Hash-chained logs at `/proc/safety` — any tampering is detectable |
+| **Emergency Stop** | Hardware and software e-stop, reactive layer < 1ms |
+
+```bash
+castor audit --verify        # Verify audit chain integrity
+castor approvals             # View/approve dangerous commands
+castor privacy --config r.yaml  # Show sensor access policy
+```
+
+## 📦 Quick Start
+
+### 1. Install & Configure
+
+```bash
+curl -sL opencastor.com/install | bash
+castor wizard
+```
+
+The wizard walks you through provider selection, API keys, hardware config, and optional messaging setup (WhatsApp/Telegram). It remembers your previous choices.
+
+### 2. Run
 
 ```bash
 castor run --config my_robot.rcan.yaml
 ```
 
-Your robot is now online. Open `http://localhost:8501` for the CastorDash web interface.
-
-## Swap Your Brain in One Line
-
-Your robot's entire personality lives in a YAML config file powered by the [RCAN Standard](https://rcan.dev/spec/). Switch AI providers by editing one block:
-
-```yaml
-# Option A: Anthropic Claude (Recommended)
-agent:
-  provider: "anthropic"
-  model: "claude-opus-4-6"       # Best reasoning & safety
-
-# Option B: Google Gemini
-# agent:
-#   provider: "google"
-#   model: "gemini-2.5-flash"    # Stable. Also: gemini-2.5-pro, gemini-3-flash-preview
-
-# Option C: OpenAI GPT
-# agent:
-#   provider: "openai"
-#   model: "gpt-4.1"             # 1M context, strong vision. Also: gpt-5
-
-# Option D: Local / Offline
-# agent:
-#   provider: "ollama"
-#   model: "llava:13b"
-#   url: "http://localhost:11434"
-```
-
-## Architecture
+### 3. Open the Dashboard
 
 ```
-[ WhatsApp / Telegram / Discord / Slack ]   <-- Messaging Channels
-                    |
-            [ API Gateway ]                 <-- FastAPI (castor gateway)
-                    |
-      [ Claude / Gemini / GPT / Ollama ]    <-- The Brain (Provider Layer)
-                    |
-              [ RCAN Config ]               <-- The Spinal Cord (Validation)
-                    |
-        [ PCA9685 / Dynamixel / GPIO ]      <-- The Nervous System (Drivers)
-                    |
-              [ Your Robot ]                <-- The Body
+http://localhost:8501
 ```
 
-- **Messaging Channels**: Control your robot from WhatsApp, Telegram, Discord, or Slack.
-- **API Gateway**: FastAPI server with REST endpoints, webhook receivers, and bearer-token auth.
-- **Provider Layer**: Normalizes AI outputs into a standard `Thought` object (text + action JSON).
-- **RCAN Validation**: Checks actions against physical constraints (speed limits, range of motion, collision).
-- **Driver Layer**: Translates high-level intent (`move_forward`) into low-level signals (PWM, serial, I2C).
+### 4. Diagnose Issues
 
-## Supported Models (Feb 2026)
+```bash
+castor doctor
+```
 
-| Provider | Models | Best For |
-|---|---|---|
-| **Anthropic** | `claude-opus-4-6`, `claude-sonnet-4-5-20250929` | Reasoning, safety, complex planning |
-| **Google** | `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3-flash-preview`, `gemini-3-pro-preview` | Video, multimodal, speed |
-| **OpenAI** | `gpt-4.1`, `gpt-4.1-mini`, `gpt-5` | Instruction following, 1M context |
-| **Ollama** | `llava:13b`, any local model | Privacy, offline, no API cost |
+### Minimal Python Example
 
-## Supported Hardware
+```python
+from castor.providers import get_provider
+from castor.drivers.pca9685 import PCA9685Driver
 
-Pre-made RCAN presets for popular kits, or bring your own config:
+brain = get_provider({"provider": "anthropic", "model": "claude-opus-4-6"})
+driver = PCA9685Driver(config["drivers"][0])
+
+while True:
+    frame = camera.capture()
+    thought = brain.think(frame, "Navigate to the kitchen, avoid obstacles.")
+    if thought.action:
+        driver.move(thought.action["linear"], thought.action["angular"])
+```
+
+## 🏪 Community Hub
+
+Browse, install, and share robot recipes:
+
+```bash
+castor hub search "delivery bot"
+castor hub install @alice/warehouse-picker
+castor hub publish my_robot.rcan.yaml
+```
+
+Recipes are shareable RCAN configs — complete robot personalities with perception, planning, and safety settings bundled together.
+
+## 🔧 CLI Reference
+
+<details>
+<summary><b>Setup & Config</b></summary>
+
+```bash
+castor wizard                          # Interactive setup wizard
+castor quickstart                      # Wizard + demo in one command
+castor configure --config robot.yaml   # Interactive config editor
+castor install-service --config r.yaml # Generate systemd unit file
+castor learn                           # Step-by-step tutorial
+castor doctor                          # Full system health check
+castor fix                             # Auto-fix common issues
+```
+</details>
+
+<details>
+<summary><b>Run & Monitor</b></summary>
+
+```bash
+castor run --config robot.yaml         # Perception-action loop
+castor run --config robot.yaml --simulate  # No hardware needed
+castor gateway --config robot.yaml     # API gateway + messaging
+castor dashboard                       # Streamlit web UI
+castor demo                            # Simulated demo
+castor shell --config robot.yaml       # Interactive command shell
+castor repl --config robot.yaml        # Python REPL with robot objects
+castor status                          # Provider/channel readiness
+castor logs -f                         # Structured colored logs
+castor benchmark --config robot.yaml   # Performance profiling
+```
+</details>
+
+<details>
+<summary><b>Hardware & Recording</b></summary>
+
+```bash
+castor test-hardware --config robot.yaml  # Test motors individually
+castor calibrate --config robot.yaml      # Interactive calibration
+castor record --config robot.yaml         # Record a session
+castor replay session.jsonl               # Replay a recorded session
+castor watch --gateway http://127.0.0.1:8000  # Live telemetry
+```
+</details>
+
+<details>
+<summary><b>Hub & Fleet</b></summary>
+
+```bash
+castor hub search "patrol bot"         # Browse community recipes
+castor hub install @user/recipe        # Install a recipe
+castor hub publish config.yaml         # Share your recipe
+castor discover                        # Find RCAN peers on LAN
+castor fleet                           # Multi-robot status (mDNS)
+```
+</details>
+
+<details>
+<summary><b>Safety & Admin</b></summary>
+
+```bash
+castor approvals                       # View/approve dangerous commands
+castor audit --since 24h               # View audit log
+castor audit --verify                  # Verify chain integrity
+castor privacy --config robot.yaml     # Sensor access policy
+castor token --role operator           # Issue JWT
+castor upgrade                         # Self-update + health check
+```
+</details>
+
+## 🏗️ Supported Hardware
+
+Pre-made RCAN presets for popular kits, or generate your own:
 
 | Kit | Price | Preset |
 |---|---|---|
@@ -154,145 +312,26 @@ Pre-made RCAN presets for popular kits, or bring your own config:
 | Adeept RaspTank / DarkPaw | ~$55 | `presets/adeept_generic.rcan.yaml` |
 | SunFounder PiCar-X | ~$60 | `presets/sunfounder_picar.rcan.yaml` |
 | Robotis Dynamixel (X-Series) | Varies | `presets/dynamixel_arm.rcan.yaml` |
+| Hailo-8 + OAK-D Vision Stack | ~$150 | `presets/hailo_oakd_vision.rcan.yaml` |
 | DIY (ESP32, Arduino, custom) | Any | Generate with `castor wizard` |
 
-## The Perception-Action Loop
+## 🤝 Contributing
 
-OpenCastor runs a continuous observe-reason-act cycle:
+OpenCastor is fully open source (Apache 2.0) and community-driven.
 
-1. **Observe** -- capture camera frame + sensor telemetry
-2. **Reason** -- send to AI model, receive structured action JSON
-3. **Act** -- translate intent into motor commands with safety checks
-4. **Repeat** -- configurable latency budget (default 200ms)
-
-```python
-from castor.providers import get_provider
-from castor.drivers.pca9685 import PCA9685Driver
-
-brain = get_provider(config["agent"])
-driver = PCA9685Driver(config["drivers"][0])
-
-while True:
-    frame = camera.capture()
-    thought = brain.think(frame, "Sort the recycling from the trash.")
-    if thought.action:
-        driver.move(thought.action.get("linear", 0), thought.action.get("angular", 0))
-```
-
-## Docker
-
-```bash
-cp .env.example .env                          # Add your API keys
-cp config/example.rcan.yaml config/robot.rcan.yaml  # Or use castor wizard
-docker compose up                             # Launch API + dashboard
-
-# Or with a custom command:
-docker compose run opencastor castor wizard   # Interactive setup
-docker compose --profile gateway up           # Include messaging gateway
-```
-
-## CLI Reference
-
-### Setup
-```bash
-castor wizard                                      # Interactive setup wizard
-castor quickstart                                  # One-command: wizard + demo
-castor configure --config robot.rcan.yaml          # Interactive config editor
-castor install-service --config robot.rcan.yaml    # Generate systemd unit file
-castor learn                                       # Interactive step-by-step tutorial
-```
-
-### Run
-```bash
-castor run       --config robot.rcan.yaml          # Perception-action loop
-castor run       --config robot.rcan.yaml --simulate  # No hardware
-castor gateway   --config robot.rcan.yaml          # API gateway + messaging
-castor dashboard                                   # Streamlit web UI
-castor demo                                        # Simulated demo (no hardware/API keys)
-castor shell     --config robot.rcan.yaml          # Interactive command shell
-castor repl      --config robot.rcan.yaml          # Python REPL with robot objects
-```
-
-### Diagnostics
-```bash
-castor doctor                                      # System health checks
-castor fix                                         # Auto-fix common issues
-castor status                                      # Provider/channel readiness
-castor logs -f                                     # Structured colored logs
-castor lint      --config robot.rcan.yaml          # Deep config validation
-castor benchmark --config robot.rcan.yaml          # Performance profiling
-castor test                                        # Run test suite
-```
-
-### Hardware
-```bash
-castor test-hardware --config robot.rcan.yaml      # Test motors individually
-castor calibrate --config robot.rcan.yaml          # Interactive calibration
-castor record    --config robot.rcan.yaml          # Record a session
-castor replay    session.jsonl                     # Replay a recorded session
-castor watch     --gateway http://127.0.0.1:8000   # Live telemetry dashboard
-```
-
-### Config Management
-```bash
-castor migrate   --config robot.rcan.yaml          # Migrate RCAN config version
-castor backup                                      # Back up configs
-castor restore   backup.tar.gz                     # Restore from backup
-castor export    --config robot.rcan.yaml          # Export config bundle (no secrets)
-castor diff      --config a.yaml --baseline b.yaml # Compare two configs
-castor profile   list                              # Manage named config profiles
-```
-
-### Safety & Compliance
-```bash
-castor approvals                                   # View/approve dangerous commands
-castor privacy   --config robot.rcan.yaml          # Show sensor access policy
-castor audit     --since 24h                       # View tamper-evident audit log
-castor audit     --verify                          # Verify audit chain integrity
-```
-
-OpenCastor's safety kernel includes anti-subversion (prompt injection defense), work authorization for destructive actions, physical bounds enforcement (workspace/joint/force limits), tamper-evident hash-chained audit logs, and safety state telemetry at `/proc/safety`. See [`docs/safety-audit-report.md`](docs/safety-audit-report.md) for the full architecture.
-
-### Network & Fleet
-```bash
-castor discover                                    # Find RCAN peers on LAN
-castor fleet                                       # Multi-robot status (mDNS)
-castor network   status                            # Network config & Tailscale
-castor schedule  list                              # Manage scheduled tasks
-```
-
-### Advanced
-```bash
-castor token     --role operator                   # Issue JWT for RCAN API
-castor search    "battery low" --since 7d          # Search operational logs
-castor plugins                                     # List loaded plugins
-castor upgrade                                     # Self-update + health check
-castor update-check                                # Check for newer versions
-```
-
-## Contributing
-
-OpenCastor is fully open source (Apache 2.0) and community-driven. We want your help.
-
-**Get involved:**
-- **Discord**: [discord.gg/jMjA8B26Bq](https://discord.gg/jMjA8B26Bq) -- chat with maintainers and the community
-- **Issues**: [GitHub Issues](https://github.com/craigm26/OpenCastor/issues) -- report bugs or request features
-- **PRs**: Fork, branch, and submit -- see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines
+- **Discord**: [discord.gg/jMjA8B26Bq](https://discord.gg/jMjA8B26Bq)
+- **Issues**: [GitHub Issues](https://github.com/craigm26/OpenCastor/issues)
+- **PRs**: See [CONTRIBUTING.md](CONTRIBUTING.md)
 - **Twitter/X**: [@opencastor](https://twitter.com/opencastor)
 
-**Areas we need help with:**
-- **Driver Adapters**: ODrive, VESC, ROS2 bridges, ESP32 serial
-- **AI Providers**: Mistral, Grok, Cohere, local vision models
-- **Messaging Channels**: Matrix, Signal, Google Chat
-- **Sim-to-Real**: Gazebo / MuJoCo integration
-- **Tests**: Unit tests, integration tests, hardware mock tests
+**Areas we need help with:** driver adapters (ODrive, VESC, ROS2), new AI providers (Mistral, Grok, Cohere), messaging channels (Matrix, Signal), sim-to-real (Gazebo / MuJoCo), and tests.
 
-Every contribution matters -- from fixing a typo to adding a new driver.
+## 📄 License
 
-## License
-
-Apache 2.0. Built for the community, ready for the enterprise.
+Apache 2.0 — built for the community, ready for the enterprise.
 
 ---
 
-*Built on the [RCAN Spec](https://rcan.dev/spec/) by [Continuon AI](https://github.com/craigm26).*
+<p align="center">
+  Built on the <a href="https://rcan.dev/spec/">RCAN Spec</a> by <a href="https://github.com/craigm26">Continuon AI</a>
+</p>

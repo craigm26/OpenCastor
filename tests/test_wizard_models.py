@@ -365,3 +365,28 @@ class TestDynamicModelFetch:
         with patch.dict("os.environ", {}, clear=True):
             models = _fetch_openai_models()
         assert models == []
+
+
+class TestBrainPresets:
+    def test_all_presets_have_required_fields(self):
+        from castor.wizard import BRAIN_PRESETS
+
+        for preset in BRAIN_PRESETS:
+            assert "name" in preset
+            assert "desc" in preset
+            assert "primary" in preset
+            assert "provider" in preset["primary"]
+            assert "model" in preset["primary"]
+            assert "cost" in preset
+
+    def test_preset_count(self):
+        from castor.wizard import BRAIN_PRESETS
+
+        assert len(BRAIN_PRESETS) >= 5
+
+    def test_free_preset_exists(self):
+        from castor.wizard import BRAIN_PRESETS
+
+        free = [p for p in BRAIN_PRESETS if p["cost"] == "free"]
+        assert len(free) >= 1
+        assert free[0]["primary"]["provider"] == "huggingface"
