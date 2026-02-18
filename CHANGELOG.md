@@ -5,6 +5,14 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.17.17] - 2026-02-17
+
+### Added
+- **"Start your robot now?"** — wizard offers to launch `castor run` immediately after setup completes
+
+### Fixed
+- **Post-install instructions** — simplified Quick Start to `cd && source venv/bin/activate && castor run` (castor requires venv active)
+
 ## [2026.2.17.16] - 2026-02-17
 
 ### Added

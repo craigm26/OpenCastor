@@ -780,6 +780,18 @@ def main():
         print(f"\n  Or with Docker:          {Colors.BLUE}docker compose up{Colors.ENDC}")
         print("\n  Validate config:         https://rcan.dev/spec/")
 
+    # --- Offer to start the robot ---
+    print()
+    try:
+        start = input_default("Start your robot now? (y/n)", "y").strip().lower()
+        if start in ("y", "yes"):
+            print(f"\n{Colors.GREEN}Starting OpenCastor...{Colors.ENDC}\n")
+            import subprocess
+
+            subprocess.run([sys.executable, "-m", "castor.cli", "run", "--config", filename])
+    except (KeyboardInterrupt, EOFError):
+        print(f"\n\n  {Colors.BOLD}To start later:{Colors.ENDC} castor run --config {filename}")
+
 
 if __name__ == "__main__":
     main()

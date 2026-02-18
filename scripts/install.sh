@@ -3,7 +3,7 @@
 # Supports: macOS, Debian/Ubuntu, Fedora/RHEL, Arch, Alpine, Raspberry Pi
 set -euo pipefail
 
-VERSION="2026.2.17.16"
+VERSION="2026.2.17.17"
 REPO_URL="https://github.com/craigm26/OpenCastor.git"
 INSTALL_DIR="${OPENCASTOR_DIR:-$HOME/opencastor}"
 
@@ -327,9 +327,8 @@ echo "${GREEN}================================================${RESET}"
 echo "  ${BOLD}OpenCastor installed successfully!${RESET}"
 echo ""
 echo "  ${BOLD}Quick Start:${RESET}"
-echo "    1. cd $INSTALL_DIR && source venv/bin/activate"
-echo "    2. Edit .env and add your ANTHROPIC_API_KEY"
-echo "    3. castor run --config robot.rcan.yaml"
+echo "    cd $INSTALL_DIR && source venv/bin/activate"
+echo "    castor run --config *.rcan.yaml"
 echo ""
 echo "  ${BOLD}Useful Commands:${RESET}"
 echo "    castor wizard          Re-run the setup wizard anytime"
