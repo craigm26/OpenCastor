@@ -822,44 +822,95 @@ def cmd_login(args) -> None:
 def _login_anthropic(args) -> None:
     """Handle Anthropic authentication via setup-token or API key."""
     import getpass
+    import shutil
+    import subprocess
 
     print("\n  Anthropic Authentication")
     print("  ========================")
     print()
     print("  [1] Setup-token (uses Claude Max/Pro subscription — no per-token billing)")
-    print("  [2] API key (pay-as-you-go from console.anthropic.com)")
+    print("  [2] Paste an existing setup-token")
+    print("  [3] API key (pay-as-you-go from console.anthropic.com)")
     print()
 
     choice = input("  Selection [1]: ").strip() or "1"
+    token = None
 
     if choice == "1":
+        # Generate a fresh setup-token via Claude CLI
+        if not shutil.which("claude"):
+            print("  ❌ Claude CLI not found. Install it first:")
+            print("     npm install -g @anthropic-ai/claude-code")
+            print()
+            print("  Or choose [2] to paste a token generated on another machine.")
+            return
+
         print()
-        print("  Run 'claude setup-token' in another terminal, then paste the token.")
-        print("  (Token starts with sk-ant-oat01-)")
+        print("  Generating a setup-token via Claude CLI...")
+        print("  (This creates a token specific to OpenCastor — won't affect OpenClaw)")
+        print()
+        try:
+            result = subprocess.run(
+                ["claude", "setup-token"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            output = result.stdout.strip()
+            # The token is usually the last line of output
+            for line in reversed(output.split("\n")):
+                line = line.strip()
+                if line.startswith("sk-ant-oat01-") and len(line) >= 80:
+                    token = line
+                    break
+
+            if not token:
+                print(f"  ⚠️  Could not extract token from claude output.")
+                if output:
+                    print(f"  Output: {output[:200]}")
+                print("  Try [2] to paste the token manually.")
+                return
+
+        except subprocess.TimeoutExpired:
+            print("  ⚠️  claude setup-token timed out. Try running it manually.")
+            return
+        except Exception as e:
+            print(f"  ⚠️  Error running claude setup-token: {e}")
+            return
+
+    elif choice == "2":
+        print()
+        print("  Paste a setup-token (starts with sk-ant-oat01-).")
+        print("  Generate one with: claude setup-token")
         print()
         token = getpass.getpass("  Setup-token: ").strip()
         if not token:
             print("  Cancelled.")
             return
-        if token.startswith("sk-ant-oat01-") and len(token) >= 80:
-            _write_env_key("ANTHROPIC_API_KEY", token)
-            print("  ✅ Setup-token saved to .env (subscription auth)")
-        else:
+        if not (token.startswith("sk-ant-oat01-") and len(token) >= 80):
             print("  ⚠️  Token doesn't match expected format (sk-ant-oat01-...).")
             confirm = input("  Save anyway? [y/N]: ").strip().lower()
-            if confirm in ("y", "yes"):
-                _write_env_key("ANTHROPIC_API_KEY", token)
-                print("  ✅ Token saved to .env")
-            else:
+            if confirm not in ("y", "yes"):
                 print("  Cancelled.")
-    else:
+                return
+
+    elif choice == "3":
         print()
         token = getpass.getpass("  ANTHROPIC_API_KEY: ").strip()
         if not token:
             print("  Cancelled.")
             return
-        _write_env_key("ANTHROPIC_API_KEY", token)
-        print("  ✅ API key saved to .env")
+    else:
+        print("  Invalid selection.")
+        return
+
+    # Save token to OpenCastor's own store (~/.opencastor/anthropic-token)
+    from castor.providers.anthropic_provider import AnthropicProvider
+
+    saved_path = AnthropicProvider.save_token(token)
+    is_setup_token = token.startswith("sk-ant-oat01-")
+    label = "setup-token (subscription)" if is_setup_token else "API key"
+    print(f"  ✅ {label} saved to {saved_path}")
 
     # Validate
     try:

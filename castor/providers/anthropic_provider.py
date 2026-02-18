@@ -26,17 +26,21 @@ class AnthropicProvider(BaseProvider):
         # Resolution order:
         # 1. ANTHROPIC_API_KEY env var (works for both API keys and setup-tokens)
         # 2. config api_key
-        # 3. Claude CLI credentials (~/.claude/.credentials.json setup-token)
+        # 3. OpenCastor's own stored setup-token (~/.opencastor/anthropic-token)
+        #
+        # NOTE: We do NOT read from ~/.claude/.credentials.json — that belongs
+        # to Claude CLI / OpenClaw. Reading it risks token invalidation (the
+        # "token sink" problem where refreshing one client's token kills another's).
         api_key = os.getenv("ANTHROPIC_API_KEY") or config.get("api_key")
 
         if not api_key:
-            # Try reading setup-token from Claude CLI credentials
-            api_key = self._read_claude_setup_token()
+            # Try reading OpenCastor's own stored token
+            api_key = self._read_stored_token()
 
         if not api_key:
             raise ValueError(
                 "No Anthropic credentials found. Options:\n"
-                "  1. Run 'claude setup-token' and set ANTHROPIC_API_KEY to the token\n"
+                "  1. Run 'castor login anthropic' to generate a setup-token\n"
                 "     (uses your Claude Max/Pro subscription — no per-token billing)\n"
                 "  2. Set ANTHROPIC_API_KEY to an API key from console.anthropic.com\n"
                 "  3. Run 'castor wizard' to configure interactively"
@@ -49,34 +53,40 @@ class AnthropicProvider(BaseProvider):
 
         self.client = anthropic.Anthropic(api_key=api_key)
 
+    # Path for OpenCastor's own token store (separate from Claude CLI / OpenClaw)
+    TOKEN_PATH = os.path.expanduser("~/.opencastor/anthropic-token")
+
     @classmethod
-    def _read_claude_setup_token(cls):
-        """Read setup-token from Claude CLI credentials file.
+    def _read_stored_token(cls):
+        """Read OpenCastor's own stored Anthropic token.
 
-        The Claude CLI stores credentials at ~/.claude/.credentials.json.
-        A setup-token (sk-ant-oat01-...) works directly as an API key,
-        allowing use of a Claude Max/Pro subscription without pay-per-token billing.
+        Stored at ~/.opencastor/anthropic-token by 'castor login anthropic'.
+        This is intentionally separate from ~/.claude/.credentials.json
+        to avoid the token sink problem (invalidating OpenClaw's token).
         """
-        import json
-
-        creds_path = os.path.expanduser("~/.claude/.credentials.json")
         try:
-            if os.path.exists(creds_path):
-                with open(creds_path) as f:
-                    data = json.load(f)
-                # Try setup-token first (preferred)
-                oauth = data.get("claudeAiOauth", {})
-                token = oauth.get("accessToken")
-                if token and token.startswith(cls.SETUP_TOKEN_PREFIX):
-                    logger.debug("Read setup-token from Claude CLI credentials")
-                    return token
-                # Also check for any token that looks like a setup-token
-                if token and len(token) >= 80:
-                    logger.debug("Read token from Claude CLI credentials")
+            if os.path.exists(cls.TOKEN_PATH):
+                with open(cls.TOKEN_PATH) as f:
+                    token = f.read().strip()
+                if token:
+                    logger.debug("Read Anthropic token from %s", cls.TOKEN_PATH)
                     return token
         except Exception as e:
-            logger.debug(f"Could not read Claude credentials: {e}")
+            logger.debug(f"Could not read stored token: {e}")
         return None
+
+    @classmethod
+    def save_token(cls, token: str) -> str:
+        """Save an Anthropic token to OpenCastor's token store.
+
+        Returns the path where the token was saved.
+        """
+        token_dir = os.path.dirname(cls.TOKEN_PATH)
+        os.makedirs(token_dir, mode=0o700, exist_ok=True)
+        with open(cls.TOKEN_PATH, "w") as f:
+            f.write(token)
+        os.chmod(cls.TOKEN_PATH, 0o600)
+        return cls.TOKEN_PATH
 
     def think(self, image_bytes: bytes, instruction: str) -> Thought:
         b64_image = base64.b64encode(image_bytes).decode("utf-8")

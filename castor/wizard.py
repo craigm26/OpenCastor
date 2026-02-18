@@ -530,29 +530,32 @@ def _anthropic_auth_flow(env_var):
         return False
 
     if auth_choice == "1":
-        # Setup-token flow
+        # Setup-token flow — stored in OpenCastor's own token file, not .env
+        # This avoids the "token sink" problem where sharing tokens with
+        # OpenClaw / Claude CLI causes mutual invalidation.
         print()
         print(f"  Run {Colors.BOLD}claude setup-token{Colors.ENDC} in another terminal,")
         print("  then paste the generated token (starts with sk-ant-oat01-).")
         print(
-            f"  It will be saved to your local "
-            f"{Colors.BOLD}.env{Colors.ENDC} file as ANTHROPIC_API_KEY."
+            f"  It will be saved to {Colors.BOLD}~/.opencastor/anthropic-token{Colors.ENDC}"
+            f" (separate from Claude CLI / OpenClaw)."
         )
         key = input_secret("Setup-token")
         if key:
+            from castor.providers.anthropic_provider import AnthropicProvider
+
+            saved_path = AnthropicProvider.save_token(key)
             if key.startswith("sk-ant-oat01-") and len(key) >= 80:
-                _write_env_var(env_var, key)
                 print(
-                    f"  {Colors.GREEN}[OK]{Colors.ENDC} Setup-token saved to .env "
+                    f"  {Colors.GREEN}[OK]{Colors.ENDC} Setup-token saved to {saved_path} "
                     f"(subscription auth — no per-token billing)"
                 )
                 return True
             else:
                 print(
                     f"  {Colors.WARNING}[WARN]{Colors.ENDC} Token doesn't look like a "
-                    f"setup-token (expected sk-ant-oat01-...). Saving anyway."
+                    f"setup-token (expected sk-ant-oat01-...). Saved to {saved_path} anyway."
                 )
-                _write_env_var(env_var, key)
                 return True
         else:
             print(f"  {Colors.WARNING}Skipped.{Colors.ENDC}")

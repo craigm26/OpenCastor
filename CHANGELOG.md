@@ -5,6 +5,15 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.18.1] - 2026-02-18
+
+### Changed
+- **Separate token store** — OpenCastor now stores Anthropic tokens at `~/.opencastor/anthropic-token`, NOT in Claude CLI's credentials. Prevents the "token sink" problem where sharing tokens between OpenCastor/OpenClaw/Claude CLI causes mutual invalidation.
+- **`castor login anthropic`** — option [1] now runs `claude setup-token` directly to generate a fresh token for OpenCastor
+- Wizard setup-token flow saves to `~/.opencastor/` instead of `.env`
+- Token file has 0600 permissions for security
+- 8 new tests (1265 total)
+
 ## [2026.2.17.21] - 2026-02-17
 
 ### Added
