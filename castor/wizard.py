@@ -509,22 +509,52 @@ def _anthropic_auth_flow(env_var):
             return True
 
     print(f"\n{Colors.GREEN}--- AUTHENTICATION (Anthropic) ---{Colors.ENDC}")
-    print("  An Anthropic API key is required for robot control.")
-    print(f"  Get one at: {Colors.BOLD}https://console.anthropic.com/settings/keys{Colors.ENDC}")
-    print("  (Works with both pay-as-you-go and Max/Pro plan accounts)")
+    print("  Choose how to authenticate with Anthropic Claude:")
     print()
-    print("  [1] Paste API key")
-    print("  [2] I'll set it later (skip)")
+    print(f"  [1] Setup-token {Colors.BOLD}(Recommended — uses your Max/Pro subscription){Colors.ENDC}")
+    print("      Run 'claude setup-token' and paste the token. No per-token billing.")
+    print("  [2] API key (pay-as-you-go)")
+    print(f"      Get one at: {Colors.BOLD}https://console.anthropic.com/settings/keys{Colors.ENDC}")
+    print("  [3] I'll set it later (skip)")
 
     auth_choice = input_default("Selection", "1").strip()
 
-    if auth_choice == "2":
+    if auth_choice == "3":
         print(
             f"  {Colors.WARNING}Skipped.{Colors.ENDC} Set ANTHROPIC_API_KEY in .env before running."
         )
         return False
 
-    # API key flow
+    if auth_choice == "1":
+        # Setup-token flow
+        print()
+        print(f"  Run {Colors.BOLD}claude setup-token{Colors.ENDC} in another terminal,")
+        print("  then paste the generated token (starts with sk-ant-oat01-).")
+        print(
+            f"  It will be saved to your local "
+            f"{Colors.BOLD}.env{Colors.ENDC} file as ANTHROPIC_API_KEY."
+        )
+        key = input_secret("Setup-token")
+        if key:
+            if key.startswith("sk-ant-oat01-") and len(key) >= 80:
+                _write_env_var(env_var, key)
+                print(
+                    f"  {Colors.GREEN}[OK]{Colors.ENDC} Setup-token saved to .env "
+                    f"(subscription auth — no per-token billing)"
+                )
+                return True
+            else:
+                print(
+                    f"  {Colors.WARNING}[WARN]{Colors.ENDC} Token doesn't look like a "
+                    f"setup-token (expected sk-ant-oat01-...). Saving anyway."
+                )
+                _write_env_var(env_var, key)
+                return True
+        else:
+            print(f"  {Colors.WARNING}Skipped.{Colors.ENDC}")
+            return False
+
+    # API key flow (choice "2" or anything else)
     print()
     print(
         f"  It will be saved to your local "

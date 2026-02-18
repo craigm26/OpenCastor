@@ -812,9 +812,88 @@ def cmd_login(args) -> None:
         _login_huggingface(args)
     elif service == "ollama":
         _login_ollama(args)
+    elif service in ("anthropic", "claude"):
+        _login_anthropic(args)
     else:
         print(f"  Unknown service: {service}")
-        print("  Supported: huggingface (hf), ollama")
+        print("  Supported: anthropic (claude), huggingface (hf), ollama")
+
+
+def _login_anthropic(args) -> None:
+    """Handle Anthropic authentication via setup-token or API key."""
+    import getpass
+
+    print("\n  Anthropic Authentication")
+    print("  ========================")
+    print()
+    print("  [1] Setup-token (uses Claude Max/Pro subscription — no per-token billing)")
+    print("  [2] API key (pay-as-you-go from console.anthropic.com)")
+    print()
+
+    choice = input("  Selection [1]: ").strip() or "1"
+
+    if choice == "1":
+        print()
+        print("  Run 'claude setup-token' in another terminal, then paste the token.")
+        print("  (Token starts with sk-ant-oat01-)")
+        print()
+        token = getpass.getpass("  Setup-token: ").strip()
+        if not token:
+            print("  Cancelled.")
+            return
+        if token.startswith("sk-ant-oat01-") and len(token) >= 80:
+            _write_env_key("ANTHROPIC_API_KEY", token)
+            print("  ✅ Setup-token saved to .env (subscription auth)")
+        else:
+            print("  ⚠️  Token doesn't match expected format (sk-ant-oat01-...).")
+            confirm = input("  Save anyway? [y/N]: ").strip().lower()
+            if confirm in ("y", "yes"):
+                _write_env_key("ANTHROPIC_API_KEY", token)
+                print("  ✅ Token saved to .env")
+            else:
+                print("  Cancelled.")
+    else:
+        print()
+        token = getpass.getpass("  ANTHROPIC_API_KEY: ").strip()
+        if not token:
+            print("  Cancelled.")
+            return
+        _write_env_key("ANTHROPIC_API_KEY", token)
+        print("  ✅ API key saved to .env")
+
+    # Validate
+    try:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=token)
+        resp = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=10,
+            messages=[{"role": "user", "content": "hi"}],
+        )
+        if resp.content:
+            print("  ✅ Authentication verified!")
+    except Exception as e:
+        print(f"  ⚠️  Could not verify: {e}")
+
+
+def _write_env_key(key: str, value: str) -> None:
+    """Write or update a key in the .env file."""
+    env_path = os.path.join(os.getcwd(), ".env")
+    lines = []
+    found = False
+    if os.path.exists(env_path):
+        with open(env_path) as f:
+            for line in f:
+                if line.startswith(f"{key}="):
+                    lines.append(f"{key}={value}\n")
+                    found = True
+                else:
+                    lines.append(line)
+    if not found:
+        lines.append(f"{key}={value}\n")
+    with open(env_path, "w") as f:
+        f.writelines(lines)
 
 
 def _login_huggingface(args) -> None:
@@ -1798,14 +1877,14 @@ def main() -> None:
     # castor login
     p_login = sub.add_parser(
         "login",
-        help="Authenticate with AI providers (Hugging Face, etc.)",
+        help="Authenticate with AI providers",
         epilog=(
             "Examples:\n"
+            "  castor login anthropic     # Setup-token or API key\n"
+            "  castor login claude        # Same as anthropic\n"
             "  castor login huggingface\n"
-            "  castor login hf\n"
             "  castor login hf --token hf_xxxx\n"
             "  castor login hf --list-models\n"
-            "  castor login hf --list-models --task image-text-to-text\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

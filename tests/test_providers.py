@@ -191,3 +191,85 @@ class TestGetProvider:
 
         get_provider({"provider": "Google"})
         mock_cls.assert_called_once()
+
+
+# =====================================================================
+# Anthropic setup-token auth
+# =====================================================================
+
+
+class TestAnthropicSetupToken:
+    """Test Anthropic provider setup-token (subscription auth) support."""
+
+    def _make_provider(self, config, monkeypatch=None):
+        """Create AnthropicProvider with mocked anthropic module."""
+        import sys
+        mock_mod = MagicMock()
+        with patch.dict(sys.modules, {"anthropic": mock_mod}):
+            # Force reimport to pick up mock
+            import importlib
+            import castor.providers.anthropic_provider as mod
+            importlib.reload(mod)
+            provider = mod.AnthropicProvider(config)
+        return provider, mock_mod
+
+    def test_setup_token_via_env(self, monkeypatch):
+        """Setup-token in ANTHROPIC_API_KEY env var should work."""
+        token = "sk-ant-oat01-" + "x" * 80
+        monkeypatch.setenv("ANTHROPIC_API_KEY", token)
+        provider, mock_mod = self._make_provider({"provider": "anthropic"})
+        mock_mod.Anthropic.assert_called_once_with(api_key=token)
+        assert provider.client is not None
+
+    def test_api_key_via_env(self, monkeypatch):
+        """Standard API key should still work."""
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-test-key-1234")
+        provider, mock_mod = self._make_provider({"provider": "anthropic"})
+        mock_mod.Anthropic.assert_called_once_with(api_key="sk-ant-api03-test-key-1234")
+
+    def test_api_key_from_config(self, monkeypatch):
+        """API key from config dict should work."""
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        _, mock_mod = self._make_provider(
+            {"provider": "anthropic", "api_key": "sk-ant-test"}
+        )
+        mock_mod.Anthropic.assert_called_once_with(api_key="sk-ant-test")
+
+    def test_no_credentials_raises(self, monkeypatch, tmp_path):
+        """Should raise ValueError when no credentials found anywhere."""
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.setattr(
+            "os.path.expanduser",
+            lambda p: str(tmp_path / ".claude" / ".credentials.json"),
+        )
+        with pytest.raises(ValueError, match="No Anthropic credentials found"):
+            self._make_provider({"provider": "anthropic"})
+
+    def test_setup_token_prefix_constant(self):
+        """Verify setup-token prefix matches Claude CLI format."""
+        from castor.providers.anthropic_provider import AnthropicProvider
+        assert AnthropicProvider.SETUP_TOKEN_PREFIX == "sk-ant-oat01-"
+
+    def test_reads_claude_cli_credentials(self, monkeypatch, tmp_path):
+        """Should read setup-token from ~/.claude/.credentials.json."""
+        import json
+
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        creds_dir = tmp_path / ".claude"
+        creds_dir.mkdir()
+        token = "sk-ant-oat01-" + "a" * 80
+        creds_file = creds_dir / ".credentials.json"
+        creds_file.write_text(
+            json.dumps({"claudeAiOauth": {"accessToken": token}})
+        )
+        monkeypatch.setattr(
+            "os.path.expanduser",
+            lambda p: str(creds_file) if ".credentials" in p else p,
+        )
+        _, mock_mod = self._make_provider({"provider": "anthropic"})
+        mock_mod.Anthropic.assert_called_once_with(api_key=token)
+
+    def test_default_model(self):
+        """Default model should be claude-opus-4-6."""
+        from castor.providers.anthropic_provider import AnthropicProvider
+        assert AnthropicProvider.DEFAULT_MODEL == "claude-opus-4-6"
