@@ -164,8 +164,9 @@ install_deps_debian() {
     run $SUDO apt-get install -y -qq libgl1-mesa-glx 2>/dev/null || true
 
   # Optional: libatlas for older ARM numpy (not available on Bookworm/RPi5 — safe to skip)
-  if apt-cache show libatlas-base-dev &>/dev/null; then
-    run $SUDO apt-get install -y -qq libatlas-base-dev
+  if apt-cache policy libatlas-base-dev 2>/dev/null | grep -q 'Candidate:' \
+     && ! apt-cache policy libatlas-base-dev 2>/dev/null | grep -q 'Candidate: (none)'; then
+    run $SUDO apt-get install -y -qq libatlas-base-dev 2>/dev/null || true
   else
     info "libatlas-base-dev not available (not needed on Bookworm/RPi5, skipping)"
   fi
