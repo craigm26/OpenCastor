@@ -15,7 +15,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Version = "2026.2.18.10"
+$Version = "2026.2.18.11"
 $RepoUrl = "https://github.com/craigm26/OpenCastor.git"
 $InstallDir = if ($env:OPENCASTOR_DIR) { $env:OPENCASTOR_DIR } else { Join-Path $HOME "opencastor" }
 

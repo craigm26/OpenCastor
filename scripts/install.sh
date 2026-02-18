@@ -3,7 +3,7 @@
 # Supports: macOS, Debian/Ubuntu, Fedora/RHEL, Arch, Alpine, Raspberry Pi
 set -euo pipefail
 
-VERSION="2026.2.18.10"
+VERSION="2026.2.18.11"
 REPO_URL="https://github.com/craigm26/OpenCastor.git"
 INSTALL_DIR="${OPENCASTOR_DIR:-$HOME/opencastor}"
 
@@ -157,7 +157,7 @@ install_deps_debian() {
     python3 python3-pip python3-venv python3-dev \
     portaudio19-dev \
     libglib2.0-0 libsdl2-mixer-2.0-0 libsdl2-2.0-0 \
-    i2c-tools git
+    i2c-tools git tmux
 
   # libgl1 (handles renamed packages across versions)
   run $SUDO apt-get install -y -qq libgl1 2>/dev/null || \

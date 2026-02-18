@@ -125,6 +125,18 @@ def cmd_dashboard(args) -> None:
     )
 
 
+def cmd_dashboard_tui(args) -> None:
+    """Launch the tmux terminal dashboard."""
+    from castor.dashboard_tui import kill_existing_session, launch_dashboard
+
+    if args.kill:
+        kill_existing_session()
+        print("  Dashboard session killed.")
+        return
+
+    launch_dashboard(args.config, args.layout, args.simulate)
+
+
 def cmd_token(args) -> None:
     """Issue a JWT token for RCAN API access."""
     from castor.auth import load_dotenv_if_available
@@ -1417,6 +1429,21 @@ def main() -> None:
     # castor dashboard
     sub.add_parser("dashboard", help="Launch the Streamlit web UI")
 
+    # castor dashboard-tui
+    p_tui = sub.add_parser(
+        "dashboard-tui",
+        help="Terminal dashboard (tmux multi-pane robot monitor)",
+    )
+    p_tui.add_argument("--config", default="robot.rcan.yaml", help="RCAN config file")
+    p_tui.add_argument(
+        "--layout",
+        default="full",
+        choices=["full", "minimal", "debug"],
+        help="Dashboard layout (default: full)",
+    )
+    p_tui.add_argument("--simulate", action="store_true", help="Simulation mode")
+    p_tui.add_argument("--kill", action="store_true", help="Kill existing dashboard")
+
     # castor token
     p_token = sub.add_parser("token", help="Issue a JWT token for RCAN API access")
     p_token.add_argument(
@@ -1982,6 +2009,7 @@ def main() -> None:
         "gateway": cmd_gateway,
         "wizard": cmd_wizard,
         "dashboard": cmd_dashboard,
+        "dashboard-tui": cmd_dashboard_tui,
         "token": cmd_token,
         "discover": cmd_discover,
         "doctor": cmd_doctor,

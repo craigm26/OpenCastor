@@ -5,6 +5,12 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.18.11] - 2026-02-18
+
+### Added
+- **Terminal Dashboard** (`castor dashboard-tui`) — tmux-based multi-pane robot monitor. Watch your robot's brain, eyes, body, safety, and messaging subsystems in real-time across split panes. Three layouts: `full` (6 panes), `minimal` (3), `debug` (4). Mouse-enabled, zoom with Ctrl+B z.
+- **tmux added to installer** — auto-installed as a system dependency on Linux
+
 ## [2026.2.18.10] - 2026-02-18
 
 ### Added
