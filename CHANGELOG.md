@@ -5,6 +5,11 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.18.7] - 2026-02-18
+
+### Fixed
+- **Installer version synced** — `install.sh` and `install.ps1` now show correct version (were stuck at v2026.2.17.20)
+
 ## [2026.2.18.6] - 2026-02-18
 
 ### Added
