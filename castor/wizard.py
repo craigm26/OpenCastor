@@ -128,6 +128,7 @@ PROVIDER_AUTH = {
         "env_var": "GOOGLE_API_KEY",
         "label": "Google (Gemini)",
         "desc": "Fast, multimodal, robotics",
+        "has_oauth": True,
     },
     "openai": {
         "env_var": "OPENAI_API_KEY",
@@ -138,6 +139,7 @@ PROVIDER_AUTH = {
         "env_var": "HF_TOKEN",
         "label": "Hugging Face",
         "desc": "Open-source models",
+        "has_cli_login": True,
     },
     "ollama": {
         "env_var": None,
@@ -369,9 +371,21 @@ def authenticate_provider(provider_key, *, already_authed=None):
         already_authed.add(provider_key)
         return True
 
-    # Anthropic: offer OAuth
+    # Providers with interactive login flows
     if provider_key == "anthropic" and info.get("has_oauth"):
         result = _anthropic_auth_flow(env_var)
+        if result:
+            already_authed.add(provider_key)
+        return result
+
+    if provider_key == "google" and info.get("has_oauth"):
+        result = _google_auth_flow(env_var)
+        if result:
+            already_authed.add(provider_key)
+        return result
+
+    if provider_key == "huggingface" and info.get("has_cli_login"):
+        result = _huggingface_auth_flow(env_var)
         if result:
             already_authed.add(provider_key)
         return result
@@ -500,6 +514,190 @@ def _anthropic_auth_flow(env_var):
                 f"  {Colors.WARNING}[WARN]{Colors.ENDC} Could not validate key "
                 f"(network issue?). Saved to .env anyway."
             )
+        return True
+    else:
+        print(f"  {Colors.WARNING}Skipped.{Colors.ENDC} Set {env_var} in .env before running.")
+        return False
+
+
+def _check_google_adc():
+    """Check for existing Google Application Default Credentials."""
+    adc_path = os.path.expanduser("~/.config/gcloud/application_default_credentials.json")
+    if os.path.exists(adc_path):
+        return True
+    # Also check the environment variable
+    adc_env = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    if adc_env and os.path.exists(adc_env):
+        return True
+    return False
+
+
+def _run_gcloud_login():
+    """Run gcloud auth application-default login."""
+    import shutil
+    import subprocess
+
+    if not shutil.which("gcloud"):
+        return "not_installed"
+
+    print(f"\n  {Colors.BOLD}Launching Google sign-in...{Colors.ENDC}")
+    print("  A browser window will open. Sign in with your Google account.\n")
+    try:
+        result = subprocess.run(
+            ["gcloud", "auth", "application-default", "login"],
+            timeout=120,
+        )
+        return result.returncode == 0
+    except Exception as e:
+        print(f"  {Colors.WARNING}Login failed: {e}{Colors.ENDC}")
+        return False
+
+
+def _google_auth_flow(env_var):
+    """Handle Google auth: ADC/OAuth or API key."""
+    print(f"\n{Colors.GREEN}--- AUTHENTICATION (Google) ---{Colors.ENDC}")
+    print("  How would you like to authenticate with Google?")
+    print("  [1] Google AI Studio subscription (sign in with Google account)")
+    print("  [2] API key (paste GOOGLE_API_KEY)")
+
+    auth_choice = input_default("Selection", "1").strip()
+
+    if auth_choice == "1":
+        # Check for existing ADC
+        if _check_google_adc():
+            print(
+                f"\n  {Colors.GREEN}[OK]{Colors.ENDC} Google Application Default Credentials found."
+            )
+            _write_env_var("GOOGLE_AUTH_MODE", "adc")
+            return True
+
+        # Try gcloud login
+        result = _run_gcloud_login()
+        if result is True:
+            print(
+                f"\n  {Colors.GREEN}[OK]{Colors.ENDC} "
+                f"Signed in! Using Application Default Credentials."
+            )
+            _write_env_var("GOOGLE_AUTH_MODE", "adc")
+            return True
+        elif result == "not_installed":
+            print(
+                f"\n  {Colors.WARNING}gcloud CLI not found.{Colors.ENDC} Falling back to API key."
+            )
+            print(f"  Install: {Colors.BOLD}https://cloud.google.com/sdk/docs/install{Colors.ENDC}")
+            print(f"  Then run: {Colors.BOLD}gcloud auth application-default login{Colors.ENDC}\n")
+        else:
+            print(f"  {Colors.WARNING}Login failed.{Colors.ENDC} Falling back to API key.")
+
+    # Fall through to API key
+    print("\n  Your Google API key is needed.")
+    print(
+        f"  It will be saved to your local "
+        f"{Colors.BOLD}.env{Colors.ENDC} file (never committed to git)."
+    )
+    key = input_secret(f"{env_var}")
+    if key:
+        valid = _validate_api_key("google", key)
+        _write_env_var(env_var, key)
+        if valid:
+            print(f"  {Colors.GREEN}[OK]{Colors.ENDC} Key validated and saved to .env")
+        else:
+            print(
+                f"  {Colors.WARNING}[WARN]{Colors.ENDC} Could not validate key "
+                f"(network issue?). Saved to .env anyway."
+            )
+        return True
+    else:
+        print(f"  {Colors.WARNING}Skipped.{Colors.ENDC} Set {env_var} in .env before running.")
+        return False
+
+
+def _check_huggingface_token():
+    """Check for existing HuggingFace token."""
+    # New location (huggingface_hub >= 0.14)
+    token_path = os.path.expanduser("~/.cache/huggingface/token")
+    if os.path.exists(token_path):
+        with open(token_path) as f:
+            token = f.read().strip()
+        if token:
+            return True
+    # Legacy location
+    legacy_path = os.path.expanduser("~/.huggingface/token")
+    if os.path.exists(legacy_path):
+        with open(legacy_path) as f:
+            token = f.read().strip()
+        if token:
+            return True
+    return False
+
+
+def _run_huggingface_login():
+    """Run huggingface-cli login."""
+    import shutil
+    import subprocess
+
+    if not shutil.which("huggingface-cli"):
+        return "not_installed"
+
+    print(f"\n  {Colors.BOLD}Launching Hugging Face login...{Colors.ENDC}")
+    print("  A browser window will open. Sign in with your Hugging Face account.\n")
+    try:
+        result = subprocess.run(
+            ["huggingface-cli", "login"],
+            timeout=120,
+        )
+        return result.returncode == 0
+    except Exception as e:
+        print(f"  {Colors.WARNING}Login failed: {e}{Colors.ENDC}")
+        return False
+
+
+def _huggingface_auth_flow(env_var):
+    """Handle HuggingFace auth: CLI login or paste token."""
+    print(f"\n{Colors.GREEN}--- AUTHENTICATION (Hugging Face) ---{Colors.ENDC}")
+    print("  How would you like to authenticate with Hugging Face?")
+    print("  [1] Sign in with Hugging Face account (opens browser)")
+    print("  [2] Paste token (HF_TOKEN)")
+
+    auth_choice = input_default("Selection", "1").strip()
+
+    if auth_choice == "1":
+        # Check for existing token
+        if _check_huggingface_token():
+            print(
+                f"\n  {Colors.GREEN}[OK]{Colors.ENDC} "
+                f"Hugging Face token found (~/.cache/huggingface/token)."
+            )
+            _write_env_var("HF_AUTH_MODE", "cli")
+            return True
+
+        # Try CLI login
+        result = _run_huggingface_login()
+        if result is True:
+            print(f"\n  {Colors.GREEN}[OK]{Colors.ENDC} Signed in! Token saved by huggingface-cli.")
+            _write_env_var("HF_AUTH_MODE", "cli")
+            return True
+        elif result == "not_installed":
+            print(
+                f"\n  {Colors.WARNING}huggingface-cli not found.{Colors.ENDC} "
+                f"Falling back to token."
+            )
+            print(f"  Install: {Colors.BOLD}pip install huggingface_hub{Colors.ENDC}")
+            print(f"  Then run: {Colors.BOLD}huggingface-cli login{Colors.ENDC}\n")
+        else:
+            print(f"  {Colors.WARNING}Login failed.{Colors.ENDC} Falling back to token.")
+
+    # Fall through to paste token
+    print("\n  Your Hugging Face token is needed.")
+    print(f"  Get one at: {Colors.BOLD}https://huggingface.co/settings/tokens{Colors.ENDC}")
+    print(
+        f"  It will be saved to your local "
+        f"{Colors.BOLD}.env{Colors.ENDC} file (never committed to git)."
+    )
+    key = input_secret(f"{env_var}")
+    if key:
+        _write_env_var(env_var, key)
+        print(f"  {Colors.GREEN}[OK]{Colors.ENDC} Token saved to .env")
         return True
     else:
         print(f"  {Colors.WARNING}Skipped.{Colors.ENDC} Set {env_var} in .env before running.")

@@ -13,6 +13,15 @@ and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH
 ### Fixed
 - **Post-install instructions** — simplified Quick Start to `cd && source venv/bin/activate && castor run` (castor requires venv active)
 
+## [2026.2.17.19] - 2026-02-17
+
+### Added
+- **Wizard redesign** — QuickStart now has distinct steps: Provider → Auth → Primary Model → Secondary Models → Messaging
+- **Provider-specific auth flows** — Anthropic (Max/Pro OAuth or API key), Google (ADC via `gcloud` or API key), HuggingFace (`huggingface-cli login` or paste token), OpenAI (API key), Ollama (connection check)
+- **Primary model selection** — curated model list per provider with recommendations and descriptions
+- **Secondary models** — optional specialized models (Gemini Robotics ER 1.5, GPT-4o vision, custom) with cross-provider auth
+- 21 new wizard tests (1244 total)
+
 ## [2026.2.17.18] - 2026-02-17
 
 ### Added

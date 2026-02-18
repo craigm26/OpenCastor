@@ -2,14 +2,15 @@
 
 from unittest.mock import patch
 
-import pytest
-
 from castor.wizard import (
     MODELS,
     PROVIDER_AUTH,
     PROVIDER_ORDER,
-    SECONDARY_MODELS,
     _build_agent_config,
+    _check_google_adc,
+    _check_huggingface_token,
+    _google_auth_flow,
+    _huggingface_auth_flow,
     choose_model,
     choose_provider_step,
     choose_secondary_models,
@@ -159,3 +160,88 @@ class TestGeneratePresetWithSecondary:
         assert "secondary_models" in config["agent"]
         assert len(config["agent"]["secondary_models"]) == 1
         assert config["agent"]["secondary_models"][0]["model"] == "gemini-er-1.5"
+
+
+class TestGoogleAuthFlow:
+    """Test Google ADC/OAuth auth flow."""
+
+    def test_check_google_adc_exists(self, tmp_path):
+        adc = tmp_path / "application_default_credentials.json"
+        adc.write_text("{}")
+        with patch.dict("os.environ", {"GOOGLE_APPLICATION_CREDENTIALS": str(adc)}):
+            assert _check_google_adc() is True
+
+    def test_check_google_adc_missing(self, tmp_path):
+        with patch("os.path.expanduser", return_value=str(tmp_path / "nope")):
+            with patch.dict("os.environ", {}, clear=True):
+                assert _check_google_adc() is False
+
+    @patch("builtins.input", return_value="1")
+    def test_google_adc_already_present(self, _, tmp_path):
+        with patch("castor.wizard._check_google_adc", return_value=True):
+            with patch("castor.wizard._write_env_var") as mock_write:
+                result = _google_auth_flow("GOOGLE_API_KEY")
+        assert result is True
+        mock_write.assert_called_with("GOOGLE_AUTH_MODE", "adc")
+
+    @patch("builtins.input", side_effect=["2", "fake-key"])
+    def test_google_api_key_fallback(self, _):
+        with patch("castor.wizard._validate_api_key", return_value=True):
+            with patch("castor.wizard._write_env_var") as mock_write:
+                result = _google_auth_flow("GOOGLE_API_KEY")
+        assert result is True
+        mock_write.assert_any_call("GOOGLE_API_KEY", "fake-key")
+
+
+class TestHuggingFaceAuthFlow:
+    """Test HuggingFace CLI login / token auth flow."""
+
+    def test_check_hf_token_exists(self, tmp_path):
+        token_file = tmp_path / "token"
+        token_file.write_text("hf_abc123")
+        with patch(
+            "os.path.expanduser",
+            side_effect=lambda p: (
+                str(tmp_path / "token") if "cache" in p else str(tmp_path / "nope")
+            ),
+        ):
+            assert _check_huggingface_token() is True
+
+    @patch("builtins.input", return_value="1")
+    def test_hf_cli_already_authed(self, _):
+        with patch("castor.wizard._check_huggingface_token", return_value=True):
+            with patch("castor.wizard._write_env_var") as mock_write:
+                result = _huggingface_auth_flow("HF_TOKEN")
+        assert result is True
+        mock_write.assert_called_with("HF_AUTH_MODE", "cli")
+
+    @patch("builtins.input", side_effect=["2", "hf_fake_token"])
+    def test_hf_paste_token(self, _):
+        with patch("castor.wizard._write_env_var") as mock_write:
+            result = _huggingface_auth_flow("HF_TOKEN")
+        assert result is True
+        mock_write.assert_any_call("HF_TOKEN", "hf_fake_token")
+
+    @patch("builtins.input", side_effect=["2", ""])
+    def test_hf_skip_token(self, _):
+        result = _huggingface_auth_flow("HF_TOKEN")
+        assert result is False
+
+
+class TestProviderAuthFlags:
+    """Verify PROVIDER_AUTH has correct flags for OAuth/CLI login."""
+
+    def test_anthropic_has_oauth(self):
+        assert PROVIDER_AUTH["anthropic"].get("has_oauth") is True
+
+    def test_google_has_oauth(self):
+        assert PROVIDER_AUTH["google"].get("has_oauth") is True
+
+    def test_huggingface_has_cli_login(self):
+        assert PROVIDER_AUTH["huggingface"].get("has_cli_login") is True
+
+    def test_openai_no_oauth(self):
+        assert PROVIDER_AUTH["openai"].get("has_oauth") is None
+
+    def test_ollama_no_oauth(self):
+        assert PROVIDER_AUTH["ollama"].get("has_oauth") is None
