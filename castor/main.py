@@ -477,7 +477,24 @@ def main():
     except Exception as e:
         logger.debug(f"Audit log skipped: {e}")
 
-    # 7. THE CONTROL LOOP
+    # 7. SIGNAL HANDLING (graceful shutdown on SIGTERM/SIGINT)
+    import signal
+
+    _shutdown_requested = False
+
+    def _graceful_shutdown(signum, frame):
+        nonlocal _shutdown_requested
+        sig_name = signal.Signals(signum).name if hasattr(signal, "Signals") else signum
+        if _shutdown_requested:
+            logger.warning(f"Received {sig_name} again — forcing exit.")
+            raise SystemExit(1)
+        _shutdown_requested = True
+        logger.info(f"Received {sig_name}. Shutting down gracefully...")
+
+    signal.signal(signal.SIGTERM, _graceful_shutdown)
+    signal.signal(signal.SIGINT, _graceful_shutdown)
+
+    # 8. THE CONTROL LOOP
     latency_budget = config.get("agent", {}).get("latency_budget_ms", 3000)
     logger.info("Entering Perception-Action Loop. Press Ctrl+C to stop.")
 
@@ -486,7 +503,7 @@ def main():
     _LATENCY_WARN_THRESHOLD = 5  # consecutive overruns before suggesting action
 
     try:
-        while True:
+        while not _shutdown_requested:
             loop_start = time.time()
 
             # Check emergency stop
@@ -591,8 +608,8 @@ def main():
             # Sleep to prevent API rate limiting
             time.sleep(1.0)
 
-    except KeyboardInterrupt:
-        logger.info("User Interrupt. Shutting down...")
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Shutting down...")
         if audit:
             audit.log_shutdown("user_interrupt")
     except Exception as exc:
@@ -627,30 +644,78 @@ def main():
             pass
         raise
     finally:
-        # Clear shared references first so in-flight gateway requests
+        logger.info("🛑 Shutdown sequence starting...")
+
+        # Phase 1: Stop motors immediately (safety first)
+        if driver and not args.simulate:
+            try:
+                driver.stop()
+                logger.info("  ✓ Motors stopped")
+            except Exception as e:
+                logger.warning(f"  ✗ Motor stop failed: {e}")
+
+        # Phase 2: Clear shared references so in-flight requests
         # cannot grab a closing/closed device.
         set_shared_camera(None)
         set_shared_speaker(None)
 
+        # Phase 3: Stop background services
         if watchdog:
-            watchdog.stop()
+            try:
+                watchdog.stop()
+                logger.info("  ✓ Watchdog stopped")
+            except Exception:
+                pass
 
         if battery_monitor:
-            battery_monitor.stop()
+            try:
+                battery_monitor.stop()
+                logger.info("  ✓ Battery monitor stopped")
+            except Exception:
+                pass
 
         if mdns_broadcaster:
-            mdns_broadcaster.stop()
+            try:
+                mdns_broadcaster.stop()
+                logger.info("  ✓ mDNS stopped")
+            except Exception:
+                pass
 
+        # Phase 4: Close hardware
         if driver and not args.simulate:
-            logger.info("Parking hardware...")
-            driver.close()
-        speaker.close()
-        camera.close()
+            try:
+                driver.close()
+                logger.info("  ✓ Hardware parked")
+            except Exception as e:
+                logger.warning(f"  ✗ Hardware close failed: {e}")
 
-        # Flush memory and shut down the virtual filesystem
-        fs.shutdown()
+        try:
+            speaker.close()
+            logger.info("  ✓ Speaker closed")
+        except Exception:
+            pass
+
+        try:
+            camera.close()
+            logger.info("  ✓ Camera closed")
+        except Exception:
+            pass
+
+        # Phase 5: Flush memory and shut down filesystem
+        try:
+            fs.shutdown()
+            logger.info("  ✓ Filesystem flushed")
+        except Exception:
+            pass
         set_shared_fs(None)
-        logger.info("OpenCastor Offline.")
+
+        if audit:
+            try:
+                audit.log_shutdown("graceful")
+            except Exception:
+                pass
+
+        logger.info("🤖 OpenCastor Offline. Goodbye.")
 
 
 if __name__ == "__main__":
