@@ -1,0 +1,33 @@
+{
+  "id": "research-data-collector-c9f4a3",
+  "name": "Research Data Collection Platform",
+  "description": "Multi-sensor mobile platform for field research with fleet coordination, structured logging, and Gemini Robotics ER for autonomous navigation",
+  "author": "dr_fieldbot",
+  "category": "research",
+  "difficulty": "advanced",
+  "hardware": [
+    "Freenove 4WD Car Kit",
+    "Raspberry Pi 5 (8GB)",
+    "Pi Camera Module v3 (wide-angle)",
+    "BME680 environmental sensor",
+    "GPS module (NEO-6M)",
+    "USB microphone",
+    "64GB microSD"
+  ],
+  "ai": {
+    "provider": "google",
+    "model": "gemini-2.5-flash",
+    "secondary_model": "gemini-robotics-er-1.5"
+  },
+  "tags": ["research", "data-collection", "fleet", "sensors", "gps", "environmental", "advanced"],
+  "budget": "$220",
+  "use_case": "Fleet of 3 robots collecting environmental data across a university research meadow. Each robot covers a grid section, logging GPS-tagged photos, air quality readings (BME680), ambient sound levels, and ground cover classification. Data syncs to a central server for analysis. Gemini Robotics ER handles autonomous waypoint navigation.",
+  "created": "2026-02-17T12:00:00Z",
+  "version": "1.0.0",
+  "opencastor_version": "2026.2.17.7",
+  "files": {
+    "config": "config.rcan.yaml",
+    "readme": "README.md",
+    "docs": []
+  }
+}

@@ -1,30 +1,27 @@
-name: "🤖 Recipe Submission"
-description: Submit a new community recipe for OpenCastor
-title: "[Recipe] "
-labels: ["recipe", "community"]
+name: "🤖 New Recipe Submission"
+description: Share a working robot config with the community
+title: "recipe: "
+labels: ["community-recipe", "submission"]
 body:
   - type: markdown
     attributes:
       value: |
-        ## Submit a Community Recipe
-        Share your working robot configuration with the OpenCastor community!
-        All configs will be reviewed for PII before merging.
+        Thanks for sharing your build! Please fill out the details below. A maintainer will help format it into a recipe.
+        See [CONTRIBUTING-RECIPES.md](../../CONTRIBUTING-RECIPES.md) for full guidelines.
 
   - type: input
-    id: recipe-name
+    id: name
     attributes:
       label: Recipe Name
-      description: A short, descriptive name for your recipe
-      placeholder: "e.g., Greenhouse Monitor Bot"
+      placeholder: "e.g., PiCar-X Home Patrol Bot"
     validations:
       required: true
 
   - type: textarea
     id: description
     attributes:
-      label: Description
-      description: What does this robot do? What problem does it solve?
-      placeholder: "Describe your robot's purpose and what makes this config interesting..."
+      label: What does it do?
+      placeholder: "Describe your robot and what problem it solves. Be specific!"
     validations:
       required: true
 
@@ -33,92 +30,79 @@ body:
     attributes:
       label: Category
       options:
-        - home
-        - agriculture
-        - education
-        - industrial
-        - research
-        - entertainment
+        - Home & Indoor
+        - Agriculture
+        - Industrial
+        - Education & Research
+        - Outdoor & Exploration
+        - Service & Companion
+        - Other
     validations:
       required: true
 
   - type: dropdown
     id: difficulty
     attributes:
-      label: Difficulty Level
+      label: Difficulty
       options:
-        - beginner
-        - intermediate
-        - advanced
+        - Beginner (kit-based, no soldering)
+        - Intermediate (some wiring or custom parts)
+        - Advanced (fleet, multiple sensors, custom builds)
+    validations:
+      required: true
+
+  - type: input
+    id: ai_provider
+    attributes:
+      label: AI Provider & Model
+      placeholder: "e.g., Google Gemini 2.5 Flash"
     validations:
       required: true
 
   - type: textarea
     id: hardware
     attributes:
-      label: Required Hardware
-      description: List all hardware components needed
+      label: Hardware List
       placeholder: |
-        - Raspberry Pi 4 (4GB)
-        - PiCar-X kit
-        - USB webcam
-    validations:
-      required: true
-
-  - type: input
-    id: robot-platform
-    attributes:
-      label: Robot Platform
-      description: The robot kit or platform used
-      placeholder: "e.g., PiCar-X, TurtleBot3, custom build"
-    validations:
-      required: true
-
-  - type: input
-    id: ai-model
-    attributes:
-      label: AI Model Used
-      description: The AI model and provider
-      placeholder: "e.g., google/gemini-2.5-flash, anthropic/claude-sonnet"
+        - Robot chassis (name, link)
+        - Raspberry Pi model
+        - Camera
+        - Sensors
+        - Approximate total cost
     validations:
       required: true
 
   - type: textarea
-    id: config-yaml
+    id: config
     attributes:
-      label: Config YAML
-      description: Paste your RCAN config (PII will be scrubbed during review)
+      label: RCAN Config (paste your config.rcan.yaml)
+      description: "Remove all API keys and personal info first!"
       render: yaml
-      placeholder: |
-        robot:
-          name: my-robot
-          platform: picar-x
-        agent:
-          provider: google
-          model: gemini-2.5-flash
     validations:
       required: true
 
   - type: textarea
-    id: testing-notes
+    id: lessons
     attributes:
-      label: Testing Notes
-      description: How did you test this? Any gotchas or tips?
-      placeholder: |
-        - Tested indoors on hardwood floors
-        - Works best in well-lit environments
-        - Camera angle matters — 30° downward is optimal
+      label: What worked well? What would you change?
+      placeholder: "Honest notes help others the most."
     validations:
-      required: false
+      required: true
+
+  - type: input
+    id: budget
+    attributes:
+      label: Approximate Budget
+      placeholder: "$120"
 
   - type: checkboxes
-    id: confirmations
+    id: terms
     attributes:
       label: Checklist
       options:
-        - label: I have removed API keys, passwords, and personal information from the config
+        - label: I tested this on real hardware
           required: true
-        - label: I have tested this config on real hardware (or simulation)
+        - label: I removed all API keys and personal information
           required: true
-        - label: I agree to share this under the project's open-source license
+        - label: I agree to license this recipe under Apache 2.0
           required: true
