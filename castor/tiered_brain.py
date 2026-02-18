@@ -28,15 +28,33 @@ logger = logging.getLogger("OpenCastor.TieredBrain")
 
 
 class ReactiveLayer:
-    """Layer 0: Rule-based reactive safety controller (<1ms).
+    """Layer 0: Rule-based reactive safety controller.
 
-    No AI needed. Hardcoded rules for immediate safety responses.
+    Combines hardcoded rules (<1ms) with optional Hailo-8 NPU
+    object detection (~20ms) for obstacle avoidance without API calls.
     Returns an action if triggered, None to pass to next layer.
     """
 
     def __init__(self, config: dict):
         self.min_obstacle_m = config.get("reactive", {}).get("min_obstacle_m", 0.3)
         self.blank_threshold = config.get("reactive", {}).get("blank_threshold", 100)
+        self.hailo_enabled = config.get("reactive", {}).get("hailo_vision", False)
+        self._hailo = None
+        self.last_detections = []  # Expose for telemetry/logging
+
+        if self.hailo_enabled:
+            try:
+                from .hailo_vision import HailoVision
+
+                model = config.get("reactive", {}).get(
+                    "hailo_model", "/usr/share/hailo-models/yolov8s_h8.hef"
+                )
+                confidence = config.get("reactive", {}).get("hailo_confidence", 0.4)
+                self._hailo = HailoVision(model_path=model, confidence=confidence)
+                if not self._hailo.available:
+                    self._hailo = None
+            except Exception as e:
+                logger.debug(f"Hailo vision not available: {e}")
 
     def evaluate(self, frame_bytes: bytes, sensor_data: dict | None = None) -> dict | None:
         """Check reactive safety rules. Returns action dict or None."""
@@ -48,7 +66,7 @@ class ReactiveLayer:
         if frame_bytes == b"\x00" * len(frame_bytes):
             return {"type": "wait", "duration_ms": 500, "reason": "blank_frame"}
 
-        # Rule 3: Obstacle proximity (if sensor data available)
+        # Rule 3: Depth-based obstacle proximity
         if sensor_data:
             distance = sensor_data.get("front_distance_m")
             if distance is not None and distance < self.min_obstacle_m:
@@ -59,8 +77,49 @@ class ReactiveLayer:
         if sensor_data and sensor_data.get("battery_critical"):
             return {"type": "stop", "reason": "battery_critical"}
 
+        # Rule 5: Hailo-8 NPU object detection (~20ms)
+        if self._hailo is not None:
+            try:
+                import cv2
+                import numpy as np
+
+                # Decode JPEG to frame
+                arr = np.frombuffer(frame_bytes, dtype=np.uint8)
+                frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                if frame is not None:
+                    result = self._hailo.detect_obstacles(frame)
+                    self.last_detections = result.get("all_detections", [])
+
+                    nearest = result.get("nearest_obstacle")
+                    if nearest and nearest.area() > 0.25:
+                        # Large obstacle taking >25% of frame = too close
+                        logger.warning(
+                            f"Reactive: {nearest} filling {nearest.area():.0%} of frame — stopping!"
+                        )
+                        return {
+                            "type": "stop",
+                            "reason": f"hailo_{nearest.class_name}_{nearest.area():.0%}",
+                        }
+
+                    if not result["clear_path"] and result["obstacles"]:
+                        # Obstacles in center path — slow down
+                        names = [d.class_name for d in result["obstacles"][:3]]
+                        return {
+                            "type": "move",
+                            "linear": 0.0,
+                            "angular": 0.3,  # Turn to avoid
+                            "reason": f"hailo_avoid_{','.join(names)}",
+                        }
+            except Exception as e:
+                logger.debug(f"Hailo detection error: {e}")
+
         # No reactive trigger — pass to next layer
         return None
+
+    def close(self):
+        """Release Hailo resources."""
+        if self._hailo:
+            self._hailo.close()
 
 
 class TieredBrain:

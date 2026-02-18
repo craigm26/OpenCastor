@@ -1,7 +1,5 @@
 """Tests for castor.healthcheck — startup health check module."""
 
-
-
 from castor.healthcheck import (
     _check_config_valid,
     _check_dependencies,
