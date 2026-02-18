@@ -5,6 +5,12 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.17.15] - 2026-02-17
+
+### Fixed
+- **Installer** — wizard stdin redirected to `/dev/tty` for `curl | bash` piped installs (wizard reads user input properly instead of script lines)
+- **Post-install messaging** — clear "Useful Commands" section showing `castor wizard`, `castor --help`, `castor status`, `castor doctor`, `castor dashboard`; explicit tip that wizard can be re-run anytime
+
 ## [2026.2.17.14] - 2026-02-17
 
 ### Fixed

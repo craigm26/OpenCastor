@@ -3,7 +3,7 @@
 # Supports: macOS, Debian/Ubuntu, Fedora/RHEL, Arch, Alpine, Raspberry Pi
 set -euo pipefail
 
-VERSION="2026.2.17.14"
+VERSION="2026.2.17.15"
 REPO_URL="https://github.com/craigm26/OpenCastor.git"
 INSTALL_DIR="${OPENCASTOR_DIR:-$HOME/opencastor}"
 
@@ -302,7 +302,9 @@ if [ "$SKIP_WIZARD" = false ] && [ "$DRY_RUN" = false ]; then
   WIZARD_EXIT=$?
   set -e
   if [ "$WIZARD_EXIT" -ne 0 ]; then
-    warn "Wizard exited (code $WIZARD_EXIT). Run 'castor wizard' later to configure."
+    warn "Wizard exited (code $WIZARD_EXIT)."
+    info "No worries! Run ${BOLD}castor wizard${RESET} anytime to configure your robot."
+    info "For all commands: ${BOLD}castor --help${RESET}"
   fi
 fi
 
@@ -324,10 +326,20 @@ echo ""
 echo "${GREEN}================================================${RESET}"
 echo "  ${BOLD}OpenCastor installed successfully!${RESET}"
 echo ""
-echo "  Quick Start:"
+echo "  ${BOLD}Quick Start:${RESET}"
 echo "    1. cd $INSTALL_DIR && source venv/bin/activate"
 echo "    2. Edit .env and add your ANTHROPIC_API_KEY"
 echo "    3. castor run --config robot.rcan.yaml"
 echo ""
-echo "  Verify:  bash scripts/install-check.sh"
+echo "  ${BOLD}Useful Commands:${RESET}"
+echo "    castor wizard          Re-run the setup wizard anytime"
+echo "    castor --help          See all available commands"
+echo "    castor status          Check robot & system status"
+echo "    castor doctor          Diagnose common issues"
+echo "    castor dashboard       Open the web dashboard"
+echo ""
+echo "  ${BOLD}Verify Install:${RESET}  bash scripts/install-check.sh"
+echo ""
+echo "  ${YELLOW}Tip:${RESET} You can re-run ${BOLD}castor wizard${RESET} anytime to"
+echo "  reconfigure your robot, change AI provider, or add channels."
 echo "${GREEN}================================================${RESET}"
