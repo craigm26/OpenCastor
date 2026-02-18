@@ -1,5 +1,5 @@
 """OpenCastor: The Universal Runtime for Embodied AI."""
 
-__version__ = "2026.2.17.12"
+__version__ = "2026.2.17.13"
 
 __all__ = ["__version__"]

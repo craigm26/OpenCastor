@@ -5,6 +5,12 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.17.13] - 2026-02-17
+
+### Fixed
+- **neonize version pin** — `>=1.0.0` → `>=0.3.10` (1.0 doesn't exist)
+- **Installer resilience** — `[rpi]` extras failure falls back to core install instead of aborting
+
 ## [2026.2.17.12] - 2026-02-17
 
 ### Fixed

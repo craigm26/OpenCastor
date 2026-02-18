@@ -3,7 +3,7 @@
 # Supports: macOS, Debian/Ubuntu, Fedora/RHEL, Arch, Alpine, Raspberry Pi
 set -euo pipefail
 
-VERSION="2026.2.17.12"
+VERSION="2026.2.17.13"
 REPO_URL="https://github.com/craigm26/OpenCastor.git"
 INSTALL_DIR="${OPENCASTOR_DIR:-$HOME/opencastor}"
 
@@ -275,7 +275,10 @@ step "[5/6] Installing Python packages..."
 if [ "$DRY_RUN" = false ]; then
   pip install --quiet --upgrade pip
   if [ "$IS_RPI" = true ]; then
-    pip install --quiet -e ".[rpi]"
+    pip install --quiet -e ".[rpi]" || {
+      warn "Some RPi extras failed to install. Falling back to core..."
+      pip install --quiet -e "."
+    }
   else
     pip install --quiet -e ".[core]" 2>/dev/null || pip install --quiet -e "."
   fi
