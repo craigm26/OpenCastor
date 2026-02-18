@@ -929,22 +929,31 @@ def _login_anthropic(args) -> None:
 
 
 def _write_env_key(key: str, value: str) -> None:
-    """Write or update a key in the .env file."""
-    env_path = os.path.join(os.getcwd(), ".env")
-    lines = []
-    found = False
-    if os.path.exists(env_path):
-        with open(env_path) as f:
-            for line in f:
-                if line.startswith(f"{key}="):
-                    lines.append(f"{key}={value}\n")
-                    found = True
-                else:
-                    lines.append(line)
-    if not found:
-        lines.append(f"{key}={value}\n")
-    with open(env_path, "w") as f:
-        f.writelines(lines)
+    """Write or update a key in ~/.opencastor/env (and local .env for compat)."""
+    env_dir = os.path.expanduser("~/.opencastor")
+    os.makedirs(env_dir, mode=0o700, exist_ok=True)
+
+    for env_path in [os.path.join(env_dir, "env"), os.path.join(os.getcwd(), ".env")]:
+        lines = []
+        found = False
+        if os.path.exists(env_path):
+            with open(env_path) as f:
+                for line in f:
+                    if line.startswith(f"{key}="):
+                        lines.append(f"{key}={value}\n")
+                        found = True
+                    else:
+                        lines.append(line)
+        if not found:
+            lines.append(f"{key}={value}\n")
+        with open(env_path, "w") as f:
+            f.writelines(lines)
+
+    # Secure the primary env file
+    try:
+        os.chmod(os.path.join(env_dir, "env"), 0o600)
+    except OSError:
+        pass
 
 
 def _login_huggingface(args) -> None:

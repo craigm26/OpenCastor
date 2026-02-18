@@ -1537,11 +1537,32 @@ def generate_custom_config(robot_name, agent_config, links, drivers):
     }
 
 
-def _write_env_var(key: str, value: str):
-    """Append or update a variable in the local .env file."""
-    env_path = ".env"
-    lines = []
+ENV_DIR = os.path.expanduser("~/.opencastor")
+ENV_PATH = os.path.join(ENV_DIR, "env")
 
+
+def _write_env_var(key: str, value: str):
+    """Write or update a variable in ~/.opencastor/env.
+
+    Credentials are stored in the user's home directory (not the install dir)
+    so they survive uninstall/reinstall. The file has 0600 permissions.
+    Also writes to local .env for backward compatibility.
+    """
+    # Primary: ~/.opencastor/env (survives uninstall)
+    os.makedirs(ENV_DIR, mode=0o700, exist_ok=True)
+    _upsert_env_file(ENV_PATH, key, value)
+    try:
+        os.chmod(ENV_PATH, 0o600)
+    except OSError:
+        pass
+
+    # Secondary: local .env (backward compat for castor run in project dir)
+    _upsert_env_file(".env", key, value)
+
+
+def _upsert_env_file(env_path: str, key: str, value: str):
+    """Insert or update a key=value in an env file."""
+    lines = []
     if os.path.exists(env_path):
         with open(env_path) as f:
             lines = f.readlines()

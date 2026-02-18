@@ -5,6 +5,13 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.18.9] - 2026-02-18
+
+### Changed
+- **Credentials moved to `~/.opencastor/`** — `.env` vars now written to `~/.opencastor/env` (0600 perms) alongside `anthropic-token` and `wizard-state.yaml`. Local `.env` still written for backward compat.
+- **Uninstaller redesigned** — removes install dir but keeps `~/.opencastor/` by default. Asks user: "[1] Keep credentials (recommended)" or "[2] Delete everything". Migrates legacy `.env` to `~/.opencastor/env` during uninstall.
+- **Auth loads `~/.opencastor/env` first** — `load_dotenv_if_available()` reads the safe env file before local `.env`, without overriding already-set vars.
+
 ## [2026.2.18.8] - 2026-02-18
 
 ### Added

@@ -46,11 +46,30 @@ CHANNEL_AUTH_MAP: Dict[str, list] = {
 
 
 def load_dotenv_if_available():
-    """Load .env file if python-dotenv is installed."""
+    """Load env files: ~/.opencastor/env (primary) and local .env (fallback)."""
+    # Load ~/.opencastor/env first (survives uninstall)
+    opencastor_env = os.path.expanduser("~/.opencastor/env")
+    if os.path.exists(opencastor_env):
+        try:
+            with open(opencastor_env) as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, _, value = line.partition("=")
+                        key = key.strip()
+                        value = value.strip()
+                        # Don't override already-set env vars
+                        if key and not os.getenv(key):
+                            os.environ[key] = value
+            logger.debug("Loaded ~/.opencastor/env")
+        except Exception:
+            pass
+
+    # Also load local .env for backward compatibility
     try:
         from dotenv import load_dotenv
 
-        load_dotenv()
+        load_dotenv(override=False)
         logger.debug("Loaded .env file")
     except ImportError:
         pass
