@@ -47,29 +47,17 @@ class AnthropicProvider(BaseProvider):
             )
 
         if api_key.startswith(self.SETUP_TOKEN_PREFIX):
-            # OAuth setup-token — can't use directly with Anthropic SDK.
-            # Route through claude-max-api-proxy (OpenAI-compatible) if available,
-            # otherwise fall back to Claude CLI subprocess.
-            proxy_url = os.getenv("CLAUDE_PROXY_URL", "http://127.0.0.1:3456")
-            if self._check_proxy(proxy_url):
-                logger.info("Using Claude subscription via proxy at %s", proxy_url)
-                self._use_proxy = True
-                self._proxy_url = proxy_url
-                from openai import OpenAI
+            # OAuth setup-token — route through Claude CLI (handles OAuth
+            # token exchange internally). This mirrors how OpenClaw uses
+            # Claude Max/Pro subscriptions.
+            from castor.claude_proxy import ClaudeOAuthClient
 
-                self._openai_client = OpenAI(base_url=f"{proxy_url}/v1", api_key="not-needed")
-                self.client = None
-            else:
-                logger.warning(
-                    "Claude proxy not available at %s — falling back to Claude CLI (slower)",
-                    proxy_url,
-                )
-                self._use_proxy = False
-                self._use_cli = True
-                self.client = None
+            logger.info("Using Claude subscription via CLI (OAuth token)")
+            self._use_cli = True
+            self._cli_client = ClaudeOAuthClient(api_key)
+            self.client = None
         else:
             logger.info("Using Anthropic API key")
-            self._use_proxy = False
             self._use_cli = False
             self.client = anthropic.Anthropic(api_key=api_key)
 
@@ -108,30 +96,10 @@ class AnthropicProvider(BaseProvider):
         os.chmod(cls.TOKEN_PATH, 0o600)
         return cls.TOKEN_PATH
 
-    @staticmethod
-    def _check_proxy(url: str) -> bool:
-        """Check if claude-max-api-proxy is reachable."""
-        import socket
-
-        try:
-            # Parse host:port from URL and do a raw TCP connect check
-            from urllib.parse import urlparse
-
-            parsed = urlparse(url)
-            host = parsed.hostname or "127.0.0.1"
-            port = parsed.port or 3456
-            sock = socket.create_connection((host, port), timeout=2)
-            sock.close()
-            return True
-        except Exception:
-            return False
-
     def think(self, image_bytes: bytes, instruction: str) -> Thought:
         b64_image = base64.b64encode(image_bytes).decode("utf-8")
 
-        # Route through proxy or CLI if using OAuth token
-        if getattr(self, "_use_proxy", False):
-            return self._think_via_proxy(image_bytes, instruction)
+        # Route through CLI if using OAuth token
         if getattr(self, "_use_cli", False):
             return self._think_via_cli(instruction)
 
@@ -165,68 +133,18 @@ class AnthropicProvider(BaseProvider):
             logger.error(f"Anthropic error: {e}")
             return Thought(f"Error: {e}", None)
 
-    def _think_via_proxy(self, image_bytes: bytes, instruction: str) -> Thought:
-        """Send request through claude-max-api-proxy (OpenAI-compatible)."""
-        b64_image = base64.b64encode(image_bytes).decode("utf-8")
-
-        messages = [{"role": "system", "content": self.system_prompt}]
-        content = []
-        is_blank = image_bytes == b"\x00" * len(image_bytes)
-        if not is_blank and len(image_bytes) > 100:
-            content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{b64_image}"},
-                }
-            )
-        content.append({"type": "text", "text": instruction})
-        messages.append({"role": "user", "content": content})
-
+    def _think_via_cli(self, instruction: str) -> Thought:
+        """Call Claude via OAuth CLI client (uses Max/Pro subscription)."""
         try:
-            response = self._openai_client.chat.completions.create(
+            response = self._cli_client.create_message(
                 model=self.model_name,
-                messages=messages,
+                system=self.system_prompt,
+                messages=[{"role": "user", "content": instruction}],
                 max_tokens=1024,
             )
-            text = response.choices[0].message.content
+            text = response["content"][0]["text"]
             action = self._clean_json(text)
             return Thought(text, action)
         except Exception as e:
-            logger.error(f"Proxy error: {e}")
-            return Thought(f"Error: {e}", None)
-
-    def _think_via_cli(self, instruction: str) -> Thought:
-        """Fallback: call Claude CLI directly (slow, no vision)."""
-        import json
-        import subprocess
-
-        try:
-            prompt = f"{self.system_prompt}\n\n{instruction}"
-            result = subprocess.run(
-                ["claude", "-p", prompt, "--output-format", "json"],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                env={
-                    **os.environ,
-                    "CLAUDE_CODE_OAUTH_TOKEN": open(self.TOKEN_PATH).read().strip(),
-                },
-            )
-            # Parse CLI JSON output — find the assistant result message
-            lines = result.stdout.strip().split("\n")
-            for line in reversed(lines):
-                try:
-                    msg = json.loads(line)
-                    if isinstance(msg, dict) and msg.get("type") == "result":
-                        text = msg.get("result", "")
-                        action = self._clean_json(text)
-                        return Thought(text, action)
-                except json.JSONDecodeError:
-                    continue
-            # Fallback: treat entire stdout as response
-            text = result.stdout.strip()
-            action = self._clean_json(text)
-            return Thought(text, action)
-        except Exception as e:
-            logger.error(f"CLI fallback error: {e}")
+            logger.error(f"CLI error: {e}")
             return Thought(f"Error: {e}", None)
