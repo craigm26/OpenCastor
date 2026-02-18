@@ -5,6 +5,15 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.17.21] - 2026-02-17
+
+### Added
+- **Anthropic setup-token auth** — use your Claude Max/Pro subscription instead of pay-per-token API keys
+- **`castor login anthropic`** (alias: `castor login claude`) — interactive setup-token or API key auth
+- **Auto-read Claude CLI credentials** — reads setup-token from `~/.claude/.credentials.json` as fallback
+- Wizard now recommends setup-token as option [1] over API key
+- 7 new Anthropic auth tests (1264 total)
+
 ## [2026.2.17.20] - 2026-02-17
 
 ### Added
