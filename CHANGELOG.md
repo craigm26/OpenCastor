@@ -5,6 +5,21 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.19.1] - 2026-02-19
+
+### Added
+- **MLX Provider** (`castor/providers/mlx_provider.py`): Apple Silicon native
+  inference via mlx-lm (direct) or vLLM-MLX/MLX-OpenAI-Server (OpenAI API).
+  400+ tok/s on M4 Max. Vision support via mlx-vlm. Provider aliases:
+  `mlx`, `mlx-lm`, `vllm-mlx`.
+- MLX models in wizard: Qwen2.5-VL-7B, Llama 3.3 8B, Mistral Small 3.1 24B
+- llama.cpp and MLX providers added to wizard provider selection
+- 8 new provider tests (1330 total)
+
+### Changed
+- Provider count: 7 → 8 (Anthropic, Google, OpenAI, HuggingFace, Ollama,
+  llama.cpp, MLX, Claude OAuth)
+
 ## [2026.2.19.0] - 2026-02-19 🚀 Major Release
 
 ### Highlights

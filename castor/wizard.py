@@ -147,10 +147,28 @@ PROVIDER_AUTH = {
         "label": "Ollama (Local)",
         "desc": "Free, private, no API needed",
     },
+    "llamacpp": {
+        "env_var": None,
+        "label": "llama.cpp (Local)",
+        "desc": "Bare-metal GGUF inference",
+    },
+    "mlx": {
+        "env_var": None,
+        "label": "MLX (Apple Silicon)",
+        "desc": "Native GPU, 400+ tok/s on Mac",
+    },
 }
 
 # Ordered list for menu display
-PROVIDER_ORDER = ["anthropic", "google", "openai", "huggingface", "ollama"]
+PROVIDER_ORDER = [
+    "anthropic",
+    "google",
+    "openai",
+    "huggingface",
+    "ollama",
+    "llamacpp",
+    "mlx",
+]
 
 MODELS = {
     "anthropic": [
@@ -238,6 +256,28 @@ MODELS = {
         },
     ],
     "ollama": [],  # dynamically populated or user enters name
+    "llamacpp": [],  # user enters model name or GGUF path
+    "mlx": [
+        {
+            "id": "mlx-community/Qwen2.5-VL-7B-Instruct-4bit",
+            "label": "Qwen 2.5 VL 7B (4-bit)",
+            "desc": "Vision + language, recommended",
+            "tags": ["vision", "recommended"],
+            "recommended": True,
+        },
+        {
+            "id": "mlx-community/Llama-3.3-8B-Instruct-4bit",
+            "label": "Llama 3.3 8B (4-bit)",
+            "desc": "Fast general purpose",
+            "tags": ["fast"],
+        },
+        {
+            "id": "mlx-community/Mistral-Small-3.1-24B-Instruct-2503-4bit",
+            "label": "Mistral Small 3.1 24B (4-bit)",
+            "desc": "Strong reasoning",
+            "tags": ["reasoning"],
+        },
+    ],
 }
 
 SECONDARY_MODELS = [
