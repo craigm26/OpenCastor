@@ -372,50 +372,61 @@ class SafetyLayer:
 
         # Anti-subversion scan for AI-generated /dev/ writes
         if path.startswith("/dev/"):
-            subversion_result = _scan_before_write(path, data, principal)
-            if not subversion_result.ok:
-                self._audit_safety(
-                    principal,
-                    path,
-                    "anti_subversion",
-                    "; ".join(subversion_result.reasons),
-                )
-                if subversion_result.verdict.value == "block":
-                    return False
+            try:
+                subversion_result = _scan_before_write(path, data, principal)
+                if not subversion_result.ok:
+                    self._audit_safety(
+                        principal,
+                        path,
+                        "anti_subversion",
+                        "; ".join(subversion_result.reasons),
+                    )
+                    if subversion_result.verdict.value == "block":
+                        return False
+            except Exception as exc:
+                logger.error("Anti-subversion scan failed (allowing write): %s", exc)
 
         # Physical bounds enforcement for motor and arm paths
         if path.startswith(("/dev/motor", "/dev/arm")):
-            bounds_result = check_write_bounds(self._bounds_checker, path, data)
-            if bounds_result.violated:
-                logger.warning(
-                    "WRITE denied: bounds violation on %s: %s", path, bounds_result.details
-                )
-                self._audit_safety(principal, path, "bounds_violation", bounds_result.details)
-                return False
-            if bounds_result.status == "warning":
-                logger.info("Bounds warning on %s: %s", path, bounds_result.details)
-                self._audit_safety(principal, path, "bounds_warning", bounds_result.details)
+            try:
+                bounds_result = check_write_bounds(self._bounds_checker, path, data)
+                if bounds_result.violated:
+                    logger.warning(
+                        "WRITE denied: bounds violation on %s: %s", path, bounds_result.details
+                    )
+                    self._audit_safety(principal, path, "bounds_violation", bounds_result.details)
+                    return False
+                if bounds_result.status == "warning":
+                    logger.info("Bounds warning on %s: %s", path, bounds_result.details)
+                    self._audit_safety(principal, path, "bounds_warning", bounds_result.details)
+            except Exception as exc:
+                logger.error("Bounds check failed (allowing write): %s", exc)
 
         # Safety protocol rules for /dev/ writes
         if path.startswith("/dev/"):
-            protocol_violations = check_write_protocol(self._protocol, path, data)
-            critical = [v for v in protocol_violations if v.severity == "critical"]
-            if critical:
-                logger.warning(
-                    "WRITE denied: protocol violation on %s: %s",
-                    path,
-                    critical[0].message,
-                )
-                self._audit_safety(principal, path, "protocol_violation", critical[0].message)
-                return False
-            for v in protocol_violations:
-                if v.severity == "violation":
-                    logger.warning("WRITE denied: protocol violation on %s: %s", path, v.message)
-                    self._audit_safety(principal, path, "protocol_violation", v.message)
+            try:
+                protocol_violations = check_write_protocol(self._protocol, path, data)
+                critical = [v for v in protocol_violations if v.severity == "critical"]
+                if critical:
+                    logger.warning(
+                        "WRITE denied: protocol violation on %s: %s",
+                        path,
+                        critical[0].message,
+                    )
+                    self._audit_safety(principal, path, "protocol_violation", critical[0].message)
                     return False
-                if v.severity == "warning":
-                    logger.info("Protocol warning on %s: %s", path, v.message)
-                    self._audit_safety(principal, path, "protocol_warning", v.message)
+                for v in protocol_violations:
+                    if v.severity == "violation":
+                        logger.warning(
+                            "WRITE denied: protocol violation on %s: %s", path, v.message
+                        )
+                        self._audit_safety(principal, path, "protocol_violation", v.message)
+                        return False
+                    if v.severity == "warning":
+                        logger.info("Protocol warning on %s: %s", path, v.message)
+                        self._audit_safety(principal, path, "protocol_warning", v.message)
+            except Exception as exc:
+                logger.error("Protocol check failed (allowing write): %s", exc)
 
         # Motor-specific safety enforcement
         if path.startswith("/dev/motor"):

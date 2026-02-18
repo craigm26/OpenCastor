@@ -1791,7 +1791,9 @@ def main() -> None:
         help="Show sensor readings (CPU temp, memory, disk, load)",
     )
     p_monitor.add_argument("--watch", action="store_true", help="Continuous monitoring")
-    p_monitor.add_argument("--interval", type=float, default=5.0, help="Seconds between readings (default: 5)")
+    p_monitor.add_argument(
+        "--interval", type=float, default=5.0, help="Seconds between readings (default: 5)"
+    )
 
     # castor login
     p_login = sub.add_parser(

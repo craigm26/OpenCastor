@@ -2,7 +2,13 @@
 
 from castor.safety.anti_subversion import ScanResult, ScanVerdict, check_input_safety, scan_input
 from castor.safety.authorization import DestructiveActionDetector, WorkAuthority, WorkOrder
-from castor.safety.bounds import BoundsChecker, BoundsResult, ForceBounds, JointBounds, WorkspaceBounds
+from castor.safety.bounds import (
+    BoundsChecker,
+    BoundsResult,
+    ForceBounds,
+    JointBounds,
+    WorkspaceBounds,
+)
 from castor.safety.state import SafetyStateSnapshot, SafetyTelemetry, compute_safety_score
 
 __all__ = [
