@@ -5,6 +5,15 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.18.12] - 2026-02-18
+
+### Added
+- **Claude OAuth client** (`castor/claude_proxy.py`) — native integration with Claude Max/Pro subscriptions via OAuth token. Works like OpenClaw: `castor login anthropic` generates a setup-token, the brain routes through Claude CLI with proper model selection and system prompts. No per-token billing.
+- **OpenAI provider `base_url` support** — point at any OpenAI-compatible endpoint
+
+### Fixed
+- Anthropic provider auto-detects OAuth tokens and routes correctly (no more 401 errors with setup-tokens)
+
 ## [2026.2.18.11] - 2026-02-18
 
 ### Added
