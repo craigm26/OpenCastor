@@ -865,7 +865,7 @@ def _login_anthropic(args) -> None:
                     break
 
             if not token:
-                print(f"  ⚠️  Could not extract token from claude output.")
+                print("  ⚠️  Could not extract token from claude output.")
                 if output:
                     print(f"  Output: {output[:200]}")
                 print("  Try [2] to paste the token manually.")

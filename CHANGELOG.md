@@ -5,6 +5,11 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.18.3] - 2026-02-18
+
+### Fixed
+- Lint error: extraneous f-string prefix in cli.py (F541)
+
 ## [2026.2.18.2] - 2026-02-18
 
 ### Added
