@@ -495,7 +495,7 @@ def _anthropic_auth_flow(env_var):
                     f"{Colors.BOLD}npm install -g @anthropic-ai/claude-code"
                     f"{Colors.ENDC}"
                 )
-                print(f"  Then run: {Colors.BOLD}claude login{Colors.ENDC}\n")
+                print(f"  Then run: ${Colors.BOLD}claude auth login{Colors.ENDC}\n")
 
     # Fall through to API key
     print("\n  Your Anthropic API key is needed.")
@@ -906,6 +906,20 @@ def _check_claude_oauth():
     except Exception:
         return None
 
+    # Use claude auth status to check if signed in
+    try:
+        auth_result = subprocess.run(
+            ["claude", "auth", "status"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if auth_result.returncode == 0 and "logged in" in auth_result.stdout.lower():
+            return True
+    except Exception:
+        pass
+
+    # Fallback: check for credential files
     claude_creds = os.path.expanduser("~/.claude/credentials.json")
     claude_settings = os.path.expanduser("~/.claude/settings.json")
     if os.path.exists(claude_creds) or os.path.exists(claude_settings):
@@ -922,7 +936,7 @@ def _run_claude_login():
     print("  A browser window will open. Sign in with your Anthropic account.\n")
     try:
         result = subprocess.run(
-            ["claude", "login"],
+            ["claude", "auth", "login"],
             timeout=120,
         )
         return result.returncode == 0
