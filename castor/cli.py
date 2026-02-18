@@ -141,12 +141,10 @@ def cmd_token(args) -> None:
 
     try:
         from castor.rcan.jwt_auth import RCANTokenManager
-        from castor.rcan.rbac import RCANRole
+        from castor.rcan.rbac import RCANRole, resolve_role_name
 
-        from castor.rcan.rbac import resolve_role_name
-
-            role_name = resolve_role_name(args.role)
-            role = RCANRole[role_name]
+        role_name = resolve_role_name(args.role)
+        role = RCANRole[role_name]
         scopes = args.scope.split(",") if args.scope else None
 
         ruri = os.getenv("OPENCASTOR_RURI", "rcan://opencastor.unknown.00000000")
@@ -1180,7 +1178,9 @@ def cmd_safety(args) -> None:
     print("-" * 80)
     for r in rules:
         enabled = "✓" if r["enabled"] else "✗"
-        print(f"{r['rule_id']:<15} {r['category']:<12} {r['severity']:<10} {enabled:<8} {r['description']}")
+        print(
+            f"{r['rule_id']:<15} {r['category']:<12} {r['severity']:<10} {enabled:<8} {r['description']}"
+        )
 
 
 def cmd_audit(args) -> None:
@@ -1747,12 +1747,17 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_safety.add_argument(
-        "safety_action", nargs="?", default="rules", choices=["rules"],
+        "safety_action",
+        nargs="?",
+        default="rules",
+        choices=["rules"],
         help="Safety sub-command (default: rules)",
     )
     p_safety.add_argument("--category", default=None, help="Filter by category")
     p_safety.add_argument(
-        "--config", default=None, help="Path to safety protocol YAML config",
+        "--config",
+        default=None,
+        help="Path to safety protocol YAML config",
     )
 
     p_audit = sub.add_parser(
@@ -1772,6 +1777,14 @@ def main() -> None:
     )
     p_audit.add_argument("--limit", type=int, default=50, help="Max entries to show (default: 50)")
     p_audit.add_argument("--verify", action="store_true", help="Verify hash chain integrity")
+
+    # castor monitor
+    p_monitor = sub.add_parser(
+        "monitor",
+        help="Show sensor readings (CPU temp, memory, disk, load)",
+    )
+    p_monitor.add_argument("--watch", action="store_true", help="Continuous monitoring")
+    p_monitor.add_argument("--interval", type=float, default=5.0, help="Seconds between readings (default: 5)")
 
     # castor login
     p_login = sub.add_parser(
@@ -1861,6 +1874,7 @@ def main() -> None:
         "quickstart": cmd_quickstart,
         "plugins": cmd_plugins,
         "audit": cmd_audit,
+        "monitor": _cmd_monitor,
         "safety": cmd_safety,
         "login": cmd_login,
         "hub": cmd_hub,

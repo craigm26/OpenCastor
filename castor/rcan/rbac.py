@@ -39,9 +39,7 @@ def resolve_role_name(name: str) -> str:
     upper = name.upper()
     if upper in _DEPRECATED_ROLE_NAMES:
         new_name = _DEPRECATED_ROLE_NAMES[upper]
-        logger.warning(
-            "Role '%s' is deprecated, use '%s' (RCAN spec alignment)", upper, new_name
-        )
+        logger.warning("Role '%s' is deprecated, use '%s' (RCAN spec alignment)", upper, new_name)
         return new_name
     return upper
 
