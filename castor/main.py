@@ -91,10 +91,50 @@ class Camera:
     def __init__(self, config: dict):
         self._picam = None
         self._cv_cap = None
+        self._oakd_pipeline = None
+        self._oakd_rgb_q = None
+        self._oakd_depth_q = None
+        self.last_depth = None  # Expose depth for reactive layer
 
         cam_cfg = config.get("camera", {})
         cam_type = cam_cfg.get("type", "auto")
         res = cam_cfg.get("resolution", [640, 480])
+        depth_enabled = cam_cfg.get("depth_enabled", False)
+
+        # --- Try OAK-D (DepthAI USB camera with depth) ---
+        if cam_type in ("oakd", "auto"):
+            try:
+                import depthai as dai
+
+                pipeline = dai.Pipeline()
+
+                cam = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.CAM_A)
+                rgb_out = cam.requestOutput((res[0], res[1]), type=dai.ImgFrame.Type.BGR888p)
+                self._oakd_rgb_q = rgb_out.createOutputQueue()
+
+                if depth_enabled:
+                    left_cam = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.CAM_B)
+                    right_cam = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.CAM_C)
+                    stereo = pipeline.create(dai.node.StereoDepth)
+                    left_cam.requestOutput((640, 480), type=dai.ImgFrame.Type.GRAY8).link(
+                        stereo.left
+                    )
+                    right_cam.requestOutput((640, 480), type=dai.ImgFrame.Type.GRAY8).link(
+                        stereo.right
+                    )
+                    self._oakd_depth_q = stereo.depth.createOutputQueue()
+
+                pipeline.start()
+                self._oakd_pipeline = pipeline
+                depth_str = " + depth" if depth_enabled else ""
+                logger.info(f"OAK-D camera online ({res[0]}x{res[1]}{depth_str})")
+                return
+            except Exception as exc:
+                if cam_type == "oakd":
+                    logger.error(f"OAK-D camera requested but failed: {exc}")
+                else:
+                    logger.debug(f"OAK-D not available: {exc}")
+                self._oakd_pipeline = None
 
         # --- Try picamera2 (CSI ribbon cable camera) ---
         if cam_type in ("csi", "auto"):
@@ -137,11 +177,34 @@ class Camera:
         logger.warning("No camera detected. Using blank frames.")
 
     def is_available(self) -> bool:
-        """Return True if a real camera (CSI or USB) is online."""
-        return self._picam is not None or self._cv_cap is not None
+        """Return True if a real camera (CSI, USB, or OAK-D) is online."""
+        return (
+            self._picam is not None or self._cv_cap is not None or self._oakd_pipeline is not None
+        )
 
     def capture_jpeg(self) -> bytes:
         """Return a JPEG-encoded frame as bytes."""
+        if self._oakd_pipeline is not None:
+            try:
+                import cv2
+
+                rgb_frame = self._oakd_rgb_q.get()
+                frame = rgb_frame.getCvFrame()
+
+                # Also grab depth if available
+                if self._oakd_depth_q is not None:
+                    try:
+                        depth_frame = self._oakd_depth_q.tryGet()
+                        if depth_frame is not None:
+                            self.last_depth = depth_frame.getFrame()
+                    except Exception:
+                        pass
+
+                _, buf = cv2.imencode(".jpg", frame)
+                return buf.tobytes()
+            except Exception:
+                return b"\x00" * 1024
+
         if self._picam is not None:
             try:
                 import cv2
@@ -163,6 +226,12 @@ class Camera:
         return b"\x00" * 1024
 
     def close(self):
+        if self._oakd_pipeline is not None:
+            try:
+                self._oakd_pipeline.stop()
+                logger.debug("OAK-D pipeline stopped")
+            except Exception:
+                pass
         if self._picam is not None:
             try:
                 self._picam.stop()
@@ -557,7 +626,21 @@ def main():
                 instruction = f"{instruction}\n\n{context_ctx}"
 
             if tiered:
-                thought = tiered.think(frame_bytes, instruction)
+                # Build sensor data from depth camera if available
+                sensor_data = None
+                if hasattr(camera, "last_depth") and camera.last_depth is not None:
+                    import numpy as np
+
+                    depth = camera.last_depth
+                    # Get min distance in center region (front obstacle)
+                    h, w = depth.shape
+                    center = depth[h // 3 : 2 * h // 3, w // 4 : 3 * w // 4]
+                    valid = center[center > 0]
+                    if len(valid) > 0:
+                        front_dist_mm = float(np.percentile(valid, 5))
+                        sensor_data = {"front_distance_m": front_dist_mm / 1000.0}
+
+                thought = tiered.think(frame_bytes, instruction, sensor_data=sensor_data)
             else:
                 thought = brain.think(frame_bytes, instruction)
             fs.proc.record_thought(thought.raw_text, thought.action)

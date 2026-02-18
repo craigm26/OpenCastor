@@ -56,6 +56,7 @@ class TestCheckProviderKeys:
         assert google_result[0][0] is True
 
     @patch.dict(os.environ, {}, clear=True)
+    @patch("castor.auth.load_dotenv_if_available", lambda: None)
     def test_reports_missing_provider(self):
         results = check_provider_keys()
         google_result = [r for r in results if "google" in r[1]]
