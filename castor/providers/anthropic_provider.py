@@ -30,8 +30,7 @@ class AnthropicProvider(BaseProvider):
                 auth_token = self._read_claude_oauth_token()
             if auth_token:
                 self.client = anthropic.Anthropic(
-                    api_key=auth_token,
-                    default_headers={"anthropic-beta": "interleaved-thinking-2025-05-14"},
+                    auth_token=auth_token,
                 )
                 logger.info("Using Claude OAuth credentials (Max/Pro plan)")
             else:
