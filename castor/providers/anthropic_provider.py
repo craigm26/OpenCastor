@@ -111,12 +111,18 @@ class AnthropicProvider(BaseProvider):
     @staticmethod
     def _check_proxy(url: str) -> bool:
         """Check if claude-max-api-proxy is reachable."""
-        import urllib.request
+        import socket
 
         try:
-            req = urllib.request.Request(url, method="GET")
-            with urllib.request.urlopen(req, timeout=2):
-                return True
+            # Parse host:port from URL and do a raw TCP connect check
+            from urllib.parse import urlparse
+
+            parsed = urlparse(url)
+            host = parsed.hostname or "127.0.0.1"
+            port = parsed.port or 3456
+            sock = socket.create_connection((host, port), timeout=2)
+            sock.close()
+            return True
         except Exception:
             return False
 
