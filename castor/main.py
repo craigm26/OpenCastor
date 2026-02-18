@@ -364,26 +364,32 @@ def main():
         logger.critical(f"Failed to initialize Brain: {e}")
         raise SystemExit(1) from e
 
-    # 2b. TIERED BRAIN (optional: fast brain + planner)
+    # 2b. TIERED BRAIN (optional: primary = fast brain, secondary[0] = planner)
     tiered = None
     secondary_models = config.get("agent", {}).get("secondary_models", [])
-    if secondary_models:
+    tiered_cfg = config.get("tiered_brain", {})
+    if secondary_models and tiered_cfg:
         try:
             from castor.tiered_brain import TieredBrain
 
-            # First secondary becomes the fast brain, primary becomes planner
-            fast_config = secondary_models[0]
-            fast_brain = get_provider(fast_config)
+            # Primary provider = fast brain (runs every tick)
+            # First secondary = planner (runs periodically / on escalation)
+            planner_config = secondary_models[0]
+            planner_brain = get_provider(planner_config)
             logger.info(
-                f"Fast Brain Online: {fast_config.get('provider', '?')}"
-                f"/{fast_config.get('model', '?')}"
+                f"Planner Brain Online: {planner_config.get('provider', '?')}"
+                f"/{planner_config.get('model', '?')}"
             )
             tiered = TieredBrain(
-                fast_provider=fast_brain,
-                planner_provider=brain,  # Claude becomes the planner
+                fast_provider=brain,  # Primary = fast (Gemini Flash)
+                planner_provider=planner_brain,  # Secondary = planner (Claude)
                 config=config,
             )
-            logger.info("Tiered Brain: reactive → fast → planner")
+            logger.info(
+                "Tiered Brain: reactive → fast(%s) → planner(%s)",
+                config["agent"].get("model", "?"),
+                planner_config.get("model", "?"),
+            )
         except Exception as e:
             logger.warning(f"Tiered brain unavailable ({e}), using single brain")
             tiered = None
