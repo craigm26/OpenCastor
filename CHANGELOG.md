@@ -5,6 +5,17 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.18.13] - 2026-02-18
+
+### Added
+- **Tiered Brain Architecture** (`castor/tiered_brain.py`) — three-layer brain pipeline:
+  - Layer 0 (Reactive): Rule-based safety (<1ms) — obstacle stop, blank frame wait, battery critical
+  - Layer 1 (Fast Brain): Primary perception-action loop (Gemini Flash / Ollama, ~1-2s)
+  - Layer 2 (Planner): Complex reasoning (Claude, ~10-15s) — periodic or on escalation
+- **Graceful shutdown** — SIGTERM/SIGINT caught with phased cleanup: motors → services → hardware → filesystem
+- **Ollama installed on Pi** — gemma3:1b available (CPU-only, ~15s — Gemini Flash recommended for fast brain)
+- 17 new tests (1303 total)
+
 ## [2026.2.18.12] - 2026-02-18
 
 ### Added

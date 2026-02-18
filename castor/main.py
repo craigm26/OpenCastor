@@ -364,6 +364,30 @@ def main():
         logger.critical(f"Failed to initialize Brain: {e}")
         raise SystemExit(1) from e
 
+    # 2b. TIERED BRAIN (optional: fast brain + planner)
+    tiered = None
+    secondary_models = config.get("agent", {}).get("secondary_models", [])
+    if secondary_models:
+        try:
+            from castor.tiered_brain import TieredBrain
+
+            # First secondary becomes the fast brain, primary becomes planner
+            fast_config = secondary_models[0]
+            fast_brain = get_provider(fast_config)
+            logger.info(
+                f"Fast Brain Online: {fast_config.get('provider', '?')}"
+                f"/{fast_config.get('model', '?')}"
+            )
+            tiered = TieredBrain(
+                fast_provider=fast_brain,
+                planner_provider=brain,  # Claude becomes the planner
+                config=config,
+            )
+            logger.info("Tiered Brain: reactive → fast → planner")
+        except Exception as e:
+            logger.warning(f"Tiered brain unavailable ({e}), using single brain")
+            tiered = None
+
     # 3. INITIALIZE BODY (Drivers)
     driver = None
     if not args.simulate:
@@ -526,7 +550,10 @@ def main():
             if context_ctx:
                 instruction = f"{instruction}\n\n{context_ctx}"
 
-            thought = brain.think(frame_bytes, instruction)
+            if tiered:
+                thought = tiered.think(frame_bytes, instruction)
+            else:
+                thought = brain.think(frame_bytes, instruction)
             fs.proc.record_thought(thought.raw_text, thought.action)
 
             # Watchdog heartbeat (brain responded successfully)

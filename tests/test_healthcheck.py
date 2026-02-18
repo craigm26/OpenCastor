@@ -1,8 +1,6 @@
 """Tests for castor.healthcheck — startup health check module."""
 
-from unittest.mock import patch
 
-import pytest
 
 from castor.healthcheck import (
     _check_config_valid,

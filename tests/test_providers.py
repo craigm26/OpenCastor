@@ -208,6 +208,7 @@ class TestAnthropicSetupToken:
         mock_mod = MagicMock()
         with patch.dict(sys.modules, {"anthropic": mock_mod}):
             import importlib
+
             import castor.providers.anthropic_provider as mod
 
             importlib.reload(mod)
