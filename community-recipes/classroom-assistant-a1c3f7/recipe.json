@@ -1,0 +1,30 @@
+{
+  "id": "classroom-assistant-a1c3f7",
+  "name": "Classroom Q&A Assistant",
+  "description": "Wheeled robot that roams the classroom answering student questions using Claude Haiku via WhatsApp",
+  "author": "edu_maker_jen",
+  "category": "education",
+  "difficulty": "beginner",
+  "hardware": [
+    "SunFounder PiCar-X v2.0",
+    "Raspberry Pi 4B (4GB)",
+    "Pi Camera Module v3",
+    "USB speaker (small)",
+    "32GB microSD"
+  ],
+  "ai": {
+    "provider": "anthropic",
+    "model": "claude-haiku-4"
+  },
+  "tags": ["education", "classroom", "q&a", "whatsapp", "beginner", "picar"],
+  "budget": "$140",
+  "use_case": "Sits on a table or slowly drives between desks in a middle school science class. Students send questions via WhatsApp and the robot responds with age-appropriate explanations. Teacher can set the topic of the day via a config flag.",
+  "created": "2026-02-17T08:00:00Z",
+  "version": "1.0.0",
+  "opencastor_version": "2026.2.17.7",
+  "files": {
+    "config": "config.rcan.yaml",
+    "readme": "README.md",
+    "docs": []
+  }
+}

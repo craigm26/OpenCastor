@@ -37,18 +37,41 @@
   <p class="reveal reveal-d2">Everything you need to install, configure, and deploy your first AI-powered robot.</p>
 </section>
 
-<!-- Quick Start -->
-<section class="section" style="padding-top:20px">
+<!-- Installation -->
+<section class="section" id="install" style="padding-top:20px">
   <div class="container">
     <div class="quickstart reveal">
-      <h2 style="font-size:1.5rem;margin-bottom:28px">Quick Start</h2>
+      <h2 style="font-size:1.5rem;margin-bottom:28px">Installation</h2>
 
       <div class="quickstart-step">
         <div class="quickstart-num">1</div>
         <div>
           <h4>Install OpenCastor</h4>
           <p style="font-size:0.9375rem;color:var(--text-secondary);margin-bottom:8px">One command installs everything: Python deps, hardware drivers, and the interactive wizard.</p>
-          <code>curl -sL opencastor.com/install | bash</code>
+          <div class="code-block" style="margin-bottom:12px">
+            <div class="code-header">
+              <div class="code-dots"><span></span><span></span><span></span></div>
+              <span class="code-filename">Linux / macOS</span>
+            </div>
+            <div class="code-body">curl -sL opencastor.com/install | bash</div>
+          </div>
+          <div class="code-block" style="margin-bottom:12px">
+            <div class="code-header">
+              <div class="code-dots"><span></span><span></span><span></span></div>
+              <span class="code-filename">Windows (PowerShell)</span>
+            </div>
+            <div class="code-body">irm opencastor.com/install.ps1 | iex</div>
+          </div>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin-bottom:8px"><strong>Supported platforms:</strong></p>
+          <ul style="font-size:0.875rem;color:var(--text-secondary);margin:0 0 8px 20px;padding:0;list-style:disc">
+            <li>Ubuntu 22.04+ / Debian 12+</li>
+            <li>macOS 13+ (Apple Silicon &amp; Intel)</li>
+            <li>Windows 10/11 (WSL2 or native)</li>
+            <li>Fedora 38+</li>
+            <li>Arch Linux</li>
+            <li>Raspberry Pi 5 (Bookworm)</li>
+          </ul>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin-bottom:0">To uninstall: <code style="padding:2px 6px;font-size:0.8125rem">castor uninstall</code></p>
         </div>
       </div>
 
@@ -56,7 +79,7 @@
         <div class="quickstart-num">2</div>
         <div>
           <h4>Run the setup wizard</h4>
-          <p style="font-size:0.9375rem;color:var(--text-secondary);margin-bottom:8px">The wizard walks you through choosing an AI provider, hardware kit, and messaging channels. It generates a validated RCAN config file and saves your API keys to <code style="padding:2px 6px;font-size:0.8125rem">.env</code>. <a href="#wizard" style="color:var(--accent);font-weight:500">See full walkthrough below.</a></p>
+          <p style="font-size:0.9375rem;color:var(--text-secondary);margin-bottom:8px">The wizard walks you through choosing an AI provider, models, and messaging channels. It generates a validated RCAN config file and saves your credentials to <code style="padding:2px 6px;font-size:0.8125rem">.env</code>. <a href="#wizard" style="color:var(--accent);font-weight:500">See full walkthrough below.</a></p>
           <code>castor wizard</code>
         </div>
       </div>
@@ -79,15 +102,15 @@
     <div class="section-header reveal" style="text-align:center;margin-left:auto;margin-right:auto">
       <p class="section-label">Setup Wizard</p>
       <h2 class="section-title">What to expect when<br>you run <code style="font-family:var(--font-mono);color:var(--accent)">castor wizard</code></h2>
-      <p class="section-desc" style="margin-left:auto;margin-right:auto">The wizard asks five questions, then generates a fully validated RCAN config file. Here is every step.</p>
+      <p class="section-desc" style="margin-left:auto;margin-right:auto">The wizard asks six questions, then generates a fully validated RCAN config file. Here is every step.</p>
     </div>
 
-    <!-- Step 1: Name -->
+    <!-- Step 1: Project Name -->
     <div class="wizard-step reveal">
       <div class="wizard-step-header">
         <div class="wizard-step-num">1</div>
         <div>
-          <h3>Name your robot</h3>
+          <h3>Name your project</h3>
           <p>Give your project a name. This becomes the filename for your config and appears in mDNS discovery.</p>
         </div>
       </div>
@@ -96,7 +119,8 @@
           <div class="code-dots"><span></span><span></span><span></span></div>
           <span class="code-filename">Terminal</span>
         </div>
-        <div class="code-body"><span class="cm">Project Name [MyRobot]:</span> <span class="s">Explorer</span></div>
+        <div class="code-body"><span class="cm">--- PROJECT ---</span>
+<span class="cm">Project Name [MyRobot]:</span> <span class="s">Explorer</span></div>
       </div>
     </div>
 
@@ -105,8 +129,8 @@
       <div class="wizard-step-header">
         <div class="wizard-step-num">2</div>
         <div>
-          <h3>Choose your AI brain</h3>
-          <p>Pick which large language model powers your robot. You can change this anytime by editing one line in your config file.</p>
+          <h3>Choose your AI provider</h3>
+          <p>Pick which AI provider powers your robot. Each provider offers different models with different capabilities and pricing.</p>
         </div>
       </div>
       <div class="code-block">
@@ -114,14 +138,13 @@
           <div class="code-dots"><span></span><span></span><span></span></div>
           <span class="code-filename">Terminal</span>
         </div>
-        <div class="code-body"><span class="cm">--- BRAIN SELECTION ---</span>
+        <div class="code-body"><span class="cm">--- AI PROVIDER ---</span>
 <span class="cm">Which AI provider do you want to use?</span>
-  <span class="k">[1]</span> <span class="s">Anthropic Claude Opus 4.6</span> <span class="v">(Recommended)</span>
-  <span class="k">[2]</span> <span class="s">Google Gemini 2.5 Flash</span>
-  <span class="k">[3]</span> <span class="s">Google Gemini 3 Flash (Preview)</span>
-  <span class="k">[4]</span> <span class="s">OpenAI GPT-4.1</span>
-  <span class="k">[5]</span> <span class="s">Hugging Face (Llama, Qwen, Mistral, etc.)</span>  <span class="cm">-- 1M+ models</span>
-  <span class="k">[6]</span> <span class="s">Local Llama (Ollama)</span>  <span class="cm">-- free, runs on your machine</span>
+  <span class="k">[1]</span> <span class="s">Anthropic</span> <span class="v">(Recommended)</span>
+  <span class="k">[2]</span> <span class="s">Google</span>
+  <span class="k">[3]</span> <span class="s">OpenAI</span>
+  <span class="k">[4]</span> <span class="s">Hugging Face</span>  <span class="cm">-- 1M+ models</span>
+  <span class="k">[5]</span> <span class="s">Ollama (Local)</span>  <span class="cm">-- free, runs on your machine</span>
 <span class="cm">Selection [1]:</span> <span class="s">1</span></div>
       </div>
       <div class="wizard-tip">
@@ -129,35 +152,48 @@
       </div>
     </div>
 
-    <!-- Step 3: API Key -->
+    <!-- Step 3: Authentication -->
     <div class="wizard-step reveal">
       <div class="wizard-step-header">
         <div class="wizard-step-num">3</div>
         <div>
-          <h3>Enter your API key</h3>
-          <p>Paste your provider API key. The wizard saves it to a local <code style="padding:2px 6px;font-size:0.8125rem">.env</code> file that is never committed to git. If you already have the key set in your environment, this step is skipped automatically.</p>
+          <h3>Authenticate</h3>
+          <p>Connect to your provider. Anthropic and Google support OAuth (browser-based login) — no API key needed. Hugging Face uses <code style="padding:2px 6px;font-size:0.8125rem">huggingface-cli login</code>. OpenAI uses a traditional API key. Ollama needs no authentication.</p>
         </div>
       </div>
       <div class="code-block">
         <div class="code-header">
           <div class="code-dots"><span></span><span></span><span></span></div>
-          <span class="code-filename">Terminal</span>
+          <span class="code-filename">Terminal — Anthropic (OAuth)</span>
         </div>
-        <div class="code-body"><span class="cm">--- API KEY ---</span>
-<span class="cm">  Your Anthropic Claude Opus 4.6 API key is needed.</span>
-<span class="cm">  It will be saved to your local</span> <span class="v">.env</span> <span class="cm">file (never committed to git).</span>
-<span class="cm">  ANTHROPIC_API_KEY:</span> <span class="s">sk-ant-...</span>
-  <span class="v">[OK]</span> <span class="cm">Saved to .env</span></div>
+        <div class="code-body"><span class="cm">--- AUTHENTICATION ---</span>
+<span class="cm">How would you like to authenticate?</span>
+  <span class="k">[1]</span> <span class="s">OAuth (open browser)</span> <span class="v">(Recommended)</span>
+  <span class="k">[2]</span> <span class="s">API Key (paste manually)</span>
+<span class="cm">Selection [1]:</span> <span class="s">1</span>
+  <span class="v">[OK]</span> <span class="cm">Opening browser for Anthropic OAuth...</span>
+  <span class="v">[OK]</span> <span class="cm">Authenticated successfully. Token saved to .env</span></div>
+      </div>
+      <div class="code-block" style="margin-top:12px">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">Terminal — Hugging Face (CLI login)</span>
+        </div>
+        <div class="code-body"><span class="cm">--- AUTHENTICATION ---</span>
+<span class="cm">Hugging Face uses CLI login for authentication.</span>
+  <span class="v">[...]</span> <span class="cm">Running: huggingface-cli login</span>
+  <span class="cm">Enter your Hugging Face token:</span> <span class="s">hf_...</span>
+  <span class="v">[OK]</span> <span class="cm">Login successful</span></div>
       </div>
     </div>
 
-    <!-- Step 4: Hardware Kit -->
+    <!-- Step 4: Primary Model -->
     <div class="wizard-step reveal">
       <div class="wizard-step-header">
         <div class="wizard-step-num">4</div>
         <div>
-          <h3>Select your hardware</h3>
-          <p>Pick a pre-built preset for popular Amazon robot kits, or choose Custom for advanced setups like Dynamixel arms. Presets configure motors, wiring, and physics automatically.</p>
+          <h3>Select your primary model</h3>
+          <p>Choose the main model for your robot&rsquo;s reasoning and decision-making. The wizard shows a curated list based on your chosen provider.</p>
         </div>
       </div>
       <div class="code-block">
@@ -165,28 +201,50 @@
           <div class="code-dots"><span></span><span></span><span></span></div>
           <span class="code-filename">Terminal</span>
         </div>
-        <div class="code-body"><span class="cm">--- HARDWARE KIT ---</span>
-<span class="cm">Select your hardware kit:</span>
-  <span class="k">[1]</span> <span class="s">Custom (Advanced)</span>
-  <span class="k">[2]</span> <span class="s">RPi RC Car + PCA9685 + CSI Camera</span> <span class="v">(Recommended)</span>
-  <span class="k">[3]</span> <span class="s">Waveshare AlphaBot ($45)</span>
-  <span class="k">[4]</span> <span class="s">Adeept RaspTank ($55)</span>
-  <span class="k">[5]</span> <span class="s">Freenove 4WD Car ($49)</span>
-  <span class="k">[6]</span> <span class="s">SunFounder PiCar-X ($60)</span>
-<span class="cm">Selection [2]:</span> <span class="s">2</span></div>
-      </div>
-      <div class="wizard-tip">
-        <strong>Custom mode</strong> walks you through defining degrees of freedom, link dimensions, and motor mappings. Use this for robot arms, hexapods, or any non-standard build.
+        <div class="code-body"><span class="cm">--- PRIMARY MODEL ---</span>
+<span class="cm">Select your primary model:</span>
+  <span class="k">[1]</span> <span class="s">Claude Opus 4</span> <span class="v">(Recommended)</span>
+  <span class="k">[2]</span> <span class="s">Claude Sonnet 4</span>
+  <span class="k">[3]</span> <span class="s">Claude Haiku 3.5</span>  <span class="cm">-- fast &amp; cheap</span>
+<span class="cm">Selection [1]:</span> <span class="s">1</span></div>
       </div>
     </div>
 
-    <!-- Step 5: Channels -->
+    <!-- Step 5: Secondary Models -->
     <div class="wizard-step reveal">
       <div class="wizard-step-header">
         <div class="wizard-step-num">5</div>
         <div>
+          <h3>Add secondary models <span style="font-weight:400;font-size:0.875rem;color:var(--text-secondary)">(optional)</span></h3>
+          <p>Optionally add specialized models for vision, robotics control, or other tasks. These run alongside your primary model.</p>
+        </div>
+      </div>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">Terminal</span>
+        </div>
+        <div class="code-body"><span class="cm">--- SECONDARY MODELS (optional) ---</span>
+<span class="cm">Add specialized models? Enter numbers separated by commas, or 0 to skip.</span>
+  <span class="k">[0]</span> <span class="s">None (skip)</span>
+  <span class="k">[1]</span> <span class="s">Gemini Robotics ER</span>  <span class="cm">-- embodied reasoning</span>
+  <span class="k">[2]</span> <span class="s">Gemini 2.5 Flash</span>  <span class="cm">-- fast vision</span>
+  <span class="k">[3]</span> <span class="s">GPT-4.1</span>  <span class="cm">-- tool use</span>
+  <span class="k">[4]</span> <span class="s">Claude Haiku 3.5</span>  <span class="cm">-- lightweight fallback</span>
+<span class="cm">Selection (e.g. 1,2) [0]:</span> <span class="s">1</span></div>
+      </div>
+      <div class="wizard-tip">
+        <strong>Tip:</strong> Gemini Robotics ER is purpose-built for embodied AI and excels at spatial reasoning, object manipulation planning, and real-time sensor fusion.
+      </div>
+    </div>
+
+    <!-- Step 6: Messaging -->
+    <div class="wizard-step reveal">
+      <div class="wizard-step-header">
+        <div class="wizard-step-num">6</div>
+        <div>
           <h3>Connect messaging channels</h3>
-          <p>Optionally connect WhatsApp, Telegram, Discord, or Slack so you can command your robot from your phone. You can enable multiple channels at once or skip this entirely.</p>
+          <p>Optionally connect WhatsApp or Telegram so you can command your robot from your phone. You can skip this and add channels later.</p>
         </div>
       </div>
       <div class="code-block">
@@ -196,18 +254,14 @@
         </div>
         <div class="code-body"><span class="cm">--- MESSAGING CHANNELS ---</span>
 <span class="cm">Connect your robot to messaging platforms (optional).</span>
-<span class="cm">You can enable multiple channels. Enter numbers separated by commas.</span>
-  <span class="k">[0]</span> <span class="s">None (skip)</span>
+  <span class="k">[0]</span> <span class="s">Skip</span>
   <span class="k">[1]</span> <span class="s">WhatsApp (scan QR code)</span>  <span class="cm">-- no account needed!</span>
-  <span class="k">[2]</span> <span class="s">WhatsApp via Twilio (legacy)</span>
-  <span class="k">[3]</span> <span class="s">Telegram Bot</span>
-  <span class="k">[4]</span> <span class="s">Discord Bot</span>
-  <span class="k">[5]</span> <span class="s">Slack Bot</span>
-<span class="cm">Selection (e.g. 1,3) [0]:</span> <span class="s">1</span></div>
+  <span class="k">[2]</span> <span class="s">Telegram Bot</span>
+<span class="cm">Selection [0]:</span> <span class="s">1</span></div>
       </div>
     </div>
 
-    <!-- Step 6: Output -->
+    <!-- Output -->
     <div class="wizard-step reveal">
       <div class="wizard-step-header">
         <div class="wizard-step-num" style="background:var(--green-light);color:var(--green)">&#10003;</div>
@@ -231,10 +285,11 @@
 <span class="cm">==================================================</span>
 <span class="v">Setup Complete!</span>
 
-  Config file:  <span class="k">explorer.rcan.yaml</span>
-  AI Provider:  <span class="s">Anthropic Claude Opus 4.6</span>
-  Model:        <span class="s">claude-opus-4-6</span>
-  Channels:     <span class="s">WhatsApp (scan QR code)</span>
+  Config file:   <span class="k">explorer.rcan.yaml</span>
+  AI Provider:   <span class="s">Anthropic</span>
+  Primary Model: <span class="s">Claude Opus 4</span>
+  Secondary:     <span class="s">Gemini Robotics ER</span>
+  Channels:      <span class="s">WhatsApp (scan QR code)</span>
 
 <span class="v">Next Steps:</span>
   1. Run the robot:      <span class="k">castor run --config explorer.rcan.yaml</span>
@@ -253,7 +308,7 @@
           </div>
           <div>
             <strong>explorer.rcan.yaml</strong>
-            <p>Your robot config file. Contains AI provider, hardware definitions, physics model, RCAN protocol settings, and declared capabilities. Validates against the RCAN schema.</p>
+            <p>Your robot config file. Contains AI provider, model selections, physics model, RCAN protocol settings, and declared capabilities. Validates against the RCAN schema.</p>
           </div>
         </div>
         <div class="wizard-after-item">
@@ -262,10 +317,141 @@
           </div>
           <div>
             <strong>.env</strong>
-            <p>Your API keys and channel credentials. Stored locally, listed in <code style="padding:2px 5px;font-size:0.8125rem">.gitignore</code>, never committed. The runtime loads these automatically.</p>
+            <p>Your API keys, OAuth tokens, and channel credentials. Stored locally, listed in <code style="padding:2px 5px;font-size:0.8125rem">.gitignore</code>, never committed. The runtime loads these automatically.</p>
           </div>
         </div>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- Safety -->
+<section class="section alt-section" id="safety">
+  <div class="container">
+    <div class="section-header reveal" style="text-align:center;margin-left:auto;margin-right:auto">
+      <p class="section-label">Safety</p>
+      <h2 class="section-title">Built-in safety kernel</h2>
+      <p class="section-desc" style="margin-left:auto;margin-right:auto">Every OpenCastor robot ships with a multi-layered safety kernel that runs below the AI agent. It cannot be overridden by model output — safety rules are enforced at the runtime level.</p>
+    </div>
+
+    <div class="guide-grid">
+      <div class="guide-card reveal">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Anti-subversion
+        </h3>
+        <p>Detects and blocks prompt injection, jailbreak attempts, and any AI output that tries to bypass safety constraints.</p>
+      </div>
+
+      <div class="guide-card reveal reveal-d1">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Work Authorization
+        </h3>
+        <p>Actions require explicit authorization. The robot cannot perform tasks outside its declared capabilities without human approval.</p>
+      </div>
+
+      <div class="guide-card reveal reveal-d2">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4z"/></svg>
+          Physical Bounds
+        </h3>
+        <p>Enforces velocity limits, workspace boundaries, and collision zones. Hardware-level emergency stop if bounds are violated.</p>
+      </div>
+
+      <div class="guide-card reveal reveal-d3">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+          Protocol Engine
+        </h3>
+        <p>Validates every RCAN command against the protocol spec before execution. Malformed or out-of-spec commands are rejected.</p>
+      </div>
+
+      <div class="guide-card reveal reveal-d4">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          Sensor Monitoring
+        </h3>
+        <p>Continuous monitoring of IMU, current draw, temperature, and proximity sensors. Automatic shutdown on anomalous readings.</p>
+      </div>
+
+      <div class="guide-card reveal reveal-d5">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+          Tamper-evident Audit
+        </h3>
+        <p>Every command, sensor reading, and safety event is logged with cryptographic hashes. Tamper-evident audit trail for compliance and debugging.</p>
+      </div>
+    </div>
+
+    <div class="wizard-after reveal" style="margin-top:40px">
+      <h3>Safety CLI commands</h3>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">Terminal</span>
+        </div>
+        <div class="code-body"><span class="cm"># View active safety rules</span>
+<span class="k">castor safety rules</span>
+
+<span class="cm"># Verify audit log integrity</span>
+<span class="k">castor audit --verify</span>
+
+<span class="cm"># Live safety monitor</span>
+<span class="k">castor monitor --watch</span></div>
+      </div>
+      <p style="font-size:0.9375rem;color:var(--text-secondary);margin-top:12px">For the full safety architecture and audit methodology, see the <a href="https://github.com/craigm26/OpenCastor/blob/main/docs/safety-audit-report.md" style="color:var(--accent);font-weight:500">Safety Audit Report</a>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Docker -->
+<section class="section" id="docker">
+  <div class="container">
+    <div class="section-header reveal" style="text-align:center;margin-left:auto;margin-right:auto">
+      <p class="section-label">Docker</p>
+      <h2 class="section-title">Run in a container</h2>
+      <p class="section-desc" style="margin-left:auto;margin-right:auto">Deploy OpenCastor with Docker for reproducible builds, easy CI/CD, and production-ready deployments.</p>
+    </div>
+
+    <div class="wizard-step reveal">
+      <div class="wizard-step-header">
+        <div class="wizard-step-num">1</div>
+        <div>
+          <h3>Quick start with Docker Compose</h3>
+          <p>The included <code style="padding:2px 6px;font-size:0.8125rem">docker-compose.yml</code> handles everything: runtime, gateway, and dashboard.</p>
+        </div>
+      </div>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">Terminal</span>
+        </div>
+        <div class="code-body"><span class="cm"># Clone and start</span>
+<span class="k">git clone</span> https://github.com/craigm26/OpenCastor.git
+<span class="k">cd</span> OpenCastor
+<span class="k">docker compose up -d</span></div>
+      </div>
+    </div>
+
+    <div class="wizard-step reveal">
+      <div class="wizard-step-header">
+        <div class="wizard-step-num">2</div>
+        <div>
+          <h3>Custom configuration</h3>
+          <p>Mount your own config file and environment variables into the container.</p>
+        </div>
+      </div>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">Terminal</span>
+        </div>
+        <div class="code-body"><span class="k">docker compose run</span> <span class="s">-v ./my_robot.rcan.yaml:/app/config.rcan.yaml</span> \
+  <span class="s">--env-file .env</span> \
+  castor run --config /app/config.rcan.yaml</div>
+      </div>
+      <p style="font-size:0.9375rem;color:var(--text-secondary);margin-top:12px">See the <a href="https://github.com/craigm26/OpenCastor/blob/main/Dockerfile" style="color:var(--accent);font-weight:500">Dockerfile</a> for the full build setup, including hardware pass-through and GPU support.</p>
     </div>
   </div>
 </section>

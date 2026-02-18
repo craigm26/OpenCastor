@@ -1,0 +1,32 @@
+{
+  "id": "garden-monitor-f2a8c4",
+  "name": "Garden Health Monitor",
+  "description": "Stationary garden robot that monitors plant health via camera and soil sensors, sending daily Telegram reports using GPT-4o vision",
+  "author": "green_thumb_alex",
+  "category": "agriculture",
+  "difficulty": "beginner",
+  "hardware": [
+    "Raspberry Pi 4B (4GB)",
+    "Pi Camera Module v3",
+    "Capacitive soil moisture sensor",
+    "DHT22 temperature/humidity sensor",
+    "Waterproof enclosure",
+    "Solar panel + battery (5V 3A)",
+    "32GB microSD"
+  ],
+  "ai": {
+    "provider": "openai",
+    "model": "gpt-4o"
+  },
+  "tags": ["garden", "agriculture", "plants", "soil", "solar", "telegram", "stationary"],
+  "budget": "$95",
+  "use_case": "Sits in my raised bed garden and takes photos of plants throughout the day. GPT-4o analyzes leaf color, spots pests, and checks growth progress. Combined with soil moisture and temperature readings, I get a daily Telegram digest with watering recommendations and health alerts.",
+  "created": "2026-02-17T10:00:00Z",
+  "version": "1.0.0",
+  "opencastor_version": "2026.2.17.7",
+  "files": {
+    "config": "config.rcan.yaml",
+    "readme": "README.md",
+    "docs": []
+  }
+}

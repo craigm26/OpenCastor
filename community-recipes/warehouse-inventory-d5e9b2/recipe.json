@@ -1,0 +1,31 @@
+{
+  "id": "warehouse-inventory-d5e9b2",
+  "name": "Warehouse Inventory Scanner",
+  "description": "Camera-equipped robot that patrols warehouse aisles scanning shelves and QR codes using Gemini 2.5 Flash vision",
+  "author": "logistics_dave",
+  "category": "industrial",
+  "difficulty": "intermediate",
+  "hardware": [
+    "Freenove 4WD Car Kit",
+    "Raspberry Pi 5 (8GB)",
+    "Pi Camera Module v3 (wide-angle)",
+    "USB barcode scanner (optional)",
+    "LiDAR TF-Luna (obstacle avoidance)",
+    "64GB microSD"
+  ],
+  "ai": {
+    "provider": "google",
+    "model": "gemini-2.5-flash"
+  },
+  "tags": ["warehouse", "industrial", "inventory", "qr-code", "vision", "patrol"],
+  "budget": "$280",
+  "use_case": "Drives predetermined routes through warehouse aisles at night, photographing shelf labels and QR codes. Gemini vision reads labels and compares against expected inventory positions. Flags misplaced items, empty slots, and damaged packaging in a morning report.",
+  "created": "2026-02-17T09:00:00Z",
+  "version": "1.0.0",
+  "opencastor_version": "2026.2.17.7",
+  "files": {
+    "config": "config.rcan.yaml",
+    "readme": "README.md",
+    "docs": []
+  }
+}

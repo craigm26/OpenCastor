@@ -1,0 +1,31 @@
+{
+  "id": "pet-companion-b7d1e6",
+  "name": "Pet Companion Bot",
+  "description": "Interactive robot that plays with cats and dogs using camera-based pet detection, random movement, and a treat dispenser",
+  "author": "catdad_marco",
+  "category": "home",
+  "difficulty": "beginner",
+  "hardware": [
+    "SunFounder PiCar-X v2.0",
+    "Raspberry Pi 4B (4GB)",
+    "Pi Camera Module v3",
+    "SG90 micro servo (treat dispenser)",
+    "Small treat hopper (3D printed or cardboard)",
+    "32GB microSD"
+  ],
+  "ai": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-20250514"
+  },
+  "tags": ["pets", "home", "cat", "dog", "companion", "treat-dispenser", "gpio"],
+  "budget": "$85",
+  "use_case": "Keeps my two cats entertained while I'm at work. Drives around randomly, detects when a cat is nearby via camera, and dispenses treats from a small hopper mounted on top. Claude Sonnet decides when to move, when to pause, and when to dispense based on what it sees.",
+  "created": "2026-02-17T11:00:00Z",
+  "version": "1.0.0",
+  "opencastor_version": "2026.2.17.7",
+  "files": {
+    "config": "config.rcan.yaml",
+    "readme": "README.md",
+    "docs": []
+  }
+}

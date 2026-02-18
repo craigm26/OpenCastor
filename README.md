@@ -182,9 +182,13 @@ while True:
 ## Docker
 
 ```bash
-cp .env.example .env          # Add your API keys
-castor wizard                 # Generate config
-docker compose up             # Launch
+cp .env.example .env                          # Add your API keys
+cp config/example.rcan.yaml config/robot.rcan.yaml  # Or use castor wizard
+docker compose up                             # Launch API + dashboard
+
+# Or with a custom command:
+docker compose run opencastor castor wizard   # Interactive setup
+docker compose --profile gateway up           # Include messaging gateway
 ```
 
 ## CLI Reference
