@@ -3,7 +3,7 @@
 # Supports: macOS, Debian/Ubuntu, Fedora/RHEL, Arch, Alpine, Raspberry Pi
 set -euo pipefail
 
-VERSION="2026.2.17.13"
+VERSION="2026.2.17.14"
 REPO_URL="https://github.com/craigm26/OpenCastor.git"
 INSTALL_DIR="${OPENCASTOR_DIR:-$HOME/opencastor}"
 
@@ -296,8 +296,14 @@ if [ ! -f .env ] && [ -f .env.example ]; then
 fi
 
 if [ "$SKIP_WIZARD" = false ] && [ "$DRY_RUN" = false ]; then
-  # Always run wizard with --accept-risk (safety prompt handled inline)
-  $PYTHON -m castor.wizard --accept-risk 2>/dev/null || warn "Wizard skipped (run 'castor wizard' later)"
+  # Run wizard with --accept-risk (skip safety prompt, go straight to config)
+  set +e
+  $PYTHON -m castor.wizard --accept-risk
+  WIZARD_EXIT=$?
+  set -e
+  if [ "$WIZARD_EXIT" -ne 0 ]; then
+    warn "Wizard exited (code $WIZARD_EXIT). Run 'castor wizard' later to configure."
+  fi
 fi
 
 # Ensure a default config exists even if wizard was skipped/failed

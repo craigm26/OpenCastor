@@ -5,6 +5,12 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.17.14] - 2026-02-17
+
+### Fixed
+- **Installer** — wizard runs with `--accept-risk` (skips safety prompt, goes straight to config), no longer swallows wizard output, properly reports exit code
+- **Wizard version** — now displays correct dynamic version via f-string
+
 ## [2026.2.17.13] - 2026-02-17
 
 ### Fixed
