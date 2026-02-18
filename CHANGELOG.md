@@ -5,6 +5,19 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.18.6] - 2026-02-18
+
+### Added
+- **Deep hardware discovery** — startup health check now enumerates:
+  - USB devices (via `lsusb`) — shows what's connected at each port
+  - I2C devices (via `i2cdetect`) — identifies PCA9685, IMUs, sensors, OLEDs by address
+  - SPI bus availability
+  - Serial ports (UART, USB-serial adapters like Arduino/ESP32)
+  - Loaded kernel drivers (I2C, SPI, PWM, V4L2, USB-serial, audio)
+
+### Changed
+- **Anthropic model fetch no longer uses API** — setup-tokens return 401 on `/v1/models`. Now parses model IDs from the public docs page (no auth needed). Falls back to static list if docs unreachable.
+
 ## [2026.2.18.5] - 2026-02-18
 
 ### Fixed

@@ -39,13 +39,19 @@ def run_startup_checks(config: dict, simulate: bool = False) -> dict:
     checks.append(_check_provider_auth(config))
 
     # --- Hardware checks (skip in simulation) ---
+    # --- Hardware checks (skip in simulation) ---
     if simulate:
         checks.append({"name": "Hardware", "status": "skip", "detail": "Simulation mode"})
     else:
         checks.append(_check_camera(config))
         checks.append(_check_gpio())
         checks.append(_check_i2c())
+        checks.append(_check_i2c_devices())
+        checks.append(_check_spi())
+        checks.append(_check_serial_ports())
+        checks.append(_check_usb_devices())
         checks.append(_check_speaker(config))
+        checks.append(_check_drivers())
 
     # --- System resource checks ---
     checks.append(_check_disk_space())
@@ -312,3 +318,175 @@ def _check_cpu_temp():
         return {"name": "CPU temperature", "status": "ok", "detail": f"{temp_c:.1f}°C"}
     except FileNotFoundError:
         return {"name": "CPU temperature", "status": "ok", "detail": "Sensor not available"}
+
+
+def _check_usb_devices():
+    """Enumerate USB devices connected to the system."""
+    import subprocess
+
+    try:
+        result = subprocess.run(["lsusb"], capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            return {"name": "USB devices", "status": "warn", "detail": "lsusb failed"}
+
+        lines = [ln.strip() for ln in result.stdout.strip().split("\n") if ln.strip()]
+        # Filter out root hubs, show meaningful devices
+        devices = []
+        for line in lines:
+            # Extract device description (after "ID xxxx:xxxx")
+            parts = line.split("ID ")
+            if len(parts) >= 2:
+                desc = parts[1].split(" ", 1)
+                name = desc[1] if len(desc) > 1 else desc[0]
+                # Skip generic root hubs
+                if "root hub" in name.lower():
+                    continue
+                devices.append(name.strip())
+
+        if not devices:
+            return {"name": "USB devices", "status": "ok", "detail": "No external USB devices"}
+
+        # Show first 4, count rest
+        shown = devices[:4]
+        detail = "; ".join(shown)
+        if len(devices) > 4:
+            detail += f" (+{len(devices) - 4} more)"
+        return {"name": "USB devices", "status": "ok", "detail": detail}
+    except FileNotFoundError:
+        return {"name": "USB devices", "status": "ok", "detail": "lsusb not available"}
+    except Exception as e:
+        return {"name": "USB devices", "status": "warn", "detail": str(e)[:60]}
+
+
+def _check_i2c_devices():
+    """Scan I2C bus for connected devices (sensors, PCA9685, etc.)."""
+    import subprocess
+
+    if not os.path.exists("/dev/i2c-1"):
+        return {"name": "I2C devices", "status": "skip", "detail": "No I2C bus"}
+
+    try:
+        result = subprocess.run(["i2cdetect", "-y", "1"], capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            return {"name": "I2C devices", "status": "warn", "detail": "i2cdetect failed"}
+
+        # Parse addresses from i2cdetect output
+        addresses = []
+        known_devices = {
+            "40": "PCA9685 (servo driver)",
+            "41": "PCA9685 #2",
+            "48": "ADS1115 (ADC)",
+            "53": "BNO055 (IMU)",
+            "68": "MPU6050 (IMU)",
+            "69": "MPU6050 #2",
+            "76": "BME280 (env sensor)",
+            "77": "BME280/BMP280",
+            "3c": "SSD1306 (OLED)",
+            "27": "LCD (I2C)",
+            "29": "VL53L0X (ToF)",
+            "1a": "WM8960 (audio codec)",
+            "50": "EEPROM/HAT ID",
+        }
+        for line in result.stdout.strip().split("\n")[1:]:
+            # Each line: "00: -- -- -- 03 ..."
+            parts = line.split(":")[1].strip().split() if ":" in line else []
+            for part in parts:
+                part = part.strip()
+                if part != "--" and part != "UU" and len(part) == 2:
+                    try:
+                        int(part, 16)
+                        addresses.append(part)
+                    except ValueError:
+                        pass
+
+        if not addresses:
+            return {"name": "I2C devices", "status": "ok", "detail": "No devices on bus 1"}
+
+        # Map addresses to known devices
+        found = []
+        for addr in addresses:
+            name = known_devices.get(addr, f"0x{addr}")
+            found.append(name)
+
+        detail = "; ".join(found[:4])
+        if len(found) > 4:
+            detail += f" (+{len(found) - 4} more)"
+        return {"name": "I2C devices", "status": "ok", "detail": detail}
+    except FileNotFoundError:
+        return {"name": "I2C devices", "status": "ok", "detail": "i2cdetect not installed"}
+    except Exception as e:
+        return {"name": "I2C devices", "status": "warn", "detail": str(e)[:60]}
+
+
+def _check_spi():
+    """Check if SPI bus is available."""
+    import glob
+
+    spi_devs = glob.glob("/dev/spidev*")
+    if spi_devs:
+        names = ", ".join(os.path.basename(d) for d in spi_devs)
+        return {"name": "SPI", "status": "ok", "detail": names}
+    if platform.machine().startswith("x86"):
+        return {"name": "SPI", "status": "skip", "detail": "x86 system"}
+    return {"name": "SPI", "status": "warn", "detail": "Not enabled (raspi-config → Interfaces)"}
+
+
+def _check_serial_ports():
+    """Check for serial ports (UART, USB-serial adapters)."""
+    import glob
+
+    ports = []
+    # Standard Pi UART
+    for p in ["/dev/ttyAMA0", "/dev/ttyS0", "/dev/serial0"]:
+        if os.path.exists(p):
+            ports.append(os.path.basename(p))
+    # USB serial adapters
+    usb_serial = glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*")
+    for p in usb_serial:
+        ports.append(os.path.basename(p))
+
+    if not ports:
+        if platform.machine().startswith("x86"):
+            return {"name": "Serial ports", "status": "skip", "detail": "x86 system"}
+        return {"name": "Serial ports", "status": "ok", "detail": "None detected"}
+    return {"name": "Serial ports", "status": "ok", "detail": ", ".join(ports)}
+
+
+def _check_drivers():
+    """Check for loaded kernel modules relevant to robotics."""
+    relevant_modules = {
+        "i2c_dev": "I2C userspace",
+        "i2c_bcm2835": "I2C (Pi)",
+        "spi_bcm2835": "SPI (Pi)",
+        "pwm_bcm2835": "Hardware PWM",
+        "v4l2_common": "Video4Linux",
+        "videobuf2_common": "Video buffers",
+        "bcm2835_codec": "Pi camera codec",
+        "bcm2835_isp": "Pi camera ISP",
+        "gpio_cdev": "GPIO chardev",
+        "snd_bcm2835": "Pi audio",
+        "uvcvideo": "USB camera",
+        "ch341": "CH341 USB-serial",
+        "cp210x": "CP210x USB-serial",
+        "ftdi_sio": "FTDI USB-serial",
+        "cdc_acm": "USB ACM (Arduino)",
+    }
+
+    try:
+        with open("/proc/modules") as f:
+            loaded_names = {line.split()[0] for line in f}
+    except FileNotFoundError:
+        return {"name": "Kernel drivers", "status": "ok", "detail": "Check skipped (non-Linux)"}
+
+    found = []
+    for mod, label in relevant_modules.items():
+        if mod in loaded_names:
+            found.append(label)
+
+    if not found:
+        return {"name": "Kernel drivers", "status": "warn", "detail": "No robotics drivers loaded"}
+
+    detail = "; ".join(found[:5])
+    if len(found) > 5:
+        detail += f" (+{len(found) - 5} more)"
+    return {"name": "Kernel drivers", "status": "ok", "detail": detail}

@@ -250,56 +250,38 @@ class TestProviderAuthFlags:
 class TestDynamicModelFetch:
     """Tests for dynamic model fetching from Anthropic/OpenAI APIs."""
 
-    def test_fetch_anthropic_models_parses_response(self):
-        """Should parse Anthropic /v1/models response into model dicts."""
-        import json
+    def test_fetch_anthropic_models_parses_docs_page(self):
+        """Should parse model IDs from Anthropic docs HTML."""
         from unittest.mock import MagicMock
 
         from castor.wizard import _fetch_anthropic_models
 
-        mock_data = json.dumps(
-            {
-                "data": [
-                    {
-                        "id": "claude-opus-4-6",
-                        "display_name": "Claude Opus 4.6",
-                        "created_at": "2026-01-15T00:00:00Z",
-                    },
-                    {
-                        "id": "claude-sonnet-4-5-20250929",
-                        "display_name": "Claude Sonnet 4.5",
-                        "created_at": "2025-09-29T00:00:00Z",
-                    },
-                ]
-            }
-        ).encode()
+        # Simulate HTML with model IDs embedded
+        mock_html = b"""
+        <p>claude-opus-4-6 is our most capable model.</p>
+        <p>claude-sonnet-4-5-20250929 offers great balance.</p>
+        <p>claude-haiku-3-5-20241022 is the fastest.</p>
+        """
 
         mock_resp = MagicMock()
-        mock_resp.read.return_value = mock_data
+        mock_resp.read.return_value = mock_html
         mock_resp.__enter__ = lambda s: s
         mock_resp.__exit__ = MagicMock(return_value=False)
 
         with patch("castor.wizard.urlopen", return_value=mock_resp):
-            with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test"}):
-                models = _fetch_anthropic_models()
+            models = _fetch_anthropic_models()
 
-        assert len(models) == 2
-        assert models[0]["id"] == "claude-opus-4-6"
-        assert models[0]["label"] == "Claude Opus 4.6"
-        assert "2026-01-15" in models[0]["desc"]
+        ids = [m["id"] for m in models]
+        assert "claude-opus-4-6" in ids
+        assert "claude-sonnet-4-5-20250929" in ids
+        assert "claude-haiku-3-5-20241022" in ids
 
-    def test_fetch_anthropic_models_no_key(self):
-        """Should return empty list when no API key available."""
+    def test_fetch_anthropic_models_returns_empty_on_failure(self):
+        """Should return empty list when docs page is unreachable."""
         from castor.wizard import _fetch_anthropic_models
 
-        with patch.dict("os.environ", {}, clear=True):
-            with patch("os.environ.get", side_effect=lambda k, d=None: None):
-                # Ensure no stored token either
-                with patch(
-                    "castor.providers.anthropic_provider.AnthropicProvider._read_stored_token",
-                    return_value=None,
-                ):
-                    models = _fetch_anthropic_models()
+        with patch("castor.wizard.urlopen", side_effect=Exception("timeout")):
+            models = _fetch_anthropic_models()
         assert models == []
 
     def test_fetch_openai_models_filters_chat_models(self):

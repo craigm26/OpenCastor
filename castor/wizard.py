@@ -888,47 +888,55 @@ def _choose_from_full_list(models):
 
 
 def _fetch_anthropic_models():
-    """Fetch models from Anthropic API. Returns list sorted by newest first."""
-    import json
+    """Fetch latest Anthropic models from the public docs page.
 
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        # Try OpenCastor's stored token
-        try:
-            from castor.providers.anthropic_provider import AnthropicProvider
+    We don't use the /v1/models API because setup-tokens (subscription auth)
+    return 401 on that endpoint. Instead, we fetch the public model listing
+    which doesn't require authentication.
+    """
+    import re
 
-            api_key = AnthropicProvider._read_stored_token()
-        except Exception:
-            pass
-    if not api_key:
+    try:
+        req = Request(
+            "https://docs.anthropic.com/en/docs/about-claude/models",
+            headers={"User-Agent": "OpenCastor-Wizard"},
+        )
+        with urlopen(req, timeout=10) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+    except Exception:
         return []
 
-    req = Request(
-        "https://api.anthropic.com/v1/models?limit=20",
-        headers={
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-        },
-    )
-    with urlopen(req, timeout=10) as resp:
-        data = json.loads(resp.read())
+    # Parse model IDs from the docs page — look for claude-* model strings
+    # Match patterns like claude-opus-4-6, claude-sonnet-4-5-20250929, etc.
+    model_pattern = re.compile(r"(claude-(?:opus|sonnet|haiku)-[\w.-]+)")
+    found_ids = list(dict.fromkeys(model_pattern.findall(html)))  # dedupe, preserve order
 
+    if not found_ids:
+        return []
+
+    # Build model entries with clean labels
     models = []
-    for m in data.get("data", []):
-        model_id = m["id"]
-        display = m.get("display_name", model_id)
-        created = m.get("created_at", "")
-        # Filter: skip embedding/legacy models, keep chat models
+    seen = set()
+    for model_id in found_ids:
+        # Skip duplicates and overly long IDs (likely CSS/URL fragments)
+        if model_id in seen or len(model_id) > 50:
+            continue
+        seen.add(model_id)
+
+        # Generate a readable label
+        label = model_id.replace("-", " ").title()
+        # Clean up common patterns
+        label = label.replace("Claude ", "Claude ")
         models.append(
             {
                 "id": model_id,
-                "label": display,
-                "desc": f"Released {created[:10]}" if created else "",
+                "label": label,
+                "desc": "",
                 "tags": [],
             }
         )
-    # API returns newest first already
-    return models
+
+    return models[:15]  # Cap at 15 most relevant
 
 
 def _fetch_openai_models():
