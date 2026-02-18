@@ -4,6 +4,7 @@ Run with: streamlit run castor/dashboard.py
 """
 
 import os
+import sys
 
 import streamlit as st
 

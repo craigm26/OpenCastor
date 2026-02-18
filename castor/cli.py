@@ -160,7 +160,7 @@ def cmd_token(args) -> None:
         print("Error: PyJWT is not installed. Install with: pip install PyJWT")
         raise SystemExit(1) from exc
     except KeyError as exc:
-        print(f"Error: Invalid role '{args.role}'. Valid: GUEST, USER, OPERATOR, ADMIN, CREATOR")
+        print(f"Error: Invalid role '{args.role}'. Valid: GUEST, USER, LEASEE, OWNER, CREATOR")
         raise SystemExit(1) from exc
 
 

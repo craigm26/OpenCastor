@@ -105,6 +105,12 @@ def remove_task(name: str) -> bool:
 
 
 def install_crontab(config_path: str = None):
+    import sys as _sys
+
+    if _sys.platform == "win32":
+        print("\n  crontab is not available on Windows.")
+        print("  Use Windows Task Scheduler instead.\n")
+        return
     """Install scheduled tasks to the system crontab."""
     tasks = list_tasks(config_path)
     if not tasks:
