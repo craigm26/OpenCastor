@@ -6,6 +6,8 @@ collects API keys, and configures messaging channels.
 Features:
   - Safety acknowledgment before physical hardware setup
   - QuickStart (sensible defaults) vs Advanced flow
+  - Separate provider selection, authentication, and model choice
+  - Secondary model support for vision, robotics, embeddings
   - Inline API key validation
   - Auto-hardware detection
   - Post-wizard health check
@@ -70,6 +72,9 @@ BANNER = f"""{Colors.BLUE}
        |_|
 {Colors.ENDC}"""
 
+# ---------------------------------------------------------------------------
+# Legacy PROVIDERS dict — kept for backward compatibility with tests
+# ---------------------------------------------------------------------------
 PROVIDERS = {
     "1": {
         "provider": "anthropic",
@@ -108,6 +113,153 @@ PROVIDERS = {
         "env_var": None,
     },
 }
+
+# ---------------------------------------------------------------------------
+# New data model: providers separated from models
+# ---------------------------------------------------------------------------
+PROVIDER_AUTH = {
+    "anthropic": {
+        "env_var": "ANTHROPIC_API_KEY",
+        "label": "Anthropic (Claude)",
+        "desc": "Best reasoning & safety",
+        "has_oauth": True,
+    },
+    "google": {
+        "env_var": "GOOGLE_API_KEY",
+        "label": "Google (Gemini)",
+        "desc": "Fast, multimodal, robotics",
+    },
+    "openai": {
+        "env_var": "OPENAI_API_KEY",
+        "label": "OpenAI (GPT)",
+        "desc": "Widely supported",
+    },
+    "huggingface": {
+        "env_var": "HF_TOKEN",
+        "label": "Hugging Face",
+        "desc": "Open-source models",
+    },
+    "ollama": {
+        "env_var": None,
+        "label": "Ollama (Local)",
+        "desc": "Free, private, no API needed",
+    },
+}
+
+# Ordered list for menu display
+PROVIDER_ORDER = ["anthropic", "google", "openai", "huggingface", "ollama"]
+
+MODELS = {
+    "anthropic": [
+        {
+            "id": "claude-opus-4-6",
+            "label": "Claude Opus 4.6",
+            "desc": "Best reasoning",
+            "tags": ["reasoning", "safety"],
+            "recommended": True,
+        },
+        {
+            "id": "claude-sonnet-4-5-20250929",
+            "label": "Claude Sonnet 4.5",
+            "desc": "Fast, great balance",
+            "tags": ["balanced"],
+        },
+        {
+            "id": "claude-haiku-3-5-20241022",
+            "label": "Claude Haiku 3.5",
+            "desc": "Fastest, most affordable",
+            "tags": ["fast"],
+        },
+    ],
+    "google": [
+        {
+            "id": "gemini-2.5-flash",
+            "label": "Gemini 2.5 Flash",
+            "desc": "Fast & multimodal",
+            "tags": ["fast", "multimodal"],
+            "recommended": True,
+        },
+        {
+            "id": "gemini-2.5-pro",
+            "label": "Gemini 2.5 Pro",
+            "desc": "Deep reasoning",
+            "tags": ["reasoning"],
+        },
+        {
+            "id": "gemini-3-flash-preview",
+            "label": "Gemini 3 Flash (Preview)",
+            "desc": "Latest preview model",
+            "tags": ["preview"],
+        },
+    ],
+    "openai": [
+        {
+            "id": "gpt-4.1",
+            "label": "GPT-4.1",
+            "desc": "Latest, most capable",
+            "tags": ["reasoning"],
+            "recommended": True,
+        },
+        {
+            "id": "gpt-4.1-mini",
+            "label": "GPT-4.1 Mini",
+            "desc": "Fast & affordable",
+            "tags": ["fast"],
+        },
+        {
+            "id": "gpt-4o",
+            "label": "GPT-4o",
+            "desc": "Vision & tool use",
+            "tags": ["multimodal"],
+        },
+    ],
+    "huggingface": [
+        {
+            "id": "meta-llama/Llama-3.3-70B-Instruct",
+            "label": "Llama 3.3 70B",
+            "desc": "Best open-source",
+            "tags": ["open-source"],
+            "recommended": True,
+        },
+        {
+            "id": "Qwen/Qwen2.5-72B-Instruct",
+            "label": "Qwen 2.5 72B",
+            "desc": "Strong multilingual",
+            "tags": ["multilingual"],
+        },
+        {
+            "id": "mistralai/Mistral-Large-Instruct-2407",
+            "label": "Mistral Large",
+            "desc": "European, fast",
+            "tags": ["fast"],
+        },
+    ],
+    "ollama": [],  # dynamically populated or user enters name
+}
+
+SECONDARY_MODELS = [
+    {
+        "provider": "google",
+        "id": "gemini-er-1.5",
+        "label": "Google Gemini Robotics ER 1.5",
+        "desc": "Physical AI for robot control",
+        "tags": ["robotics", "physical-ai"],
+    },
+    {
+        "provider": "google",
+        "id": "gemini-2.5-flash",
+        "label": "Google Gemini 2.5 Flash",
+        "desc": "Fast vision & multimodal",
+        "tags": ["vision", "multimodal"],
+    },
+    {
+        "provider": "openai",
+        "id": "gpt-4o",
+        "label": "OpenAI GPT-4o",
+        "desc": "Vision & tool use",
+        "tags": ["vision", "multimodal"],
+    },
+]
 
 PRESETS = {
     "1": None,  # Custom
@@ -158,7 +310,336 @@ def input_secret(prompt):
     return value if value else None
 
 
+# ---------------------------------------------------------------------------
+# Provider selection (Step 2)
+# ---------------------------------------------------------------------------
+def choose_provider_step():
+    """Select AI provider (separate from model)."""
+    print(f"\n{Colors.GREEN}--- AI PROVIDER ---{Colors.ENDC}")
+    print("Which AI provider do you want to use?\n")
+    for i, key in enumerate(PROVIDER_ORDER, 1):
+        info = PROVIDER_AUTH[key]
+        rec = " (Recommended)" if key == "anthropic" else ""
+        label = f"{info['label']}"
+        desc = f"— {info['desc']}"
+        print(f"  [{i}] {label:<28s} {desc}{rec}")
+
+    choice = input_default("\nSelection", "1").strip()
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(PROVIDER_ORDER):
+            return PROVIDER_ORDER[idx]
+    except ValueError:
+        pass
+    return "anthropic"
+
+
+# ---------------------------------------------------------------------------
+# Authentication (Step 3)
+# ---------------------------------------------------------------------------
+def authenticate_provider(provider_key, *, already_authed=None):
+    """Authenticate with a provider. Returns True if auth succeeded/skipped.
+
+    *already_authed* is a set of provider keys already authenticated this session.
+    """
+    if already_authed is None:
+        already_authed = set()
+
+    if provider_key in already_authed:
+        print(
+            f"\n  {Colors.GREEN}[OK]{Colors.ENDC} "
+            f"{PROVIDER_AUTH[provider_key]['label']} already authenticated."
+        )
+        return True
+
+    info = PROVIDER_AUTH[provider_key]
+    env_var = info.get("env_var")
+
+    if not env_var:
+        # Ollama — check connection
+        print(f"\n{Colors.GREEN}--- AUTHENTICATION ({info['label']}) ---{Colors.ENDC}")
+        print(f"  {Colors.GREEN}[OK]{Colors.ENDC} No API key needed for Ollama.")
+        _check_ollama_connection()
+        already_authed.add(provider_key)
+        return True
+
+    # Check if already in environment
+    if os.getenv(env_var):
+        print(f"\n  {Colors.GREEN}[OK]{Colors.ENDC} {env_var} already set in environment.")
+        already_authed.add(provider_key)
+        return True
+
+    # Anthropic: offer OAuth
+    if provider_key == "anthropic" and info.get("has_oauth"):
+        result = _anthropic_auth_flow(env_var)
+        if result:
+            already_authed.add(provider_key)
+        return result
+
+    # Standard API key flow
+    print(f"\n{Colors.GREEN}--- AUTHENTICATION ({info['label']}) ---{Colors.ENDC}")
+    print(f"  Your {info['label']} API key is needed.")
+    print(
+        f"  It will be saved to your local "
+        f"{Colors.BOLD}.env{Colors.ENDC} file (never committed to git)."
+    )
+
+    key = input_secret(f"{env_var}")
+    if key:
+        valid = _validate_api_key(provider_key, key)
+        _write_env_var(env_var, key)
+        if valid:
+            print(f"  {Colors.GREEN}[OK]{Colors.ENDC} Key validated and saved to .env")
+        else:
+            print(
+                f"  {Colors.WARNING}[WARN]{Colors.ENDC} Could not validate key "
+                f"(network issue?). Saved to .env anyway."
+            )
+        already_authed.add(provider_key)
+        return True
+    else:
+        print(f"  {Colors.WARNING}Skipped.{Colors.ENDC} Set {env_var} in .env before running.")
+        return False
+
+
+def _check_ollama_connection():
+    """Quick check if Ollama is reachable."""
+    try:
+        import httpx
+
+        resp = httpx.get("http://localhost:11434/api/tags", timeout=3)
+        if resp.status_code == 200:
+            print(f"  {Colors.GREEN}[OK]{Colors.ENDC} Ollama is running.")
+        else:
+            print(
+                f"  {Colors.WARNING}[WARN]{Colors.ENDC} "
+                f"Ollama responded with status {resp.status_code}."
+            )
+    except Exception:
+        print(
+            f"  {Colors.WARNING}[WARN]{Colors.ENDC} "
+            f"Could not reach Ollama at localhost:11434. "
+            f"Make sure it's running."
+        )
+
+
+def _anthropic_auth_flow(env_var):
+    """Handle Anthropic auth: OAuth or API key."""
+    oauth_status = _check_claude_oauth()
+
+    print(f"\n{Colors.GREEN}--- AUTHENTICATION (Anthropic) ---{Colors.ENDC}")
+    print("  How would you like to authenticate with Anthropic?")
+    print("  [1] Claude Max/Pro plan (sign in with your account)")
+    print("  [2] API key (pay-as-you-go)")
+
+    auth_choice = input_default("Selection", "1").strip()
+
+    if auth_choice == "1":
+        if oauth_status is True:
+            print(
+                f"\n  {Colors.GREEN}[OK]{Colors.ENDC} Claude CLI already "
+                f"authenticated (Max/Pro plan)."
+            )
+            _write_env_var("ANTHROPIC_AUTH_MODE", "oauth")
+            return True
+        elif oauth_status == "installed":
+            print("\n  Claude CLI found but not signed in.")
+            if _run_claude_login():
+                print(f"\n  {Colors.GREEN}[OK]{Colors.ENDC} Signed in! Using your Max/Pro plan.")
+                _write_env_var("ANTHROPIC_AUTH_MODE", "oauth")
+                return True
+            else:
+                print(f"  {Colors.WARNING}Login failed.{Colors.ENDC} Falling back to API key.")
+        else:
+            print("\n  Claude CLI not found. Installing...")
+            import subprocess
+
+            try:
+                result = subprocess.run(
+                    ["npm", "install", "-g", "@anthropic-ai/claude-code"],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                if result.returncode == 0:
+                    print(f"  {Colors.GREEN}[OK]{Colors.ENDC} Claude CLI installed.")
+                    if _run_claude_login():
+                        print(
+                            f"\n  {Colors.GREEN}[OK]{Colors.ENDC} "
+                            f"Signed in! Using your Max/Pro plan."
+                        )
+                        _write_env_var("ANTHROPIC_AUTH_MODE", "oauth")
+                        return True
+                else:
+                    print(
+                        f"  {Colors.WARNING}Install failed.{Colors.ENDC} Falling back to API key."
+                    )
+            except Exception:
+                print(f"  {Colors.WARNING}npm not available.{Colors.ENDC} Falling back to API key.")
+                print(
+                    f"  Install manually: "
+                    f"{Colors.BOLD}npm install -g @anthropic-ai/claude-code"
+                    f"{Colors.ENDC}"
+                )
+                print(f"  Then run: {Colors.BOLD}claude login{Colors.ENDC}\n")
+
+    # Fall through to API key
+    print("\n  Your Anthropic API key is needed.")
+    print(
+        f"  It will be saved to your local "
+        f"{Colors.BOLD}.env{Colors.ENDC} file (never committed to git)."
+    )
+    key = input_secret(f"{env_var}")
+    if key:
+        valid = _validate_api_key("anthropic", key)
+        _write_env_var(env_var, key)
+        if valid:
+            print(f"  {Colors.GREEN}[OK]{Colors.ENDC} Key validated and saved to .env")
+        else:
+            print(
+                f"  {Colors.WARNING}[WARN]{Colors.ENDC} Could not validate key "
+                f"(network issue?). Saved to .env anyway."
+            )
+        return True
+    else:
+        print(f"  {Colors.WARNING}Skipped.{Colors.ENDC} Set {env_var} in .env before running.")
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Model selection (Step 4)
+# ---------------------------------------------------------------------------
+def choose_model(provider_key):
+    """Choose primary model for the selected provider."""
+    models = MODELS.get(provider_key, [])
+
+    if provider_key == "ollama":
+        return _choose_ollama_model()
+
+    if not models:
+        name = input_default("Enter model name/ID", "")
+        return {"id": name, "label": name, "desc": "", "tags": []}
+
+    print(f"\n{Colors.GREEN}--- PRIMARY MODEL (Chat & Reasoning) ---{Colors.ENDC}")
+    for i, m in enumerate(models, 1):
+        rec = " (Recommended)" if m.get("recommended") else ""
+        print(f"  [{i}] {m['label']:<28s} ({m['desc']}){rec}")
+
+    choice = input_default("\nSelection", "1").strip()
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(models):
+            return models[idx]
+    except ValueError:
+        pass
+    # Default to first (recommended)
+    return models[0]
+
+
+def _choose_ollama_model():
+    """List locally available Ollama models or let user type a name."""
+    print(f"\n{Colors.GREEN}--- PRIMARY MODEL (Ollama) ---{Colors.ENDC}")
+
+    local_models = _list_ollama_models()
+    if local_models:
+        print("  Locally available models:")
+        for i, name in enumerate(local_models, 1):
+            print(f"  [{i}] {name}")
+        print(f"  [{len(local_models) + 1}] Other (type model name)")
+        choice = input_default("\nSelection", "1").strip()
+        try:
+            idx = int(choice) - 1
+            if 0 <= idx < len(local_models):
+                name = local_models[idx]
+                return {"id": name, "label": name, "desc": "Local", "tags": ["local"]}
+        except ValueError:
+            pass
+
+    name = input_default("Enter Ollama model name", "llava:13b")
+    return {"id": name, "label": name, "desc": "Local", "tags": ["local"]}
+
+
+def _list_ollama_models():
+    """Fetch locally available Ollama models."""
+    try:
+        import httpx
+
+        resp = httpx.get("http://localhost:11434/api/tags", timeout=3)
+        if resp.status_code == 200:
+            data = resp.json()
+            return [m["name"] for m in data.get("models", [])]
+    except Exception:
+        pass
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Secondary models (Step 5)
+# ---------------------------------------------------------------------------
+def choose_secondary_models(primary_provider, already_authed):
+    """Optionally add secondary/specialized models."""
+    print(f"\n{Colors.GREEN}--- SECONDARY MODELS (optional) ---{Colors.ENDC}")
+    print("  Add specialized models for vision, robotics, or embeddings.\n")
+    print("  [0] Skip")
+    for i, m in enumerate(SECONDARY_MODELS, 1):
+        print(f"  [{i}] {m['label']:<38s} — {m['desc']}")
+    print(f"  [{len(SECONDARY_MODELS) + 1}] Custom (enter provider + model name)")
+
+    choice = input_default("\nSelection (comma-separated, e.g. 1,2)", "0").strip()
+    if choice == "0":
+        return []
+
+    selected = []
+    for c in choice.split(","):
+        c = c.strip()
+        try:
+            idx = int(c) - 1
+            if idx == len(SECONDARY_MODELS):
+                # Custom entry
+                custom = _add_custom_secondary(already_authed)
+                if custom:
+                    selected.append(custom)
+            elif 0 <= idx < len(SECONDARY_MODELS):
+                sm = SECONDARY_MODELS[idx]
+                # Auth if needed
+                if sm["provider"] != primary_provider:
+                    authenticate_provider(sm["provider"], already_authed=already_authed)
+                selected.append(
+                    {
+                        "provider": sm["provider"],
+                        "model": sm["id"],
+                        "label": sm["label"],
+                        "tags": sm["tags"],
+                    }
+                )
+        except ValueError:
+            continue
+
+    return selected
+
+
+def _add_custom_secondary(already_authed):
+    """Prompt for a custom secondary model."""
+    print("\n  Available providers: anthropic, google, openai, huggingface, ollama")
+    provider = input_default("  Provider", "google").strip().lower()
+    model_id = input_default("  Model ID", "").strip()
+    if not model_id:
+        return None
+    if provider in PROVIDER_AUTH:
+        authenticate_provider(provider, already_authed=already_authed)
+    return {
+        "provider": provider,
+        "model": model_id,
+        "label": f"{provider}/{model_id}",
+        "tags": ["custom"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Legacy choose_provider — used by Advanced flow
+# ---------------------------------------------------------------------------
 def choose_provider():
+    """Legacy provider+model selection (used by Advanced flow)."""
     print(f"\n{Colors.GREEN}--- BRAIN SELECTION ---{Colors.ENDC}")
     print("Which AI provider do you want to use?")
     for key, val in PROVIDERS.items():
@@ -170,10 +651,7 @@ def choose_provider():
 
 
 def _validate_api_key(provider: str, api_key: str) -> bool:
-    """Make a lightweight test call to validate an API key.
-
-    Returns True if the key is valid, False otherwise.
-    """
+    """Make a lightweight test call to validate an API key."""
     if not api_key:
         return False
 
@@ -230,13 +708,12 @@ def _check_claude_oauth():
     except Exception:
         return None
 
-    # Check for stored OAuth credentials
     claude_creds = os.path.expanduser("~/.claude/credentials.json")
     claude_settings = os.path.expanduser("~/.claude/settings.json")
     if os.path.exists(claude_creds) or os.path.exists(claude_settings):
         return True
 
-    return "installed"  # CLI exists but not authenticated
+    return "installed"
 
 
 def _run_claude_login():
@@ -257,85 +734,22 @@ def _run_claude_login():
 
 
 def collect_api_key(agent_config):
-    """Prompt the user for their provider API key and write it to .env."""
+    """Prompt the user for their provider API key and write it to .env.
+
+    Used by the Advanced flow (legacy path).
+    """
     env_var = agent_config.get("env_var")
     if not env_var:
-        return  # Ollama doesn't need a key
+        return
 
-    # Check if already set in environment
     if os.getenv(env_var):
         print(f"\n  {Colors.GREEN}[OK]{Colors.ENDC} {env_var} already set in environment.")
         return
 
-    # For Anthropic: offer Max plan OAuth as an option
     if agent_config.get("provider") == "anthropic":
-        oauth_status = _check_claude_oauth()
+        _anthropic_auth_flow(env_var)
+        return
 
-        print(f"\n{Colors.GREEN}--- AUTHENTICATION ---{Colors.ENDC}")
-        print("  How would you like to authenticate with Anthropic?")
-        print("  [1] Claude Max/Pro plan (sign in with your account)")
-        print("  [2] API key (pay-as-you-go)")
-
-        auth_choice = input_default("Selection", "1").strip()
-
-        if auth_choice == "1":
-            if oauth_status is True:
-                print(
-                    f"\n  {Colors.GREEN}[OK]{Colors.ENDC} Claude CLI already "
-                    f"authenticated (Max/Pro plan)."
-                )
-                # Set a marker so the provider knows to use OAuth
-                _write_env_var("ANTHROPIC_AUTH_MODE", "oauth")
-                return
-            elif oauth_status == "installed":
-                print("\n  Claude CLI found but not signed in.")
-                if _run_claude_login():
-                    print(
-                        f"\n  {Colors.GREEN}[OK]{Colors.ENDC} Signed in! Using your Max/Pro plan."
-                    )
-                    _write_env_var("ANTHROPIC_AUTH_MODE", "oauth")
-                    return
-                else:
-                    print(f"  {Colors.WARNING}Login failed.{Colors.ENDC} Falling back to API key.")
-            else:
-                # Claude CLI not installed
-                print("\n  Claude CLI not found. Installing...")
-                import subprocess
-
-                try:
-                    result = subprocess.run(
-                        ["npm", "install", "-g", "@anthropic-ai/claude-code"],
-                        capture_output=True,
-                        text=True,
-                        timeout=120,
-                    )
-                    if result.returncode == 0:
-                        print(f"  {Colors.GREEN}[OK]{Colors.ENDC} Claude CLI installed.")
-                        if _run_claude_login():
-                            print(
-                                f"\n  {Colors.GREEN}[OK]{Colors.ENDC} Signed in! "
-                                f"Using your Max/Pro plan."
-                            )
-                            _write_env_var("ANTHROPIC_AUTH_MODE", "oauth")
-                            return
-                    else:
-                        print(
-                            f"  {Colors.WARNING}Install failed.{Colors.ENDC} "
-                            f"Falling back to API key."
-                        )
-                except Exception:
-                    print(
-                        f"  {Colors.WARNING}npm not available.{Colors.ENDC} "
-                        f"Falling back to API key."
-                    )
-                    print(
-                        f"  Install manually: "
-                        f"{Colors.BOLD}npm install -g @anthropic-ai/claude-code"
-                        f"{Colors.ENDC}"
-                    )
-                    print(f"  Then run: {Colors.BOLD}claude login{Colors.ENDC}\n")
-
-    # Standard API key flow
     print(f"\n{Colors.GREEN}--- API KEY ---{Colors.ENDC}")
     print(f"  Your {agent_config['label']} API key is needed.")
     print(
@@ -345,7 +759,6 @@ def collect_api_key(agent_config):
 
     key = input_secret(f"{env_var}")
     if key:
-        # Inline validation
         provider = agent_config.get("provider", "")
         if HAS_RICH:
             with Progress(
@@ -364,7 +777,6 @@ def collect_api_key(agent_config):
             _write_env_var(env_var, key)
             print(f"  {Colors.GREEN}[OK]{Colors.ENDC} Key validated and saved to .env")
         else:
-            # Save anyway -- validation might fail due to network, but key could be valid
             _write_env_var(env_var, key)
             print(
                 f"  {Colors.WARNING}[WARN]{Colors.ENDC} Could not validate key "
@@ -429,7 +841,6 @@ def choose_hardware():
     """Select hardware kit, with optional auto-detection."""
     print(f"\n{Colors.GREEN}--- HARDWARE KIT ---{Colors.ENDC}")
 
-    # Try auto-detection first
     try:
         from castor.hardware_detect import detect_hardware, suggest_preset
 
@@ -454,12 +865,12 @@ def choose_hardware():
             use_detected = input_default("Use detected hardware?", "Y").strip().lower()
             if use_detected in ("y", "yes", ""):
                 return preset_name
-            print()  # Fall through to manual selection
+            print()
         else:
             print(f"\n  {Colors.WARNING}[AUTO-DETECT]{Colors.ENDC} {reason}")
             print("  Falling back to manual selection.\n")
     except Exception:
-        pass  # Auto-detection not available or failed
+        pass
 
     print("Select your hardware kit:")
     print("  [1] Custom (Advanced)")
@@ -523,76 +934,98 @@ def get_drivers(links):
     return drivers
 
 
-def generate_preset_config(preset_name, robot_name, agent_config):
+def _build_agent_config(provider_key, model_info):
+    """Build the agent_config dict from new-style provider + model selection.
+
+    Maintains backward compatibility: returns dict with provider, model, label, env_var.
+    """
+    info = PROVIDER_AUTH[provider_key]
+    return {
+        "provider": provider_key,
+        "model": model_info["id"],
+        "label": f"{info['label'].split('(')[0].strip()} {model_info['label']}",
+        "env_var": info["env_var"],
+    }
+
+
+def generate_preset_config(preset_name, robot_name, agent_config, secondary_models=None):
     """Generate config for a known hardware preset."""
-    # Try to load from a preset RCAN file
     preset_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), "config", "presets", f"{preset_name}.rcan.yaml"
+        os.path.dirname(os.path.dirname(__file__)),
+        "config",
+        "presets",
+        f"{preset_name}.rcan.yaml",
     )
     if os.path.exists(preset_path):
         with open(preset_path) as f:
             config = yaml.safe_load(f)
-        # Override name, UUID, and agent with wizard selections
         config["metadata"]["robot_name"] = robot_name
         config["metadata"]["robot_uuid"] = str(uuid.uuid4())
         config["metadata"]["created_at"] = datetime.now(timezone.utc).isoformat()
         config["agent"]["provider"] = agent_config["provider"]
         config["agent"]["model"] = agent_config["model"]
-        return config
-
-    # Fallback: generic differential-drive preset
-    return {
-        "rcan_version": "1.0.0-alpha",
-        "metadata": {
-            "robot_name": robot_name,
-            "robot_uuid": str(uuid.uuid4()),
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "author": "OpenCastor Wizard",
-            "license": "Apache-2.0",
-            "tags": ["mobile", "rover", "amazon_kit"],
-        },
-        "agent": {
-            "provider": agent_config["provider"],
-            "model": agent_config["model"],
-            "vision_enabled": True,
-            "latency_budget_ms": 200,
-            "safety_stop": True,
-        },
-        "physics": {
-            "type": "differential_drive",
-            "dof": 2,
-            "chassis": {
-                "wheel_base_mm": 150,
-                "wheel_radius_mm": 32,
+    else:
+        config = {
+            "rcan_version": "1.0.0-alpha",
+            "metadata": {
+                "robot_name": robot_name,
+                "robot_uuid": str(uuid.uuid4()),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "author": "OpenCastor Wizard",
+                "license": "Apache-2.0",
+                "tags": ["mobile", "rover", "amazon_kit"],
             },
-        },
-        "drivers": [
-            {
-                "id": "motor_driver",
-                "protocol": "pca9685_i2c",
-                "port": "/dev/i2c-1",
-                "address": "0x40",
-                "frequency": 50,
-                "channels": {
-                    "left_front": 0,
-                    "left_rear": 1,
-                    "right_front": 2,
-                    "right_rear": 3,
+            "agent": {
+                "provider": agent_config["provider"],
+                "model": agent_config["model"],
+                "vision_enabled": True,
+                "latency_budget_ms": 200,
+                "safety_stop": True,
+            },
+            "physics": {
+                "type": "differential_drive",
+                "dof": 2,
+                "chassis": {
+                    "wheel_base_mm": 150,
+                    "wheel_radius_mm": 32,
                 },
-            }
-        ],
-        "network": {
-            "telemetry_stream": True,
-            "sim_to_real_sync": True,
-            "allow_remote_override": False,
-        },
-        "rcan_protocol": {
-            "port": 8000,
-            "capabilities": ["status", "nav", "teleop", "chat"],
-            "enable_mdns": False,
-            "enable_jwt": False,
-        },
-    }
+            },
+            "drivers": [
+                {
+                    "id": "motor_driver",
+                    "protocol": "pca9685_i2c",
+                    "port": "/dev/i2c-1",
+                    "address": "0x40",
+                    "frequency": 50,
+                    "channels": {
+                        "left_front": 0,
+                        "left_rear": 1,
+                        "right_front": 2,
+                        "right_rear": 3,
+                    },
+                }
+            ],
+            "network": {
+                "telemetry_stream": True,
+                "sim_to_real_sync": True,
+                "allow_remote_override": False,
+            },
+            "rcan_protocol": {
+                "port": 8000,
+                "capabilities": ["status", "nav", "teleop", "chat"],
+                "enable_mdns": False,
+                "enable_jwt": False,
+            },
+        }
+
+    # Add secondary models if any
+    if secondary_models:
+        config["agent"]["secondary_models"] = [
+            {"provider": sm["provider"], "model": sm["model"], "tags": sm.get("tags", [])}
+            for sm in secondary_models
+        ]
+
+    return config
 
 
 def generate_custom_config(robot_name, agent_config, links, drivers):
@@ -646,7 +1079,6 @@ def _write_env_var(key: str, value: str):
         with open(env_path) as f:
             lines = f.readlines()
 
-    # Check if the key already exists; if so, update it
     found = False
     for i, line in enumerate(lines):
         if line.startswith(f"{key}="):
@@ -742,11 +1174,23 @@ def main():
     robot_name = input_default("Project Name", "MyRobot")
 
     if quickstart:
-        # -- QuickStart Path --
-        agent_config = choose_provider()
-        collect_api_key(agent_config)
+        # -- QuickStart: New multi-step flow --
+        already_authed = set()
 
-        # Messaging channel (optional)
+        # Step 2: Provider
+        provider_key = choose_provider_step()
+
+        # Step 3: Authentication
+        authenticate_provider(provider_key, already_authed=already_authed)
+
+        # Step 4: Primary model
+        model_info = choose_model(provider_key)
+        agent_config = _build_agent_config(provider_key, model_info)
+
+        # Step 5: Secondary models
+        secondary_models = choose_secondary_models(provider_key, already_authed)
+
+        # Step 6: Messaging channel (optional)
         print(f"\n{Colors.GREEN}--- MESSAGING (optional) ---{Colors.ENDC}")
         print("  Connect a messaging app to talk to your robot.")
         print("  [0] Skip for now")
@@ -762,9 +1206,11 @@ def main():
             collect_channel_credentials(selected_channels)
 
         preset = "rpi_rc_car"
-        rcan_data = generate_preset_config(preset, robot_name, agent_config)
+        rcan_data = generate_preset_config(
+            preset, robot_name, agent_config, secondary_models=secondary_models
+        )
     else:
-        # -- Advanced Path --
+        # -- Advanced Path (legacy) --
         agent_config = choose_provider()
         collect_api_key(agent_config)
 
@@ -778,12 +1224,13 @@ def main():
 
         selected_channels = choose_channels()
         collect_channel_credentials(selected_channels)
+        secondary_models = []
 
     # --- Auto-generate Gateway Auth Token ---
     if not os.getenv("OPENCASTOR_API_TOKEN"):
         import secrets
 
-        token = secrets.token_hex(24)  # 48-char hex token
+        token = secrets.token_hex(24)
         _write_env_var("OPENCASTOR_API_TOKEN", token)
         print(
             f"\n  {Colors.GREEN}[AUTO]{Colors.ENDC} Gateway auth token generated and saved to .env"
@@ -831,7 +1278,7 @@ def main():
         results = run_post_wizard_checks(filename, rcan_data, agent_config["provider"])
         print_report(results, colors_class=Colors)
     except Exception:
-        pass  # Health check failure should never block wizard completion
+        pass
 
     # --- Summary ---
     if HAS_RICH:
@@ -840,6 +1287,10 @@ def main():
         _console.print(f"  Config file:  [cyan]{filename}[/]")
         _console.print(f"  AI Provider:  {agent_config['label']}")
         _console.print(f"  Model:        {agent_config['model']}")
+
+        if secondary_models:
+            names = ", ".join(sm.get("label", sm["model"]) for sm in secondary_models)
+            _console.print(f"  Secondary:    {names}")
 
         if selected_channels:
             names = ", ".join(ch["label"] for ch in selected_channels)
@@ -866,6 +1317,10 @@ def main():
         print(f"  AI Provider:  {agent_config['label']}")
         print(f"  Model:        {agent_config['model']}")
 
+        if secondary_models:
+            names = ", ".join(sm.get("label", sm["model"]) for sm in secondary_models)
+            print(f"  Secondary:    {names}")
+
         if selected_channels:
             names = ", ".join(ch["label"] for ch in selected_channels)
             print(f"  Channels:     {names}")
@@ -875,7 +1330,8 @@ def main():
             f"  1. Run the robot:        {Colors.BLUE}castor run --config {filename}{Colors.ENDC}"
         )
         print(
-            f"  2. Start the gateway:    {Colors.BLUE}castor gateway --config {filename}{Colors.ENDC}"
+            f"  2. Start the gateway:    "
+            f"{Colors.BLUE}castor gateway --config {filename}{Colors.ENDC}"
         )
         print(f"  3. Open the dashboard:   {Colors.BLUE}castor dashboard{Colors.ENDC}")
         print(f"  4. Check status:         {Colors.BLUE}castor status{Colors.ENDC}")
