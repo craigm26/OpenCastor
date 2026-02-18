@@ -111,6 +111,20 @@ def check_provider_ready(provider: str, config: Optional[Dict] = None) -> bool:
     """Check whether the given provider has credentials available."""
     if provider.lower() == "ollama":
         return True  # Ollama doesn't need an API key
+
+    # Check for OAuth/ADC auth modes
+    auth_mode = os.getenv("ANTHROPIC_AUTH_MODE", "").lower()
+    if provider.lower() == "anthropic" and auth_mode == "oauth":
+        return True
+
+    google_auth_mode = os.getenv("GOOGLE_AUTH_MODE", "").lower()
+    if provider.lower() == "google" and google_auth_mode == "adc":
+        return True
+
+    hf_auth_mode = os.getenv("HF_AUTH_MODE", "").lower()
+    if provider.lower() == "huggingface" and hf_auth_mode == "cli":
+        return True
+
     return resolve_provider_key(provider, config) is not None
 
 

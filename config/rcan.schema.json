@@ -109,6 +109,24 @@
         "api_key": {
           "type": "string",
           "description": "Fallback API key. Prefer env vars instead."
+        },
+        "secondary_models": {
+          "type": "array",
+          "description": "Optional secondary AI models for specialized tasks",
+          "items": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string"
+              }
+            }
+          }
         }
       }
     },
