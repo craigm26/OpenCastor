@@ -283,8 +283,87 @@
   </div>
 </section>
 
+<!-- Submit via GitHub PR -->
+<section class="section" id="submit">
+  <div class="container">
+    <div class="section-header center reveal">
+      <p class="section-label">Submit</p>
+      <h2 class="section-title">How to submit a recipe</h2>
+      <p class="section-desc">Recipes are submitted via GitHub Pull Request to the community-recipes directory.</p>
+    </div>
+
+    <div class="wizard-step reveal" style="margin-bottom:24px">
+      <div class="wizard-step-header">
+        <div class="wizard-step-num">1</div>
+        <div><h3>Package your config</h3><p>Run <code style="padding:2px 6px;font-size:0.8125rem">castor hub share</code> to auto-scrub secrets and generate a submission bundle.</p></div>
+      </div>
+      <div class="code-block"><div class="code-header"><div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">Terminal</span></div>
+        <div class="code-body"><span class="k">castor hub share</span> --config robot.rcan.yaml --docs BUILD_NOTES.md</div>
+      </div>
+    </div>
+
+    <div class="wizard-step reveal" style="margin-bottom:24px">
+      <div class="wizard-step-header">
+        <div class="wizard-step-num">2</div>
+        <div><h3>Fork &amp; PR</h3><p>Fork the OpenCastor repo, add your bundle to <code style="padding:2px 6px;font-size:0.8125rem">community-recipes/</code>, and open a Pull Request.</p></div>
+      </div>
+      <div class="code-block"><div class="code-header"><div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">Terminal</span></div>
+        <div class="code-body"><span class="k">git clone</span> https://github.com/YOUR_USER/OpenCastor.git
+<span class="k">cp</span> -r my-recipe/ community-recipes/
+<span class="k">git add</span> . && <span class="k">git commit</span> -m <span class="s">"Add my-robot recipe"</span>
+<span class="k">git push</span> && <span class="cm"># open PR on GitHub</span></div>
+      </div>
+    </div>
+
+    <div class="wizard-step reveal">
+      <div class="wizard-step-header">
+        <div class="wizard-step-num">3</div>
+        <div><h3>Review &amp; merge</h3><p>Maintainers review for PII leaks and validate the RCAN schema. Once approved, your recipe appears in <code style="padding:2px 6px;font-size:0.8125rem">castor hub browse</code>.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Seed Recipes -->
+<section class="section alt-section" id="seeds">
+  <div class="container">
+    <div class="section-header center reveal">
+      <p class="section-label">Seed Recipes</p>
+      <h2 class="section-title">Built-in starter configs</h2>
+      <p class="section-desc">OpenCastor ships with seed recipes — minimal, tested configs to get you started fast.</p>
+    </div>
+
+    <div class="hw-grid">
+      <div class="hw-card reveal">
+        <div class="hw-card-top"><div class="hw-card-icon">🏠</div><span class="status status-green">Seed</span></div>
+        <h3>minimal-picar</h3>
+        <p>Bare-minimum PiCar-X config with Ollama local brain. No API keys needed. 5-minute setup.</p>
+        <div class="hw-card-meta">castor hub install minimal-picar</div>
+      </div>
+      <div class="hw-card reveal reveal-d1">
+        <div class="hw-card-top"><div class="hw-card-icon">👁️</div><span class="status status-green">Seed</span></div>
+        <h3>hailo-vision-demo</h3>
+        <p>Hailo-8 YOLOv8 object detection with Pi Camera. Detects and narrates objects in real time.</p>
+        <div class="hw-card-meta">castor hub install hailo-vision-demo</div>
+      </div>
+      <div class="hw-card reveal reveal-d2">
+        <div class="hw-card-top"><div class="hw-card-icon">📷</div><span class="status status-green">Seed</span></div>
+        <h3>oakd-depth-nav</h3>
+        <p>OAK-D depth camera navigation. Obstacle avoidance using depth maps. Differential drive.</p>
+        <div class="hw-card-meta">castor hub install oakd-depth-nav</div>
+      </div>
+      <div class="hw-card reveal reveal-d3">
+        <div class="hw-card-top"><div class="hw-card-icon">🧠</div><span class="status status-green">Seed</span></div>
+        <h3>tiered-brain-starter</h3>
+        <p>Full tiered brain config: HuggingFace fast brain + Claude planner with auto-escalation.</p>
+        <div class="hw-card-meta">castor hub install tiered-brain-starter</div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- PII / Safety -->
-<section class="section alt-section">
+<section class="section">
   <div class="container">
     <div class="section-header reveal" style="text-align:center;margin-left:auto;margin-right:auto">
       <p class="section-label">Safety</p>

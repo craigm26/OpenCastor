@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>About — OpenCastor</title>
-  <meta name="description" content="OpenCastor is building the universal runtime for embodied AI. Open source, community-driven, and designed to make robotics accessible to everyone.">
+  <meta name="description" content="OpenCastor is the universal runtime for embodied AI. Open source, Apache 2.0, built by Craig Merry.">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -31,6 +31,11 @@
     .name-story { background: var(--bg-alt); border-radius: var(--radius-xl); padding: 40px; margin-top: 40px; }
     .name-story h3 { margin-bottom: 12px; }
     .name-story p { font-size: 0.9375rem; color: var(--text-secondary); line-height: 1.7; }
+    .links-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-top: 32px; max-width: 720px; margin-left: auto; margin-right: auto; }
+    .link-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; transition: all 0.25s; display: block; }
+    .link-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .link-card h4 { font-size: 0.9375rem; margin-bottom: 4px; }
+    .link-card p { font-size: 0.8125rem; color: var(--text-muted); margin: 0; }
   </style>
 </head>
 <body>
@@ -38,12 +43,13 @@
 <nav class="site-nav">
   <div class="nav-inner">
     <a href="/" class="nav-logo">
-      <svg viewBox="0 0 32 32" fill="none"><path d="M11 26 A11 11 0 1 1 23 8 L20 11 A7 7 0 1 0 14 22 Z" fill="currentColor"/><path d="M23 8 L26 5 L23 2 L20 5 Z" fill="currentColor" opacity="0.7"/><path d="M11 26 L8 29 L5 26 L8 23 Z" fill="currentColor" opacity="0.7"/><circle cx="16" cy="16" r="3.5" fill="#4285F4" opacity="0.9"/><circle cx="16" cy="16" r="1.8" fill="#fff" opacity="0.3"/></svg>
+      <svg viewBox="0 0 32 32" fill="none"><path d="M11 26 A11 11 0 1 1 23 8 L20 11 A7 7 0 1 0 14 22 Z" fill="currentColor"/><path d="M23 8 L26 5 L23 2 L20 5 Z" fill="currentColor" opacity="0.7"/><path d="M11 26 L8 29 L5 26 L8 23 Z" fill="currentColor" opacity="0.7"/><circle cx="16" cy="16" r="3.5" fill="#6366f1" opacity="0.9"/><circle cx="16" cy="16" r="1.8" fill="#fff" opacity="0.3"/></svg>
       <span>OpenCastor</span>
     </a>
     <div class="nav-links">
       <a href="/hardware">Hardware</a>
       <a href="/docs">Docs</a>
+      <a href="/hub">Hub</a>
       <a href="/about" class="active">About</a>
       <a href="https://github.com/craigm26/OpenCastor" class="btn-nav">GitHub <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg></a>
     </div>
@@ -58,7 +64,31 @@
   <p class="reveal reveal-d2">Making robotics accessible to everyone through open source and open standards.</p>
 </section>
 
-<section class="section" style="padding-top:20px">
+<!-- Stats Bar -->
+<section class="alt-section" style="padding: 48px 0">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="reveal">
+        <div class="stat-number">36,758</div>
+        <div class="stat-label">Lines of Code</div>
+      </div>
+      <div class="reveal reveal-d1">
+        <div class="stat-number">1,322</div>
+        <div class="stat-label">Tests</div>
+      </div>
+      <div class="reveal reveal-d2">
+        <div class="stat-number">7</div>
+        <div class="stat-label">AI Providers</div>
+      </div>
+      <div class="reveal reveal-d3">
+        <div class="stat-number">80+</div>
+        <div class="stat-label">COCO Classes</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" style="padding-top:40px">
   <div class="container">
     <div class="about-block reveal">
       <h2>The Problem</h2>
@@ -78,7 +108,18 @@
   </div>
 </section>
 
+<!-- Origin Story -->
 <section class="section">
+  <div class="container">
+    <div class="about-block reveal">
+      <h2>Origin Story</h2>
+      <p>OpenCastor was created by <strong>Craig Merry</strong>, inspired by early experiments with the ContinuonAI project exploring the intersection of AI agents and physical robotics. What started as a personal frustration — writing custom glue code for every robot + AI combination — grew into a mission to build the universal adapter layer that the robotics community was missing.</p>
+      <p>The project evolved from a weekend hack into a serious open-source effort: 36,758 lines of battle-tested Python, 1,322 tests, support for 7 AI providers, hardware-accelerated vision via Hailo-8 NPU, and a tiered cognitive architecture that runs a $0 primary brain with optional paid fallbacks. All released under the Apache 2.0 license.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section alt-section">
   <div class="container">
     <div class="about-block reveal">
       <h2>Our Values</h2>
@@ -86,26 +127,26 @@
 
     <div class="values-grid" style="max-width:720px;margin-left:auto;margin-right:auto">
       <div class="value-card reveal">
-        <h3><span>&#x1F513;</span> Open by Default</h3>
+        <h3><span>🔓</span> Open by Default</h3>
         <p>Apache 2.0 license. No feature gates, no premium tiers for core functionality. The runtime is free forever.</p>
       </div>
       <div class="value-card reveal reveal-d1">
-        <h3><span>&#x1F6E1;</span> Safety First</h3>
+        <h3><span>🛡️</span> Safety First</h3>
         <p>AI hallucinations must never cause physical harm. Hard-coded safety layers, velocity limits, and emergency stops in every loop.</p>
       </div>
       <div class="value-card reveal reveal-d2">
-        <h3><span>&#x1F3AF;</span> Simplicity</h3>
+        <h3><span>🎯</span> Simplicity</h3>
         <p>Five minutes from unbox to agent. If it takes longer, that's a bug. Complexity is the enemy of adoption.</p>
       </div>
       <div class="value-card reveal reveal-d3">
-        <h3><span>&#x1F310;</span> Universal</h3>
+        <h3><span>🌐</span> Universal</h3>
         <p>Any AI, any hardware, any form factor. If it has a motor and a camera, OpenCastor should be able to drive it.</p>
       </div>
     </div>
   </div>
 </section>
 
-<section class="section alt-section">
+<section class="section">
   <div class="container">
     <div class="about-block reveal">
       <h2>Journey</h2>
@@ -114,7 +155,7 @@
         <div class="timeline-item reveal">
           <div class="date">2025</div>
           <h4>The Idea</h4>
-          <p>Frustrated by writing custom integration code for every robot + AI combination, we started sketching a universal adapter layer.</p>
+          <p>Frustrated by writing custom integration code for every robot + AI combination. ContinuonAI experiments sparked the vision for a universal adapter layer.</p>
         </div>
         <div class="timeline-item reveal">
           <div class="date">Early 2025</div>
@@ -122,9 +163,9 @@
           <p>Published the first draft of the Robotic Control & Automation Network specification — a hardware-agnostic YAML schema for robot definition.</p>
         </div>
         <div class="timeline-item reveal">
-          <div class="date">2025</div>
-          <h4>OpenCastor v2026.2.17.20</h4>
-          <p>First public release. Four AI providers, three driver families, interactive wizard, and a web dashboard. Runs on Raspberry Pi.</p>
+          <div class="date">Feb 2026</div>
+          <h4>OpenCastor v2026.2.19.0</h4>
+          <p>Seven AI providers, Hailo-8 NPU vision, OAK-D depth, tiered brain architecture, 1,322 tests, and a community hub. 36,758 lines of code.</p>
         </div>
         <div class="timeline-item reveal">
           <div class="date">Next</div>
@@ -136,14 +177,45 @@
   </div>
 </section>
 
-<section class="section">
+<section class="section alt-section">
   <div class="container">
     <div class="about-block">
       <div class="name-story reveal">
         <h3>Why "Castor"?</h3>
         <p>In Greek mythology, Castor and Pollux are the twin stars of the Gemini constellation. Castor — the mortal twin — represents the physical world: robots, hardware, bodies. Pollux — the immortal twin — represents AI: intelligence, reasoning, the cloud.</p>
-        <p style="margin-top:12px">OpenCastor bridges the mortal and the immortal. It gives physical robots access to digital intelligence. The wrench logo — a tool with an AI eye at its center — represents hardware empowered by intelligence.</p>
+        <p style="margin-top:12px">OpenCastor bridges the mortal and the immortal. It gives physical robots access to digital intelligence.</p>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- Links -->
+<section class="section">
+  <div class="container">
+    <div class="section-header center reveal">
+      <h2 class="section-title">Links</h2>
+    </div>
+    <div class="links-grid">
+      <a href="https://github.com/craigm26/OpenCastor" class="link-card reveal">
+        <h4>📦 GitHub</h4>
+        <p>Source code, issues, discussions</p>
+      </a>
+      <a href="https://pypi.org/project/opencastor/" class="link-card reveal reveal-d1">
+        <h4>🐍 PyPI</h4>
+        <p>pip install opencastor</p>
+      </a>
+      <a href="https://rcan.dev/spec/" class="link-card reveal reveal-d2">
+        <h4>📄 RCAN Spec</h4>
+        <p>The open robot config standard</p>
+      </a>
+      <a href="https://discord.gg/jMjA8B26Bq" class="link-card reveal reveal-d3">
+        <h4>💬 Discord</h4>
+        <p>Community chat &amp; support</p>
+      </a>
+    </div>
+
+    <div class="about-block reveal" style="margin-top:48px;text-align:center">
+      <p style="font-size:0.9375rem">OpenCastor is open source under the <strong>Apache 2.0 License</strong>.<br>Created by <strong>Craig Merry</strong>.</p>
     </div>
   </div>
 </section>
@@ -165,13 +237,12 @@
   <div class="footer-inner">
     <div class="footer-grid">
       <div class="footer-brand">
-        <a href="/" class="nav-logo"><svg viewBox="0 0 32 32" width="24" height="24" fill="none"><path d="M11 26 A11 11 0 1 1 23 8 L20 11 A7 7 0 1 0 14 22 Z" fill="currentColor" style="color:var(--accent)"/><path d="M23 8 L26 5 L23 2 L20 5 Z" fill="currentColor" style="color:var(--accent)" opacity="0.7"/><path d="M11 26 L8 29 L5 26 L8 23 Z" fill="currentColor" style="color:var(--accent)" opacity="0.7"/><circle cx="16" cy="16" r="3.5" fill="#4285F4" opacity="0.9"/><circle cx="16" cy="16" r="1.8" fill="#fff" opacity="0.3"/></svg><span>OpenCastor</span></a>
+        <a href="/" class="nav-logo"><svg viewBox="0 0 32 32" width="24" height="24" fill="none"><path d="M11 26 A11 11 0 1 1 23 8 L20 11 A7 7 0 1 0 14 22 Z" fill="currentColor" style="color:var(--accent)"/><path d="M23 8 L26 5 L23 2 L20 5 Z" fill="currentColor" style="color:var(--accent)" opacity="0.7"/><path d="M11 26 L8 29 L5 26 L8 23 Z" fill="currentColor" style="color:var(--accent)" opacity="0.7"/><circle cx="16" cy="16" r="3.5" fill="#6366f1" opacity="0.9"/><circle cx="16" cy="16" r="1.8" fill="#fff" opacity="0.3"/></svg><span>OpenCastor</span></a>
         <p>The universal runtime for embodied AI.</p>
       </div>
-      <div class="footer-col"><h4>Product</h4><a href="/docs">Documentation</a><a href="/hardware">Hardware</a><a href="https://rcan.dev/spec/">RCAN Spec</a></div>
-      <div class="footer-col"><h4>Resources</h4><a href="/docs">Getting Started</a><a href="https://github.com/craigm26/OpenCastor">GitHub</a><a href="https://github.com/craigm26/OpenCastor/issues">Issues</a></div>
-      <div class="footer-col"><h4>Company</h4><a href="/hub">Hub</a>
-      <a href="/about">About</a><a href="mailto:hello@opencastor.com">Contact</a></div>
+      <div class="footer-col"><h4>Product</h4><a href="/docs">Documentation</a><a href="/hardware">Hardware</a><a href="https://rcan.dev/spec/">RCAN Spec</a><a href="https://pypi.org/project/opencastor/">PyPI</a></div>
+      <div class="footer-col"><h4>Resources</h4><a href="/docs">Getting Started</a><a href="https://github.com/craigm26/OpenCastor">GitHub</a><a href="https://github.com/craigm26/OpenCastor/issues">Issues</a><a href="https://discord.gg/jMjA8B26Bq">Discord</a></div>
+      <div class="footer-col"><h4>Company</h4><a href="/hub">Hub</a><a href="/about">About</a><a href="mailto:hello@opencastor.com">Contact</a></div>
     </div>
     <div class="footer-bottom">
       <p>&copy; 2025-2026 Craig Merry. Apache 2.0 License.</p>

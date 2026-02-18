@@ -4,19 +4,30 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hardware — OpenCastor</title>
-  <meta name="description" content="OpenCastor supports 20+ robot kits from popular manufacturers. From $50 hobby cars to professional Dynamixel arms.">
+  <meta name="description" content="OpenCastor hardware compatibility: platforms, AI accelerators, cameras, sensors, and pre-built robot kits.">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
+  <style>
+    .status-orange { color: var(--orange); background: var(--orange-light); }
+    .status-blue { color: var(--accent); background: var(--accent-glow); }
+    .compat-table { width:100%; border-collapse:collapse; margin:16px 0; }
+    .compat-table th, .compat-table td { text-align:left; padding:12px 16px; font-size:0.875rem; border-bottom:1px solid var(--border); }
+    .compat-table th { color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.06em; font-size:0.6875rem; }
+    .compat-table td { color:var(--text-secondary); }
+    .compat-table .check { color:var(--green); font-weight:700; }
+    .compat-table .beta { color:var(--orange); font-weight:600; font-size:0.75rem; }
+    .compat-table .planned { color:var(--text-muted); font-size:0.75rem; }
+  </style>
 </head>
 <body>
 
 <nav class="site-nav">
   <div class="nav-inner">
     <a href="/" class="nav-logo">
-      <svg viewBox="0 0 32 32" fill="none"><path d="M11 26 A11 11 0 1 1 23 8 L20 11 A7 7 0 1 0 14 22 Z" fill="currentColor"/><path d="M23 8 L26 5 L23 2 L20 5 Z" fill="currentColor" opacity="0.7"/><path d="M11 26 L8 29 L5 26 L8 23 Z" fill="currentColor" opacity="0.7"/><circle cx="16" cy="16" r="3.5" fill="#4285F4" opacity="0.9"/><circle cx="16" cy="16" r="1.8" fill="#fff" opacity="0.3"/></svg>
+      <svg viewBox="0 0 32 32" fill="none"><path d="M11 26 A11 11 0 1 1 23 8 L20 11 A7 7 0 1 0 14 22 Z" fill="currentColor"/><path d="M23 8 L26 5 L23 2 L20 5 Z" fill="currentColor" opacity="0.7"/><path d="M11 26 L8 29 L5 26 L8 23 Z" fill="currentColor" opacity="0.7"/><circle cx="16" cy="16" r="3.5" fill="#6366f1" opacity="0.9"/><circle cx="16" cy="16" r="1.8" fill="#fff" opacity="0.3"/></svg>
       <span>OpenCastor</span>
     </a>
     <div class="nav-links">
@@ -34,114 +45,232 @@
 <section class="page-hero">
   <p class="section-label reveal">Compatible Hardware</p>
   <h1 class="reveal reveal-d1">Built for every robot.</h1>
-  <p class="reveal reveal-d2">Pre-built presets for popular kits. Or bring your own config for anything with a motor, servo, or actuator.</p>
+  <p class="reveal reveal-d2">From $35 Raspberry Pi to Nvidia Jetson. Pre-built presets for popular kits, or bring your own config.</p>
 </section>
 
+<!-- Supported Platforms -->
 <section class="section" style="padding-top:40px">
   <div class="container">
     <div class="section-header reveal">
-      <h2 class="section-title">Wheeled Robots</h2>
-      <p class="section-desc">Smart cars, rovers, and tracked platforms that work out of the box.</p>
+      <h2 class="section-title">Supported Platforms</h2>
+      <p class="section-desc">OpenCastor runs anywhere Python 3.10+ is available. ARM64 native.</p>
     </div>
     <div class="hw-grid">
       <div class="hw-card reveal">
-        <div class="hw-card-top"><div class="hw-card-icon">&#x1F916;</div><span class="status status-green">Supported</span></div>
-        <h3>Waveshare AlphaBot2</h3>
-        <p>Tracked robot with IR sensors, camera mount, and Raspberry Pi HAT. Great starter platform.</p>
-        <div class="hw-card-meta">Driver: PCA9685 &middot; I2C &middot; $55</div>
+        <div class="hw-card-top"><div class="hw-card-icon">🍓</div><span class="status status-green">Supported</span></div>
+        <h3>Raspberry Pi 5</h3>
+        <p>Primary target. Full Hailo-8 AI Kit support, OAK-D, CSI cameras, I2C sensors. Bookworm OS.</p>
+        <div class="hw-card-meta">ARM64 · 4/8GB · $60–$80</div>
       </div>
       <div class="hw-card reveal reveal-d1">
-        <div class="hw-card-top"><div class="hw-card-icon">&#x1F3CE;</div><span class="status status-green">Supported</span></div>
-        <h3>SunFounder PiCar-X</h3>
-        <p>Smart car with camera pan/tilt, line following, ultrasonic avoidance, and speaker.</p>
-        <div class="hw-card-meta">Driver: PCA9685 &middot; I2C &middot; $80</div>
+        <div class="hw-card-top"><div class="hw-card-icon">🍓</div><span class="status status-green">Supported</span></div>
+        <h3>Raspberry Pi 4</h3>
+        <p>Well-tested. All drivers and providers work. No Hailo AI Kit (use Coral TPU or USB accelerators instead).</p>
+        <div class="hw-card-meta">ARM64 · 2/4/8GB · $35–$75</div>
       </div>
       <div class="hw-card reveal reveal-d2">
-        <div class="hw-card-top"><div class="hw-card-icon">&#x1F68C;</div><span class="status status-green">Supported</span></div>
-        <h3>Adeept RaspTank</h3>
-        <p>Tank-style tracked robot with robotic arm, camera, and OpenCV support.</p>
-        <div class="hw-card-meta">Driver: PCA9685 &middot; I2C &middot; $70</div>
+        <div class="hw-card-top"><div class="hw-card-icon">🐧</div><span class="status status-green">Supported</span></div>
+        <h3>Linux x86_64</h3>
+        <p>Ubuntu 22.04+, Debian 12+, Fedora 38+, Arch. Full feature parity. Great for development.</p>
+        <div class="hw-card-meta">x86_64 · Any RAM · Desktop/Server</div>
       </div>
       <div class="hw-card reveal reveal-d3">
-        <div class="hw-card-top"><div class="hw-card-icon">&#x1F3CE;</div><span class="status status-green">Supported</span></div>
-        <h3>RC Cars (1:16 / 1:10)</h3>
-        <p>Standard RC cars with PCA9685 servo steering and ESC throttle. Works with most hobby-grade platforms.</p>
-        <div class="hw-card-meta">Driver: PCA9685 RC &middot; I2C &middot; $30+</div>
+        <div class="hw-card-top"><div class="hw-card-icon">🍎</div><span class="status status-green">Supported</span></div>
+        <h3>macOS</h3>
+        <p>macOS 13+ on Apple Silicon &amp; Intel. No GPIO/I2C (use serial or network drivers). Good for dev/sim.</p>
+        <div class="hw-card-meta">ARM64/x86 · macOS 13+</div>
       </div>
       <div class="hw-card reveal reveal-d4">
-        <div class="hw-card-top"><div class="hw-card-icon">&#x1F3CE;</div><span class="status status-green">Supported</span></div>
-        <h3>Waveshare JetBot</h3>
-        <p>NVIDIA Jetson Nano-powered robot with deep learning capabilities and CSI camera.</p>
-        <div class="hw-card-meta">Driver: PCA9685 &middot; I2C &middot; $120</div>
+        <div class="hw-card-top"><div class="hw-card-icon">🪟</div><span class="status status-orange">Beta</span></div>
+        <h3>Windows</h3>
+        <p>Windows 10/11 via WSL2 or native Python. Serial and network drivers work. GPIO requires WSL2.</p>
+        <div class="hw-card-meta">x86_64 · WSL2 recommended</div>
       </div>
       <div class="hw-card reveal reveal-d5">
-        <div class="hw-card-top"><div class="hw-card-icon">&#x1F578;</div><span class="status status-orange">Beta</span></div>
-        <h3>Adeept DarkPaw</h3>
-        <p>Spider-style quadruped with 12 servo joints and camera. Walking gaits supported.</p>
-        <div class="hw-card-meta">Driver: PCA9685 &middot; I2C &middot; $90</div>
+        <div class="hw-card-top"><div class="hw-card-icon">🐳</div><span class="status status-green">Supported</span></div>
+        <h3>Docker</h3>
+        <p>Official Docker image with hardware pass-through. Docker Compose included. Supports GPU and USB device mounting.</p>
+        <div class="hw-card-meta">Any platform · docker compose up</div>
       </div>
     </div>
   </div>
 </section>
 
+<!-- AI Accelerators -->
 <section class="section alt-section">
   <div class="container">
     <div class="section-header reveal">
-      <h2 class="section-title">Arms &amp; Manipulators</h2>
-      <p class="section-desc">Professional-grade servo arms with precision position control.</p>
+      <h2 class="section-title">AI Accelerators</h2>
+      <p class="section-desc">Hardware-accelerated inference for real-time vision and on-device ML.</p>
     </div>
     <div class="hw-grid">
       <div class="hw-card reveal">
-        <div class="hw-card-top"><div class="hw-card-icon">&#x1F9BE;</div><span class="status status-green">Supported</span></div>
-        <h3>Dynamixel X-Series</h3>
-        <p>Industry-standard smart servos with feedback, temperature monitoring, and daisy-chain support.</p>
-        <div class="hw-card-meta">Driver: Dynamixel v2 &middot; Serial &middot; $200+</div>
+        <div class="hw-card-top"><div class="hw-card-icon">⚡</div><span class="status status-green">Supported</span></div>
+        <h3>Hailo-8 / Hailo-8L</h3>
+        <p>26 TOPS AI accelerator. M.2 module for Pi 5 AI Kit. YOLOv8 object detection at 30+ FPS. Primary vision accelerator.</p>
+        <div class="hw-card-meta">M.2 · 26 TOPS · Pi 5 AI Kit · $70</div>
       </div>
       <div class="hw-card reveal reveal-d1">
-        <div class="hw-card-top"><div class="hw-card-icon">&#x1F9BE;</div><span class="status status-orange">Beta</span></div>
-        <h3>6-DOF Hobby Arms</h3>
-        <p>Affordable 6-axis arms using standard hobby servos and PCA9685 controllers.</p>
-        <div class="hw-card-meta">Driver: PCA9685 &middot; I2C &middot; $40+</div>
+        <div class="hw-card-top"><div class="hw-card-icon">🪸</div><span class="status status-green">Supported</span></div>
+        <h3>Google Coral TPU</h3>
+        <p>4 TOPS Edge TPU via USB or M.2. TensorFlow Lite models. Good for Pi 4 where Hailo isn't available.</p>
+        <div class="hw-card-meta">USB/M.2 · 4 TOPS · $25–$60</div>
       </div>
       <div class="hw-card reveal reveal-d2">
-        <div class="hw-card-top"><div class="hw-card-icon">&#x1F9BE;</div><span class="status status-blue">Planned</span></div>
-        <h3>SO-ARM100</h3>
-        <p>Low-cost open-source robotic arm designed for research and education.</p>
-        <div class="hw-card-meta">Driver: Serial &middot; Coming Soon</div>
+        <div class="hw-card-top"><div class="hw-card-icon">📷</div><span class="status status-green">Supported</span></div>
+        <h3>Intel OAK-D (Movidius VPU)</h3>
+        <p>On-device neural inference via Myriad X VPU. Depth + ML in one device. DepthAI v3 integration.</p>
+        <div class="hw-card-meta">USB3 · Myriad X · $99–$199</div>
+      </div>
+      <div class="hw-card reveal reveal-d3">
+        <div class="hw-card-top"><div class="hw-card-icon">🟢</div><span class="status status-orange">Beta</span></div>
+        <h3>Nvidia Jetson</h3>
+        <p>Jetson Nano, Orin Nano, AGX Orin. CUDA-accelerated inference. Best for heavy ML workloads.</p>
+        <div class="hw-card-meta">GPU · CUDA · $99–$1999</div>
       </div>
     </div>
   </div>
 </section>
 
+<!-- Cameras -->
 <section class="section">
   <div class="container">
     <div class="section-header reveal">
-      <h2 class="section-title">Custom &amp; DIY</h2>
-      <p class="section-desc">Build your own config for any hardware that speaks I2C, Serial, CAN, or GPIO.</p>
+      <h2 class="section-title">Cameras</h2>
+      <p class="section-desc">Vision input for object detection, depth mapping, and navigation.</p>
     </div>
     <div class="hw-grid">
       <div class="hw-card reveal">
-        <div class="hw-card-top"><div class="hw-card-icon">&#x1F527;</div><span class="status status-orange">Beta</span></div>
-        <h3>Arduino / ESP32</h3>
-        <p>Connect Arduino or ESP32 boards via serial communication for custom actuator control.</p>
-        <div class="hw-card-meta">Driver: Serial &middot; USB</div>
+        <div class="hw-card-top"><div class="hw-card-icon">📷</div><span class="status status-green">Supported</span></div>
+        <h3>OAK-D / OAK-D Lite</h3>
+        <p>Stereo depth camera with on-device ML. Spatial object detection, 3D coordinates, obstacle mapping.</p>
+        <div class="hw-card-meta">type: oakd · USB3 · depth_enabled: true</div>
       </div>
       <div class="hw-card reveal reveal-d1">
-        <div class="hw-card-top"><div class="hw-card-icon">&#x1F4E1;</div><span class="status status-orange">Beta</span></div>
-        <h3>GPIO Direct</h3>
-        <p>Direct Raspberry Pi GPIO pin control for simple motor drivers and relays.</p>
-        <div class="hw-card-meta">Driver: GPIO &middot; Direct</div>
+        <div class="hw-card-top"><div class="hw-card-icon">🎥</div><span class="status status-green">Supported</span></div>
+        <h3>CSI Cameras</h3>
+        <p>Raspberry Pi Camera Module v2/v3, HQ Camera. Native MIPI CSI interface for low-latency capture.</p>
+        <div class="hw-card-meta">type: csi · MIPI CSI · $15–$50</div>
       </div>
       <div class="hw-card reveal reveal-d2">
-        <div class="hw-card-top"><div class="hw-card-icon">&#x2699;</div><span class="status status-blue">Planned</span></div>
-        <h3>CAN Bus</h3>
-        <p>Industrial CAN bus support for advanced motor controllers and sensor networks.</p>
-        <div class="hw-card-meta">Driver: CAN &middot; Coming Soon</div>
+        <div class="hw-card-top"><div class="hw-card-icon">🔌</div><span class="status status-green">Supported</span></div>
+        <h3>USB Webcams</h3>
+        <p>Any UVC-compatible USB camera. Logitech C920/C930, generic USB cams. V4L2 on Linux.</p>
+        <div class="hw-card-meta">type: usb · UVC · $20+</div>
       </div>
     </div>
   </div>
 </section>
 
+<!-- Motor Drivers -->
+<section class="section alt-section">
+  <div class="container">
+    <div class="section-header reveal">
+      <h2 class="section-title">Motor Drivers</h2>
+      <p class="section-desc">Control servos, DC motors, and ESCs.</p>
+    </div>
+    <div class="hw-grid">
+      <div class="hw-card reveal">
+        <div class="hw-card-top"><div class="hw-card-icon">⚙️</div><span class="status status-green">Supported</span></div>
+        <h3>PCA9685 (I2C PWM)</h3>
+        <p>16-channel PWM driver. Standard for hobby servos, ESCs, and DC motor controllers. I2C address 0x40.</p>
+        <div class="hw-card-meta">protocol: pca9685_i2c · I2C · $3–$10</div>
+      </div>
+      <div class="hw-card reveal reveal-d1">
+        <div class="hw-card-top"><div class="hw-card-icon">📡</div><span class="status status-green">Supported</span></div>
+        <h3>GPIO Direct</h3>
+        <p>Direct Raspberry Pi GPIO pin control for simple motor drivers (L298N, DRV8833) and relays.</p>
+        <div class="hw-card-meta">protocol: gpio · Direct · $0</div>
+      </div>
+      <div class="hw-card reveal reveal-d2">
+        <div class="hw-card-top"><div class="hw-card-icon">🦾</div><span class="status status-green">Supported</span></div>
+        <h3>Dynamixel (Serial)</h3>
+        <p>Smart servo protocol for Dynamixel X-series. Position, velocity, and torque feedback.</p>
+        <div class="hw-card-meta">protocol: dynamixel_v2 · Serial · $200+</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Sensors -->
+<section class="section">
+  <div class="container">
+    <div class="section-header reveal">
+      <h2 class="section-title">Sensors (I2C)</h2>
+      <p class="section-desc">Environmental awareness via I2C sensor bus.</p>
+    </div>
+    <div class="hw-grid">
+      <div class="hw-card reveal">
+        <div class="hw-card-top"><div class="hw-card-icon">🧭</div><span class="status status-green">Supported</span></div>
+        <h3>IMU (MPU6050 / BNO055)</h3>
+        <p>6/9-axis inertial measurement. Orientation, acceleration, gyroscope. Used for tilt detection and dead reckoning.</p>
+        <div class="hw-card-meta">I2C · 0x68/0x28 · $5–$30</div>
+      </div>
+      <div class="hw-card reveal reveal-d1">
+        <div class="hw-card-top"><div class="hw-card-icon">🌡️</div><span class="status status-green">Supported</span></div>
+        <h3>Environmental (BME280 / BME680)</h3>
+        <p>Temperature, humidity, pressure, air quality. Used for safety monitoring and environmental data logging.</p>
+        <div class="hw-card-meta">I2C · 0x76/0x77 · $5–$15</div>
+      </div>
+      <div class="hw-card reveal reveal-d2">
+        <div class="hw-card-top"><div class="hw-card-icon">📏</div><span class="status status-green">Supported</span></div>
+        <h3>Distance (VL53L0X / HC-SR04)</h3>
+        <p>Time-of-flight and ultrasonic ranging. Obstacle detection and proximity sensing for collision avoidance.</p>
+        <div class="hw-card-meta">I2C/GPIO · 0x29 · $3–$12</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Pre-built Robot Kits -->
+<section class="section alt-section">
+  <div class="container">
+    <div class="section-header reveal">
+      <h2 class="section-title">Pre-built Robot Kits</h2>
+      <p class="section-desc">Tested presets for popular kits. Install a community recipe and go.</p>
+    </div>
+    <div class="hw-grid">
+      <div class="hw-card reveal">
+        <div class="hw-card-top"><div class="hw-card-icon">🏎️</div><span class="status status-green">Supported</span></div>
+        <h3>RC Cars (1:16 / 1:10)</h3>
+        <p>Standard hobby RC cars with PCA9685 servo steering and ESC throttle. Most budget-friendly option.</p>
+        <div class="hw-card-meta">PCA9685 RC · I2C · $30+</div>
+      </div>
+      <div class="hw-card reveal reveal-d1">
+        <div class="hw-card-top"><div class="hw-card-icon">🤖</div><span class="status status-green">Supported</span></div>
+        <h3>WaveShare AlphaBot2</h3>
+        <p>Tracked robot with IR sensors, camera mount, and Raspberry Pi HAT. Great starter platform.</p>
+        <div class="hw-card-meta">PCA9685 · I2C · $55</div>
+      </div>
+      <div class="hw-card reveal reveal-d2">
+        <div class="hw-card-top"><div class="hw-card-icon">🛡️</div><span class="status status-green">Supported</span></div>
+        <h3>Adeept RaspTank</h3>
+        <p>Tank-style tracked robot with robotic arm, camera, and OpenCV support.</p>
+        <div class="hw-card-meta">PCA9685 · I2C · $70</div>
+      </div>
+      <div class="hw-card reveal reveal-d3">
+        <div class="hw-card-top"><div class="hw-card-icon">🚗</div><span class="status status-green">Supported</span></div>
+        <h3>Freenove 4WD Smart Car</h3>
+        <p>4-wheel drive with ultrasonic, line-following, camera. Robust outdoor-capable platform.</p>
+        <div class="hw-card-meta">PCA9685 · I2C · $75</div>
+      </div>
+      <div class="hw-card reveal reveal-d4">
+        <div class="hw-card-top"><div class="hw-card-icon">🏎️</div><span class="status status-green">Supported</span></div>
+        <h3>SunFounder PiCar-X</h3>
+        <p>Smart car with camera pan/tilt, line following, ultrasonic avoidance, and speaker.</p>
+        <div class="hw-card-meta">PCA9685 · I2C · $80</div>
+      </div>
+      <div class="hw-card reveal reveal-d5">
+        <div class="hw-card-top"><div class="hw-card-icon">🕷️</div><span class="status status-orange">Beta</span></div>
+        <h3>Adeept DarkPaw</h3>
+        <p>Spider-style quadruped with 12 servo joints. Walking gaits supported.</p>
+        <div class="hw-card-meta">PCA9685 · I2C · $90</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
 <section class="cta-section">
   <h2 class="reveal">Don't see your hardware?</h2>
   <p class="reveal reveal-d1">OpenCastor is extensible by design. Write a driver, submit a preset, or request support.</p>
@@ -156,13 +285,12 @@
   <div class="footer-inner">
     <div class="footer-grid">
       <div class="footer-brand">
-        <a href="/" class="nav-logo"><svg viewBox="0 0 32 32" width="24" height="24" fill="none"><path d="M11 26 A11 11 0 1 1 23 8 L20 11 A7 7 0 1 0 14 22 Z" fill="currentColor" style="color:var(--accent)"/><path d="M23 8 L26 5 L23 2 L20 5 Z" fill="currentColor" style="color:var(--accent)" opacity="0.7"/><path d="M11 26 L8 29 L5 26 L8 23 Z" fill="currentColor" style="color:var(--accent)" opacity="0.7"/><circle cx="16" cy="16" r="3.5" fill="#4285F4" opacity="0.9"/><circle cx="16" cy="16" r="1.8" fill="#fff" opacity="0.3"/></svg><span>OpenCastor</span></a>
+        <a href="/" class="nav-logo"><svg viewBox="0 0 32 32" width="24" height="24" fill="none"><path d="M11 26 A11 11 0 1 1 23 8 L20 11 A7 7 0 1 0 14 22 Z" fill="currentColor" style="color:var(--accent)"/><path d="M23 8 L26 5 L23 2 L20 5 Z" fill="currentColor" style="color:var(--accent)" opacity="0.7"/><path d="M11 26 L8 29 L5 26 L8 23 Z" fill="currentColor" style="color:var(--accent)" opacity="0.7"/><circle cx="16" cy="16" r="3.5" fill="#6366f1" opacity="0.9"/><circle cx="16" cy="16" r="1.8" fill="#fff" opacity="0.3"/></svg><span>OpenCastor</span></a>
         <p>The universal runtime for embodied AI.</p>
       </div>
-      <div class="footer-col"><h4>Product</h4><a href="/docs">Documentation</a><a href="/hardware">Hardware</a><a href="https://rcan.dev/spec/">RCAN Spec</a></div>
-      <div class="footer-col"><h4>Resources</h4><a href="/docs">Getting Started</a><a href="https://github.com/craigm26/OpenCastor">GitHub</a><a href="https://github.com/craigm26/OpenCastor/issues">Issues</a></div>
-      <div class="footer-col"><h4>Company</h4><a href="/hub">Hub</a>
-      <a href="/about">About</a><a href="mailto:hello@opencastor.com">Contact</a></div>
+      <div class="footer-col"><h4>Product</h4><a href="/docs">Documentation</a><a href="/hardware">Hardware</a><a href="https://rcan.dev/spec/">RCAN Spec</a><a href="https://pypi.org/project/opencastor/">PyPI</a></div>
+      <div class="footer-col"><h4>Resources</h4><a href="/docs">Getting Started</a><a href="https://github.com/craigm26/OpenCastor">GitHub</a><a href="https://github.com/craigm26/OpenCastor/issues">Issues</a><a href="https://discord.gg/jMjA8B26Bq">Discord</a></div>
+      <div class="footer-col"><h4>Company</h4><a href="/hub">Hub</a><a href="/about">About</a><a href="mailto:hello@opencastor.com">Contact</a></div>
     </div>
     <div class="footer-bottom">
       <p>&copy; 2025-2026 Craig Merry. Apache 2.0 License.</p>
