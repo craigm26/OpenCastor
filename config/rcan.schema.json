@@ -126,6 +126,15 @@
           "type": "string",
           "description": "Custom API base URL for providers that support it."
         },
+        "agentic_vision": {
+          "type": "boolean",
+          "description": "Enable Agentic Vision for Gemini 3 Flash and later. Adds code_execution tool so the model can zoom, annotate, and visually ground navigation decisions. Auto-enabled when model is gemini-3-flash-preview."
+        },
+        "tools": {
+          "type": "array",
+          "description": "Extra tools to pass to the provider (e.g. ['code_execution'] for Gemini).",
+          "items": { "type": "string" }
+        },
         "secondary_models": {
           "type": "array",
           "description": "Optional secondary AI models for specialized tasks",

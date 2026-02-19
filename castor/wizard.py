@@ -92,8 +92,9 @@ PROVIDERS = {
     "3": {
         "provider": "google",
         "model": "gemini-3-flash-preview",
-        "label": "Google Gemini 3 Flash (Preview)",
+        "label": "Google Gemini 3 Flash — Agentic Vision (Preview)",
         "env_var": "GOOGLE_API_KEY",
+        "note": "Enables code_execution automatically for Think→Act→Observe vision loop",
     },
     "4": {
         "provider": "openai",
@@ -220,9 +221,14 @@ MODELS = {
         },
         {
             "id": "gemini-3-flash-preview",
-            "label": "Gemini 3 Flash (Preview)",
-            "desc": "Latest preview model",
-            "tags": ["preview"],
+            "label": "Gemini 3 Flash — Agentic Vision (Preview)",
+            "desc": "Think→Act→Observe loop: zooms in on obstacles, annotates images, "
+                    "grounds decisions in visual evidence. 5-10% vision benchmark boost "
+                    "via code execution. Best for: fine-grained object ID, hazard labels, "
+                    "navigation in cluttered scenes.",
+            "tags": ["preview", "agentic", "vision", "code-execution"],
+            "recommended": False,
+            "agentic_vision": True,
         },
     ],
     "openai": [

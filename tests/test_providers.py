@@ -292,3 +292,66 @@ class TestAnthropicSetupToken:
         from castor.providers.anthropic_provider import AnthropicProvider
 
         assert AnthropicProvider.DEFAULT_MODEL == "claude-opus-4-6"
+
+
+class TestAgenticVisionGoogle:
+    """GoogleProvider auto-enables code_execution for Agentic Vision models."""
+
+    def _make_provider(self, model_name, extra_config=None):
+        """Instantiate GoogleProvider with a mocked genai module."""
+        import types, sys
+
+        # Build a minimal mock for google.generativeai
+        mock_genai = types.ModuleType("google.generativeai")
+        captured = {}
+
+        class _MockModel:
+            def __init__(self, model_name, system_instruction=None, tools=None):
+                captured["model_name"] = model_name
+                captured["system_instruction"] = system_instruction
+                captured["tools"] = tools
+
+        mock_genai.configure = lambda **_: None
+        mock_genai.GenerativeModel = _MockModel
+
+        google_mod = types.ModuleType("google")
+        sys.modules["google"] = google_mod
+        sys.modules["google.generativeai"] = mock_genai
+
+        from castor.providers.google_provider import GoogleProvider
+
+        config = {"provider": "google", "model": model_name, "api_key": "test-key"}
+        if extra_config:
+            config.update(extra_config)
+
+        provider = GoogleProvider(config)
+        return provider, captured
+
+    def test_agentic_vision_auto_enabled_for_gemini3_flash(self):
+        provider, captured = self._make_provider("gemini-3-flash-preview")
+        assert provider._is_agentic_vision is True
+        assert "code_execution" in (captured.get("tools") or [])
+
+    def test_agentic_vision_not_enabled_for_gemini25_flash(self):
+        provider, captured = self._make_provider("gemini-2.5-flash")
+        assert provider._is_agentic_vision is False
+        assert (captured.get("tools") or []) == []
+
+    def test_agentic_vision_system_prompt_addendum_injected(self):
+        provider, captured = self._make_provider("gemini-3-flash-preview")
+        assert captured.get("system_instruction") is not None
+        assert "Agentic Vision" in captured["system_instruction"]
+        assert "zoom" in captured["system_instruction"].lower()
+
+    def test_agentic_vision_explicit_opt_out(self):
+        provider, captured = self._make_provider(
+            "gemini-3-flash-preview", extra_config={"agentic_vision": False}
+        )
+        assert provider._is_agentic_vision is False
+
+    def test_agentic_vision_explicit_opt_in_for_non_default_model(self):
+        provider, captured = self._make_provider(
+            "gemini-2.5-flash", extra_config={"agentic_vision": True}
+        )
+        assert provider._is_agentic_vision is True
+        assert "code_execution" in (captured.get("tools") or [])
