@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <b>49,267 lines of code · 1,998 tests · Python 3.10–3.12</b><br/>
+  <b>49,511 lines of code · 2,009 tests · Python 3.10–3.12</b><br/>
   <i>Connect any AI model to any robot hardware through a single YAML config.</i>
 </p>
 
@@ -51,7 +51,7 @@ Supports **Linux, macOS (Apple Silicon & Intel), Windows 11, Raspberry Pi, Docke
 Installer flags: `--dry-run`, `--no-rpi`, `--skip-wizard`
 </details>
 
-## ✨ What's New in v2026.2.20.0
+## ✨ What's New in v2026.2.20.4
 
 - **8 AI providers** — Anthropic, Google, OpenAI, HuggingFace, Ollama, llama.cpp, MLX, Claude OAuth proxy
 - **Tiered brain architecture** — reactive rules → fast inference → deep planning
