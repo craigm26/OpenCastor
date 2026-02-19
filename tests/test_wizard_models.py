@@ -84,7 +84,8 @@ class TestChooseModel:
     @patch("builtins.input", return_value="")
     def test_default_anthropic_model(self, _):
         m = choose_model("anthropic")
-        assert m["id"] == "claude-opus-4-6"
+        # Dynamic fetch may return different latest model
+        assert m["id"].startswith("claude-")
 
     @patch("builtins.input", return_value="2")
     def test_select_second_model(self, _):
