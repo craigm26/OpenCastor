@@ -1728,40 +1728,79 @@ def _run_whatsapp_pairing():
     print("    Press Ctrl+C when pairing is complete.\n")
 
     try:
-        # Run a minimal neonize client that just does QR pairing
+        # Run a minimal neonize client that just does QR pairing.
+        # Key fixes: use QREvent for QR display, explicit shutdown on success,
+        # and flush stdout for real-time output in subprocess.
         pairing_script = """
-import os, sys
-try:
-    from neonize.client import NewClient
-    from neonize.events import ConnectedEv, PairStatusEv
+import os, sys, time, signal
+
+def main():
+    try:
+        from neonize.client import NewClient
+        from neonize.events import ConnectedEv, PairStatusEv, QREvent
+    except ImportError:
+        print("    ⚠️  neonize not installed. Run: pip install 'opencastor[whatsapp]'")
+        sys.exit(1)
 
     db_path = os.path.expanduser("~/.opencastor/whatsapp_session.db")
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     client = NewClient(db_path)
+    connected = False
+
+    @client.event(QREvent)
+    def on_qr(client, event):
+        # neonize prints the QR code to terminal automatically.
+        # Just provide a hint so users know what's happening.
+        codes = getattr(event, 'Codes', None)
+        if codes:
+            print(f"    📱 QR code displayed — scan it with WhatsApp on your phone", flush=True)
+        else:
+            print(f"    📱 QR code ready — scan it with WhatsApp on your phone", flush=True)
 
     @client.event(ConnectedEv)
     def on_connected(client, event):
-        print("\\n    ✅ WhatsApp connected successfully!")
-        print("    You can now close this with Ctrl+C.\\n")
+        nonlocal connected
+        connected = True
+        try:
+            me = client.get_me()
+            print(f"\\n    ✅ WhatsApp connected as {me.PushName}!", flush=True)
+        except Exception:
+            print("\\n    ✅ WhatsApp connected successfully!", flush=True)
+        print("    Session saved. Your robot will auto-reconnect next time.\\n", flush=True)
+        # Give neonize a moment to persist the session, then exit
+        time.sleep(2)
+        os._exit(0)
 
     @client.event(PairStatusEv)
     def on_pair(client, event):
-        print("    📱 Pairing status update received")
+        print("    📱 Pairing status update received", flush=True)
 
-    print("    Waiting for QR code scan...")
-    client.connect()
-except KeyboardInterrupt:
-    print("\\n    Pairing session ended.")
-except Exception as e:
-    print(f"\\n    ⚠️  Pairing error: {e}")
-"""
-        subprocess.run(
-            [sys.executable, "-c", pairing_script],
-            timeout=120,
-        )
-    except subprocess.TimeoutExpired:
-        print("    ⚠️  Pairing timed out (2 min). Try again with: castor gateway")
+    print("    Waiting for QR code...", flush=True)
+    try:
+        client.connect()
+    except Exception as e:
+        if not connected:
+            print(f"\\n    ⚠️  Connection error: {e}", flush=True)
+            print("    This can happen if WhatsApp servers are busy. Try again in a moment.", flush=True)
+
+if __name__ == "__main__":
+    try:
+        main()
     except KeyboardInterrupt:
+        print("\\n    Pairing session ended.")
+"""
+        # Use Popen instead of run() so output streams in real-time
+        proc = subprocess.Popen(
+            [sys.executable, "-c", pairing_script],
+            stdout=None,  # inherit stdout
+            stderr=None,  # inherit stderr
+        )
+        proc.wait(timeout=180)  # 3 min timeout for slow QR generation
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        print("    ⚠️  Pairing timed out (3 min). Try again with: castor gateway")
+    except KeyboardInterrupt:
+        proc.kill()
         print("\n    Pairing session ended.")
     except Exception as e:
         print(f"    ⚠️  Could not start pairing: {e}")

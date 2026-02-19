@@ -41,9 +41,12 @@ def main():
     # Find all .rcan.yaml files
     files_to_check = []
     for root, _, files in os.walk(args.dir):
-        # Skip hidden directories (but not "." itself)
+        # Skip hidden directories (but not "." itself) and community recipes
+        # (recipes are partial configs that get merged into full RCAN configs)
         parts = root.split(os.sep)
         if any(p.startswith(".") and p != "." for p in parts):
+            continue
+        if "community-recipes" in parts:
             continue
         for file in files:
             if file.endswith(".rcan.yaml") or file.endswith(".rcan.yml"):

@@ -5,6 +5,15 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.20.2] - 2026-02-20 📋 RCAN Schema + WhatsApp Pairing Fix
+
+### Fixed
+- **RCAN schema updated** — Added `tiered_brain`, `reactive`, `learner` sections. Added all 8 provider aliases to `agent.provider` enum (huggingface, llamacpp, mlx, claude_oauth, etc.). Added `depth_enabled` and `base_url` fields.
+- **WhatsApp pairing** — Rewrote wizard pairing to use `Popen` for real-time QR output, added `QREvent` handler, 3-minute timeout, explicit session persistence on connect, and better error messaging.
+- **RCAN validator** — Skip `community-recipes/` (partial configs by design, not full RCAN).
+
+---
+
 ## [2026.2.20.1] - 2026-02-20 🎛️ Improve CLI Shortcuts
 
 ### Added

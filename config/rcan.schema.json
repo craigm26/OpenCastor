@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rcan.dev/schema/rcan.schema.json",
   "title": "RCAN Configuration",
-  "description": "Robot Configuration and Autonomy Notation \u2014 the config format for OpenCastor robots.",
+  "description": "Robot Configuration and Autonomy Notation — the config format for OpenCastor robots.",
   "type": "object",
   "required": [
     "rcan_version",
@@ -87,7 +87,15 @@
             "openai",
             "anthropic",
             "ollama",
-            "openrouter"
+            "openrouter",
+            "huggingface",
+            "llamacpp",
+            "llama.cpp",
+            "llama-cpp",
+            "mlx",
+            "mlx-lm",
+            "vllm-mlx",
+            "claude_oauth"
           ]
         },
         "model": {
@@ -110,6 +118,10 @@
           "type": "string",
           "description": "Fallback API key. Prefer env vars instead."
         },
+        "base_url": {
+          "type": "string",
+          "description": "Custom API base URL for providers that support it."
+        },
         "secondary_models": {
           "type": "array",
           "description": "Optional secondary AI models for specialized tasks",
@@ -127,6 +139,113 @@
               }
             }
           }
+        }
+      }
+    },
+    "tiered_brain": {
+      "type": "object",
+      "description": "Tiered brain architecture — reactive (<1ms), fast (~500ms), planner (~12s).",
+      "additionalProperties": false,
+      "properties": {
+        "planner_interval": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Run the planner every N ticks."
+        },
+        "uncertainty_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Confidence threshold below which the planner is invoked."
+        }
+      }
+    },
+    "reactive": {
+      "type": "object",
+      "description": "Reactive layer configuration (Layer 0) — rule-based safety and hardware-accelerated vision.",
+      "additionalProperties": false,
+      "properties": {
+        "hailo_vision": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Hailo-8 NPU YOLOv8 object detection. Opt-in to avoid driver issues on non-Hailo hardware."
+        },
+        "hailo_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Minimum detection confidence for Hailo-8 vision."
+        },
+        "hailo_model_path": {
+          "type": "string",
+          "description": "Path to the .hef model file for Hailo-8."
+        },
+        "min_obstacle_m": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Minimum obstacle distance in meters before emergency stop."
+        },
+        "fallback_provider": {
+          "type": "object",
+          "description": "Fallback AI provider when primary is unavailable.",
+          "properties": {
+            "provider": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "learner": {
+      "type": "object",
+      "description": "Self-improving loop (Sisyphus pattern). Disabled by default — enable via wizard or `castor improve --enable`.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable self-improving loop. Disabled by default."
+        },
+        "provider": {
+          "type": "string",
+          "description": "AI provider for episode analysis."
+        },
+        "model": {
+          "type": "string",
+          "description": "Model for episode analysis."
+        },
+        "cadence": {
+          "type": "string",
+          "description": "Analysis cadence (every_episode, every_5, every_10)."
+        },
+        "cadence_n": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Analyze every N episodes."
+        },
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum retry attempts for failed patches."
+        },
+        "auto_apply_config": {
+          "type": "boolean",
+          "default": true,
+          "description": "Auto-apply safe config tuning patches."
+        },
+        "auto_apply_behavior": {
+          "type": "boolean",
+          "default": false,
+          "description": "Auto-apply behavior rule patches."
+        },
+        "auto_apply_code": {
+          "type": "boolean",
+          "default": false,
+          "description": "Auto-apply code patches. Always false recommended — requires human review."
         }
       }
     },
@@ -306,7 +425,8 @@
       "description": "Camera configuration.",
       "properties": {
         "type": {
-          "type": "string"
+          "type": "string",
+          "description": "Camera type (e.g. usb, picam, oakd, csi)."
         },
         "resolution": {
           "type": "array",
@@ -320,6 +440,11 @@
         "framerate": {
           "type": "integer",
           "minimum": 1
+        },
+        "depth_enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable stereo depth (OAK-D and similar)."
         }
       },
       "additionalProperties": false
@@ -407,7 +532,7 @@
     },
     "rcan_protocol": {
       "type": "object",
-      "description": "RCAN protocol settings. Required for safety invariants, RURI identity, RBAC, and capability declaration. All sub-fields have safe defaults.",
+      "description": "RCAN protocol settings. Required for safety invariants, RURI identity, RBAC, and capability declaration.",
       "additionalProperties": false,
       "properties": {
         "port": {
