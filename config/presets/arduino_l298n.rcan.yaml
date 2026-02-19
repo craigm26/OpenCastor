@@ -1,0 +1,116 @@
+rcan_version: "1.0.0-alpha"
+
+metadata:
+  robot_name: "Arduino_L298N_Generic"
+  robot_uuid: "00000000-0000-0000-0000-000000000014"
+  author: "OpenCastor Default"
+  license: "Apache-2.0"
+  tags:
+    - mobile
+    - diy
+    - arduino
+    - l298n
+    - makerspace
+    - stem
+    - second-hand
+    - generic
+  description: >
+    Generic Arduino (Uno/Mega/Nano) + L298N dual H-bridge motor driver — the most
+    common DIY robotics combo in the world. Found at every makerspace, hackerspace,
+    school electronics lab, and Goodwill bin. Communicates via USB serial using a
+    simple JSON or line-protocol firmware. Supports 2-4 DC motors, servo, and
+    analog/digital sensors.
+
+agent:
+  provider: "anthropic"
+  model: "claude-sonnet-4-5"
+  vision_enabled: false
+  latency_budget_ms: 150
+  safety_stop: true
+
+physics:
+  type: "differential_drive"
+  dof: 2
+  chassis:
+    wheel_base_mm: 150
+    wheel_radius_mm: 33
+
+drivers:
+  - id: "motor_driver"
+    protocol: "arduino_serial_json"
+    # OpenCastor ships a companion Arduino sketch: firmware/arduino_l298n_bridge.ino
+    port: "/dev/ttyACM0"    # Uno/Mega; ttyUSB0 for CH340 clones
+    baud: 115200
+    # L298N wiring:
+    #   ENA → Arduino PWM pin 5   (left speed)
+    #   IN1 → Arduino pin 6       (left dir A)
+    #   IN2 → Arduino pin 7       (left dir B)
+    #   ENB → Arduino PWM pin 10  (right speed)
+    #   IN3 → Arduino pin 8       (right dir A)
+    #   IN4 → Arduino pin 9       (right dir B)
+    channels:
+      left_pwm_pin: 5
+      left_dir_a: 6
+      left_dir_b: 7
+      right_pwm_pin: 10
+      right_dir_a: 8
+      right_dir_b: 9
+    max_pwm: 255
+    deadband_pwm: 40        # Minimum PWM to overcome motor stiction
+
+  - id: "ultrasonic_hcsr04"
+    protocol: "arduino_serial_json"
+    port: "/dev/ttyACM0"
+    baud: 115200
+    sensor_type: "hcsr04"
+    trigger_pin: 12
+    echo_pin: 11
+
+  - id: "servo_pan"
+    protocol: "arduino_serial_json"
+    port: "/dev/ttyACM0"
+    baud: 115200
+    sensor_type: "servo"
+    pin: 3
+    min_us: 500
+    max_us: 2500
+
+  - id: "line_sensor"
+    protocol: "arduino_serial_json"
+    port: "/dev/ttyACM0"
+    baud: 115200
+    sensor_type: "digital_array"
+    pins: [A0, A1, A2, A3]
+
+connection:
+  type: "serial"
+  port: "/dev/ttyACM0"
+  baud: 115200
+
+network:
+  telemetry_stream: false
+  sim_to_real_sync: false
+  allow_remote_override: false
+
+rcan_protocol:
+  port: 8000
+  capabilities: [status, nav, teleop]
+  enable_mdns: false
+  enable_jwt: false
+
+notes:
+  firmware: >
+    Flash firmware/arduino_l298n_bridge.ino with Arduino IDE.
+    The sketch reads JSON commands on Serial and replies with sensor JSON:
+      {"cmd":"drive","left":150,"right":150}  → move
+      {"cmd":"stop"}                           → emergency stop
+      {"cmd":"sensor","id":"hcsr04"}           → get distance
+  wiring_cheatsheet:
+    l298n_power: "Connect 12V to L298N VCC, GND to L298N GND and Arduino GND."
+    motor_a: "Motor A → OUT1 and OUT2 on L298N"
+    motor_b: "Motor B → OUT3 and OUT4 on L298N"
+    logic: "L298N 5V → Arduino 5V (if jumper present, else skip)"
+  second_hand_tips: >
+    Arduino Uno clones with CH340 USB chip are everywhere and cost ~$3. The L298N
+    module (blue or red board) is ~$2. Total BOM under $15 including chassis.
+    Check eBay, AliExpress, and school makerspace scrap bins.

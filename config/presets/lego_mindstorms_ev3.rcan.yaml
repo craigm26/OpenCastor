@@ -1,0 +1,112 @@
+rcan_version: "1.0.0-alpha"
+
+metadata:
+  robot_name: "LEGO_Mindstorms_EV3"
+  robot_uuid: "00000000-0000-0000-0000-000000000010"
+  author: "OpenCastor Default"
+  license: "Apache-2.0"
+  tags:
+    - mobile
+    - educational
+    - lego
+    - mindstorms
+    - ev3
+    - stem
+    - second-hand
+  description: >
+    LEGO Mindstorms EV3 — extremely common in school surplus sales and donations.
+    Uses the ev3dev Linux OS with Python driver. Large motors on output ports A/D
+    (drive), medium motor on B (arm/gripper). Touch, color, and ultrasonic sensors
+    on input ports 1-4.
+
+agent:
+  provider: "anthropic"
+  model: "claude-sonnet-4-5"
+  vision_enabled: false
+  latency_budget_ms: 500
+  safety_stop: true
+
+physics:
+  type: "differential_drive"
+  dof: 2
+  chassis:
+    wheel_base_mm: 130
+    wheel_radius_mm: 28
+
+drivers:
+  - id: "left_motor"
+    protocol: "ev3dev_tacho_motor"
+    # ev3dev exposes motors as /sys/class/tacho-motor/motorN
+    port: "outA"
+    motor_type: "lego-ev3-l-motor"
+    polarity: "normal"
+    max_speed_rpm: 170
+
+  - id: "right_motor"
+    protocol: "ev3dev_tacho_motor"
+    port: "outD"
+    motor_type: "lego-ev3-l-motor"
+    polarity: "inversed"
+    max_speed_rpm: 170
+
+  - id: "arm_motor"
+    protocol: "ev3dev_tacho_motor"
+    port: "outB"
+    motor_type: "lego-ev3-m-motor"
+    polarity: "normal"
+    max_speed_rpm: 260
+
+  - id: "touch_sensor"
+    protocol: "ev3dev_sensor"
+    port: "in1"
+    sensor_type: "lego-ev3-touch"
+    mode: "TOUCH"
+
+  - id: "color_sensor"
+    protocol: "ev3dev_sensor"
+    port: "in2"
+    sensor_type: "lego-ev3-color"
+    mode: "COL-COLOR"   # COL-REFLECT, COL-AMBIENT, RGB-RAW also supported
+
+  - id: "ultrasonic_sensor"
+    protocol: "ev3dev_sensor"
+    port: "in3"
+    sensor_type: "lego-ev3-us"
+    mode: "US-DIST-CM"
+
+  - id: "gyro_sensor"
+    protocol: "ev3dev_sensor"
+    port: "in4"
+    sensor_type: "lego-ev3-gyro"
+    mode: "GYRO-ANG"
+
+connection:
+  # ev3dev exposes an SSH server; connect via USB/WiFi dongle/BT
+  type: "ev3dev_ssh"
+  host: "ev3dev.local"   # or IP assigned via USB RNDIS
+  user: "robot"
+  # Alternatively use BrickPi3 or BrickPiS on a Raspberry Pi host
+
+network:
+  telemetry_stream: true
+  sim_to_real_sync: false
+  allow_remote_override: true
+
+rcan_protocol:
+  port: 8000
+  capabilities: [status, nav, teleop, chat]
+  enable_mdns: false
+  enable_jwt: false
+
+notes:
+  setup: >
+    1. Flash ev3dev image to microSD: https://www.ev3dev.org/docs/getting-started/
+    2. Boot EV3 with ev3dev SD card.
+    3. Connect via USB cable (RNDIS) or add a WiFi USB dongle.
+    4. SSH: ssh robot@ev3dev.local (default password: maker)
+    5. pip install python-ev3dev2
+    6. castor run --config lego_mindstorms_ev3.rcan.yaml
+  second_hand_tips: >
+    Common at school surplus, Goodwill, and Facebook Marketplace for $30-80.
+    Check that all motor/sensor ports click firmly. Test each motor with the
+    built-in EV3 menu before flashing ev3dev. Replacement cables are cheap on eBay.

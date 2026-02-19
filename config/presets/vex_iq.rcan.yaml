@@ -1,0 +1,106 @@
+rcan_version: "1.0.0-alpha"
+
+metadata:
+  robot_name: "VEX_IQ"
+  robot_uuid: "00000000-0000-0000-0000-000000000012"
+  author: "OpenCastor Default"
+  license: "Apache-2.0"
+  tags:
+    - mobile
+    - educational
+    - vex
+    - vex-iq
+    - stem
+    - second-hand
+  description: >
+    VEX IQ robotics system — one of the most donated platforms from school robotics
+    programs. Smart motors and sensors share the same 4-pin RJ11-style ports and
+    communicate over a proprietary VEX serial/I2C protocol. Brain connects via USB.
+    Typical kit: 2 drive motors, 1 arm motor, distance + color + gyro sensors.
+
+agent:
+  provider: "anthropic"
+  model: "claude-sonnet-4-5"
+  vision_enabled: false
+  latency_budget_ms: 300
+  safety_stop: true
+
+physics:
+  type: "differential_drive"
+  dof: 2
+  chassis:
+    wheel_base_mm: 190
+    wheel_radius_mm: 45
+
+drivers:
+  - id: "left_motor"
+    protocol: "vex_iq_serial"
+    port: 1           # Smart port 1-12 on the IQ Brain
+    device_type: "motor"
+    gearbox: "high_speed"  # high_speed (600rpm) | torque (100rpm)
+    reversed: false
+
+  - id: "right_motor"
+    protocol: "vex_iq_serial"
+    port: 6
+    device_type: "motor"
+    gearbox: "high_speed"
+    reversed: true
+
+  - id: "arm_motor"
+    protocol: "vex_iq_serial"
+    port: 3
+    device_type: "motor"
+    gearbox: "torque"
+    reversed: false
+
+  - id: "distance_sensor"
+    protocol: "vex_iq_serial"
+    port: 2
+    device_type: "distance"
+
+  - id: "color_sensor"
+    protocol: "vex_iq_serial"
+    port: 4
+    device_type: "color"
+
+  - id: "gyro_sensor"
+    protocol: "vex_iq_serial"
+    port: 5
+    device_type: "gyro"
+
+  - id: "bumper_switch"
+    protocol: "vex_iq_serial"
+    port: 7
+    device_type: "bumper"
+
+connection:
+  # VEX IQ Brain connects via USB; exposes as CDC serial device
+  type: "serial"
+  port: "/dev/ttyACM0"   # Linux; macOS: /dev/cu.usbmodem*
+  baud: 115200
+  # Community library: vex-serial or VEXcode Python SDK
+
+network:
+  telemetry_stream: true
+  sim_to_real_sync: false
+  allow_remote_override: true
+
+rcan_protocol:
+  port: 8000
+  capabilities: [status, nav, teleop, chat]
+  enable_mdns: false
+  enable_jwt: false
+
+notes:
+  setup: >
+    1. Install VEXcode IQ or use the community vex-serial Python library.
+    2. Flash a "pass-through serial" program to the Brain that echoes OpenCastor
+       commands to the smart port bus.
+    3. Connect Brain via USB-A to USB-A cable.
+    4. castor run --config vex_iq.rcan.yaml
+  second_hand_tips: >
+    VEX IQ sets are donated by middle/high school robotics teams after seasons end.
+    Check Facebook Marketplace, eBay, and school auction sites. Smart motors are
+    self-identifying — plug them in and the Brain auto-detects. Battery packs are
+    the most commonly dead component; replacements are ~$20.

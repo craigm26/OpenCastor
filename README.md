@@ -335,6 +335,42 @@ Pre-made RCAN presets for popular kits, or generate your own:
 | Hailo-8 + OAK-D Vision Stack | ~$150 | `presets/hailo_oakd_vision.rcan.yaml` |
 | DIY (ESP32, Arduino, custom) | Any | Generate with `castor wizard` |
 
+## 🏫 STEM & Second-Hand Hardware
+
+OpenCastor explicitly supports the parts that students, educators, and hobbyists
+**actually have** — donated kits, school surplus, eBay finds, and sub-$50 Amazon
+staples. If you found it at Goodwill, a school auction, or a makerspace scrap bin,
+there's probably a preset for it.
+
+| Kit | Typical New Price | Where to Find Used | Preset |
+|---|---|---|---|
+| LEGO Mindstorms EV3 | ~$300 new | School surplus, eBay $30-80 | `presets/lego_mindstorms_ev3.rcan.yaml` |
+| LEGO SPIKE Prime | ~$320 new | STEM program donations, eBay $80-150 | `presets/lego_spike_prime.rcan.yaml` |
+| VEX IQ System | ~$250 new | Robotics team surplus, school auctions $50-120 | `presets/vex_iq.rcan.yaml` |
+| Makeblock mBot | ~$50 new | eBay $10-25, Amazon Warehouse | `presets/makeblock_mbot.rcan.yaml` |
+| Arduino + L298N (DIY) | ~$8-15 total | Makerspace bins, AliExpress | `presets/arduino_l298n.rcan.yaml` |
+| ESP32 + Motor Driver (DIY) | ~$6-12 total | AliExpress, hackerspaces | `presets/esp32_generic.rcan.yaml` |
+| Yahboom ROSMASTER X3 | ~$150-200 | Amazon Warehouse, eBay | `presets/yahboom_rosmaster.rcan.yaml` |
+| Elegoo Tumbller / Smart Car | ~$35-40 new | Amazon Warehouse $15-25, eBay | `presets/elegoo_tumbller.rcan.yaml` |
+| Freenove 4WD Car (Pi-based) | ~$40 new | eBay $15-25 (Pi not included) | `presets/freenove_4wd.rcan.yaml` |
+| Cytron Maker Pi RP2040 | ~$10 new | Hackerspaces, STEM lab surplus | `presets/cytron_maker_pi.rcan.yaml` |
+
+> **🔍 Not sure what you have?** See the [Hardware Identification Guide](docs/hardware-guide.md)
+> for a decision tree: *"I found this at a thrift store, now what?"*
+
+### Tips for Second-Hand Hardware
+
+- **Test first, code later.** Run `castor test-hardware --config <preset>.rcan.yaml` to verify
+  each motor and sensor before writing any autonomy code.
+- **Cables are the most common failure point.** LEGO connector cables, USB-B ports,
+  and servo leads are all cheap to replace.
+- **Clone boards are fine.** Arduino Uno clones with CH340 USB chips work perfectly.
+  You may need to install the CH341SER driver on Windows.
+- **Battery health matters.** Test battery packs under load — many donated robots have
+  degraded cells that drop voltage and confuse motor drivers.
+- **Community firmware exists** for almost every kit. Check the `firmware/` directory
+  in this repo for Arduino sketches and MicroPython scripts.
+
 ## 🤝 Contributing
 
 OpenCastor is fully open source (Apache 2.0) and community-driven.

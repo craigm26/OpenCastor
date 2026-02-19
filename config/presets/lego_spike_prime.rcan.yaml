@@ -1,0 +1,106 @@
+rcan_version: "1.0.0-alpha"
+
+metadata:
+  robot_name: "LEGO_SPIKE_Prime"
+  robot_uuid: "00000000-0000-0000-0000-000000000011"
+  author: "OpenCastor Default"
+  license: "Apache-2.0"
+  tags:
+    - mobile
+    - educational
+    - lego
+    - spike
+    - micropython
+    - ble
+    - stem
+    - second-hand
+  description: >
+    LEGO SPIKE Prime — the modern classroom successor to Mindstorms EV3.
+    Increasingly common in school donations and STEM lab surplus (~$320 new).
+    Hub connects via USB or BLE; runs MicroPython. Angular/medium motors on
+    ports A-F; force, color, distance sensors on same ports.
+
+agent:
+  provider: "anthropic"
+  model: "claude-sonnet-4-5"
+  vision_enabled: false
+  latency_budget_ms: 400
+  safety_stop: true
+
+physics:
+  type: "differential_drive"
+  dof: 2
+  chassis:
+    wheel_base_mm: 140
+    wheel_radius_mm: 32
+
+drivers:
+  - id: "left_motor"
+    protocol: "spike_hub_serial"
+    port: "A"
+    device: "motor"
+    direction: 1
+
+  - id: "right_motor"
+    protocol: "spike_hub_serial"
+    port: "B"
+    device: "motor"
+    direction: -1
+
+  - id: "arm_motor"
+    protocol: "spike_hub_serial"
+    port: "C"
+    device: "motor"
+    direction: 1
+
+  - id: "force_sensor"
+    protocol: "spike_hub_serial"
+    port: "D"
+    device: "force_sensor"
+
+  - id: "color_sensor"
+    protocol: "spike_hub_serial"
+    port: "E"
+    device: "color_sensor"
+
+  - id: "distance_sensor"
+    protocol: "spike_hub_serial"
+    port: "F"
+    device: "distance_sensor"
+
+  - id: "imu"
+    protocol: "spike_hub_internal"
+    device: "imu"
+    # Built into the hub; provides yaw/pitch/roll + acceleration
+
+connection:
+  # USB CDC serial (preferred) or BLE via bleak library
+  type: "serial"
+  port: "/dev/ttyACM0"   # Linux; macOS: /dev/cu.usbmodem*; Win: COMx
+  baud: 115200
+  ble_alternative:
+    enabled: false
+    adapter: "hci0"
+    device_name: "LEGO Hub"
+
+network:
+  telemetry_stream: true
+  sim_to_real_sync: false
+  allow_remote_override: true
+
+rcan_protocol:
+  port: 8000
+  capabilities: [status, nav, teleop, chat]
+  enable_mdns: false
+  enable_jwt: false
+
+notes:
+  setup: >
+    1. Connect SPIKE Prime hub via USB-C cable.
+    2. Put hub in REPL/shell mode via LEGO Education SPIKE app → advanced → REPL.
+    3. Or use the spike-prime-tools Python package: pip install spike-prime
+    4. castor run --config lego_spike_prime.rcan.yaml
+  second_hand_tips: >
+    Often found in school auction lots or STEM program surplus. Check hub battery
+    health (charge fully before testing). All 6 ports are multi-function — same
+    cable works for motors and sensors.

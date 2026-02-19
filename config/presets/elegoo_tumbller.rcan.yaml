@@ -1,0 +1,116 @@
+rcan_version: "1.0.0-alpha"
+
+metadata:
+  robot_name: "Elegoo_Tumbller_Smart_Car"
+  robot_uuid: "00000000-0000-0000-0000-000000000017"
+  author: "OpenCastor Default"
+  license: "Apache-2.0"
+  tags:
+    - mobile
+    - self-balancing
+    - arduino
+    - elegoo
+    - stem
+    - amazon
+    - second-hand
+  description: >
+    Elegoo Tumbller / Elegoo Smart Robot Car — among the most popular sub-$40
+    Arduino-based kits on Amazon. The Tumbller is a self-balancing two-wheel robot
+    (MPU6050 IMU + TB6612FNG motors). The Smart Car kit is a 4-wheel line-follower/
+    obstacle-avoidance car. Both use Arduino Uno/Nano + USB serial.
+
+agent:
+  provider: "anthropic"
+  model: "claude-sonnet-4-5"
+  vision_enabled: false
+  latency_budget_ms: 150
+  safety_stop: true
+
+physics:
+  type: "self_balancing"    # Change to "differential_drive" for Smart Car version
+  dof: 2
+  chassis:
+    wheel_base_mm: 95
+    wheel_radius_mm: 34
+
+drivers:
+  - id: "motor_driver"
+    protocol: "arduino_serial_json"
+    # Flash firmware/elegoo_tumbller_bridge.ino to the Arduino Nano on the bot
+    port: "/dev/ttyUSB0"    # CH340 USB-serial; may be ttyACM0 on genuine Nano
+    baud: 9600
+    channels:
+      left_motor: "M1"
+      right_motor: "M2"
+    motor_driver_ic: "TB6612FNG"
+    # TB6612FNG pins (wired on Elegoo PCB):
+    #   PWMA → D5,  AIN1 → D7,  AIN2 → D8
+    #   PWMB → D6,  BIN1 → D9,  BIN2 → D11
+    left_pwm_pin: 5
+    left_in1: 7
+    left_in2: 8
+    right_pwm_pin: 6
+    right_in1: 9
+    right_in2: 11
+
+  - id: "imu_mpu6050"
+    protocol: "arduino_serial_json"
+    port: "/dev/ttyUSB0"
+    baud: 9600
+    sensor_type: "mpu6050"
+    i2c_address: "0x68"
+    # The MPU6050 is used for self-balancing PID control
+
+  - id: "ultrasonic_sensor"
+    protocol: "arduino_serial_json"
+    port: "/dev/ttyUSB0"
+    baud: 9600
+    sensor_type: "hcsr04"
+    trigger_pin: 12
+    echo_pin: 13
+
+  - id: "ir_line_sensors"
+    # 2x IR sensors on bottom for line following
+    protocol: "arduino_serial_json"
+    port: "/dev/ttyUSB0"
+    baud: 9600
+    sensor_type: "ir_array"
+    pins: [A0, A1]
+
+  - id: "rgb_leds"
+    protocol: "arduino_serial_json"
+    port: "/dev/ttyUSB0"
+    baud: 9600
+    sensor_type: "ws2812"
+    data_pin: 4
+    led_count: 2
+
+connection:
+  type: "serial"
+  port: "/dev/ttyUSB0"
+  baud: 9600
+
+network:
+  telemetry_stream: false
+  sim_to_real_sync: false
+  allow_remote_override: false
+
+rcan_protocol:
+  port: 8000
+  capabilities: [status, nav, teleop]
+  enable_mdns: false
+  enable_jwt: false
+
+notes:
+  setup: >
+    1. Open firmware/elegoo_tumbller_bridge.ino in Arduino IDE.
+    2. Install libraries: MPU6050, Adafruit NeoPixel (via Library Manager).
+    3. Select "Arduino Nano" + "ATmega328P (Old Bootloader)" if upload fails.
+    4. Upload via USB, then: castor run --config elegoo_tumbller.rcan.yaml
+  variants:
+    tumbller: "2-wheel self-balancing. Uses MPU6050 PID. Requires balancing firmware."
+    smart_car_v4: "4-wheel differential drive. Set physics.type to differential_drive."
+  second_hand_tips: >
+    Extremely common on Amazon Warehouse, eBay (~$15-25 used), and school donations.
+    The CH340 USB chip may need a driver on Windows: install CH341SER.exe.
+    Check all header pins are soldered — the Elegoo PCBs are sometimes poorly soldered.

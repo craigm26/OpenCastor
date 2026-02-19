@@ -1,0 +1,132 @@
+rcan_version: "1.0.0-alpha"
+
+metadata:
+  robot_name: "Freenove_4WD_Smart_Car"
+  robot_uuid: "00000000-0000-0000-0000-000000000018"
+  author: "OpenCastor Default"
+  license: "Apache-2.0"
+  tags:
+    - mobile
+    - 4wd
+    - raspberry-pi
+    - freenove
+    - stem
+    - amazon
+    - second-hand
+  description: >
+    Freenove 4WD Smart Car Kit — one of the most popular Raspberry Pi robot kits
+    on Amazon (~$40, 4-star+ with thousands of reviews). Uses a custom PCB that
+    integrates PCA9685 PWM controller, TB6612FNG motor drivers, ultrasonic sensor,
+    IR line followers, camera servo, and a WS2812B LED strip. Runs Python on RPi.
+
+agent:
+  provider: "anthropic"
+  model: "claude-sonnet-4-5"
+  vision_enabled: true
+  latency_budget_ms: 200
+  safety_stop: true
+
+physics:
+  type: "four_wheel_drive"
+  dof: 4
+  chassis:
+    wheel_base_mm: 160
+    track_width_mm: 145
+    wheel_radius_mm: 33
+
+drivers:
+  - id: "motor_driver"
+    protocol: "pca9685_i2c"
+    port: "/dev/i2c-1"
+    address: "0x40"
+    frequency: 50
+    # Freenove PCB motor wiring (TB6612FNG via PCA9685):
+    channels:
+      front_left: 0
+      front_right: 1
+      rear_left: 2
+      rear_right: 3
+    polarity:
+      front_left: 1
+      front_right: -1
+      rear_left: 1
+      rear_right: -1
+
+  - id: "servo_camera_pan"
+    protocol: "pca9685_i2c"
+    port: "/dev/i2c-1"
+    address: "0x40"
+    frequency: 50
+    channels:
+      pan: 8
+    servo_min_pulse_us: 500
+    servo_max_pulse_us: 2500
+
+  - id: "servo_camera_tilt"
+    protocol: "pca9685_i2c"
+    port: "/dev/i2c-1"
+    address: "0x40"
+    frequency: 50
+    channels:
+      tilt: 9
+    servo_min_pulse_us: 500
+    servo_max_pulse_us: 2500
+
+  - id: "ultrasonic_sensor"
+    protocol: "gpio_hcsr04"
+    trigger_pin: 27
+    echo_pin: 22
+    max_range_cm: 300
+
+  - id: "ir_line_sensors"
+    # 3-channel IR line follower
+    protocol: "gpio_digital"
+    pins:
+      left: 19
+      center: 16
+      right: 20
+
+  - id: "rgb_leds"
+    protocol: "gpio_ws2812"
+    gpio_pin: 10    # SPI MOSI for better timing
+    led_count: 4
+
+  - id: "camera"
+    protocol: "v4l2"
+    device: "/dev/video0"
+    resolution: "640x480"
+    fps: 30
+
+  - id: "buzzer"
+    protocol: "gpio_digital"
+    gpio_pin: 17
+    active_high: true
+
+connection:
+  type: "local"    # Runs on Raspberry Pi directly
+
+network:
+  telemetry_stream: true
+  sim_to_real_sync: false
+  allow_remote_override: true
+
+rcan_protocol:
+  port: 8000
+  capabilities: [status, nav, teleop, chat, vision]
+  enable_mdns: true
+  enable_jwt: false
+
+notes:
+  setup: >
+    1. Enable I2C and SPI: sudo raspi-config → Interfaces
+    2. pip install RPi.GPIO adafruit-circuitpython-pca9685 opencastor
+    3. Check I2C address: i2cdetect -y 1 (should see 0x40)
+    4. castor run --config freenove_4wd.rcan.yaml
+  second_hand_tips: >
+    Freenove kits appear on eBay for ~$15-25 used. The Raspberry Pi is usually
+    NOT included in used listings — verify before buying. The Freenove PCB is
+    keyed, so any RPi 3/4/5 with the 40-pin GPIO header fits. Camera module is
+    optional; OpenCastor works fine without it.
+  gpio_pinout_note: >
+    GPIO numbers above are BCM numbering (what RPi.GPIO uses by default).
+    Physical pins differ. Run "gpio readall" to see both numbering systems.

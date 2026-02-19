@@ -1,0 +1,125 @@
+rcan_version: "1.0.0-alpha"
+
+metadata:
+  robot_name: "Yahboom_ROSMASTER_X3"
+  robot_uuid: "00000000-0000-0000-0000-000000000016"
+  author: "OpenCastor Default"
+  license: "Apache-2.0"
+  tags:
+    - mobile
+    - mecanum
+    - ros2
+    - yahboom
+    - raspberry-pi
+    - stem
+    - amazon
+  description: >
+    Yahboom ROSMASTER X3 — a popular ROS2 learning kit (~$150-200 on Amazon).
+    Features mecanum wheels for holonomic motion, Raspberry Pi 4/5 host, and a
+    Yahboom expansion board with PCA9685 PWM controller. Comes with RGB LEDs,
+    ultrasonic sensor, and optional camera/LiDAR. Excellent for learning ROS2.
+
+agent:
+  provider: "anthropic"
+  model: "claude-opus-4-6"
+  vision_enabled: true
+  latency_budget_ms: 200
+  safety_stop: true
+
+physics:
+  type: "mecanum"
+  dof: 4
+  chassis:
+    wheel_base_mm: 155
+    track_width_mm: 145
+    wheel_radius_mm: 38
+    # Mecanum roller angle: 45 degrees
+
+drivers:
+  - id: "motor_driver"
+    protocol: "pca9685_i2c"
+    port: "/dev/i2c-1"
+    address: "0x40"
+    frequency: 50
+    # Mecanum wheel layout:
+    #   FL = Front Left  (channel 0) — roller direction: /
+    #   FR = Front Right (channel 1) — roller direction: \
+    #   RL = Rear Left   (channel 2) — roller direction: \
+    #   RR = Rear Right  (channel 3) — roller direction: /
+    channels:
+      front_left: 0
+      front_right: 1
+      rear_left: 2
+      rear_right: 3
+    polarity:
+      front_left: 1
+      front_right: -1
+      rear_left: 1
+      rear_right: -1
+
+  - id: "servo_camera_pan"
+    protocol: "pca9685_i2c"
+    port: "/dev/i2c-1"
+    address: "0x40"
+    frequency: 50
+    channels:
+      pan: 8
+      tilt: 9
+    servo_range_deg: 180
+
+  - id: "rgb_leds"
+    protocol: "gpio_ws2812"
+    gpio_pin: 18    # WS2812B LED strip via GPIO18 (PWM)
+    led_count: 4
+
+  - id: "ultrasonic_sensor"
+    protocol: "gpio_hcsr04"
+    trigger_pin: 27
+    echo_pin: 22
+    max_range_cm: 400
+
+  - id: "camera"
+    protocol: "v4l2"
+    device: "/dev/video0"
+    resolution: "640x480"
+    fps: 30
+
+  - id: "imu"
+    protocol: "i2c_mpu6050"
+    port: "/dev/i2c-1"
+    address: "0x68"
+
+ros2:
+  enabled: true
+  namespace: "/rosmaster"
+  topics:
+    cmd_vel: "/rosmaster/cmd_vel"
+    odom: "/rosmaster/odom"
+    scan: "/rosmaster/scan"    # If LiDAR attached
+  node_name: "opencastor_rosmaster"
+
+connection:
+  type: "local"    # Runs directly on Raspberry Pi
+
+network:
+  telemetry_stream: true
+  sim_to_real_sync: true
+  allow_remote_override: true
+
+rcan_protocol:
+  port: 8000
+  capabilities: [status, nav, teleop, chat, vision]
+  enable_mdns: true
+  enable_jwt: false
+
+notes:
+  setup: >
+    1. Flash Yahboom's official Raspberry Pi image (Ubuntu 22.04 + ROS2 Humble),
+       or install OpenCastor on a stock Raspberry Pi OS.
+    2. Enable I2C: sudo raspi-config → Interfaces → I2C → Enable
+    3. pip install opencastor adafruit-circuitpython-pca9685
+    4. castor run --config yahboom_rosmaster.rcan.yaml
+  second_hand_tips: >
+    The ROSMASTER appears on Amazon Warehouse deals, eBay, and occasionally
+    in university robotics lab surplus. Check that the Raspberry Pi is included
+    (sometimes sold separately). The PCA9685 expansion board is the key component.

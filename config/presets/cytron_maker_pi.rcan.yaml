@@ -1,0 +1,132 @@
+rcan_version: "1.0.0-alpha"
+
+metadata:
+  robot_name: "Cytron_Maker_Pi_RP2040"
+  robot_uuid: "00000000-0000-0000-0000-000000000019"
+  author: "OpenCastor Default"
+  license: "Apache-2.0"
+  tags:
+    - mobile
+    - rp2040
+    - micropython
+    - cytron
+    - makerspace
+    - stem
+    - second-hand
+  description: >
+    Cytron Maker Pi RP2040 — a compact robotics board built around the RP2040
+    microcontroller (same as Raspberry Pi Pico). Popular in hackerspaces, STEM
+    labs, and maker education programs. Includes 2x DC motor channels (DRV8833),
+    4x servo outputs, 7x Grove ports, buzzer, and WS2812B LEDs. Runs CircuitPython
+    or MicroPython. Connects via USB serial.
+
+agent:
+  provider: "anthropic"
+  model: "claude-sonnet-4-5"
+  vision_enabled: false
+  latency_budget_ms: 150
+  safety_stop: true
+
+physics:
+  type: "differential_drive"
+  dof: 2
+  chassis:
+    wheel_base_mm: 130
+    wheel_radius_mm: 32
+
+drivers:
+  - id: "motor_driver"
+    protocol: "rp2040_serial_json"
+    # Flash firmware/cytron_maker_pi_bridge.py (CircuitPython) to the board
+    port: "/dev/ttyACM0"    # Linux; macOS: /dev/cu.usbmodem*
+    baud: 115200
+    # Onboard DRV8833 dual motor driver (no external driver needed):
+    channels:
+      motor_a: "M1"    # GP8 (PWM A1), GP9 (PWM A2)
+      motor_b: "M2"    # GP10 (PWM B1), GP11 (PWM B2)
+    max_pwm: 65535      # RP2040 16-bit PWM
+    deadband_pwm: 6000
+
+  - id: "servo_1"
+    protocol: "rp2040_serial_json"
+    port: "/dev/ttyACM0"
+    baud: 115200
+    sensor_type: "servo"
+    grove_port: "GP12"    # Servo port 1
+    min_us: 500
+    max_us: 2500
+
+  - id: "servo_2"
+    protocol: "rp2040_serial_json"
+    port: "/dev/ttyACM0"
+    baud: 115200
+    sensor_type: "servo"
+    grove_port: "GP13"    # Servo port 2
+    min_us: 500
+    max_us: 2500
+
+  - id: "ultrasonic_sensor"
+    protocol: "rp2040_serial_json"
+    port: "/dev/ttyACM0"
+    baud: 115200
+    sensor_type: "hcsr04"
+    # Plug HC-SR04 into Grove port 1 (GP0/GP1)
+    trigger_gpio: 0
+    echo_gpio: 1
+
+  - id: "rgb_leds"
+    protocol: "rp2040_serial_json"
+    port: "/dev/ttyACM0"
+    baud: 115200
+    sensor_type: "ws2812"
+    data_pin: 18          # Onboard NeoPixels (2x WS2812B)
+    led_count: 2
+
+  - id: "buzzer"
+    protocol: "rp2040_serial_json"
+    port: "/dev/ttyACM0"
+    baud: 115200
+    sensor_type: "buzzer"
+    gpio: 22              # Onboard piezo buzzer
+
+  - id: "grove_i2c"
+    # General I2C for Grove-compatible sensors (OLED, IMU, etc.)
+    protocol: "rp2040_serial_json"
+    port: "/dev/ttyACM0"
+    baud: 115200
+    sensor_type: "i2c_passthrough"
+    sda_gpio: 4
+    scl_gpio: 5
+
+connection:
+  type: "serial"
+  port: "/dev/ttyACM0"
+  baud: 115200
+
+network:
+  telemetry_stream: false
+  sim_to_real_sync: false
+  allow_remote_override: false
+
+rcan_protocol:
+  port: 8000
+  capabilities: [status, nav, teleop]
+  enable_mdns: false
+  enable_jwt: false
+
+notes:
+  firmware: >
+    Copy firmware/cytron_maker_pi_bridge.py to the RP2040 as code.py.
+    The board must be in CircuitPython mode (CIRCUITPY drive appears in file manager).
+    To enter CircuitPython: hold BOOTSEL, plug in USB, copy circuitpython.uf2 to RPI-RP2.
+    The bridge accepts JSON commands and streams sensor data back.
+  firmware_alternative: >
+    MicroPython also works: copy firmware/cytron_maker_pi_bridge_mp.py as main.py.
+    Flash MicroPython .uf2 via same BOOTSEL method.
+  second_hand_tips: >
+    Cytron Maker Pi RP2040 is ~$10 new, often found in STEM lab kits at hackerspaces.
+    Any Raspberry Pi Pico can run the same firmware with an L298N/DRV8833 breakout.
+    Check that the micro-USB port is not broken (common damage point).
+  grove_compatibility: >
+    All Grove ports accept standard Grove sensors (Seeed Studio ecosystem).
+    Pin-compatible sensors from DFRobot Gravity series also work.

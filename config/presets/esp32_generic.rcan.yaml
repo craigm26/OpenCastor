@@ -1,0 +1,116 @@
+rcan_version: "1.0.0-alpha"
+
+metadata:
+  robot_name: "ESP32_Generic_WiFi_Bot"
+  robot_uuid: "00000000-0000-0000-0000-000000000015"
+  author: "OpenCastor Default"
+  license: "Apache-2.0"
+  tags:
+    - mobile
+    - diy
+    - esp32
+    - wifi
+    - websocket
+    - makerspace
+    - stem
+    - generic
+  description: >
+    Generic ESP32 development board + motor driver — the WiFi-native evolution of
+    the Arduino L298N combo. The ESP32 runs a WebSocket/REST server firmware that
+    OpenCastor controls over the local network. Supports L298N, L293D, DRV8833,
+    TB6612, or any PWM-based motor driver. Sub-$10 hardware, massive user base.
+
+agent:
+  provider: "anthropic"
+  model: "claude-sonnet-4-5"
+  vision_enabled: false
+  latency_budget_ms: 100
+  safety_stop: true
+
+physics:
+  type: "differential_drive"
+  dof: 2
+  chassis:
+    wheel_base_mm: 150
+    wheel_radius_mm: 33
+
+drivers:
+  - id: "motor_driver"
+    protocol: "esp32_websocket"
+    # ESP32 runs firmware/esp32_ws_bridge (Arduino sketch or MicroPython)
+    host: "192.168.1.200"   # Set static IP or use mDNS: esp32bot.local
+    port: 81
+    endpoint: "/ws"
+    # GPIO mapping on ESP32 (change to match your wiring):
+    channels:
+      left_pwm_gpio: 16
+      left_dir_a_gpio: 17
+      left_dir_b_gpio: 18
+      right_pwm_gpio: 19
+      right_dir_a_gpio: 21
+      right_dir_b_gpio: 22
+    pwm_freq_hz: 5000
+    pwm_resolution_bits: 8    # 0-255
+    deadband_pwm: 35
+
+  - id: "ultrasonic_sensor"
+    protocol: "esp32_websocket"
+    host: "192.168.1.200"
+    port: 81
+    endpoint: "/ws"
+    sensor_type: "hcsr04"
+    trigger_gpio: 5
+    echo_gpio: 23
+
+  - id: "servo_pan"
+    protocol: "esp32_websocket"
+    host: "192.168.1.200"
+    port: 81
+    endpoint: "/ws"
+    sensor_type: "servo"
+    gpio: 25
+    min_us: 500
+    max_us: 2500
+
+  - id: "camera"
+    # Optional: ESP32-CAM variant for basic vision
+    protocol: "mjpeg_stream"
+    enabled: false
+    url: "http://192.168.1.200:80/stream"
+
+connection:
+  type: "websocket"
+  host: "192.168.1.200"
+  port: 81
+  mdns_name: "esp32bot"     # Resolve via esp32bot.local if mDNS available
+  reconnect_interval_ms: 2000
+  watchdog_timeout_ms: 3000  # ESP32 halts motors if no command for 3s
+
+network:
+  telemetry_stream: true
+  sim_to_real_sync: false
+  allow_remote_override: true
+
+rcan_protocol:
+  port: 8000
+  capabilities: [status, nav, teleop, chat]
+  enable_mdns: true
+  enable_jwt: false
+
+notes:
+  firmware: >
+    Flash firmware/esp32_ws_bridge.ino with Arduino IDE (install ESP32 board package).
+    Or use firmware/esp32_ws_bridge.py with MicroPython + uasyncio.
+    The ESP32 serves a WebSocket on port 81. Commands are JSON:
+      {"cmd":"drive","left":200,"right":200,"duration_ms":500}
+      {"cmd":"stop"}
+      {"cmd":"sensor","id":"hcsr04"}
+  motor_driver_options:
+    l298n: "Most common. Needs separate 12V supply. Add flyback diodes."
+    l293d: "DIP chip. Lower current (600mA). Good for tiny motors."
+    tb6612fng: "Preferred — efficient, low heat, 1.2A/ch."
+    drv8833: "Tiny, efficient, 1.5A/ch. Best for small bots."
+  second_hand_tips: >
+    ESP32 dev boards are ~$3-6 on AliExpress. ESP32-WROOM-32 and ESP32-S3 are
+    the most common variants. Check makerspace scrap bins, STEM lab donations,
+    and Adafruit/SparkFun seconds on eBay.
