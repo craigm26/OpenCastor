@@ -564,6 +564,31 @@
           "description": "Optional URL of an RCAN fleet registry."
         }
       }
+    },
+    "agent_roster": {
+      "type": "array",
+      "description": "Agents to spawn at startup (Phase 2-3).",
+      "items": {
+        "type": "object",
+        "required": ["name", "enabled"],
+        "properties": {
+          "name": {"type": "string"},
+          "enabled": {"type": "boolean"},
+          "config": {"type": "object", "additionalProperties": true}
+        },
+        "additionalProperties": false
+      }
+    },
+    "swarm": {
+      "type": "object",
+      "description": "Multi-robot swarm coordination (Phase 4).",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean", "default": false},
+        "sync_interval_s": {"type": "number", "minimum": 1},
+        "patch_sync": {"type": "boolean", "default": false},
+        "shared_memory_path": {"type": "string"}
+      }
     }
   }
 }

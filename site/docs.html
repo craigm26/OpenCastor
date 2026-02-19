@@ -684,6 +684,55 @@ castor improve --batch --config bot.rcan.yaml</code></pre>
   </div>
 </section>
 
+<!-- Agent Swarm -->
+<section class="section" id="agent-swarm">
+  <div class="container">
+    <div class="section-header center reveal">
+      <p class="section-label">Intelligence</p>
+      <h2 class="section-title">Agent Swarm Architecture</h2>
+      <p class="section-desc">Multiple specialized AI agents running concurrently — each an expert in its domain.</p>
+    </div>
+    <div class="doc-content reveal">
+      <pre><code># Phase 2: Observer + Navigator
+from castor.agents import ObserverAgent, NavigatorAgent, SharedState, AgentRegistry
+
+state = SharedState()
+reg = AgentRegistry()
+reg.register(ObserverAgent)
+reg.register(NavigatorAgent)
+
+observer = reg.spawn("observer", config={"obstacle_labels": ["bottle"]})
+navigator = reg.spawn("navigator", config={"max_speed": 0.5})
+
+# CLI
+castor agents list
+castor agents spawn --name observer
+castor agents status</code></pre>
+
+      <pre style="margin-top:1rem"><code># Phase 3: Task Specialists
+from castor.specialists import TaskPlanner, ManipulatorSpecialist, ScoutSpecialist
+from castor.specialists import Task
+
+planner = TaskPlanner([ManipulatorSpecialist(), ScoutSpecialist()])
+task = Task(id="t1", type="grasp", goal="Grasp the red block",
+            params={"object_position": [0.5, 0.3, 0.1]}, priority=3, created_at=time.time(), deadline_s=None)
+planner.submit(task)
+result = await planner.run_next()</code></pre>
+
+      <pre style="margin-top:1rem"><code># Phase 4: Swarm Coordination
+from castor.swarm import SwarmCoordinator, SharedMemory, SwarmConsensus
+
+mem = SharedMemory(robot_id="bob-001")
+consensus = SwarmConsensus(robot_id="bob-001", shared_memory=mem)
+coordinator = SwarmCoordinator(my_robot_id="bob-001", shared_memory=mem, consensus=consensus)
+
+coordinator.add_peer(peer)  # discovered via mDNS
+assignment = coordinator.assign_next()
+print(coordinator.fleet_status())</code></pre>
+    </div>
+  </div>
+</section>
+
 <!-- Troubleshooting -->
 <section class="section" id="troubleshooting">
   <div class="container">

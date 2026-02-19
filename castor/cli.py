@@ -33,6 +33,9 @@ Usage:
     castor learn                                       # Interactive tutorial
     castor fleet status                                # Multi-robot status
     castor export --config robot.rcan.yaml             # Export config bundle
+    castor agents list                                 # List active agents
+    castor agents status                               # Agent health report
+    castor agents spawn --name observer                # Spawn an agent
 """
 
 import argparse
@@ -731,6 +734,61 @@ def cmd_fleet(args) -> None:
     from castor.fleet import fleet_status
 
     fleet_status(timeout=float(args.timeout))
+
+
+def cmd_agents(args) -> None:
+    """Manage robot agents."""
+    action = getattr(args, "action", "list") or "list"
+    if action == "list":
+        from castor.agents.navigator import NavigatorAgent
+        from castor.agents.observer import ObserverAgent
+        from castor.agents.registry import AgentRegistry
+
+        reg = AgentRegistry()
+        reg.register(ObserverAgent)
+        reg.register(NavigatorAgent)
+        agents = reg.list_agents()
+        if not agents:
+            print("  No agents running. Use: castor agents spawn --name observer")
+            return
+        for a in agents:
+            print(f"  {a['name']:20s} {a['status']}")
+    elif action == "status":
+        from castor.agents.registry import AgentRegistry
+
+        reg = AgentRegistry()
+        report = reg.health_report()
+        if not report:
+            print("  No agents running.")
+            return
+        for name, health in report.items():
+            status = health.get("status", "unknown")
+            uptime = health.get("uptime_s", 0.0)
+            print(f"  {name:20s} {status:10s} uptime={uptime:.1f}s")
+    elif action == "spawn":
+        name = getattr(args, "name", None)
+        if not name:
+            print("  Error: --name required for spawn")
+            return
+        try:
+            from castor.agents.navigator import NavigatorAgent
+            from castor.agents.observer import ObserverAgent
+            from castor.agents.registry import AgentRegistry
+
+            reg = AgentRegistry()
+            reg.register(ObserverAgent)
+            reg.register(NavigatorAgent)
+            agent = reg.spawn(name)
+            print(f"  ✅ Spawned agent '{name}' (status: {agent.status.value})")
+            print("  Note: Agent runs within the gateway process. Start the gateway to activate.")
+        except (ValueError, KeyError):
+            print(f"  Error: Unknown agent '{name}'. Available: observer, navigator")
+    elif action == "stop":
+        name = getattr(args, "name", None)
+        if not name:
+            print("  Error: --name required for stop")
+            return
+        print(f"  Agent '{name}' stop requested. Use 'castor gateway stop' to stop all agents.")
 
 
 def cmd_export(args) -> None:
@@ -1871,6 +1929,18 @@ def main() -> None:
         "--timeout", default="5", help="mDNS scan duration in seconds (default: 5)"
     )
 
+    # castor agents
+    p_agents = sub.add_parser("agents", help="Manage robot agents")
+    p_agents.add_argument(
+        "action",
+        choices=["list", "status", "spawn", "stop"],
+        nargs="?",
+        default="list",
+    )
+    p_agents.add_argument("--name", help="Agent name for spawn/stop")
+    p_agents.add_argument("--config", help="RCAN config path")
+    p_agents.set_defaults(func=cmd_agents)
+
     # castor export
     p_export = sub.add_parser(
         "export",
@@ -2239,6 +2309,7 @@ def main() -> None:
         "learn": cmd_learn,
         "improve": cmd_improve,
         "fleet": cmd_fleet,
+        "agents": cmd_agents,
         "export": cmd_export,
         # Batch 4 (OpenClaw-inspired)
         "approvals": cmd_approvals,

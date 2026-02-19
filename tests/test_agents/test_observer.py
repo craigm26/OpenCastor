@@ -1,5 +1,6 @@
 """Tests for ObserverAgent and SceneGraph construction."""
 
+import asyncio
 import time
 
 from castor.agents.base import AgentStatus
@@ -21,17 +22,14 @@ def make_hailo_det(label="person", confidence=0.9, bbox=None):
     }
 
 
-def make_scene(**kwargs):
-    defaults = dict(
-        timestamp=time.time(),
-        detections=[],
-        free_space_pct=1.0,
-        closest_obstacle_m=None,
-        dominant_objects=[],
-        raw_sensor_keys=[],
-    )
-    defaults.update(kwargs)
-    return SceneGraph(**defaults)
+def observe(agent, sensor_data):
+    """Synchronous helper — runs agent.observe in a fresh event loop."""
+    return asyncio.run(agent.observe(sensor_data))
+
+
+def act(agent, context=None):
+    """Synchronous helper — runs agent.act in a fresh event loop."""
+    return asyncio.run(agent.act(context or {}))
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +59,7 @@ class TestDetection:
         d = Detection("book", 0.7, (0, 0, 0.1, 0.1), None, False)
         assert d.is_obstacle is False
 
-    def test_bbox_is_tuple(self):
+    def test_bbox_has_four_elements(self):
         d = Detection("car", 0.8, (0.2, 0.1, 0.5, 0.9), None, True)
         assert len(d.bbox) == 4
 
@@ -103,51 +101,51 @@ class TestSceneGraph:
 
 
 class TestObserverEmptySensorData:
-    async def test_empty_dict_returns_scene_graph(self):
+    def test_empty_dict_returns_scene_graph(self):
         agent = ObserverAgent()
-        scene = await agent.observe({})
+        scene = observe(agent, {})
         assert isinstance(scene, SceneGraph)
 
-    async def test_none_returns_scene_graph(self):
+    def test_none_returns_scene_graph(self):
         agent = ObserverAgent()
-        scene = await agent.observe(None)
+        scene = observe(agent, None)
         assert isinstance(scene, SceneGraph)
 
-    async def test_empty_detections_list(self):
+    def test_empty_detections_list(self):
         agent = ObserverAgent()
-        scene = await agent.observe({})
+        scene = observe(agent, {})
         assert scene.detections == []
 
-    async def test_free_space_one_when_no_detections(self):
+    def test_free_space_one_when_no_detections(self):
         agent = ObserverAgent()
-        scene = await agent.observe({})
+        scene = observe(agent, {})
         assert scene.free_space_pct == 1.0
 
-    async def test_closest_obstacle_none_when_empty(self):
+    def test_closest_obstacle_none_when_empty(self):
         agent = ObserverAgent()
-        scene = await agent.observe({})
+        scene = observe(agent, {})
         assert scene.closest_obstacle_m is None
 
-    async def test_timestamp_set_to_current_time(self):
+    def test_timestamp_set_to_current_time(self):
         agent = ObserverAgent()
         before = time.time()
-        scene = await agent.observe({})
+        scene = observe(agent, {})
         after = time.time()
         assert before <= scene.timestamp <= after
 
-    async def test_none_hailo_detections_key(self):
+    def test_none_hailo_detections_key(self):
         agent = ObserverAgent()
-        scene = await agent.observe({"hailo_detections": None})
+        scene = observe(agent, {"hailo_detections": None})
         assert scene.detections == []
 
-    async def test_empty_hailo_list(self):
+    def test_empty_hailo_list(self):
         agent = ObserverAgent()
-        scene = await agent.observe({"hailo_detections": []})
+        scene = observe(agent, {"hailo_detections": []})
         assert scene.detections == []
 
-    async def test_no_raw_sensor_keys_when_empty(self):
+    def test_no_raw_sensor_keys_when_empty(self):
         agent = ObserverAgent()
-        scene = await agent.observe({})
+        scene = observe(agent, {})
         assert scene.raw_sensor_keys == []
 
 
@@ -157,67 +155,66 @@ class TestObserverEmptySensorData:
 
 
 class TestObserverDetectionParsing:
-    async def test_single_detection_parsed(self):
+    def test_single_detection_parsed(self):
         agent = ObserverAgent()
-        scene = await agent.observe({"hailo_detections": [make_hailo_det("person", 0.9)]})
+        scene = observe(agent, {"hailo_detections": [make_hailo_det("person", 0.9)]})
         assert len(scene.detections) == 1
         assert scene.detections[0].label == "person"
 
-    async def test_confidence_stored(self):
+    def test_confidence_stored(self):
         agent = ObserverAgent()
-        scene = await agent.observe({"hailo_detections": [make_hailo_det("person", 0.95)]})
+        scene = observe(agent, {"hailo_detections": [make_hailo_det("person", 0.95)]})
         assert abs(scene.detections[0].confidence - 0.95) < 1e-6
 
-    async def test_person_is_obstacle(self):
+    def test_person_is_obstacle(self):
         agent = ObserverAgent()
-        scene = await agent.observe({"hailo_detections": [make_hailo_det("person")]})
+        scene = observe(agent, {"hailo_detections": [make_hailo_det("person")]})
         assert scene.detections[0].is_obstacle is True
 
-    async def test_car_is_obstacle(self):
+    def test_car_is_obstacle(self):
         agent = ObserverAgent()
-        scene = await agent.observe({"hailo_detections": [make_hailo_det("car")]})
+        scene = observe(agent, {"hailo_detections": [make_hailo_det("car")]})
         assert scene.detections[0].is_obstacle is True
 
-    async def test_unknown_label_not_obstacle(self):
+    def test_unknown_label_not_obstacle(self):
         agent = ObserverAgent()
-        scene = await agent.observe({"hailo_detections": [make_hailo_det("unicorn")]})
+        scene = observe(agent, {"hailo_detections": [make_hailo_det("unicorn")]})
         assert scene.detections[0].is_obstacle is False
 
-    async def test_book_not_obstacle(self):
+    def test_book_not_obstacle(self):
         agent = ObserverAgent()
-        scene = await agent.observe({"hailo_detections": [make_hailo_det("book")]})
+        scene = observe(agent, {"hailo_detections": [make_hailo_det("book")]})
         assert scene.detections[0].is_obstacle is False
 
-    async def test_multiple_detections(self):
+    def test_multiple_detections(self):
         agent = ObserverAgent()
         dets = [make_hailo_det("person"), make_hailo_det("car"), make_hailo_det("book")]
-        scene = await agent.observe({"hailo_detections": dets})
+        scene = observe(agent, {"hailo_detections": dets})
         assert len(scene.detections) == 3
 
-    async def test_malformed_detection_skipped(self):
+    def test_malformed_detection_skipped_valid_remains(self):
         agent = ObserverAgent()
         dets = [{"garbage": True, "bbox": "bad"}, make_hailo_det("person")]
-        scene = await agent.observe({"hailo_detections": dets})
-        # Valid detection must be present; malformed may be skipped or partially parsed
+        scene = observe(agent, {"hailo_detections": dets})
         labels = [d.label for d in scene.detections]
         assert "person" in labels
 
-    async def test_class_name_alias_accepted(self):
+    def test_class_name_alias_accepted(self):
         """hailo_vision.py uses 'class_name' — both aliases must work."""
         agent = ObserverAgent()
         det = {"class_name": "dog", "score": 0.8, "bbox": [0.1, 0.1, 0.2, 0.2]}
-        scene = await agent.observe({"hailo_detections": [det]})
+        scene = observe(agent, {"hailo_detections": [det]})
         assert scene.detections[0].label == "dog"
 
-    async def test_score_alias_accepted(self):
+    def test_score_alias_accepted(self):
         agent = ObserverAgent()
         det = {"label": "cat", "score": 0.75, "bbox": [0.0, 0.0, 0.1, 0.1]}
-        scene = await agent.observe({"hailo_detections": [det]})
+        scene = observe(agent, {"hailo_detections": [det]})
         assert abs(scene.detections[0].confidence - 0.75) < 1e-6
 
-    async def test_hailo_key_added_to_raw_sensor_keys(self):
+    def test_hailo_key_added_to_raw_sensor_keys(self):
         agent = ObserverAgent()
-        scene = await agent.observe({"hailo_detections": [make_hailo_det()]})
+        scene = observe(agent, {"hailo_detections": [make_hailo_det()]})
         assert "hailo_detections" in scene.raw_sensor_keys
 
 
@@ -227,7 +224,7 @@ class TestObserverDetectionParsing:
 
 
 class TestObserverDominantObjects:
-    async def test_top3_by_confidence(self):
+    def test_top3_by_confidence(self):
         agent = ObserverAgent()
         dets = [
             make_hailo_det("person", 0.9),
@@ -235,19 +232,19 @@ class TestObserverDominantObjects:
             make_hailo_det("dog", 0.7),
             make_hailo_det("chair", 0.5),
         ]
-        scene = await agent.observe({"hailo_detections": dets})
+        scene = observe(agent, {"hailo_detections": dets})
         assert len(scene.dominant_objects) <= 3
         assert "person" in scene.dominant_objects
 
-    async def test_unique_labels(self):
+    def test_unique_labels(self):
         agent = ObserverAgent()
         dets = [make_hailo_det("person", 0.9), make_hailo_det("person", 0.8)]
-        scene = await agent.observe({"hailo_detections": dets})
+        scene = observe(agent, {"hailo_detections": dets})
         assert scene.dominant_objects.count("person") == 1
 
-    async def test_empty_detections_empty_dominant(self):
+    def test_empty_detections_empty_dominant(self):
         agent = ObserverAgent()
-        scene = await agent.observe({})
+        scene = observe(agent, {})
         assert scene.dominant_objects == []
 
 
@@ -257,22 +254,22 @@ class TestObserverDominantObjects:
 
 
 class TestObserverFreeSpace:
-    async def test_large_obstacle_reduces_free_space(self):
+    def test_large_obstacle_reduces_free_space(self):
         agent = ObserverAgent()
         dets = [{"label": "person", "confidence": 0.9, "bbox": [0.0, 0.0, 0.9, 0.9]}]
-        scene = await agent.observe({"hailo_detections": dets})
+        scene = observe(agent, {"hailo_detections": dets})
         assert scene.free_space_pct < 1.0
 
-    async def test_non_obstacle_does_not_reduce_free_space(self):
+    def test_non_obstacle_does_not_reduce_free_space(self):
         agent = ObserverAgent()
         dets = [{"label": "book", "confidence": 0.8, "bbox": [0.0, 0.0, 0.9, 0.9]}]
-        scene = await agent.observe({"hailo_detections": dets})
+        scene = observe(agent, {"hailo_detections": dets})
         assert scene.free_space_pct == 1.0
 
-    async def test_free_space_bounded_zero_to_one(self):
+    def test_free_space_bounded_zero_to_one(self):
         agent = ObserverAgent()
         dets = [{"label": "person", "confidence": 0.9, "bbox": [0.0, 0.0, 1.0, 1.0]}]
-        scene = await agent.observe({"hailo_detections": dets})
+        scene = observe(agent, {"hailo_detections": dets})
         assert 0.0 <= scene.free_space_pct <= 1.0
 
 
@@ -282,12 +279,13 @@ class TestObserverFreeSpace:
 
 
 class TestObserverClosestObstacle:
-    async def test_no_obstacle_no_distance(self):
+    def test_no_obstacle_no_distance(self):
         agent = ObserverAgent()
-        scene = await agent.observe({"hailo_detections": [make_hailo_det("book")]})
+        scene = observe(agent, {"hailo_detections": [make_hailo_det("book")]})
+        # book is not an obstacle, so closest_obstacle_m stays None
         assert scene.closest_obstacle_m is None
 
-    async def test_closest_from_depth_map(self):
+    def test_closest_from_depth_map(self):
         try:
             import numpy as np
         except ImportError:
@@ -302,11 +300,11 @@ class TestObserverClosestObstacle:
             ],
             "depth_map": depth,
         }
-        scene = await agent.observe(sensor_data)
+        scene = observe(agent, sensor_data)
         assert scene.closest_obstacle_m is not None
         assert scene.closest_obstacle_m < 5.0  # should be ~1.2
 
-    async def test_depth_key_in_raw_sensor_keys(self):
+    def test_depth_key_in_raw_sensor_keys(self):
         try:
             import numpy as np
         except ImportError:
@@ -318,17 +316,18 @@ class TestObserverClosestObstacle:
             "hailo_detections": [make_hailo_det("person")],
             "depth_map": depth,
         }
-        scene = await agent.observe(sensor_data)
+        scene = observe(agent, sensor_data)
         assert "depth_map" in scene.raw_sensor_keys
 
-    async def test_multiple_obstacles_returns_minimum(self):
+    def test_multiple_obstacles_closest_wins(self):
         try:
             import numpy as np
         except ImportError:
             return
 
+        np = __import__("numpy")
         agent = ObserverAgent()
-        depth = 3.0 * __import__("numpy").ones((10, 10))
+        depth = 3.0 * np.ones((10, 10))
         depth[2, 2] = 0.8  # near obstacle
         depth[8, 8] = 2.5  # far obstacle
         sensor_data = {
@@ -338,7 +337,7 @@ class TestObserverClosestObstacle:
             ],
             "depth_map": depth,
         }
-        scene = await agent.observe(sensor_data)
+        scene = observe(agent, sensor_data)
         if scene.closest_obstacle_m is not None:
             assert scene.closest_obstacle_m <= 2.5
 
@@ -349,25 +348,25 @@ class TestObserverClosestObstacle:
 
 
 class TestObserverSharedState:
-    async def test_publishes_scene_graph_to_state(self):
+    def test_publishes_scene_graph_to_state(self):
         state = SharedState()
         agent = ObserverAgent(shared_state=state)
-        await agent.observe({"hailo_detections": [make_hailo_det("person")]})
+        observe(agent, {"hailo_detections": [make_hailo_det("person")]})
         sg = state.get("scene_graph")
         assert sg is not None
         assert isinstance(sg, SceneGraph)
 
-    async def test_subsequent_observe_updates_state(self):
+    def test_subsequent_observe_updates_state(self):
         state = SharedState()
         agent = ObserverAgent(shared_state=state)
-        await agent.observe({"hailo_detections": [make_hailo_det("person")]})
-        await agent.observe({})
+        observe(agent, {"hailo_detections": [make_hailo_det("person")]})
+        observe(agent, {})  # second call with no detections
         sg = state.get("scene_graph")
         assert sg.detections == []
 
-    async def test_status_running_after_observe(self):
+    def test_status_running_after_observe(self):
         agent = ObserverAgent()
-        await agent.observe({})
+        observe(agent, {})
         assert agent.status == AgentStatus.RUNNING
 
 
@@ -377,19 +376,19 @@ class TestObserverSharedState:
 
 
 class TestObserverAct:
-    async def test_act_returns_dict(self):
+    def test_act_returns_dict(self):
         agent = ObserverAgent()
-        result = await agent.act({})
+        result = act(agent)
         assert isinstance(result, dict)
 
-    async def test_act_no_scene_returns_wait(self):
+    def test_act_no_scene_returns_wait(self):
         agent = ObserverAgent()
-        result = await agent.act({})
+        result = act(agent)
         assert result["action"] == "wait"
 
-    async def test_act_with_clear_scene_returns_observe(self):
+    def test_act_with_clear_scene_returns_observe(self):
         state = SharedState()
         agent = ObserverAgent(shared_state=state)
-        await agent.observe({})
-        result = await agent.act({})
+        observe(agent, {})  # populates scene_graph
+        result = act(agent)
         assert result["action"] == "observe"

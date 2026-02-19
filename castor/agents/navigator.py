@@ -145,9 +145,7 @@ class NavigatorAgent(BaseAgent):
     # Planning
     # ------------------------------------------------------------------
 
-    def _plan(
-        self, scene: Optional["SceneGraph"], goal_x: float, goal_y: float
-    ) -> NavigationPlan:
+    def _plan(self, scene: Optional["SceneGraph"], goal_x: float, goal_y: float) -> NavigationPlan:
         """Run potential-field planning and return a :class:`NavigationPlan`.
 
         Args:
@@ -196,8 +194,15 @@ class NavigatorAgent(BaseAgent):
             total_x, total_y = 0.0, 1.0  # default: straight ahead
 
         heading = math.degrees(math.atan2(total_x, total_y))
-        has_repulsion = rx != 0.0 or ry != 0.0
-        reason = "obstacle_avoidance" if has_repulsion else "goal_seeking"
+        # Reason is "obstacle_avoidance" if any obstacle is close enough to repel,
+        # even if its position is symmetric and the net force vector is zero.
+        has_close_obstacles = any(
+            d.is_obstacle
+            and (d.distance_m if d.distance_m is not None else OBSTACLE_INFLUENCE_M)
+            < OBSTACLE_INFLUENCE_M
+            for d in scene.detections
+        )
+        reason = "obstacle_avoidance" if has_close_obstacles else "goal_seeking"
         confidence = float(min(1.0, scene.free_space_pct * 1.2))
 
         wp = Waypoint(

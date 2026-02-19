@@ -72,8 +72,7 @@ class AgentRegistry:
         """
         if name not in self._classes:
             raise KeyError(
-                f"No agent class registered for name '{name}'. "
-                f"Available: {list(self._classes)}"
+                f"No agent class registered for name '{name}'. Available: {list(self._classes)}"
             )
         agent = self._classes[name](config=config or {})
         self._agents[name] = agent

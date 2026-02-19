@@ -21,9 +21,7 @@ class _Entry:
 
     def __init__(self, value: Any, ttl_s: Optional[float] = None) -> None:
         self.value = value
-        self.expires_at: Optional[float] = (
-            (time.monotonic() + ttl_s) if ttl_s is not None else None
-        )
+        self.expires_at: Optional[float] = (time.monotonic() + ttl_s) if ttl_s is not None else None
 
     def is_expired(self) -> bool:
         """Return True if this entry has passed its expiry time."""
@@ -153,10 +151,13 @@ class SharedState:
             return list(self._store.keys())
 
     def snapshot(self) -> Dict[str, Any]:
-        """Return a shallow copy of all current non-expired key/value pairs.
+        """Return a deep copy of all current non-expired key/value pairs.
 
         Expired entries are pruned during the snapshot.
+        Mutating the returned dict or its values does not affect the store.
         """
+        import copy
+
         with self._lock:
             result: Dict[str, Any] = {}
             expired = []
@@ -164,7 +165,7 @@ class SharedState:
                 if entry.is_expired():
                     expired.append(k)
                 else:
-                    result[k] = entry.value
+                    result[k] = copy.deepcopy(entry.value)
             for k in expired:
                 del self._store[k]
             return result

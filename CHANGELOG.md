@@ -5,6 +5,40 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.20.3] - 2026-02-20 🤖 Agent Swarm Architecture (Phase 2-4)
+
+### Highlights
+Three new layers of intelligence: Observer + Navigator (Phase 2),
+Task Specialists + TaskPlanner (Phase 3), and Multi-Robot Swarm Coordination (Phase 4).
+
+### Added
+- **Phase 2 — Observer + Navigator** (`castor/agents/`):
+  - `BaseAgent` ABC — lifecycle (start/stop), observe/act interface, health reporting
+  - `ObserverAgent` — converts Hailo-8/depth sensor data into structured `SceneGraph`
+  - `NavigatorAgent` — potential-field path planning; publishes RCAN-compatible action dicts
+  - `SharedState` — thread-safe pub/sub state bus for inter-agent communication
+  - `AgentRegistry` — spawn, list, stop, health-check agents by name
+- **Phase 3 — Task Specialists** (`castor/specialists/`):
+  - `ManipulatorSpecialist` — 6-DOF arm/gripper planning (grasp, place, home)
+  - `ScoutSpecialist` — frontier-based autonomous exploration, 20×20 occupancy grid
+  - `DockSpecialist` — smooth deceleration dock approach, battery threshold checks
+  - `ResponderSpecialist` — human-readable status formatting, alert severity
+  - `TaskPlanner` — heapq priority queue, capability matching, concurrent execution
+- **Phase 4 — Swarm Coordination** (`castor/swarm/`):
+  - `SwarmPeer` — represents a discovered fleet peer with load scoring
+  - `SwarmCoordinator` — capability-matched, load-balanced task dispatch
+  - `SharedMemory` — cross-robot knowledge store with TTL, JSON persistence, merge
+  - `SwarmConsensus` — optimistic task claiming, TTL-based locks, leader election
+  - `PatchSync` — broadcast Sisyphus improvement patches fleet-wide
+- **`castor agents` CLI** — list, status, spawn, stop agents
+- **RCAN schema** — `agent_roster` and `swarm` config sections
+- **468 new tests** (168 Phase 2 + 185 Phase 3 + 115 Phase 4)
+
+### Stats
+- **1,912 tests** passing (11 skipped) | **~42,000 LOC** | 8 providers
+
+---
+
 ## [2026.2.20.2] - 2026-02-20 📋 RCAN Schema + WhatsApp Pairing Fix
 
 ### Fixed

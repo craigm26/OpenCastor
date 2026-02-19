@@ -214,9 +214,7 @@ class ObserverAgent(BaseAgent):
             logger.debug(f"Skipping malformed detection {det!r}: {exc}")
             return None
 
-    def _enrich_with_depth(
-        self, detections: List[Detection], depth_map: Any
-    ) -> List[Detection]:
+    def _enrich_with_depth(self, detections: List[Detection], depth_map: Any) -> List[Detection]:
         """Assign depth-derived distances using bbox centre pixel lookup.
 
         Args:
@@ -253,16 +251,10 @@ class ObserverAgent(BaseAgent):
 
     def _closest_obstacle(self, detections: List[Detection]) -> Optional[float]:
         """Return the minimum known distance among obstacle detections."""
-        distances = [
-            d.distance_m
-            for d in detections
-            if d.is_obstacle and d.distance_m is not None
-        ]
+        distances = [d.distance_m for d in detections if d.is_obstacle and d.distance_m is not None]
         return min(distances) if distances else None
 
-    def _estimate_free_space(
-        self, detections: List[Detection], depth_map: Any
-    ) -> float:
+    def _estimate_free_space(self, detections: List[Detection], depth_map: Any) -> float:
         """Heuristic estimate of free navigable space fraction [0, 1].
 
         Uses depth map if available (fraction of pixels with depth > 1 m),

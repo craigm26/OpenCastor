@@ -1,6 +1,7 @@
 """Tests for BaseAgent ABC and AgentStatus lifecycle."""
 
 import asyncio
+import time
 
 from castor.agents.base import AgentStatus, BaseAgent
 
@@ -23,7 +24,7 @@ class ConcreteAgent(BaseAgent):
 
 
 class SlowAgent(BaseAgent):
-    """Agent whose loop sleeps — useful for concurrency tests."""
+    """Agent whose loop sleeps — useful for cancellation tests."""
 
     name = "slow"
 
@@ -107,49 +108,64 @@ class TestBaseAgentInit:
 
 
 class TestBaseAgentLifecycle:
-    async def test_start_sets_running(self):
-        agent = ConcreteAgent()
-        await agent.start()
-        assert agent.status == AgentStatus.RUNNING
-        await agent.stop()
+    def test_start_sets_running(self):
+        async def _test():
+            agent = ConcreteAgent()
+            await agent.start()
+            assert agent.status == AgentStatus.RUNNING
+            await agent.stop()
 
-    async def test_stop_sets_stopped(self):
-        agent = ConcreteAgent()
-        await agent.start()
-        await agent.stop()
-        assert agent.status == AgentStatus.STOPPED
+        asyncio.run(_test())
 
-    async def test_start_idempotent_when_already_running(self):
-        agent = ConcreteAgent()
-        await agent.start()
-        first_task = agent._task
-        await agent.start()  # second call should be no-op
-        assert agent._task is first_task
-        assert agent.status == AgentStatus.RUNNING
-        await agent.stop()
+    def test_stop_sets_stopped(self):
+        async def _test():
+            agent = ConcreteAgent()
+            await agent.start()
+            await agent.stop()
+            assert agent.status == AgentStatus.STOPPED
 
-    async def test_start_records_start_time(self):
-        import time
+        asyncio.run(_test())
 
-        agent = ConcreteAgent()
-        before = time.monotonic()
-        await agent.start()
-        after = time.monotonic()
-        assert before <= agent._start_time <= after
-        await agent.stop()
+    def test_start_idempotent_when_already_running(self):
+        async def _test():
+            agent = ConcreteAgent()
+            await agent.start()
+            first_task = agent._task
+            await agent.start()  # second call should be no-op
+            assert agent._task is first_task
+            assert agent.status == AgentStatus.RUNNING
+            await agent.stop()
 
-    async def test_stop_cancels_background_task(self):
-        agent = SlowAgent()
-        await agent.start()
-        task = agent._task
-        await agent.stop()
-        assert task.done()
+        asyncio.run(_test())
 
-    async def test_stop_on_idle_agent_is_safe(self):
-        agent = ConcreteAgent()
-        # Should not raise even though never started
-        await agent.stop()
-        assert agent.status == AgentStatus.STOPPED
+    def test_start_records_start_time(self):
+        async def _test():
+            agent = ConcreteAgent()
+            before = time.monotonic()
+            await agent.start()
+            after = time.monotonic()
+            assert before <= agent._start_time <= after
+            await agent.stop()
+
+        asyncio.run(_test())
+
+    def test_stop_cancels_background_task(self):
+        async def _test():
+            agent = SlowAgent()
+            await agent.start()
+            task = agent._task
+            await agent.stop()
+            assert task.done()
+
+        asyncio.run(_test())
+
+    def test_stop_on_idle_agent_is_safe(self):
+        async def _test():
+            agent = ConcreteAgent()
+            await agent.stop()  # should not raise
+            assert agent.status == AgentStatus.STOPPED
+
+        asyncio.run(_test())
 
 
 # ---------------------------------------------------------------------------
@@ -182,24 +198,33 @@ class TestBaseAgentHealth:
         agent = ConcreteAgent()
         assert agent.health()["errors"] == []
 
-    async def test_health_running_status(self):
-        agent = ConcreteAgent()
-        await agent.start()
-        assert agent.health()["status"] == "running"
-        await agent.stop()
+    def test_health_running_status(self):
+        async def _test():
+            agent = ConcreteAgent()
+            await agent.start()
+            assert agent.health()["status"] == "running"
+            await agent.stop()
 
-    async def test_health_uptime_positive_after_start(self):
-        agent = ConcreteAgent()
-        await agent.start()
-        h = agent.health()
-        assert h["uptime_s"] >= 0.0
-        await agent.stop()
+        asyncio.run(_test())
 
-    async def test_health_stopped_status(self):
-        agent = ConcreteAgent()
-        await agent.start()
-        await agent.stop()
-        assert agent.health()["status"] == "stopped"
+    def test_health_uptime_positive_after_start(self):
+        async def _test():
+            agent = ConcreteAgent()
+            await agent.start()
+            h = agent.health()
+            assert h["uptime_s"] >= 0.0
+            await agent.stop()
+
+        asyncio.run(_test())
+
+    def test_health_stopped_status(self):
+        async def _test():
+            agent = ConcreteAgent()
+            await agent.start()
+            await agent.stop()
+            assert agent.health()["status"] == "stopped"
+
+        asyncio.run(_test())
 
 
 # ---------------------------------------------------------------------------
@@ -208,29 +233,29 @@ class TestBaseAgentHealth:
 
 
 class TestBaseAgentObserveAct:
-    async def test_observe_returns_value(self):
+    def test_observe_returns_value(self):
         agent = ConcreteAgent()
-        result = await agent.observe({"x": 1})
+        result = asyncio.run(agent.observe({"x": 1}))
         assert result is not None
 
-    async def test_observe_passthrough_data(self):
+    def test_observe_passthrough_data(self):
         agent = ConcreteAgent()
-        result = await agent.observe({"sensor": 42})
+        result = asyncio.run(agent.observe({"sensor": 42}))
         assert result["received"]["sensor"] == 42
 
-    async def test_act_returns_dict(self):
+    def test_act_returns_dict(self):
         agent = ConcreteAgent()
-        result = await agent.act({})
+        result = asyncio.run(agent.act({}))
         assert isinstance(result, dict)
 
-    async def test_act_has_action_key(self):
+    def test_act_has_action_key(self):
         agent = ConcreteAgent()
-        result = await agent.act({})
+        result = asyncio.run(agent.act({}))
         assert "action" in result
 
-    async def test_observe_with_empty_dict(self):
+    def test_observe_with_empty_dict(self):
         agent = ConcreteAgent()
-        result = await agent.observe({})
+        result = asyncio.run(agent.observe({}))
         assert result is not None
 
 
