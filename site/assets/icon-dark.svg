@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="OpenCastor app icon">
+  <defs>
+    <linearGradient id="brain-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00c6ff"/>
+      <stop offset="100%" stop-color="#0072ff"/>
+    </linearGradient>
+    <linearGradient id="connector-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f09819"/>
+      <stop offset="100%" stop-color="#ff512f"/>
+    </linearGradient>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+    <filter id="glow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feFlood flood-color="#ff512f" flood-opacity="0.5" result="color"/>
+      <feComposite operator="in" in="color" in2="blur" result="shadow"/>
+      <feComposite operator="over" in="SourceGraphic" in2="shadow"/>
+    </filter>
+    <filter id="brain-glow" x="-15%" y="-15%" width="130%" height="130%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feFlood flood-color="#0072ff" flood-opacity="0.25" result="color"/>
+      <feComposite operator="in" in="color" in2="blur" result="shadow"/>
+      <feComposite operator="over" in="SourceGraphic" in2="shadow"/>
+    </filter>
+    <!-- Clip to rounded square -->
+    <clipPath id="icon-clip">
+      <rect width="512" height="512" rx="108"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="108" fill="url(#bg-grad)"/>
+
+  <!-- Subtle grid lines (depth) -->
+  <g stroke="#ffffff" stroke-width="0.5" opacity="0.04" clip-path="url(#icon-clip)">
+    <line x1="128" y1="0" x2="128" y2="512"/>
+    <line x1="256" y1="0" x2="256" y2="512"/>
+    <line x1="384" y1="0" x2="384" y2="512"/>
+    <line x1="0" y1="128" x2="512" y2="128"/>
+    <line x1="0" y1="256" x2="512" y2="256"/>
+    <line x1="0" y1="384" x2="512" y2="384"/>
+  </g>
+
+  <!-- Brain icon: scale(3.85) centered in 512x512 -->
+  <!-- Original brain spans ~x:30–135, y:15–130 → 105×115 → at 3.85×: 404×443 -->
+  <!-- Offset to center: x=(512−404)/2=54, y=(512−443)/2=34 -->
+  <!-- Brain origin starts at (30,15), so shift: translate(54−30×3.85, 34−15×3.85) -->
+  <!-- = translate(54−115.5, 34−57.75) = translate(−61.5, −23.75) -->
+  <g transform="translate(-61.5, -23.75) scale(3.85)" clip-path="url(#icon-clip)">
+    <g transform="translate(20, 10)">
+      <!-- Brain silhouette -->
+      <path d="M75,5 C40,5 15,30 10,55 C5,75 15,90 30,95 L30,105 C30,110 35,115 42,115 L68,115 C75,115 80,110 80,105 L80,98 C95,95 105,80 110,60 C115,35 100,5 75,5 Z"
+            fill="url(#brain-grad)" stroke="#0052aa" stroke-width="1.2" filter="url(#brain-glow)"/>
+
+      <!-- Neural network edges -->
+      <g stroke="#ffffff" stroke-width="1.4" fill="none" stroke-linecap="round" opacity="0.6">
+        <path d="M40,30 L60,45 L90,35"/>
+        <path d="M60,45 L65,70 L45,85"/>
+        <path d="M65,70 L95,65"/>
+      </g>
+
+      <!-- Neural network nodes -->
+      <g fill="#ffffff" opacity="0.9">
+        <circle cx="40" cy="30" r="3"/>
+        <circle cx="60" cy="45" r="3"/>
+        <circle cx="90" cy="35" r="3"/>
+        <circle cx="65" cy="70" r="3"/>
+        <circle cx="45" cy="85" r="3"/>
+        <circle cx="95" cy="65" r="3"/>
+      </g>
+
+      <!-- Compass / connector indicator -->
+      <circle cx="85" cy="50" r="12" fill="#ffffff" stroke="#004e92" stroke-width="1.8"/>
+      <path d="M85,40 L85,46 M95,50 L89,50 M85,60 L85,54 M75,50 L81,50"
+            stroke="#0072ff" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="85" cy="50" r="5" fill="url(#connector-grad)"/>
+
+      <!-- Connector ports -->
+      <g transform="translate(35, 97)" filter="url(#glow)">
+        <rect x="0" y="0" width="40" height="14" rx="3" fill="#0d1117" stroke="#1d4ed8" stroke-width="1"/>
+        <rect x="5"  y="3" width="11" height="16" rx="2" fill="url(#connector-grad)"/>
+        <rect x="23" y="3" width="11" height="16" rx="2" fill="url(#connector-grad)"/>
+        <path d="M8,4 L8,17 M12,4 L12,17 M26,4 L26,17 M30,4 L30,17"
+              stroke="#fff" stroke-width="1" opacity="0.7"/>
+      </g>
+    </g>
+  </g>
+</svg>

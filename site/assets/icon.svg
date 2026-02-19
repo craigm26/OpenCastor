@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="28 11 114 118" role="img" aria-label="OpenCastor icon">
+  <defs>
+    <linearGradient id="brain-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00c6ff"/>
+      <stop offset="100%" stop-color="#0072ff"/>
+    </linearGradient>
+    <linearGradient id="connector-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f09819"/>
+      <stop offset="100%" stop-color="#ff512f"/>
+    </linearGradient>
+    <filter id="glow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feFlood flood-color="#ff512f" flood-opacity="0.5" result="color"/>
+      <feComposite operator="in" in="color" in2="blur" result="shadow"/>
+      <feComposite operator="over" in="SourceGraphic" in2="shadow"/>
+    </filter>
+    <filter id="brain-shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#004e92" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <g transform="translate(20, 10)">
+    <!-- Brain silhouette -->
+    <path d="M75,5 C40,5 15,30 10,55 C5,75 15,90 30,95 L30,105 C30,110 35,115 42,115 L68,115 C75,115 80,110 80,105 L80,98 C95,95 105,80 110,60 C115,35 100,5 75,5 Z"
+          fill="url(#brain-grad)" stroke="#004e92" stroke-width="1.5" filter="url(#brain-shadow)"/>
+
+    <!-- Neural network edges -->
+    <g stroke="#ffffff" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.65">
+      <path d="M40,30 L60,45 L90,35"/>
+      <path d="M60,45 L65,70 L45,85"/>
+      <path d="M65,70 L95,65"/>
+    </g>
+
+    <!-- Neural network nodes -->
+    <g fill="#ffffff">
+      <circle cx="40" cy="30" r="3"/>
+      <circle cx="60" cy="45" r="3"/>
+      <circle cx="90" cy="35" r="3"/>
+      <circle cx="65" cy="70" r="3"/>
+      <circle cx="45" cy="85" r="3"/>
+      <circle cx="95" cy="65" r="3"/>
+    </g>
+
+    <!-- Compass / connector indicator -->
+    <circle cx="85" cy="50" r="11" fill="#ffffff" stroke="#004e92" stroke-width="2"/>
+    <path d="M85,41 L85,46 M94,50 L89,50 M85,59 L85,54 M76,50 L81,50"
+          stroke="#0072ff" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="85" cy="50" r="4.5" fill="url(#connector-grad)"/>
+
+    <!-- Connector ports -->
+    <g transform="translate(36, 98)" filter="url(#glow)">
+      <rect x="0" y="0" width="38" height="13" rx="2.5" fill="#1a1a2e" stroke="#004e92" stroke-width="1"/>
+      <rect x="5"  y="3" width="11" height="15" rx="1.5" fill="url(#connector-grad)"/>
+      <rect x="22" y="3" width="11" height="15" rx="1.5" fill="url(#connector-grad)"/>
+      <path d="M8,4 L8,16 M12,4 L12,16 M25,4 L25,16 M29,4 L29,16"
+            stroke="#fff" stroke-width="1" opacity="0.75"/>
+    </g>
+  </g>
+</svg>
