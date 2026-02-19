@@ -605,7 +605,7 @@ def _improve_toggle(args) -> bool:
         print(f"\n  ✅ Self-improving loop enabled in {config_path}")
         print(f"     Provider: {provider}/{model}")
         print(f"     Cadence: every {cadence} episode(s)")
-        print(f"     Auto-apply: config=yes, behavior=no, code=no")
+        print("     Auto-apply: config=yes, behavior=no, code=no")
         print()
         print("  Tip: Customize provider/model/cadence in the learner section of your config,")
         print("  or re-run `castor wizard` for the interactive setup.")
