@@ -3,6 +3,7 @@ import logging
 import os
 
 from .base import BaseProvider, Thought
+from castor.prompt_cache import CacheStats, build_cached_system_prompt
 
 logger = logging.getLogger("OpenCastor.Anthropic")
 
@@ -60,6 +61,14 @@ class AnthropicProvider(BaseProvider):
             logger.info("Using Anthropic API key")
             self._use_cli = False
             self.client = anthropic.Anthropic(api_key=api_key)
+
+        # Build once — same blocks every call = cache hits
+        # rcan_config is optional; passed in by TieredBrain when available
+        self._cached_system_blocks = build_cached_system_prompt(
+            self.system_prompt,
+            config.get("rcan_config"),
+        )
+        self._cache_stats = CacheStats()
 
     # Path for OpenCastor's own token store (separate from Claude CLI / OpenClaw)
     TOKEN_PATH = os.path.expanduser("~/.opencastor/anthropic-token")
@@ -123,9 +132,13 @@ class AnthropicProvider(BaseProvider):
             response = self.client.messages.create(
                 model=self.model_name,
                 max_tokens=1024,
-                system=self.system_prompt,
+                system=self._cached_system_blocks,  # list with cache_control breakpoints
                 messages=[{"role": "user", "content": content}],
+                extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
             )
+            # Track cache stats
+            self._cache_stats.record(response.usage)
+            self._cache_stats.alert_if_low(logger=logger)
             text = response.content[0].text
             action = self._clean_json(text)
             return Thought(text, action)
@@ -134,11 +147,16 @@ class AnthropicProvider(BaseProvider):
             return Thought(f"Error: {e}", None)
 
     def _think_via_cli(self, instruction: str) -> Thought:
-        """Call Claude via OAuth CLI client (uses Max/Pro subscription)."""
+        """Call Claude via OAuth CLI client (uses Max/Pro subscription).
+
+        TODO: The CLI path passes system as a plain string and does not yet support
+        cache_control content blocks. Upgrade ClaudeOAuthClient to accept a list[dict]
+        system prompt to enable caching on this code path too.
+        """
         try:
             response = self._cli_client.create_message(
                 model=self.model_name,
-                system=self.system_prompt,
+                system=self.system_prompt,  # plain string — cache_control not yet supported here
                 messages=[{"role": "user", "content": instruction}],
                 max_tokens=1024,
             )
@@ -148,3 +166,8 @@ class AnthropicProvider(BaseProvider):
         except Exception as e:
             logger.error(f"CLI error: {e}")
             return Thought(f"Error: {e}", None)
+
+    @property
+    def cache_stats(self) -> dict:
+        """Return current prompt cache statistics as a dict."""
+        return self._cache_stats.to_dict()

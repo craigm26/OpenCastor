@@ -192,7 +192,14 @@ class TieredBrain:
 
         if should_plan and self.planner:
             try:
+                # Inject dynamic sensor state into the USER message (not the system prompt).
+                # This keeps the system prompt prefix stable across ticks so cache hits occur.
+                # Per Claude Code's cache-first lesson: static content in system, dynamic in user.
+                from castor.prompt_cache import build_sensor_reminder
+                sensor_reminder = build_sensor_reminder(sensor_data or {})
                 plan_instruction = (
+                    f"{sensor_reminder}\n\n" if sensor_reminder else ""
+                ) + (
                     f"You are the strategic planner for a robot. "
                     f"The fast brain's last response: {thought.raw_text[:200]}\n\n"
                     f"Current task: {instruction}\n\n"
@@ -218,9 +225,13 @@ class TieredBrain:
     def get_stats(self) -> dict:
         """Return brain layer usage stats."""
         total = max(self.stats["total_ticks"], 1)
-        return {
+        stats = {
             **self.stats,
             "reactive_pct": round(self.stats["reactive_count"] / total * 100, 1),
             "fast_pct": round(self.stats["fast_count"] / total * 100, 1),
             "planner_pct": round(self.stats["planner_count"] / total * 100, 1),
         }
+        # Include prompt cache stats from planner if available
+        if self.planner and hasattr(self.planner, "cache_stats"):
+            stats["cache"] = self.planner.cache_stats
+        return stats

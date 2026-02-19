@@ -58,6 +58,43 @@ def check_provider_keys(config=None):
     return results
 
 
+def check_cache_stats(planner) -> tuple[bool, str, str]:
+    """Check prompt cache statistics from the planner provider (if Anthropic).
+
+    Returns a (ok, name, detail) tuple suitable for the doctor report.
+    """
+    if planner is None:
+        return True, "Prompt cache", "no planner configured"
+
+    # Check cache stats if planner is an AnthropicProvider
+    if hasattr(planner, "cache_stats"):
+        stats = planner.cache_stats
+        hit_rate = stats.get("hit_rate", 0)
+        total_calls = stats.get("total_calls", 0)
+        tokens_saved = stats.get("tokens_saved", 0)
+
+        if total_calls == 0:
+            return True, "Prompt cache", "no calls recorded yet"
+
+        # Warm-up period: < 10 calls is inconclusive
+        if total_calls < 10:
+            detail = (
+                f"warming up ({total_calls} calls, "
+                f"hit rate {hit_rate:.1%}, {tokens_saved:,} tokens saved)"
+            )
+            return True, "Prompt cache", detail
+
+        ok = hit_rate >= 0.5
+        status = "healthy" if ok else "low — check system prompt stability"
+        detail = (
+            f"hit rate {hit_rate:.1%} ({stats.get('cache_hits', 0)}/{total_calls} calls), "
+            f"{tokens_saved:,} tokens saved — {status}"
+        )
+        return ok, "Prompt cache", detail
+
+    return True, "Prompt cache", "N/A (provider does not support caching)"
+
+
 def check_rcan_config(config_path):
     """Validate an RCAN config file against the JSON schema."""
     if not config_path:

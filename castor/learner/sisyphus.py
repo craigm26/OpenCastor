@@ -1,4 +1,13 @@
-"""Sisyphus Loop — orchestrates the PM→Dev→QA→Apply improvement cycle."""
+"""Sisyphus Loop — orchestrates the PM→Dev→QA→Apply improvement cycle.
+
+Cache-safe forking note (Claude Code lesson):
+  When Sisyphus spawns PM→Dev→QA→Apply sub-operations, each stage should
+  share the parent session's cached system-prompt prefix.
+  - Do NOT build a fresh system prompt per stage.
+  - Stage-specific context must go into USER messages, not the system prompt.
+  - This ensures Anthropic's prompt cache prefix remains valid across all forks.
+  See: castor/prompt_cache.py — build_cached_system_prompt, build_sensor_reminder
+"""
 
 from __future__ import annotations
 

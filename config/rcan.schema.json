@@ -152,6 +152,18 @@
               }
             }
           }
+        },
+        "prompt_caching": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Anthropic prompt caching (cache_control breakpoints). Reduces costs and latency. Disable only for debugging."
+        },
+        "cache_alert_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.5,
+          "description": "Alert when prompt cache hit rate falls below this fraction (0.5 = 50%). Set to 0 to disable alerts."
         }
       }
     },
