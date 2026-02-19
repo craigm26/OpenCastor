@@ -71,10 +71,10 @@
           <a href="#configuration">Configuration (RCAN)</a>
           <a href="#providers">AI Providers Guide</a>
           <a href="#tiered-brain">Tiered Brain Architecture</a>
-          <a href="#hailo">Hailo-8 NPU Vision</a>
+          <a href="#peripherals">Peripherals &amp; Auto-Detect</a>
         </div>
         <div>
-          <a href="#oakd">OAK-D Camera</a>
+          <a href="#hailo">Hailo-8 (example NPU)</a>
           <a href="#safety">Safety Modules</a>
           <a href="#cli">CLI Reference</a>
           <a href="#api">API Reference</a>
@@ -400,13 +400,88 @@
   </div>
 </section>
 
-<!-- Hailo-8 Vision -->
+<!-- Peripherals — Universal plug-and-play -->
+<section class="section" id="peripherals">
+  <div class="container">
+    <div class="section-header center reveal">
+      <p class="section-label">Hardware</p>
+      <h2 class="section-title">Plug-and-Play Peripherals</h2>
+      <p class="section-desc">Any USB camera, depth sensor, LiDAR, IMU, or motor controller. OpenCastor auto-detects at startup — no driver code required.</p>
+    </div>
+
+    <div class="doc-section reveal">
+      <h3>How auto-detection works</h3>
+      <p>At startup (or when you run <code>castor scan</code>), OpenCastor scans:</p>
+      <ul>
+        <li><strong>USB devices</strong> via <code>lsusb</code> — matches against a library of known VID:PID pairs (OAK-D, Intel RealSense, RPLiDAR, common IMUs, motor controllers)</li>
+        <li><strong>Video devices</strong> via <code>/dev/video*</code> — any V4L2-compatible camera is usable immediately</li>
+        <li><strong>I²C bus</strong> via <code>i2cdetect</code> — finds servo controllers (PCA9685), IMUs (MPU-6050, BNO055), distance sensors (VL53L0X), and motor drivers</li>
+        <li><strong>Serial ports</strong> via <code>/dev/ttyUSB*</code> and <code>/dev/ttyACM*</code> — Arduino, motor controllers, GPS, LiDAR</li>
+        <li><strong>NPU accelerators</strong> — Hailo-8 via HailoRT, Google Coral Edge TPU, NVIDIA Jetson (via nvml)</li>
+      </ul>
+
+      <div class="code-block" style="margin:16px 0">
+        <div class="code-header"><div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">Scan connected hardware</span></div>
+        <div class="code-body"><span class="k">castor scan</span>
+
+<span class="cm"># Example output:</span>
+<span class="s">✓ OAK-D Lite          USB   03e7:2485  → camera.type: "oakd"</span>
+<span class="s">✓ Logitech C920       USB   046d:082d  → camera.type: "usb"  /dev/video0</span>
+<span class="s">✓ RPLiDAR A1          Serial /dev/ttyUSB0 → lidar.type: "rplidar"</span>
+<span class="s">✓ PCA9685             I²C   0x40       → driver.type: "pca9685"</span>
+<span class="s">✓ Hailo-8 NPU         PCIe  —          → camera.npu: "hailo"</span>
+<span class="s">  MPU-6050            I²C   0x68       → imu.type: "mpu6050"</span></div>
+      </div>
+
+      <h3>Auto-detect in your RCAN config</h3>
+      <p>Set <code>type: "auto"</code> on any peripheral block. OpenCastor will pick the best available hardware at runtime — and fall back gracefully if nothing is found.</p>
+
+      <div class="code-block" style="margin:16px 0">
+        <div class="code-header"><div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">rcan.yaml — auto-detect everything</span></div>
+        <div class="code-body"><span class="k">camera</span>:
+  <span class="k">type</span>: <span class="s">"auto"</span>        <span class="cm"># tries: oakd → realsense → hailo → usb → csi → none</span>
+  <span class="k">depth_enabled</span>: <span class="v">true</span>  <span class="cm"># ignored if detected camera has no depth</span>
+  <span class="k">fps</span>: <span class="n">30</span>
+
+<span class="k">lidar</span>:
+  <span class="k">type</span>: <span class="s">"auto"</span>        <span class="cm"># tries: rplidar → hokuyo → sick → none</span>
+
+<span class="k">imu</span>:
+  <span class="k">type</span>: <span class="s">"auto"</span>        <span class="cm"># tries: bno055 → mpu6050 → icm42688 → none</span></div>
+      </div>
+
+      <h3>Supported peripheral categories</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:0.9rem">
+        <thead><tr style="border-bottom:1px solid #e5e7eb">
+          <th style="text-align:left;padding:8px 4px">Category</th>
+          <th style="text-align:left;padding:8px 4px">Examples</th>
+          <th style="text-align:left;padding:8px 4px">Interface</th>
+          <th style="text-align:left;padding:8px 4px">RCAN type</th>
+        </tr></thead>
+        <tbody>
+          <tr style="border-bottom:1px solid #f3f4f6"><td style="padding:8px 4px">RGB Camera</td><td style="padding:8px 4px">Any USB webcam, Logitech C920, Pi camera v3</td><td style="padding:8px 4px">USB / CSI</td><td style="padding:8px 4px"><code>camera.type: "usb"</code> / <code>"csi"</code></td></tr>
+          <tr style="border-bottom:1px solid #f3f4f6"><td style="padding:8px 4px">Depth Camera</td><td style="padding:8px 4px">OAK-D, OAK-D Lite, Intel RealSense D435</td><td style="padding:8px 4px">USB 3</td><td style="padding:8px 4px"><code>camera.type: "oakd"</code> / <code>"realsense"</code></td></tr>
+          <tr style="border-bottom:1px solid #f3f4f6"><td style="padding:8px 4px">NPU Accelerator</td><td style="padding:8px 4px">Hailo-8, Hailo-8L, Google Coral Edge TPU</td><td style="padding:8px 4px">M.2 / USB</td><td style="padding:8px 4px"><code>camera.npu: "hailo"</code> / <code>"coral"</code></td></tr>
+          <tr style="border-bottom:1px solid #f3f4f6"><td style="padding:8px 4px">LiDAR</td><td style="padding:8px 4px">RPLiDAR A1/A2/C1, Hokuyo URG, SICK TiM</td><td style="padding:8px 4px">Serial / USB</td><td style="padding:8px 4px"><code>lidar.type: "rplidar"</code></td></tr>
+          <tr style="border-bottom:1px solid #f3f4f6"><td style="padding:8px 4px">IMU</td><td style="padding:8px 4px">MPU-6050, BNO055, ICM-42688</td><td style="padding:8px 4px">I²C / SPI</td><td style="padding:8px 4px"><code>imu.type: "auto"</code></td></tr>
+          <tr style="border-bottom:1px solid #f3f4f6"><td style="padding:8px 4px">Servo Controller</td><td style="padding:8px 4px">PCA9685 (16-ch PWM)</td><td style="padding:8px 4px">I²C</td><td style="padding:8px 4px"><code>driver.type: "pca9685"</code></td></tr>
+          <tr style="border-bottom:1px solid #f3f4f6"><td style="padding:8px 4px">Motor Driver</td><td style="padding:8px 4px">L298N, DRV8833, TB6612, Cytron MD10C</td><td style="padding:8px 4px">GPIO / Serial</td><td style="padding:8px 4px"><code>driver.type: "l298n"</code></td></tr>
+          <tr><td style="padding:8px 4px">Microcontroller</td><td style="padding:8px 4px">Arduino Uno/Nano/Mega, STM32, ESP32</td><td style="padding:8px 4px">USB CDC</td><td style="padding:8px 4px"><code>driver.type: "arduino"</code></td></tr>
+        </tbody>
+      </table>
+
+      <p style="margin-top:16px">Don't see yours? Any device reachable via <code>/dev/video*</code>, <code>/dev/ttyUSB*</code>, I²C, or SPI works — just set <code>type: "generic"</code> with a <code>device_path</code>. See <a href="https://github.com/craigm26/OpenCastor/blob/main/docs/peripherals.md">docs/peripherals.md</a> for full details.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Hailo-8 Vision — example NPU accelerator -->
 <section class="section" id="hailo">
   <div class="container">
     <div class="section-header center reveal">
-      <p class="section-label">Vision</p>
+      <p class="section-label">Example: NPU Accelerator</p>
       <h2 class="section-title">Hailo-8 NPU Vision</h2>
-      <p class="section-desc">Hardware-accelerated object detection at 30+ FPS on edge. No GPU required.</p>
+      <p class="section-desc">One example of supported NPU acceleration. Also works with Google Coral Edge TPU and NVIDIA Jetson. No GPU required.</p>
     </div>
 
     <div class="doc-section reveal">
@@ -442,9 +517,9 @@
 <section class="section alt-section" id="oakd">
   <div class="container">
     <div class="section-header center reveal">
-      <p class="section-label">Depth Perception</p>
-      <h2 class="section-title">OAK-D Camera</h2>
-      <p class="section-desc">Stereo depth perception with on-device neural inference via DepthAI v3.</p>
+      <p class="section-label">Example: Depth &amp; Stereo Camera</p>
+      <h2 class="section-title">OAK-D / Depth Cameras</h2>
+      <p class="section-desc">OAK-D is one example. Also works with Intel RealSense, ZED, and any USB depth camera. Set <code>camera.type: "auto"</code> to detect whichever you have.</p>
     </div>
 
     <div class="doc-section reveal">

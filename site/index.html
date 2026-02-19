@@ -6,7 +6,7 @@
   <title>OpenCastor — The Universal Runtime for Embodied AI</title>
   <meta name="description" content="Give any robot a brain. 8 AI providers, $0 primary brain, 49K+ lines of battle-tested code. Open source, Apache 2.0.">
   <meta property="og:title" content="OpenCastor — The Universal Runtime for Embodied AI">
-  <meta property="og:description" content="Give any robot a brain. 8 AI providers, Hailo-8 NPU vision, OAK-D depth. Open source.">
+  <meta property="og:description" content="Give any robot a brain. 8 AI providers, plug-and-play peripheral auto-detection. Any camera, sensor, or LiDAR. Open source.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://opencastor.com">
   <meta name="twitter:card" content="summary_large_image">
@@ -56,7 +56,7 @@
 
   <p class="hero-sub reveal reveal-d2">
     Give any robot a brain. 8 AI providers, tiered cognitive architecture,<br>
-    hardware-accelerated vision. One config file. Zero lock-in.
+    plug-and-play peripheral detection. One config file. Zero lock-in.
   </p>
 
   <div class="hero-actions reveal reveal-d3">
@@ -155,15 +155,15 @@
 
     <div class="feature-grid">
       <div class="card reveal">
-        <div class="card-icon" style="background: var(--cyan-light);">🎯</div>
-        <h3>Hailo-8 NPU Vision</h3>
-        <p>Hardware-accelerated object detection at 30+ FPS on edge. 80+ COCO classes out of the box. YOLOv8 on dedicated AI accelerator — no GPU required.</p>
+        <div class="card-icon" style="background: var(--cyan-light);">🔌</div>
+        <h3>Plug-and-Play Peripherals</h3>
+        <p>Any USB camera, depth sensor, LiDAR, IMU, or motor controller works out of the box. OpenCastor auto-detects hardware at startup — no driver code required. Run <code>castor scan</code> to see everything connected.</p>
       </div>
 
       <div class="card reveal reveal-d1">
-        <div class="card-icon" style="background: var(--accent-glow);">📷</div>
-        <h3>OAK-D Depth Camera</h3>
-        <p>Stereo depth perception with on-device neural inference. Spatial awareness, obstacle mapping, and 3D understanding for autonomous navigation.</p>
+        <div class="card-icon" style="background: var(--accent-glow);">👁️</div>
+        <h3>Vision &amp; Depth, Your Way</h3>
+        <p>V4L2 USB cameras, CSI ribbon cameras, OAK-D stereo depth, Intel RealSense, Hailo-8 NPU acceleration — set <code>camera: type: auto</code> and OpenCastor picks the best available hardware. Swap it at any time.</p>
       </div>
 
       <div class="card reveal reveal-d2">
@@ -298,8 +298,8 @@
         <div class="stat-label">AI Providers</div>
       </div>
       <div class="reveal reveal-d3">
-        <div class="stat-number">80+</div>
-        <div class="stat-label">COCO Classes</div>
+        <div class="stat-number">Any</div>
+        <div class="stat-label">USB / I2C / SPI Peripheral</div>
       </div>
     </div>
   </div>
