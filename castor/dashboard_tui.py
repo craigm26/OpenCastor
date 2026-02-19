@@ -351,7 +351,7 @@ def build_robot_command(config_path, simulate=False):
     return f"{cmd} 2>&1 | tee /tmp/opencastor.log"
 
 
-def launch_dashboard(config_path, layout_name="full", simulate=False):
+def launch_dashboard(config_path, layout_name="full", simulate=False, run_command=None):
     """Launch the tmux dashboard."""
     if not check_tmux():
         return False
@@ -371,7 +371,7 @@ def launch_dashboard(config_path, layout_name="full", simulate=False):
     open("/tmp/opencastor.log", "a").close()
 
     # Create new session with the first pane (robot runner)
-    robot_cmd = build_robot_command(config_path, simulate)
+    robot_cmd = run_command or build_robot_command(config_path, simulate)
     subprocess.run(
         [
             "tmux",

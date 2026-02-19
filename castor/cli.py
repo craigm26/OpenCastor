@@ -48,8 +48,48 @@ import traceback
 # ---------------------------------------------------------------------------
 
 
+def _launch_with_dashboard(args) -> None:
+    """Re-launch inside a tmux session with the dashboard alongside the robot."""
+    import shutil
+
+    if not shutil.which("tmux"):
+        print("  ⚠️  tmux not found. Install it with: sudo apt install tmux")
+        print("  Falling back to plain run...\n")
+        return  # caller will continue without dashboard
+
+    from castor.dashboard_tui import SESSION_NAME, kill_existing_session, launch_dashboard
+
+    # Kill any stale session
+    kill_existing_session()
+
+    layout = getattr(args, "layout", "full")
+    config = args.config
+    simulate_flag = "--simulate" if getattr(args, "simulate", False) else ""
+
+    # Build the castor run command (without --dashboard to avoid recursion)
+    run_cmd = f"castor run --config {config} {simulate_flag}".strip()
+
+    # Launch dashboard session; the "logs" pane will run the robot
+    print(f"\n  🚀 Launching OpenCastor dashboard (layout: {layout})...")
+    print(f"     Robot command: {run_cmd}")
+    print(f"     Attach with:   tmux attach -t {SESSION_NAME}\n")
+
+    launch_dashboard(
+        config_path=config,
+        layout_name=layout,
+        simulate=getattr(args, "simulate", False),
+        run_command=run_cmd,
+    )
+    raise SystemExit(0)
+
+
 def cmd_run(args) -> None:
     """Run the main perception-action loop."""
+    # --dashboard: hand off to tmux session before doing anything else
+    if getattr(args, "dashboard", False):
+        _launch_with_dashboard(args)
+        # If tmux not available, _launch_with_dashboard returns (falls through)
+
     config_path = args.config
 
     # Guided first-run: if no config exists, offer to run the wizard
@@ -1616,6 +1656,7 @@ def main() -> None:
             "Quick start:\n"
             "  castor wizard                                 # First-time setup\n"
             "  castor run --config robot.rcan.yaml           # Start the robot\n"
+            "  castor run --config robot.rcan.yaml --dashboard  # Robot + tmux dashboard\n"
             "  castor demo                                   # Try without hardware\n"
             "  castor doctor                                 # Check system health\n"
         ),
@@ -1627,11 +1668,28 @@ def main() -> None:
     p_run = sub.add_parser(
         "run",
         help="Run the robot perception-action loop",
-        epilog="Example: castor run --config robot.rcan.yaml --simulate",
+        epilog=(
+            "Examples:\n"
+            "  castor run --config robot.rcan.yaml\n"
+            "  castor run --config robot.rcan.yaml --dashboard\n"
+            "  castor run --config robot.rcan.yaml --dashboard --layout minimal\n"
+            "  castor run --config robot.rcan.yaml --simulate --dashboard\n"
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_run.add_argument("--config", default="robot.rcan.yaml", help="RCAN config file")
     p_run.add_argument("--simulate", action="store_true", help="Run without hardware")
+    p_run.add_argument(
+        "--dashboard",
+        action="store_true",
+        help="Launch tmux dashboard alongside the robot (requires tmux)",
+    )
+    p_run.add_argument(
+        "--layout",
+        default="full",
+        choices=["full", "minimal", "debug"],
+        help="Dashboard layout when --dashboard is used (default: full)",
+    )
 
     # castor gateway
     p_gw = sub.add_parser(
