@@ -266,10 +266,10 @@ class TestParserEdgeCases:
         assert args.delay == 2.0
 
     def test_demo_defaults(self):
-        """'castor demo' defaults to steps=10 delay=1.5."""
+        """'castor demo' defaults to steps=10 delay=0.8."""
         args = self._dispatch_and_capture("castor.cli.cmd_demo", "castor", "demo")
         assert args.steps == 10
-        assert args.delay == 1.5
+        assert args.delay == 0.8
 
     def test_restore_requires_archive(self):
         """'castor restore' without the archive positional arg should error."""
@@ -1114,20 +1114,20 @@ class TestCmdDoctor:
 # =====================================================================
 class TestCmdDemo:
     def test_calls_run_demo(self):
-        """cmd_demo should call run_demo with steps and delay."""
-        args = _make_args(steps=5, delay=2.0)
+        """cmd_demo should call run_demo with steps, delay, layout, and no_color."""
+        args = _make_args(steps=5, delay=2.0, layout="full", no_color=False)
         mock_demo = MagicMock()
         with patch.dict("sys.modules", {"castor.demo": MagicMock(run_demo=mock_demo)}):
             cmd_demo(args)
-        mock_demo.assert_called_once_with(steps=5, delay=2.0)
+        mock_demo.assert_called_once_with(steps=5, delay=2.0, layout="full", no_color=False)
 
     def test_default_args(self):
-        """cmd_demo with default args."""
-        args = _make_args(steps=10, delay=1.5)
+        """cmd_demo with default args (delay=0.8, layout=full)."""
+        args = _make_args(steps=10, delay=0.8)
         mock_demo = MagicMock()
         with patch.dict("sys.modules", {"castor.demo": MagicMock(run_demo=mock_demo)}):
             cmd_demo(args)
-        mock_demo.assert_called_once_with(steps=10, delay=1.5)
+        mock_demo.assert_called_once_with(steps=10, delay=0.8, layout="full", no_color=False)
 
 
 # =====================================================================

@@ -2,12 +2,43 @@
 
 We're building the universal runtime for embodied AI and we want your help.
 Whether you're adding a new LLM provider, writing a hardware driver, building a
-messaging integration, or fixing a typo -- every contribution counts.
+messaging integration, or fixing a typo — every contribution counts.
 
 **Join the community:**
 - **Discord**: [discord.gg/jMjA8B26Bq](https://discord.gg/jMjA8B26Bq) — ask questions, share builds, get help
 - **GitHub Issues**: Report bugs or request features
 - **Twitter/X**: [@opencastor](https://twitter.com/opencastor)
+- **PyPI**: [pypi.org/project/opencastor](https://pypi.org/project/opencastor/)
+- **Community Hub**: [opencastor.com/hub](https://opencastor.com/hub) — browse and share robot recipes
+
+## Ways to Contribute
+
+### 🤖 Share a Robot Recipe
+The fastest way to contribute. A recipe is a RCAN config + optional scripts for a specific robot:
+
+```bash
+castor hub share --submit
+```
+
+See `community-recipes/` for examples. Recipes are submitted as GitHub Pull Requests.
+
+### 🐛 Report a Bug
+Open an issue: https://github.com/craigm26/OpenCastor/issues
+
+Include your OS, hardware, OpenCastor version (`castor --version`), and the full error output.
+
+### 🔌 Build a Provider
+Add support for a new AI provider in `castor/providers/`. See existing providers for the interface. It's a clean 50-line pattern.
+
+### 🧪 Improve Tests
+We target high coverage. Pick any area with < 80% coverage and add tests. Run:
+
+```bash
+pytest tests/ --cov=castor --cov-report=term-missing
+```
+
+### 📚 Improve Docs
+Docs live in `site/` (HTML) and `README.md`. Community recipe docs are in `docs/community-recipes.md`.
 
 ## Quick Start for Contributors
 

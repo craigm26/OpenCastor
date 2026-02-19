@@ -26,6 +26,7 @@ Usage:
     castor replay session.jsonl                        # Replay a recorded session
     castor benchmark --config robot.rcan.yaml          # Performance profiling
     castor lint --config robot.rcan.yaml               # Deep config validation
+    castor validate --config bot.rcan.yaml             # RCAN conformance check
     castor improve --enable                            # Enable self-improving loop
     castor improve --disable                           # Disable self-improving loop
     castor improve --episodes 10                       # Analyze last 10 episodes
@@ -275,7 +276,12 @@ def cmd_demo(args) -> None:
     """Run a simulated perception-action loop (no hardware/API keys)."""
     from castor.demo import run_demo
 
-    run_demo(steps=args.steps, delay=args.delay)
+    run_demo(
+        steps=args.steps,
+        delay=args.delay,
+        layout=getattr(args, "layout", "full"),
+        no_color=getattr(args, "no_color", False),
+    )
 
 
 def cmd_test_hardware(args) -> None:
@@ -592,6 +598,139 @@ def cmd_lint(args) -> None:
 
     issues = run_lint(args.config)
     print_lint_report(issues, args.config)
+
+
+def cmd_validate(args) -> None:
+    """Run RCAN conformance checks."""
+    import json as _json
+
+    import yaml
+
+    from castor.conformance import ConformanceChecker
+
+    config_path = args.config
+
+    # --- Config file existence check ---
+    if not os.path.exists(config_path):
+        print(f"\n  Config not found: {config_path}")
+        print("  Run `castor wizard` to create one first.\n")
+        raise SystemExit(1)
+
+    # --- Load YAML ---
+    try:
+        with open(config_path) as f:
+            config = yaml.safe_load(f) or {}
+    except Exception as exc:
+        print(f"\n  Error loading config: {exc}\n")
+        raise SystemExit(1) from exc
+
+    # --- JSON schema validation (reuse doctor.py logic) ---
+    from castor.doctor import check_rcan_config
+
+    schema_ok, _, schema_detail = check_rcan_config(config_path)
+
+    # --- Run conformance checks ---
+    checker = ConformanceChecker(config, config_path=config_path)
+    if getattr(args, "category", None):
+        try:
+            results = checker.run_category(args.category)
+        except ValueError as exc:
+            print(f"\n  {exc}")
+            print("  Valid categories: safety, provider, protocol, performance, hardware\n")
+            raise SystemExit(1) from exc
+    else:
+        results = checker.run_all()
+
+    summary = checker.summary(results)
+
+    # --- JSON output ---
+    if getattr(args, "json", False):
+        output = {
+            "config": config_path,
+            "schema_valid": schema_ok,
+            "schema_detail": schema_detail,
+            "results": [
+                {
+                    "check_id": r.check_id,
+                    "category": r.category,
+                    "status": r.status,
+                    "detail": r.detail,
+                    "fix": r.fix,
+                }
+                for r in results
+            ],
+            "summary": summary,
+        }
+        print(_json.dumps(output, indent=2))
+        _validate_exit(summary, getattr(args, "strict", False))
+        return
+
+    # --- Human-readable output ---
+    _SEP = "─" * 42
+
+    print()
+    print("  castor validate — RCAN Conformance Check")
+    print(f"  Config: {config_path}")
+    if not schema_ok:
+        print(f"  ⚠️  Schema: {schema_detail}")
+    print()
+
+    STATUS_ICONS = {"pass": "✅", "warn": "⚠️ ", "fail": "❌"}
+
+    # Group by category
+    categories_seen: list[str] = []
+    by_cat: dict[str, list] = {}
+    for r in results:
+        if r.category not in by_cat:
+            by_cat[r.category] = []
+            categories_seen.append(r.category)
+        by_cat[r.category].append(r)
+
+    CAT_LABELS = {
+        "safety": "SAFETY",
+        "provider": "PROVIDER",
+        "protocol": "PROTOCOL",
+        "performance": "PERFORMANCE",
+        "hardware": "HARDWARE",
+    }
+
+    for cat in categories_seen:
+        label = CAT_LABELS.get(cat, cat.upper())
+        print(f"  {label} {_SEP[len(label) + 2 :]}")
+        for r in by_cat[cat]:
+            icon = STATUS_ICONS.get(r.status, "?")
+            check_col = f"{r.check_id:<35}"
+            print(f"  {icon}  {check_col} {r.detail}")
+            if r.fix and r.status != "pass":
+                print(f"       {'':35} Fix: {r.fix}")
+        print()
+
+    # Summary line
+    print(f"  {_SEP}")
+    score = summary["score"]
+    passes = summary["pass"]
+    warns = summary["warn"]
+    fails = summary["fail"]
+    print(f"  Score: {score}/100   ✅ {passes}  ⚠️  {warns}  ❌ {fails}")
+    print()
+
+    if fails == 0 and warns == 0:
+        print("  Your robot config is fully RCAN conformant. 🎉")
+    elif fails == 0:
+        print("  Your robot config is RCAN conformant (with warnings).")
+    else:
+        print(f"  Your robot config has {fails} conformance failure(s). Please fix them.")
+
+    print()
+    _validate_exit(summary, getattr(args, "strict", False))
+
+
+def _validate_exit(summary: dict, strict: bool) -> None:
+    """Exit with appropriate code based on results."""
+    if summary["fail"] > 0:
+        raise SystemExit(1)
+    if strict and summary["warn"] > 0:
+        raise SystemExit(1)
 
 
 def _improve_toggle(args) -> bool:
@@ -1764,7 +1903,14 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_demo.add_argument("--steps", type=int, default=10, help="Number of loop iterations")
-    p_demo.add_argument("--delay", type=float, default=1.5, help="Seconds between steps")
+    p_demo.add_argument("--delay", type=float, default=0.8, help="Seconds between steps")
+    p_demo.add_argument(
+        "--layout",
+        default="full",
+        choices=["full", "minimal"],
+        help="Demo depth: full (all 5 acts) or minimal (skip Acts 3 & 4)",
+    )
+    p_demo.add_argument("--no-color", action="store_true", help="Disable rich output")
 
     # castor test-hardware
     p_test = sub.add_parser(
@@ -1934,6 +2080,29 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_lint.add_argument("--config", default="robot.rcan.yaml", help="RCAN config file")
+
+    # castor validate
+    p_validate = sub.add_parser(
+        "validate",
+        help="Run RCAN conformance checks",
+        epilog=(
+            "Examples:\n"
+            "  castor validate --config bot.rcan.yaml       # RCAN conformance check\n"
+            "  castor validate --config bot.rcan.yaml --category safety\n"
+            "  castor validate --config bot.rcan.yaml --json\n"
+            "  castor validate --config bot.rcan.yaml --strict\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_validate.add_argument("--config", default="robot.rcan.yaml", help="RCAN config file")
+    p_validate.add_argument(
+        "--category",
+        default=None,
+        help="Only run checks in this category (safety/provider/protocol/performance/hardware)",
+    )
+    p_validate.add_argument("--json", action="store_true", help="Output results as JSON")
+    p_validate.add_argument("--strict", action="store_true", help="Exit with non-zero if any WARN")
+    p_validate.set_defaults(func=cmd_validate)
 
     # castor learn
     p_learn = sub.add_parser(
@@ -2364,6 +2533,7 @@ def main() -> None:
         "replay": cmd_replay,
         "benchmark": cmd_benchmark,
         "lint": cmd_lint,
+        "validate": cmd_validate,
         "learn": cmd_learn,
         "improve": cmd_improve,
         "fleet": cmd_fleet,

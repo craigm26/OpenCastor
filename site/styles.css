@@ -437,3 +437,179 @@ code, pre { font-family: var(--font-mono); }
   .install-block { flex-direction: column; text-align: center; }
   .stats-grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* ==========================================================
+   Community Hub additions
+   ========================================================== */
+
+/* --- Community Stats Bar --- */
+.community-stats-bar {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 40px 0;
+  background: var(--bg-alt);
+}
+.community-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 32px;
+  text-align: center;
+}
+.community-stat-number {
+  font-family: var(--font-display);
+  font-size: 2.5rem;
+  font-weight: 800;
+  line-height: 1.1;
+  margin-bottom: 6px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.community-stat-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+/* --- Recipe Tags --- */
+.recipe-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 10px;
+}
+.recipe-tag {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+/* --- Submit CTA Box --- */
+.submit-cta-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 28px;
+  background: linear-gradient(135deg, rgba(99,102,241,0.10) 0%, var(--bg-card) 100%);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-xl);
+  padding: 48px;
+}
+.submit-cta-icon {
+  font-size: 3rem;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.submit-cta-content h2 { margin-bottom: 10px; }
+.submit-cta-content p { font-size: 1rem; color: var(--text-secondary); max-width: 520px; }
+
+/* --- Social links in CTA --- */
+.community-social-links {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 32px;
+}
+.community-social-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  transition: all var(--dur) var(--ease);
+  text-decoration: none;
+}
+.community-social-link:hover {
+  border-color: var(--accent);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+.community-social-coming-soon {
+  cursor: default;
+  opacity: 0.5;
+}
+.community-social-coming-soon:hover {
+  transform: none;
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+
+/* --- Steps (hub how-it-works) --- */
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+}
+.step {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+}
+.step-num {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+.step h3 { margin-bottom: 8px; font-size: 1.125rem; }
+.step p { font-size: 0.9375rem; color: var(--text-secondary); margin: 0; }
+
+/* --- Dark section --- */
+.dark-section { background: var(--surface); }
+.dark-section .section-title { color: var(--text); }
+
+/* --- Bento grid --- */
+.bento {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+/* --- Code showcase --- */
+.code-showcase {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 64px;
+  align-items: center;
+}
+
+/* --- Community section on index --- */
+.community-index-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 40px;
+}
+
+/* accent-light variable (reuse) */
+:root { --accent-light: rgba(99, 102, 241, 0.12); --blue-light: rgba(6, 182, 212, 0.1); }
+
+/* --- Responsive community additions --- */
+@media (max-width: 1024px) {
+  .community-stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .code-showcase { grid-template-columns: 1fr; gap: 32px; }
+  .community-index-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 768px) {
+  .steps { grid-template-columns: 1fr; }
+  .submit-cta-box { flex-direction: column; gap: 16px; padding: 28px; }
+  .community-stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .community-index-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+  .community-stats-grid { grid-template-columns: 1fr 1fr; gap: 24px; }
+  .community-social-links { flex-direction: column; align-items: center; }
+}

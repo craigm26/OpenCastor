@@ -4,7 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Community Hub — OpenCastor</title>
-  <meta name="description" content="Browse and share working robot configs from the OpenCastor community. Tested recipes for home, outdoor, industrial, and agricultural robots.">
+  <meta name="description" content="Share, discover, and remix robot recipes. Browse community-tested RCAN configs for home, outdoor, industrial, and agricultural robots.">
+  <meta property="og:title" content="OpenCastor Community Hub — Share &amp; discover robot recipes">
+  <meta property="og:description" content="Community-tested robot configs. Browse by use case, fork what works, share what you learn.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://opencastor.com/hub">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -32,14 +36,49 @@
 </nav>
 
 <main>
-<section class="page-hero">
+
+<!-- ======== HERO ======== -->
+<section class="page-hero" style="padding-bottom:40px">
   <p class="section-label reveal">Community Hub</p>
-  <h1 class="reveal reveal-d1">Recipes that<br><span class="gradient-text">actually work.</span></h1>
-  <p class="reveal reveal-d2">Tested robot configs shared by real builders. Browse by use case, fork what works, share what you learn.</p>
+  <h1 class="reveal reveal-d1">OpenCastor<br><span class="gradient-text">Community Hub</span></h1>
+  <p class="reveal reveal-d2" style="font-size:1.25rem;max-width:540px;margin:0 auto 36px">Share, discover, and remix robot recipes — configs that real builders have tested on real hardware.</p>
+  <div class="hero-actions reveal reveal-d3">
+    <a href="#recipes" class="btn btn-primary btn-lg">
+      Browse Recipes
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+    <a href="#submit" class="btn btn-secondary btn-lg">
+      Share Your Config
+    </a>
+  </div>
 </section>
 
-<!-- How it works -->
-<section class="section" style="padding-top:20px">
+<!-- ======== COMMUNITY STATS ======== -->
+<section class="community-stats-bar">
+  <div class="container">
+    <div class="community-stats-grid">
+      <div class="community-stat reveal">
+        <div class="community-stat-number">7</div>
+        <div class="community-stat-label">Recipes</div>
+      </div>
+      <div class="community-stat reveal reveal-d1">
+        <div class="community-stat-number">8</div>
+        <div class="community-stat-label">AI Providers</div>
+      </div>
+      <div class="community-stat reveal reveal-d2">
+        <div class="community-stat-number">3</div>
+        <div class="community-stat-label">GitHub Stars</div>
+      </div>
+      <div class="community-stat reveal reveal-d3">
+        <div class="community-stat-number">2,009</div>
+        <div class="community-stat-label">Tests Passing</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== HOW IT WORKS ======== -->
+<section class="section" style="padding-top:60px">
   <div class="container">
     <div class="steps" style="margin-bottom:60px">
       <div class="step reveal">
@@ -57,74 +96,41 @@
         <div class="step-num">03</div>
         <h3>Share Back</h3>
         <p>Got something working? Package your config with notes and lessons learned. Auto-scrubs secrets and PII.</p>
-        <code style="font-size:0.8125rem;margin-top:8px;display:inline-block">castor hub share --config robot.rcan.yaml</code>
+        <code style="font-size:0.8125rem;margin-top:8px;display:inline-block">castor hub share --submit</code>
       </div>
     </div>
   </div>
 </section>
 
-<!-- Categories -->
-<section class="section alt-section" id="categories">
-  <div class="container">
-    <div class="section-header reveal">
-      <p class="section-label">Categories</p>
-      <h2 class="section-title">Every robot has a purpose.</h2>
-      <p class="section-desc">Browse by what your robot needs to do.</p>
-    </div>
-
-    <div class="bento">
-      <div class="card reveal">
-        <div class="card-icon" style="background:var(--accent-light)">🏠</div>
-        <h3>Home & Indoor</h3>
-        <p>Patrol, monitoring, pet interaction, cleaning assistance. Small robots for tight spaces.</p>
-      </div>
-      <div class="card reveal reveal-d1">
-        <div class="card-icon" style="background:var(--green-light)">🌿</div>
-        <h3>Agriculture</h3>
-        <p>Crop inspection, pest detection, soil monitoring, weed identification. Built for dirt and weather.</p>
-      </div>
-      <div class="card reveal reveal-d1">
-        <div class="card-icon" style="background:var(--blue-light)">🏔️</div>
-        <h3>Outdoor & Exploration</h3>
-        <p>Terrain navigation, mapping, environmental sensing. Rugged builds for the real world.</p>
-      </div>
-      <div class="card reveal reveal-d2">
-        <div class="card-icon" style="background:var(--orange-light)">🏭</div>
-        <h3>Industrial</h3>
-        <p>Inspection, assembly assistance, warehouse navigation. Precision and reliability first.</p>
-      </div>
-      <div class="card reveal reveal-d3">
-        <div class="card-icon" style="background:var(--purple-light)">🎓</div>
-        <h3>Education & Research</h3>
-        <p>Teaching robotics, running experiments, prototyping new ideas. Learning by building.</p>
-      </div>
-      <div class="card reveal reveal-d4">
-        <div class="card-icon" style="background:var(--blue-light)">🤝</div>
-        <h3>Service & Companion</h3>
-        <p>Delivery, greeting, guidance, social interaction. Robots that work with people.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- Featured Recipes -->
-<section class="section" id="recipes">
+<!-- ======== FEATURED RECIPES ======== -->
+<section class="section alt-section" id="recipes">
   <div class="container">
     <div class="section-header reveal">
       <p class="section-label">Featured Recipes</p>
       <h2 class="section-title">Built by the community,<br>for the community.</h2>
+      <p class="section-desc">Real configs from real builders — with honest documentation, hardware lists, and lessons learned.</p>
     </div>
 
     <div class="hw-grid">
+
       <div class="hw-card reveal">
         <div class="hw-card-top">
           <div class="hw-card-icon">🏠</div>
           <span class="status status-green">Tested</span>
         </div>
-        <h3>PiCar-X Home Patrol</h3>
+        <h3>PiCar-X Home Patrol Bot</h3>
         <p>Autonomous nightly patrol with Gemini vision. Spots open windows, water leaks, and items on the floor. Alerts via WhatsApp.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">SunFounder PiCar-X</span>
+          <span class="recipe-tag">Pi 4B</span>
+          <span class="recipe-tag">Gemini</span>
+        </div>
         <div class="hw-card-meta">
-          Google Gemini 2.5 Flash &middot; SunFounder PiCar-X &middot; ~$120 &middot; Beginner
+          <span>by <strong>robotmike</strong></span>
+          <span>&middot; ~$120 &middot; Beginner</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor hub install picar-home-patrol-e7f3a1</code>
         </div>
       </div>
 
@@ -135,8 +141,17 @@
         </div>
         <h3>Farm Scout — Crop Inspector</h3>
         <p>4WD rover that checks crop rows for pests, disease, and dry spots using Llama 3.3 on Hugging Face. Daily Telegram reports.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">Freenove 4WD</span>
+          <span class="recipe-tag">Pi 5</span>
+          <span class="recipe-tag">Llama 3.3</span>
+        </div>
         <div class="hw-card-meta">
-          Hugging Face Llama 3.3 &middot; Freenove 4WD &middot; ~$200 &middot; Intermediate
+          <span>by <strong>agribot_sarah</strong></span>
+          <span>&middot; ~$200 &middot; Intermediate</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor hub install llama-farm-scout-b4d2e8</code>
         </div>
       </div>
 
@@ -145,10 +160,19 @@
           <div class="hw-card-icon">🎓</div>
           <span class="status status-green">Tested</span>
         </div>
-        <h3>Classroom Q&A Assistant</h3>
+        <h3>Classroom Q&amp;A Assistant</h3>
         <p>Wheeled robot that answers student questions via WhatsApp using Claude Haiku. Rate-limited and content-filtered for classroom use.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">SunFounder PiCar-X</span>
+          <span class="recipe-tag">Pi 4B</span>
+          <span class="recipe-tag">Claude Haiku</span>
+        </div>
         <div class="hw-card-meta">
-          Anthropic Claude Haiku 4 &middot; SunFounder PiCar-X &middot; ~$140 &middot; Beginner
+          <span>by <strong>edu_maker_jen</strong></span>
+          <span>&middot; ~$140 &middot; Beginner</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor hub install classroom-assistant-a1c3f7</code>
         </div>
       </div>
 
@@ -159,8 +183,17 @@
         </div>
         <h3>Warehouse Inventory Scanner</h3>
         <p>Nightly aisle patrols with Gemini vision reading QR codes and shelf labels. Flags misplaced items and empty slots in a morning report.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">Freenove 4WD + LiDAR</span>
+          <span class="recipe-tag">Pi 5</span>
+          <span class="recipe-tag">Gemini 2.5</span>
+        </div>
         <div class="hw-card-meta">
-          Google Gemini 2.5 Flash &middot; Freenove 4WD + LiDAR &middot; ~$280 &middot; Intermediate
+          <span>by <strong>warehouse_tim</strong></span>
+          <span>&middot; ~$280 &middot; Intermediate</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor hub install warehouse-inventory-d5e9b2</code>
         </div>
       </div>
 
@@ -171,8 +204,17 @@
         </div>
         <h3>Garden Health Monitor</h3>
         <p>Solar-powered stationary robot monitoring plant health and soil moisture. Daily Telegram reports with watering recommendations via GPT-4o.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">RPi 4B + sensors</span>
+          <span class="recipe-tag">Solar</span>
+          <span class="recipe-tag">GPT-4o</span>
+        </div>
         <div class="hw-card-meta">
-          OpenAI GPT-4o &middot; RPi 4B + sensors &middot; ~$95 &middot; Beginner
+          <span>by <strong>green_thumb_bot</strong></span>
+          <span>&middot; ~$95 &middot; Beginner</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor hub install garden-monitor-f2a8c4</code>
         </div>
       </div>
 
@@ -183,8 +225,17 @@
         </div>
         <h3>Pet Companion Bot</h3>
         <p>Interactive robot that entertains cats and dogs with random movement and treat dispensing. Claude Sonnet vision detects pet behavior.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">PiCar-X + servo</span>
+          <span class="recipe-tag">Pi 4B</span>
+          <span class="recipe-tag">Claude Sonnet</span>
+        </div>
         <div class="hw-card-meta">
-          Anthropic Claude Sonnet 4 &middot; PiCar-X + servo &middot; ~$85 &middot; Beginner
+          <span>by <strong>petbot_carlos</strong></span>
+          <span>&middot; ~$85 &middot; Beginner</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor hub install pet-companion-b7d1e6</code>
         </div>
       </div>
 
@@ -195,8 +246,17 @@
         </div>
         <h3>Research Data Collector</h3>
         <p>Multi-sensor fleet platform for environmental field research. GPS-tagged data, fleet coordination, and structured JSONL logging.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">Freenove 4WD</span>
+          <span class="recipe-tag">Pi 5 + GPS</span>
+          <span class="recipe-tag">Gemini 2.5</span>
+        </div>
         <div class="hw-card-meta">
-          Google Gemini 2.5 Flash + Robotics ER &middot; Freenove 4WD &middot; ~$220 &middot; Advanced
+          <span>by <strong>fieldbot_research</strong></span>
+          <span>&middot; ~$220 &middot; Advanced</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor hub install research-data-collector-c9f4a3</code>
         </div>
       </div>
 
@@ -206,17 +266,138 @@
           <span class="status" style="background:var(--accent-light);color:var(--accent)">Your recipe?</span>
         </div>
         <h3>Share Your Build</h3>
-        <p>Got a working robot config? Package it with <code>castor hub share</code> and help the next builder skip the hard parts.</p>
-        <div class="hw-card-meta">
-          Any AI &middot; Any hardware &middot; Your budget &middot; Your difficulty
+        <p>Got a working robot config? Package it with <code>castor hub share --submit</code> and help the next builder skip the hard parts.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">Any AI</span>
+          <span class="recipe-tag">Any hardware</span>
+        </div>
+        <div class="hw-card-meta">Any budget &middot; Any difficulty</div>
+        <div style="margin-top:12px">
+          <a href="#submit" class="btn btn-primary btn-sm">Submit a Recipe &rarr;</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ======== SUBMIT CTA ======== -->
+<section class="section" id="submit-cta">
+  <div class="container">
+    <div class="submit-cta-box reveal">
+      <div class="submit-cta-icon">🤖</div>
+      <div class="submit-cta-content">
+        <h2>Share Your Robot Config</h2>
+        <p>Got a working setup? One command packages your config, scrubs secrets, and generates a submission bundle. Help the next builder skip the hard parts.</p>
+        <div class="hero-actions" style="justify-content:flex-start;margin-top:24px">
+          <a href="#submit" class="btn btn-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            castor hub share --submit
+          </a>
+          <a href="https://github.com/craigm26/OpenCastor/tree/main/community-recipes" class="btn btn-secondary">
+            Browse on GitHub
+          </a>
         </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- What makes a great recipe -->
-<section class="section dark-section" id="contribute">
+<!-- ======== GET INVOLVED ======== -->
+<section class="section alt-section" id="get-involved">
+  <div class="container">
+    <div class="section-header center reveal">
+      <p class="section-label">Get Involved</p>
+      <h2 class="section-title">4 ways to contribute</h2>
+      <p class="section-desc">Every contribution — big or small — makes OpenCastor better for every robot builder.</p>
+    </div>
+
+    <div class="bento">
+      <div class="card reveal">
+        <div class="card-icon" style="background:var(--accent-glow)">🤖</div>
+        <h3>Submit a Recipe</h3>
+        <p>The fastest way to contribute. Package your working config with <code>castor hub share --submit</code> and open a PR to <code>community-recipes/</code>. See existing recipes for format.</p>
+        <div style="margin-top:20px">
+          <a href="#submit" style="color:var(--accent);font-size:0.875rem;font-weight:600">Submit yours &rarr;</a>
+        </div>
+      </div>
+
+      <div class="card reveal reveal-d1">
+        <div class="card-icon" style="background:var(--red-light)">🐛</div>
+        <h3>Report an Issue</h3>
+        <p>Found a bug? Unexpected behavior? Hardware that doesn't work? Open an issue on GitHub with your OS, hardware, and the error output.</p>
+        <div style="margin-top:20px">
+          <a href="https://github.com/craigm26/OpenCastor/issues" style="color:var(--accent);font-size:0.875rem;font-weight:600">Open an issue &rarr;</a>
+        </div>
+      </div>
+
+      <div class="card reveal reveal-d2">
+        <div class="card-icon" style="background:var(--blue-light)">📚</div>
+        <h3>Improve Docs</h3>
+        <p>Docs live in <code>site/</code> (HTML) and <code>README.md</code>. Found a confusing section? Wrong command? Missing example? Fix it and open a PR.</p>
+        <div style="margin-top:20px">
+          <a href="https://github.com/craigm26/OpenCastor/blob/main/CONTRIBUTING.md" style="color:var(--accent);font-size:0.875rem;font-weight:600">See CONTRIBUTING.md &rarr;</a>
+        </div>
+      </div>
+
+      <div class="card reveal reveal-d3">
+        <div class="card-icon" style="background:var(--purple-light)">🔌</div>
+        <h3>Build a Provider</h3>
+        <p>Add support for a new AI provider in <code>castor/providers/</code>. Follow the <code>BaseProvider</code> interface — it's a clean 50-line pattern. See existing providers for examples.</p>
+        <div style="margin-top:20px">
+          <a href="https://github.com/craigm26/OpenCastor/blob/main/CONTRIBUTING.md#how-to-add-a-new-ai-provider" style="color:var(--accent);font-size:0.875rem;font-weight:600">Provider guide &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== CATEGORIES ======== -->
+<section class="section" id="categories">
+  <div class="container">
+    <div class="section-header reveal">
+      <p class="section-label">Categories</p>
+      <h2 class="section-title">Every robot has a purpose.</h2>
+      <p class="section-desc">Browse by what your robot needs to do.</p>
+    </div>
+
+    <div class="bento">
+      <div class="card reveal">
+        <div class="card-icon" style="background:var(--accent-light)">🏠</div>
+        <h3>Home &amp; Indoor</h3>
+        <p>Patrol, monitoring, pet interaction, cleaning assistance. Small robots for tight spaces.</p>
+      </div>
+      <div class="card reveal reveal-d1">
+        <div class="card-icon" style="background:var(--green-light)">🌿</div>
+        <h3>Agriculture</h3>
+        <p>Crop inspection, pest detection, soil monitoring, weed identification. Built for dirt and weather.</p>
+      </div>
+      <div class="card reveal reveal-d1">
+        <div class="card-icon" style="background:var(--blue-light)">🏔️</div>
+        <h3>Outdoor &amp; Exploration</h3>
+        <p>Terrain navigation, mapping, environmental sensing. Rugged builds for the real world.</p>
+      </div>
+      <div class="card reveal reveal-d2">
+        <div class="card-icon" style="background:var(--orange-light)">🏭</div>
+        <h3>Industrial</h3>
+        <p>Inspection, assembly assistance, warehouse navigation. Precision and reliability first.</p>
+      </div>
+      <div class="card reveal reveal-d3">
+        <div class="card-icon" style="background:var(--purple-light)">🎓</div>
+        <h3>Education &amp; Research</h3>
+        <p>Teaching robotics, running experiments, prototyping new ideas. Learning by building.</p>
+      </div>
+      <div class="card reveal reveal-d4">
+        <div class="card-icon" style="background:var(--blue-light)">🤝</div>
+        <h3>Service &amp; Companion</h3>
+        <p>Delivery, greeting, guidance, social interaction. Robots that work with people.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== WHAT MAKES A GREAT RECIPE ======== -->
+<section class="section dark-section" id="quality">
   <div class="container">
     <div class="section-header reveal" style="text-align:center;margin-left:auto;margin-right:auto">
       <p class="section-label">Contributing</p>
@@ -236,14 +417,14 @@
       </div>
       <div class="step reveal reveal-d2">
         <div class="step-num">💰</div>
-        <h3>Budget & Bill of Materials</h3>
+        <h3>Budget &amp; Bill of Materials</h3>
         <p>Real costs help people plan. Include links to where you bought parts if possible.</p>
       </div>
     </div>
   </div>
 </section>
 
-<!-- CLI Reference -->
+<!-- ======== CLI REFERENCE ======== -->
 <section class="section">
   <div class="container">
     <div class="code-showcase">
@@ -274,8 +455,7 @@
 <span class="s">$</span> castor hub install picar-home-patrol-e7f3a1
 
 <span class="cm"># Share your working config (PII auto-scrubbed)</span>
-<span class="s">$</span> castor hub share --config robot.rcan.yaml \
-    --docs BUILD_NOTES.md LESSONS.md
+<span class="s">$</span> castor hub share --submit
 
 <span class="cm"># See all categories</span>
 <span class="s">$</span> castor hub categories</div>
@@ -284,22 +464,22 @@
   </div>
 </section>
 
-<!-- Submit via GitHub PR -->
-<section class="section" id="submit">
+<!-- ======== SUBMIT VIA PR ======== -->
+<section class="section alt-section" id="submit">
   <div class="container">
     <div class="section-header center reveal">
       <p class="section-label">Submit</p>
       <h2 class="section-title">How to submit a recipe</h2>
-      <p class="section-desc">Recipes are submitted via GitHub Pull Request to the community-recipes directory.</p>
+      <p class="section-desc">Recipes are submitted via GitHub Pull Request to the <code>community-recipes/</code> directory.</p>
     </div>
 
     <div class="wizard-step reveal" style="margin-bottom:24px">
       <div class="wizard-step-header">
         <div class="wizard-step-num">1</div>
-        <div><h3>Package your config</h3><p>Run <code style="padding:2px 6px;font-size:0.8125rem">castor hub share</code> to auto-scrub secrets and generate a submission bundle.</p></div>
+        <div><h3>Package your config</h3><p>Run <code style="padding:2px 6px;font-size:0.8125rem">castor hub share --submit</code> to auto-scrub secrets and generate a submission bundle.</p></div>
       </div>
       <div class="code-block"><div class="code-header"><div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">Terminal</span></div>
-        <div class="code-body"><span class="k">castor hub share</span> --config robot.rcan.yaml --docs BUILD_NOTES.md</div>
+        <div class="code-body"><span class="k">castor hub share</span> --submit --config robot.rcan.yaml --docs BUILD_NOTES.md</div>
       </div>
     </div>
 
@@ -311,8 +491,8 @@
       <div class="code-block"><div class="code-header"><div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">Terminal</span></div>
         <div class="code-body"><span class="k">git clone</span> https://github.com/YOUR_USER/OpenCastor.git
 <span class="k">cp</span> -r my-recipe/ community-recipes/
-<span class="k">git add</span> . && <span class="k">git commit</span> -m <span class="s">"Add my-robot recipe"</span>
-<span class="k">git push</span> && <span class="cm"># open PR on GitHub</span></div>
+<span class="k">git add</span> . &amp;&amp; <span class="k">git commit</span> -m <span class="s">"Add my-robot recipe"</span>
+<span class="k">git push</span> &amp;&amp; <span class="cm"># open PR on GitHub</span></div>
       </div>
     </div>
 
@@ -325,8 +505,8 @@
   </div>
 </section>
 
-<!-- Seed Recipes -->
-<section class="section alt-section" id="seeds">
+<!-- ======== SEED RECIPES ======== -->
+<section class="section" id="seeds">
   <div class="container">
     <div class="section-header center reveal">
       <p class="section-label">Seed Recipes</p>
@@ -363,8 +543,8 @@
   </div>
 </section>
 
-<!-- PII / Safety -->
-<section class="section">
+<!-- ======== SAFETY ======== -->
+<section class="section alt-section">
   <div class="container">
     <div class="section-header reveal" style="text-align:center;margin-left:auto;margin-right:auto">
       <p class="section-label">Safety</p>
@@ -374,7 +554,7 @@
 
     <div class="bento" style="max-width:800px;margin:0 auto">
       <div class="card reveal">
-        <h3>🔑 API Keys & Tokens</h3>
+        <h3>🔑 API Keys &amp; Tokens</h3>
         <p>OpenAI, Anthropic, Google, Hugging Face, GitHub, Slack tokens are all detected and redacted.</p>
       </div>
       <div class="card reveal reveal-d1">
@@ -393,18 +573,33 @@
   </div>
 </section>
 
-<!-- CTA -->
+<!-- ======== SOCIAL / CTA ======== -->
 <section class="cta-section">
   <h2 class="reveal">Every working config helps someone.</h2>
   <p class="reveal reveal-d1">Share yours. Find your next build. Build together.</p>
   <div class="hero-actions reveal reveal-d2">
     <a href="https://github.com/craigm26/OpenCastor/tree/main/community-recipes" class="btn btn-primary btn-lg">
-      Browse Recipes
+      Browse Recipes on GitHub
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
     </a>
     <a href="/docs" class="btn btn-secondary btn-lg">
       Get Started
     </a>
+  </div>
+
+  <div class="community-social-links reveal reveal-d3">
+    <a href="https://github.com/craigm26/OpenCastor" class="community-social-link">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.09.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+      GitHub
+    </a>
+    <a href="https://pypi.org/project/opencastor/" class="community-social-link">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M9.585 11.692h4.328s2.432.039 2.432-2.35V5.391S16.714 3 11.936 3C7.362 3 7.647 4.983 7.647 4.983l.006 2.055h4.363v.617H5.92S3 7.28 3 11.874s2.547 4.456 2.547 4.456h1.521v-2.143s-.083-2.547 2.508-2.547l-.001.052zm-.282-4.444a.812.812 0 110-1.624.812.812 0 010 1.624z"/><path d="M14.415 12.308h-4.328s-2.432-.039-2.432 2.35v3.951S7.286 21 12.064 21c4.574 0 4.289-1.983 4.289-1.983l-.006-2.055h-4.363v-.617h6.096S21 16.72 21 12.126s-2.547-4.456-2.547-4.456h-1.521v2.143s.083 2.547-2.508 2.547l.001-.052zm.282 4.444a.812.812 0 110 1.624.812.812 0 010-1.624z"/></svg>
+      PyPI
+    </a>
+    <span class="community-social-link community-social-coming-soon">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03z"/></svg>
+      🤖 Discord (coming soon)
+    </span>
   </div>
 </section>
 
@@ -441,10 +636,11 @@
         <a href="https://discord.gg/jMjA8B26Bq">Discord Community</a>
       </div>
       <div class="footer-col">
-        <h4>Company</h4>
-        <a href="/beginners">Beginners</a>
-      <a href="/about">About</a>
-        <a href="mailto:hello@opencastor.com">Contact</a>
+        <h4>Community</h4>
+        <a href="/hub">Recipe Hub</a>
+        <a href="https://github.com/craigm26/OpenCastor/blob/main/CONTRIBUTING.md">Contributing</a>
+        <a href="https://pypi.org/project/opencastor/">PyPI</a>
+        <a href="/about">About</a>
       </div>
     </div>
     <div class="footer-bottom">

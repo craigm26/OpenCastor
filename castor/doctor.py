@@ -206,6 +206,7 @@ def print_report(results, colors_class=None):
         console.print(table)
         status_color = "green" if failed == 0 else "yellow"
         console.print(f"\n  [{status_color}]{passed} passed, {failed} failed[/]")
+        console.print("  Tip: Run 'castor validate --config X' for deep RCAN conformance checks.")
         return failed == 0
 
     except ImportError:
@@ -227,4 +228,5 @@ def print_report(results, colors_class=None):
         print(f"  [{tag}] {name}: {detail}")
 
     print(f"\n  {passed} passed, {failed} failed")
+    print("  Tip: Run 'castor validate --config X' for deep RCAN conformance checks.")
     return failed == 0
