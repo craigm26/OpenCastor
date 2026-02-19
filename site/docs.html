@@ -627,6 +627,63 @@
   </div>
 </section>
 
+<!-- Self-Improving Loop -->
+<section class="section alt-section" id="self-improving">
+  <div class="container">
+    <div class="section-header center reveal">
+      <p class="section-label">Intelligence</p>
+      <h2 class="section-title">Self-Improving Loop</h2>
+      <p class="section-desc">Your robot learns from its mistakes. The Sisyphus Loop analyzes episodes, identifies failures, generates fixes, and applies improvements — automatically.</p>
+    </div>
+    <div class="doc-content reveal">
+      <pre><code># Enable from CLI (disabled by default)
+castor improve --enable
+castor improve --enable --config mybot.rcan.yaml
+
+# Disable anytime
+castor improve --disable
+
+# Run analysis manually
+castor improve --episodes 10
+
+# Check status and history
+castor improve --status
+castor improve --improvements
+castor improve --rollback abc123
+
+# ALMA batch consolidation (cross-episode patterns)
+castor improve --batch --config bot.rcan.yaml</code></pre>
+
+      <p style="margin-top:1.5rem"><strong>How it works:</strong></p>
+      <ul style="margin-top:0.5rem;line-height:1.8">
+        <li><strong>PM Stage</strong> — Analyzes episode outcomes, identifies failures and root causes</li>
+        <li><strong>Dev Stage</strong> — Generates config/behavior patches from analysis</li>
+        <li><strong>QA Stage</strong> — Verifies patches are safe (bounds checking, regression tests)</li>
+        <li><strong>Apply Stage</strong> — Deploys verified patches (rollback available)</li>
+      </ul>
+
+      <p style="margin-top:1.5rem"><strong>Cost-aware presets (set in wizard or YAML):</strong></p>
+      <ul style="margin-top:0.5rem;line-height:1.8">
+        <li><strong>Free</strong> — Ollama/llama.cpp local analysis ($0)</li>
+        <li><strong>Budget</strong> — HuggingFace free API ($0/month)</li>
+        <li><strong>Smart</strong> — Gemini 2.5 Flash-Lite (~$1-3/month)</li>
+        <li><strong>Premium</strong> — Claude for best root-cause analysis (~$5-15/month)</li>
+      </ul>
+
+      <p style="margin-top:1.5rem">Config and behavior patches can auto-apply within safe bounds. Code patches always require human review. Enable via <code>castor wizard</code> or directly in your RCAN config:</p>
+
+      <pre style="margin-top:0.75rem"><code>learner:
+  enabled: true
+  provider: huggingface
+  model: Qwen/Qwen2.5-7B-Instruct
+  cadence_n: 5
+  auto_apply_config: true
+  auto_apply_behavior: false
+  auto_apply_code: false</code></pre>
+    </div>
+  </div>
+</section>
+
 <!-- Troubleshooting -->
 <section class="section" id="troubleshooting">
   <div class="container">

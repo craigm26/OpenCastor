@@ -5,6 +5,20 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.20.1] - 2026-02-20 🎛️ Improve CLI Shortcuts
+
+### Added
+- **`castor improve --enable`** — Enable self-improving loop from CLI with sensible defaults (HF free tier, every 5 episodes, config auto-apply only)
+- **`castor improve --disable`** — Pause self-improving loop, preserves config and history
+- Auto-detects RCAN config when single `*.rcan.yaml` in cwd
+- Preserves existing learner settings when re-enabling (won't overwrite provider/model)
+- 7 new tests for enable/disable toggle (`test_improve_toggle.py`)
+
+### Stats
+- **1,444 tests** passing (11 skipped) | **40,287 LOC** | 8 providers
+
+---
+
 ## [2026.2.20.0] - 2026-02-20 🧠 Self-Improving Loop
 
 ### Highlights

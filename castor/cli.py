@@ -26,7 +26,9 @@ Usage:
     castor replay session.jsonl                        # Replay a recorded session
     castor benchmark --config robot.rcan.yaml          # Performance profiling
     castor lint --config robot.rcan.yaml               # Deep config validation
-    castor improve --episodes 10                       # Self-improving loop (Sisyphus)
+    castor improve --enable                            # Enable self-improving loop
+    castor improve --disable                           # Disable self-improving loop
+    castor improve --episodes 10                       # Analyze last 10 episodes
     castor improve --status                            # Improvement history
     castor learn                                       # Interactive tutorial
     castor fleet status                                # Multi-robot status
@@ -549,8 +551,86 @@ def cmd_lint(args) -> None:
     print_lint_report(issues, args.config)
 
 
+def _improve_toggle(args) -> bool:
+    """Handle --enable/--disable for self-improving loop. Returns True if handled."""
+    if not (getattr(args, "enable", False) or getattr(args, "disable", False)):
+        return False
+
+    import glob
+
+    import yaml
+
+    config_path = getattr(args, "config", None)
+    if not config_path:
+        # Auto-detect: look for *.rcan.yaml in cwd
+        candidates = glob.glob("*.rcan.yaml")
+        if len(candidates) == 1:
+            config_path = candidates[0]
+        elif len(candidates) > 1:
+            print("  Multiple RCAN configs found. Use --config to specify one:")
+            for c in candidates:
+                print(f"    {c}")
+            return True
+        else:
+            print("  No RCAN config found. Use --config <path> or run from your project directory.")
+            return True
+
+    # Load existing config
+    try:
+        with open(config_path) as f:
+            config = yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        print(f"  Config not found: {config_path}")
+        return True
+
+    if args.enable:
+        learner = config.setdefault("learner", {})
+        learner["enabled"] = True
+        # Set sensible defaults if not already configured
+        learner.setdefault("provider", "huggingface")
+        learner.setdefault("model", "Qwen/Qwen2.5-7B-Instruct")
+        learner.setdefault("cadence", "every_5")
+        learner.setdefault("cadence_n", 5)
+        learner.setdefault("max_retries", 3)
+        learner.setdefault("auto_apply_config", True)
+        learner.setdefault("auto_apply_behavior", False)
+        learner.setdefault("auto_apply_code", False)
+
+        with open(config_path, "w") as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+        provider = learner["provider"]
+        model = learner["model"]
+        cadence = learner.get("cadence_n", 5)
+        print(f"\n  ✅ Self-improving loop enabled in {config_path}")
+        print(f"     Provider: {provider}/{model}")
+        print(f"     Cadence: every {cadence} episode(s)")
+        print(f"     Auto-apply: config=yes, behavior=no, code=no")
+        print()
+        print("  Tip: Customize provider/model/cadence in the learner section of your config,")
+        print("  or re-run `castor wizard` for the interactive setup.")
+
+    elif args.disable:
+        if "learner" in config:
+            config["learner"]["enabled"] = False
+        else:
+            config["learner"] = {"enabled": False}
+
+        with open(config_path, "w") as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+        print(f"\n  ⏸️  Self-improving loop disabled in {config_path}")
+        print("  Episode recording will stop. Existing history is preserved.")
+        print("  Re-enable anytime with: castor improve --enable")
+
+    return True
+
+
 def cmd_improve(args) -> None:
     """Self-improving loop — analyze episodes and apply improvements."""
+    if _improve_toggle(args):
+        return
+
     try:
         from castor.learner import ALMAConsolidation, EpisodeStore, SisyphusLoop
     except ImportError:
@@ -1754,6 +1834,8 @@ def main() -> None:
         help="Self-improving loop (Sisyphus pattern) — analyze episodes and apply improvements",
         epilog=(
             "Examples:\n"
+            "  castor improve --enable              # Enable self-improving loop\n"
+            "  castor improve --disable             # Disable self-improving loop\n"
             "  castor improve --episodes 10         # Analyze last 10 episodes\n"
             "  castor improve --status              # Show improvement history\n"
             "  castor improve --improvements         # List all applied patches\n"
@@ -1771,6 +1853,12 @@ def main() -> None:
     p_improve.add_argument("--rollback", type=str, help="Rollback a specific improvement by ID")
     p_improve.add_argument("--batch", action="store_true", help="Run ALMA batch consolidation")
     p_improve.add_argument("--dry-run", action="store_true", help="Analyze but don't apply patches")
+    p_improve.add_argument(
+        "--enable", action="store_true", help="Enable self-improving loop in RCAN config"
+    )
+    p_improve.add_argument(
+        "--disable", action="store_true", help="Disable self-improving loop in RCAN config"
+    )
 
     # castor fleet
     p_fleet = sub.add_parser(
