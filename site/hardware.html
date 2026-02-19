@@ -35,6 +35,7 @@
       <a href="/docs">Docs</a>
       <a href="/hub">Hub</a>
       <a href="/about">About</a>
+      <a href="/beginners">Beginners</a>
       <a href="https://github.com/craigm26/OpenCastor" class="btn-nav">GitHub <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg></a>
     </div>
     <button class="mobile-toggle" aria-label="Menu"><span></span><span></span><span></span></button>
@@ -270,6 +271,94 @@
   </div>
 </section>
 
+<!-- STEM & Classroom Hardware -->
+<section class="section" id="stem">
+  <div class="container">
+    <div class="section-header reveal">
+      <p class="section-label">STEM &amp; Classroom Hardware</p>
+      <h2 class="section-title">Found it at a thrift store? We've got you.</h2>
+      <p class="section-desc">OpenCastor works with the most common robotics kits from schools, makerspaces, and STEM programs — including second-hand parts. If you found it in a surplus sale, there's a good chance it just works.</p>
+    </div>
+    <div class="hw-grid">
+      <div class="hw-card reveal">
+        <div class="hw-card-top"><div class="hw-card-icon">🧱</div><span class="status status-green">Supported</span></div>
+        <h3>LEGO Mindstorms EV3</h3>
+        <p>The most donated STEM robot in the world. Runs ev3dev Linux. OpenCastor connects over SSH and drives motors + sensors natively.</p>
+        <div class="hw-card-meta">ev3dev SSH · $40–80 used</div>
+      </div>
+      <div class="hw-card reveal reveal-d1">
+        <div class="hw-card-top"><div class="hw-card-icon">🧱</div><span class="status status-green">Supported</span></div>
+        <h3>LEGO SPIKE Prime</h3>
+        <p>Newer classroom kit. USB-C or Bluetooth connection. Common in school donations from 2022–2024 programs.</p>
+        <div class="hw-card-meta">Serial/BLE · $80–120 used</div>
+      </div>
+      <div class="hw-card reveal reveal-d2">
+        <div class="hw-card-top"><div class="hw-card-icon">🔩</div><span class="status status-green">Supported</span></div>
+        <h3>VEX IQ</h3>
+        <p>Extremely common at school robotics program surplus sales. Smart motors with built-in encoders. USB CDC protocol.</p>
+        <div class="hw-card-meta">VEX Serial · $30–60 used</div>
+      </div>
+      <div class="hw-card reveal reveal-d3">
+        <div class="hw-card-top"><div class="hw-card-icon">🤖</div><span class="status status-green">Supported</span></div>
+        <h3>Makeblock mBot</h3>
+        <p>One of the most popular STEM kits ever made. Arduino-based Orion board, USB or Bluetooth.</p>
+        <div class="hw-card-meta">Arduino Serial · $15–30 used</div>
+      </div>
+      <div class="hw-card reveal reveal-d4">
+        <div class="hw-card-top"><div class="hw-card-icon">⚡</div><span class="status status-green">Supported</span></div>
+        <h3>Arduino + L298N</h3>
+        <p>The universal DIY combo. Found at every makerspace and hackerspace. Any Arduino + any L298N motor driver.</p>
+        <div class="hw-card-meta">Arduino Serial · $5–15 new</div>
+      </div>
+      <div class="hw-card reveal reveal-d5">
+        <div class="hw-card-top"><div class="hw-card-icon">📡</div><span class="status status-green">Supported</span></div>
+        <h3>ESP32 + Motor Driver</h3>
+        <p>WiFi-native. Dirt cheap. Great for wireless robots. Tons of dev boards on eBay for under $5.</p>
+        <div class="hw-card-meta">WebSocket/WiFi · $3–10 new</div>
+      </div>
+      <div class="hw-card reveal">
+        <div class="hw-card-top"><div class="hw-card-icon">🚗</div><span class="status status-green">Supported</span></div>
+        <h3>Elegoo Smart Robot Car</h3>
+        <p>One of the top-selling robot kits on Amazon. Arduino-based, ultrasonic sensors, line following. Tons second-hand.</p>
+        <div class="hw-card-meta">Arduino Serial · $20–35 new</div>
+      </div>
+      <div class="hw-card reveal reveal-d1">
+        <div class="hw-card-top"><div class="hw-card-icon">🚗</div><span class="status status-green">Supported</span></div>
+        <h3>Freenove 4WD (Pi)</h3>
+        <p>Hugely popular Raspberry Pi car kit. I2C motor driver, camera mount. Great community support.</p>
+        <div class="hw-card-meta">PCA9685 I2C · $35–50 new</div>
+      </div>
+      <div class="hw-card reveal reveal-d2">
+        <div class="hw-card-top"><div class="hw-card-icon">🦾</div><span class="status status-green">Supported</span></div>
+        <h3>Yahboom ROSMASTER</h3>
+        <p>Popular ROS learning kit with mecanum wheels. Ideal for students moving from classroom to research.</p>
+        <div class="hw-card-meta">PCA9685 + ROS2 · $120–150 new</div>
+      </div>
+      <div class="hw-card reveal reveal-d3">
+        <div class="hw-card-top"><div class="hw-card-icon">🎛️</div><span class="status status-green">Supported</span></div>
+        <h3>Cytron Maker Pi</h3>
+        <p>MicroPython-friendly RP2040 board from hackerspaces. Great for custom builds with salvaged parts.</p>
+        <div class="hw-card-meta">RP2040 Serial · $10–15 new</div>
+      </div>
+    </div>
+
+    <!-- Second-hand sources callout -->
+    <div class="reveal" style="margin-top:48px; padding:28px 32px; background:var(--accent-glow); border:1px solid rgba(99,102,241,0.25); border-radius:var(--radius-lg);">
+      <h3 style="margin-bottom:16px; font-size:1.1rem;">🛍️ Where to find these parts</h3>
+      <ul style="display:grid; gap:10px; color:var(--text-secondary); font-size:0.9375rem;">
+        <li>🏫 School surplus sales and district auctions</li>
+        <li>♻️ Goodwill and local thrift stores (especially near universities)</li>
+        <li>📦 eBay, Facebook Marketplace, Craigslist</li>
+        <li>🔧 Makerspace parts bins and swap meets</li>
+        <li>🎓 End-of-year FIRST Robotics / VEX program donations</li>
+      </ul>
+      <p style="margin-top:20px; font-size:0.875rem; color:var(--text-muted);">
+        Not sure what protocol your hardware uses? <a href="/docs#hardware-guide" style="color:var(--accent); text-decoration:underline; text-underline-offset:3px;">Check the hardware guide →</a>
+      </p>
+    </div>
+  </div>
+</section>
+
 <!-- CTA -->
 <section class="cta-section">
   <h2 class="reveal">Don't see your hardware?</h2>
@@ -277,6 +366,7 @@
   <div class="hero-actions reveal reveal-d2">
     <a href="https://github.com/craigm26/OpenCastor/issues" class="btn btn-primary">Request Hardware Support</a>
     <a href="/docs" class="btn btn-secondary">Write a Driver</a>
+    <a href="/beginners" class="btn btn-secondary">Beginner Guide →</a>
   </div>
 </section>
 </main>

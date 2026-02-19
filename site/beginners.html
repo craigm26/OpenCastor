@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Beginner Guide — OpenCastor</title>
+  <meta name="description" content="New to robotics? Start here. OpenCastor is designed so that anyone can get a robot thinking with AI in an afternoon. No experience needed.">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    /* ---- Beginner page extras ---- */
+    .needs-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 24px;
+      margin-top: 0;
+    }
+    .needs-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px 24px;
+      transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+    }
+    .needs-card:hover { border-color: var(--border-hover); background: var(--bg-card-hover); }
+    .needs-card-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--accent-glow);
+      color: var(--accent);
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 0.875rem;
+      margin-bottom: 16px;
+    }
+    .needs-card h3 { font-size: 1.1rem; margin-bottom: 8px; }
+    .needs-card p { font-size: 0.9375rem; color: var(--text-secondary); }
+
+    /* Starting point cards */
+    .start-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+    }
+    .start-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 32px 28px;
+      text-decoration: none;
+      display: block;
+      transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease), transform var(--dur) var(--ease);
+    }
+    .start-card:hover { border-color: var(--accent); background: var(--bg-card-hover); transform: translateY(-2px); }
+    .start-card-icon { font-size: 2.25rem; margin-bottom: 16px; }
+    .start-card h3 { font-size: 1.1rem; margin-bottom: 10px; }
+    .start-card p { font-size: 0.9375rem; color: var(--text-secondary); line-height: 1.6; }
+    .start-card code {
+      display: inline-block;
+      margin-top: 12px;
+      padding: 6px 10px;
+      background: var(--surface);
+      border-radius: var(--radius-sm);
+      font-size: 0.8125rem;
+      color: var(--accent);
+    }
+    .start-card-arrow {
+      display: inline-block;
+      margin-top: 16px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    /* Steps */
+    .steps-list { display: flex; flex-direction: column; gap: 0; }
+    .step-item {
+      display: flex;
+      gap: 28px;
+      padding: 36px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .step-item:last-child { border-bottom: none; }
+    .step-num {
+      flex-shrink: 0;
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: var(--accent-glow);
+      border: 2px solid rgba(99, 102, 241, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 1.125rem;
+      color: var(--accent);
+      margin-top: 4px;
+    }
+    .step-body { flex: 1; }
+    .step-body h3 { font-size: 1.3rem; margin-bottom: 12px; }
+    .step-body p { color: var(--text-secondary); font-size: 1rem; margin-top: 12px; line-height: 1.7; }
+    .step-code {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      margin-top: 14px;
+      font-family: var(--font-mono);
+      font-size: 0.9375rem;
+      color: var(--accent-hover);
+      overflow-x: auto;
+    }
+
+    /* FAQ */
+    .faq-list { display: flex; flex-direction: column; gap: 0; max-width: 760px; }
+    .faq-item {
+      border-bottom: 1px solid var(--border);
+      padding: 24px 0;
+    }
+    .faq-item:last-child { border-bottom: none; }
+    .faq-q {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1.05rem;
+      color: var(--text);
+      margin-bottom: 10px;
+    }
+    .faq-a { font-size: 0.9375rem; color: var(--text-secondary); line-height: 1.7; }
+    .faq-a code {
+      padding: 2px 7px;
+      background: var(--surface);
+      border-radius: 4px;
+      font-size: 0.875rem;
+      color: var(--accent);
+    }
+
+    /* Community callout */
+    .community-box {
+      background: linear-gradient(135deg, rgba(99,102,241,0.08), var(--bg-card));
+      border: 1px solid rgba(99,102,241,0.25);
+      border-radius: var(--radius-xl);
+      padding: 48px 40px;
+      text-align: center;
+    }
+    .community-box h2 { margin-bottom: 12px; }
+    .community-box p { color: var(--text-secondary); font-size: 1.0625rem; max-width: 520px; margin: 0 auto 32px; }
+    .community-links { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; }
+    .community-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 22px;
+      background: var(--bg-card-hover);
+      border: 1px solid var(--border-hover);
+      border-radius: var(--radius-md);
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: var(--text);
+      transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+    }
+    .community-link:hover { border-color: var(--accent); color: var(--accent); }
+    .community-link svg { width: 18px; height: 18px; }
+
+    /* Warm hero override for this page */
+    .beginner-hero { padding: 120px 0 80px; text-align: center; position: relative; }
+    .beginner-hero .page-hero-label {
+      display: inline-block;
+      padding: 6px 16px;
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.25);
+      border-radius: 100px;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--green);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+    .beginner-hero h1 { margin-bottom: 20px; }
+    .beginner-hero .hero-sub {
+      font-size: 1.125rem;
+      color: var(--text-secondary);
+      max-width: 620px;
+      margin: 0 auto;
+      line-height: 1.7;
+    }
+
+    @media (max-width: 640px) {
+      .step-item { flex-direction: column; gap: 16px; }
+      .community-box { padding: 36px 24px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav class="site-nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">
+      <svg viewBox="0 0 32 32" fill="none"><path d="M11 26 A11 11 0 1 1 23 8 L20 11 A7 7 0 1 0 14 22 Z" fill="currentColor"/><path d="M23 8 L26 5 L23 2 L20 5 Z" fill="currentColor" opacity="0.7"/><path d="M11 26 L8 29 L5 26 L8 23 Z" fill="currentColor" opacity="0.7"/><circle cx="16" cy="16" r="3.5" fill="#6366f1" opacity="0.9"/><circle cx="16" cy="16" r="1.8" fill="#fff" opacity="0.3"/></svg>
+      <span>OpenCastor</span>
+    </a>
+    <div class="nav-links">
+      <a href="/hardware">Hardware</a>
+      <a href="/docs">Docs</a>
+      <a href="/hub">Hub</a>
+      <a href="/about">About</a>
+      <a href="/beginners" class="active">Beginners</a>
+      <a href="https://github.com/craigm26/OpenCastor" class="btn-nav">GitHub <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg></a>
+    </div>
+    <button class="mobile-toggle" aria-label="Menu"><span></span><span></span><span></span></button>
+  </div>
+</nav>
+
+<main>
+
+<!-- ======== HERO ======== -->
+<section class="beginner-hero">
+  <div class="container">
+    <p class="page-hero-label reveal">New to robotics?</p>
+    <h1 class="reveal reveal-d1">Start here.<br>No experience needed.</h1>
+    <p class="hero-sub reveal reveal-d2">OpenCastor is designed so that anyone — student, hobbyist, curious tinkerer — can get a robot thinking with AI in an afternoon. This guide walks you through everything from scratch.</p>
+  </div>
+</section>
+
+<!-- ======== WHAT YOU'LL NEED ======== -->
+<section class="section alt-section">
+  <div class="container">
+    <div class="section-header reveal">
+      <p class="section-label">Getting ready</p>
+      <h2 class="section-title">What you'll need</h2>
+      <p class="section-desc">Three things. That's it. Don't worry about getting everything perfect — you can always swap parts out later.</p>
+    </div>
+    <div class="needs-grid">
+      <div class="needs-card reveal">
+        <div class="needs-card-num">1</div>
+        <h3>A robot or robot kit</h3>
+        <p>Any of the kits on our hardware page work. Even something from a thrift store or school surplus sale. If you're not sure, check our <a href="/hardware#stem" style="color:var(--accent);">STEM hardware list</a>.</p>
+      </div>
+      <div class="needs-card reveal reveal-d1">
+        <div class="needs-card-num">2</div>
+        <h3>A Raspberry Pi or computer</h3>
+        <p>A Raspberry Pi 4 or 5 is ideal ($35–80). A regular laptop works too for simulation. If you have a spare computer lying around, it'll probably work.</p>
+      </div>
+      <div class="needs-card reveal reveal-d2">
+        <div class="needs-card-num">3</div>
+        <h3>An AI model account</h3>
+        <p>Free options are available — we'll help you choose one. You don't need to pay anything to get started. The wizard will walk you through it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== PICK YOUR STARTING POINT ======== -->
+<section class="section">
+  <div class="container">
+    <div class="section-header reveal">
+      <p class="section-label">Where are you starting from?</p>
+      <h2 class="section-title">Pick your starting point</h2>
+      <p class="section-desc">Everyone comes from somewhere different. Find the path that fits you.</p>
+    </div>
+    <div class="start-grid">
+      <a href="/hardware" class="start-card reveal">
+        <div class="start-card-icon">🛒</div>
+        <h3>I have a kit from Amazon</h3>
+        <p>Go to the Hardware page, find your kit, and download the community preset. You'll be up and running in minutes.</p>
+        <span class="start-card-arrow">Go to Hardware page →</span>
+      </a>
+      <a href="/hardware#stem" class="start-card reveal reveal-d1">
+        <div class="start-card-icon">🎓</div>
+        <h3>I found something at school or a thrift store</h3>
+        <p>Check the STEM &amp; Classroom Hardware section — it lists the most common school and donation kits with full setup instructions.</p>
+        <span class="start-card-arrow">Check STEM hardware →</span>
+      </a>
+      <div class="start-card reveal reveal-d2" style="cursor:default;">
+        <div class="start-card-icon">🧪</div>
+        <h3>I don't have any hardware yet</h3>
+        <p>No problem. Try the built-in simulator first — no robot required. Just run:</p>
+        <code>castor demo</code>
+        <p style="margin-top:12px;">It simulates a robot so you can learn the system before buying anything.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== STEP BY STEP ======== -->
+<section class="section alt-section" id="install">
+  <div class="container">
+    <div class="section-header reveal">
+      <p class="section-label">Step by step</p>
+      <h2 class="section-title">Your first robot, start to finish</h2>
+      <p class="section-desc">Follow these steps in order. Each one builds on the last. Don't skip ahead — the wizard will handle most of the complexity for you.</p>
+    </div>
+    <div class="steps-list">
+
+      <div class="step-item reveal">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Install OpenCastor</h3>
+          <div class="step-code">curl -fsSL opencastor.com/install | bash</div>
+          <p>This one command installs everything. It works on Raspberry Pi, Mac, Linux, and Windows. Takes about 2 minutes. You'll see a progress bar as it downloads and sets up.</p>
+        </div>
+      </div>
+
+      <div class="step-item reveal">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>Run the setup wizard</h3>
+          <div class="step-code">castor wizard</div>
+          <p>The wizard asks you a few plain-English questions: what AI model to use, what hardware you have, and how you'd like to connect. It sets everything up automatically. You don't need to edit any config files by hand.</p>
+        </div>
+      </div>
+
+      <div class="step-item reveal">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Choose a free AI model</h3>
+          <p>We recommend starting with the free <strong style="color:var(--text);">Hugging Face</strong> tier — no credit card needed. The wizard will walk you through creating a free account and getting an API key in about 3 minutes.</p>
+          <p>If you already have a Claude, ChatGPT, or Gemini subscription, those work too — just paste your API key when asked.</p>
+        </div>
+      </div>
+
+      <div class="step-item reveal">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <h3>Test your hardware</h3>
+          <div class="step-code">castor test-hardware</div>
+          <p>This command talks to your robot and makes sure everything is connected correctly. It tests each motor one at a time so you can watch them move and confirm everything's working before running anything autonomous.</p>
+        </div>
+      </div>
+
+      <div class="step-item reveal">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <h3>Start your robot</h3>
+          <div class="step-code">castor run --config my_robot.rcan.yaml</div>
+          <p>Your robot is now running! It uses the camera to see the world, thinks about what to do using your chosen AI model, and moves. Just watch what happens — and don't worry, the safety layer will stop it if anything goes wrong.</p>
+        </div>
+      </div>
+
+      <div class="step-item reveal">
+        <div class="step-num">6</div>
+        <div class="step-body">
+          <h3>Talk to your robot <span style="font-size:0.875rem; font-weight:500; color:var(--text-muted);">(optional but fun)</span></h3>
+          <p>If you set up WhatsApp or Telegram during the wizard, you can now text your robot commands directly from your phone. Send it a message like "go forward" or "find the red object" and watch it respond.</p>
+          <p style="margin-top:8px; font-size:0.875rem; color:var(--text-muted);">This is set up during <code style="color:var(--accent); background:var(--surface); padding:2px 6px; border-radius:4px;">castor wizard</code> — just choose "yes" when it asks about messaging.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ======== FAQ ======== -->
+<section class="section">
+  <div class="container">
+    <div class="section-header reveal">
+      <p class="section-label">Common questions</p>
+      <h2 class="section-title">Things people ask</h2>
+      <p class="section-desc">Honest answers, no jargon.</p>
+    </div>
+    <div class="faq-list">
+      <div class="faq-item reveal">
+        <div class="faq-q">Do I need to know Python?</div>
+        <div class="faq-a">No. The wizard handles all the setup. If you want to customize your robot's behavior later, knowing basic Python helps — but it's absolutely not required to get started. Many people run OpenCastor for months without touching a line of code.</div>
+      </div>
+      <div class="faq-item reveal">
+        <div class="faq-q">What if my kit isn't listed on the hardware page?</div>
+        <div class="faq-a">Run <code>castor wizard</code> — it has a generic mode that works with most common hardware. Or join our <a href="https://discord.gg/jMjA8B26Bq" style="color:var(--accent);">Discord</a> and describe what you have. The community is friendly and someone has probably set up the same thing already.</div>
+      </div>
+      <div class="faq-item reveal">
+        <div class="faq-q">Is it free?</div>
+        <div class="faq-a">OpenCastor itself is free and open source (Apache 2.0). The AI model you choose may have costs, but we'll show you free options to start. Most beginners run for months on the free Hugging Face tier without spending anything.</div>
+      </div>
+      <div class="faq-item reveal">
+        <div class="faq-q">What if something breaks or stops working?</div>
+        <div class="faq-a">Run <code>castor doctor</code> — it checks your entire setup and tells you exactly what's wrong in plain English. Most common issues are detected and fixed automatically. If it can't fix it, it tells you what to search for.</div>
+      </div>
+      <div class="faq-item reveal">
+        <div class="faq-q">Can I use this with my class?</div>
+        <div class="faq-a">Yes! Schools and educators are very welcome. Check the community Hub for classroom-ready configs — there are presets designed for group use with multiple robots. If you need help setting up for a class, reach out on Discord.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== COMMUNITY ======== -->
+<section class="section alt-section">
+  <div class="container">
+    <div class="community-box reveal">
+      <h2>You're not alone. 🤝</h2>
+      <p>Ask a question, share what you build, or just lurk — the community is friendly to beginners. There are no dumb questions here.</p>
+      <div class="community-links">
+        <a href="https://discord.gg/jMjA8B26Bq" class="community-link">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.947 2.418-2.157 2.418z"/></svg>
+          Join Discord
+        </a>
+        <a href="https://github.com/craigm26/OpenCastor" class="community-link">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.09.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+          View on GitHub
+        </a>
+        <a href="https://github.com/craigm26/OpenCastor/issues" class="community-link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Ask a question
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== CTA ======== -->
+<section class="cta-section">
+  <h2 class="reveal">Ready? Let's build something. 🚀</h2>
+  <p class="reveal reveal-d1">One command. Two minutes. Your robot, thinking with AI.</p>
+  <div class="install-block reveal reveal-d2" style="margin:0 auto 32px; max-width:480px;">
+    <code id="install-cmd-beginner">curl -fsSL opencastor.com/install | bash</code>
+    <button onclick="copyInstallBeginner()">Copy</button>
+  </div>
+  <div class="hero-actions reveal reveal-d3">
+    <a href="#install" class="btn btn-primary btn-lg">
+      View setup steps
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+    <a href="/hardware" class="btn btn-secondary btn-lg">Browse hardware</a>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="/" class="nav-logo"><svg viewBox="0 0 32 32" width="24" height="24" fill="none"><path d="M11 26 A11 11 0 1 1 23 8 L20 11 A7 7 0 1 0 14 22 Z" fill="currentColor" style="color:var(--accent)"/><path d="M23 8 L26 5 L23 2 L20 5 Z" fill="currentColor" style="color:var(--accent)" opacity="0.7"/><path d="M11 26 L8 29 L5 26 L8 23 Z" fill="currentColor" style="color:var(--accent)" opacity="0.7"/><circle cx="16" cy="16" r="3.5" fill="#6366f1" opacity="0.9"/><circle cx="16" cy="16" r="1.8" fill="#fff" opacity="0.3"/></svg><span>OpenCastor</span></a>
+        <p>The universal runtime for embodied AI.</p>
+      </div>
+      <div class="footer-col"><h4>Product</h4><a href="/docs">Documentation</a><a href="/hardware">Hardware</a><a href="https://rcan.dev/spec/">RCAN Spec</a><a href="https://pypi.org/project/opencastor/">PyPI</a></div>
+      <div class="footer-col"><h4>Resources</h4><a href="/beginners">Beginner Guide</a><a href="https://github.com/craigm26/OpenCastor">GitHub</a><a href="https://github.com/craigm26/OpenCastor/issues">Issues</a><a href="https://discord.gg/jMjA8B26Bq">Discord</a></div>
+      <div class="footer-col"><h4>Company</h4><a href="/hub">Hub</a><a href="/about">About</a><a href="mailto:hello@opencastor.com">Contact</a></div>
+    </div>
+    <div class="footer-bottom">
+      <p>&copy; 2025-2026 Craig Merry. Apache 2.0 License.</p>
+      <div class="footer-social">
+        <a href="https://github.com/craigm26" aria-label="GitHub"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.09.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg></a>
+        <a href="https://twitter.com/opencastor" aria-label="Twitter / X"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
+        <a href="https://discord.gg/jMjA8B26Bq" aria-label="Discord"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.947 2.418-2.157 2.418z"/></svg></a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+const toggle = document.querySelector('.mobile-toggle');
+const navLinks = document.querySelector('.nav-links');
+toggle.addEventListener('click', function() { navLinks.classList.toggle('open'); toggle.classList.toggle('active'); document.body.style.overflow = navLinks.classList.contains('open') ? 'hidden' : ''; });
+document.querySelectorAll('.nav-links a').forEach(a => { a.addEventListener('click', () => { navLinks.classList.remove('open'); toggle.classList.remove('active'); document.body.style.overflow = ''; }); });
+const nav = document.querySelector('.site-nav');
+window.addEventListener('scroll', () => nav.classList.toggle('scrolled', window.scrollY > 20), { passive: true });
+nav.classList.toggle('scrolled', window.scrollY > 20);
+const ro = new IntersectionObserver((entries) => { entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); ro.unobserve(e.target); } }); }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+document.querySelectorAll('.reveal').forEach(el => ro.observe(el));
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const t = document.querySelector(a.getAttribute('href'));
+    if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
+function copyInstallBeginner() {
+  const cmd = document.getElementById('install-cmd-beginner').textContent;
+  navigator.clipboard.writeText(cmd).then(() => {
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = orig, 2000);
+  });
+}
+</script>
+</body>
+</html>
