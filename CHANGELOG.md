@@ -5,6 +5,33 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.20.5] - 2026-02-20 🎮 Demo · Validate · Community
+
+### Highlights
+Three new pillars: a 5-act live demo showing the full agent stack, a `castor validate`
+conformance checker that scores your robot config, and a proper community hub with recipes,
+contributing guide, and GitHub discoverability.
+
+### Added
+- **`castor demo` overhaul** — 5-act pipeline show: ObserverAgent + NavigatorAgent process
+  real simulated Hailo detections, reactive E-STOP fires on obstacles, TaskPlanner dispatches
+  grasp to ManipulatorSpecialist, Sisyphus mock improvement loop. No hardware needed.
+  `--layout minimal` for quick preview, `--no-color` for CI.
+- **`castor validate`** — RCAN conformance checker (`castor/conformance.py`):
+  20 behavioral invariant checks across Safety, Provider, Protocol, Performance, Hardware.
+  Scored 0-100. `--json` for CI integration, `--strict` for hard failures on warnings.
+- **Community Hub** (`site/hub.html`) — featured recipe cards, Get Involved section,
+  social links, community stats bar
+- **`CONTRIBUTING.md`** — contribution guide: recipes, bugs, providers, tests, docs
+- **`docs/community-recipes.md`** — 400-line recipe authoring guide
+- **`docs/community/reddit-launch-post.md`** — r/robotics launch post draft
+- **GitHub topics** — 10 topics set for discoverability
+- **`castor doctor`** — now hints `castor validate` for deep config checks
+- **115 new tests** (110 conformance + 5 demo)
+
+### Stats
+- **2,124 tests** passing (11 skipped) | **52,314 LOC** | 8 providers
+
 ## [2026.2.20.4] - 2026-02-20 🔌 Agent Runtime Wiring + Dashboard
 
 ### Highlights
