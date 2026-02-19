@@ -6,6 +6,24 @@
 
 ---
 
+## 🔍 Peripheral Auto-Detection
+
+Before reading further, try the automatic peripheral scanner:
+
+```bash
+castor scan
+```
+
+OpenCastor will detect USB cameras, depth cameras (OAK-D, RealSense), NPU accelerators
+(Hailo-8, Coral), LiDAR sensors, I²C devices (PCA9685, MPU-6050), serial devices
+(Arduino, STM32), and more — then suggest the right RCAN config snippets for each.
+
+See the **[Peripheral Guide](peripherals.md)** for full documentation on every supported
+hardware category, wiring tips, driver installation, and how to add support for new
+peripherals.
+
+---
+
 ## Table of Contents
 
 1. [I Found This at a Thrift Store — Now What?](#-i-found-this-at-a-thrift-store--now-what)
