@@ -24,7 +24,7 @@ and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH
 
 ### Highlights
 OpenCastor v2026.2.19.0 is a landmark release that transforms the framework into a
-production-ready, cost-effective AI robotics runtime. **7 AI providers**, a **tiered
+production-ready, cost-effective AI robotics runtime. **8 AI providers**, a **tiered
 brain architecture** that starts at $0/month, **Hailo-8 NPU vision**, **OAK-D depth
 camera** support, and an interactive wizard that guides users through optimal setup.
 
@@ -82,7 +82,7 @@ camera** support, and an interactive wizard that guides users through optimal se
 └─────────────────────────────────────────────────────┘
 ```
 
-### Providers (7 total)
+### Providers (8 total)
 | Provider | Models | Auth |
 |----------|--------|------|
 | Anthropic | Claude 4 family | API key or setup-token (OAuth) |
@@ -91,6 +91,7 @@ camera** support, and an interactive wizard that guides users through optimal se
 | HuggingFace | Qwen-VL, Llama 4, any Hub model | HF token (free) |
 | Ollama | Any GGUF model | Local (no auth) |
 | llama.cpp | Direct GGUF or Ollama API | Local (no auth) |
+| MLX | Apple Silicon native (mlx-lm, vLLM-MLX) | Local (no auth) |
 | Claude OAuth | Max/Pro subscription | setup-token |
 
 ## [2026.2.18.13] - 2026-02-18

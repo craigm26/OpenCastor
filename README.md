@@ -53,7 +53,7 @@ Installer flags: `--dry-run`, `--no-rpi`, `--skip-wizard`
 
 ## ✨ What's New in v2026.2.19.0
 
-- **7 AI providers** — Anthropic, Google, OpenAI, HuggingFace, Ollama, llama.cpp, Claude OAuth proxy
+- **8 AI providers** — Anthropic, Google, OpenAI, HuggingFace, Ollama, llama.cpp, MLX, Claude OAuth proxy
 - **Tiered brain architecture** — reactive rules → fast inference → deep planning
 - **Hailo-8 NPU vision** — on-device YOLOv8 object detection at ~250ms
 - **OAK-D stereo depth camera** — RGB + depth via DepthAI v3
@@ -121,6 +121,7 @@ OpenCastor doesn't send every decision to a $0.015/request cloud API. Instead, i
 | **HuggingFace** | Transformers, any hosted model | ~500ms | Fast brain layer, classification |
 | **Ollama** | `llava:13b`, any local model | Varies | Privacy, offline, zero cost |
 | **llama.cpp** | GGUF models | ~200ms | Edge inference, Raspberry Pi |
+| **MLX** | Apple Silicon native (mlx-lm, vLLM-MLX) | ~50ms | Mac M1-M4, 400+ tok/s |
 | **Claude OAuth** | Proxy-authenticated Claude | ~12s | Team/org deployments |
 
 Swap providers with one YAML change:

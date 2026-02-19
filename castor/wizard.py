@@ -113,6 +113,18 @@ PROVIDERS = {
         "label": "Local Llama (Ollama)",
         "env_var": None,
     },
+    "7": {
+        "provider": "llamacpp",
+        "model": "gemma3:1b",
+        "label": "llama.cpp (Local GGUF)",
+        "env_var": None,
+    },
+    "8": {
+        "provider": "mlx",
+        "model": "mlx-community/Qwen2.5-VL-7B-Instruct-4bit",
+        "label": "MLX (Apple Silicon — 400+ tok/s)",
+        "env_var": None,
+    },
 }
 
 # ---------------------------------------------------------------------------

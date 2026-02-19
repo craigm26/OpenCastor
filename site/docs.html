@@ -164,7 +164,7 @@
     <div class="wizard-step reveal">
       <div class="wizard-step-header">
         <div class="wizard-step-num">2</div>
-        <div><h3>Choose your AI provider</h3><p>Pick which AI provider powers your robot. All 7 providers are supported.</p></div>
+        <div><h3>Choose your AI provider</h3><p>Pick which AI provider powers your robot. All 8 providers are supported.</p></div>
       </div>
       <div class="code-block"><div class="code-header"><div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">Terminal</span></div>
         <div class="code-body"><span class="cm">--- AI PROVIDER ---</span>
@@ -176,6 +176,7 @@
   <span class="k">[5]</span> <span class="s">Ollama (Local)</span>  <span class="cm">-- free, runs on your machine</span>
   <span class="k">[6]</span> <span class="s">llama.cpp (Local)</span>  <span class="cm">-- bare-metal inference</span>
   <span class="k">[7]</span> <span class="s">Claude OAuth</span>  <span class="cm">-- use your Claude Pro subscription</span>
+  <span class="k">[8]</span> <span class="s">MLX (Apple Silicon)</span>  <span class="cm">-- native GPU, 400+ tok/s on Mac</span>
 <span class="cm">Selection [1]:</span> <span class="s">1</span></div>
       </div>
     </div>
@@ -241,7 +242,7 @@
 
 <span class="cm"># --- Agent Block ---</span>
 <span class="k">agent</span>:
-  <span class="k">provider</span>: <span class="s">"anthropic"</span>       <span class="cm"># anthropic | google | openai | huggingface | ollama | llamacpp | claude_oauth</span>
+  <span class="k">provider</span>: <span class="s">"anthropic"</span>       <span class="cm"># anthropic | google | openai | huggingface | ollama | llamacpp | mlx | claude_oauth</span>
   <span class="k">model</span>: <span class="s">"claude-opus-4-6"</span>
   <span class="k">vision_enabled</span>: <span class="v">true</span>
   <span class="k">safety_stop</span>: <span class="v">true</span>
@@ -305,7 +306,7 @@
   <div class="container">
     <div class="section-header center reveal">
       <p class="section-label">Providers</p>
-      <h2 class="section-title">7 AI providers, zero lock-in.</h2>
+      <h2 class="section-title">8 AI providers, zero lock-in.</h2>
       <p class="section-desc">Switch between providers with a single config change. No code rewrites.</p>
     </div>
 
@@ -341,6 +342,11 @@
         <div class="hw-card-meta" style="margin-top:12px">provider: "llamacpp" · no auth required</div>
       </div>
       <div class="guide-card reveal">
+        <h3><span style="color:#7C3AED">●</span> MLX (Apple Silicon)</h3>
+        <p>Native GPU inference on Apple Silicon via mlx-lm or vLLM-MLX. Qwen2.5-VL, Llama 3.3, Mistral. 400+ tok/s on M4 Max. No API key needed.</p>
+        <div class="hw-card-meta" style="margin-top:12px">provider: "mlx" · no auth required · pip install mlx-lm</div>
+      </div>
+      <div class="hw-card">
         <h3><span style="color:#D97706">●</span> Claude OAuth</h3>
         <p>Use your existing Claude Pro/Team subscription — no separate API key. Browser-based OAuth flow.</p>
         <div class="hw-card-meta" style="margin-top:12px">provider: "claude_oauth" · castor login</div>
