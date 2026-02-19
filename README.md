@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <b>48,000 lines of code · 1,912 tests · Python 3.10–3.12</b><br/>
+  <b>49,267 lines of code · 1,998 tests · Python 3.10–3.12</b><br/>
   <i>Connect any AI model to any robot hardware through a single YAML config.</i>
 </p>
 

@@ -15,10 +15,12 @@ Usage:
 """
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
 import sys
+import time
 
 SESSION_NAME = "opencastor"
 
@@ -33,16 +35,16 @@ PANE_FILTERS = {
 
 LAYOUTS = {
     "full": {
-        "desc": "6-pane: Brain, Eyes, Body, Safety, Comms, Logs",
-        "panes": ["brain", "eyes", "body", "safety", "comms", "logs"],
+        "desc": "7-pane: Brain, Eyes, Body, Safety, Comms, Logs, Status",
+        "panes": ["brain", "eyes", "body", "safety", "comms", "logs", "status"],
     },
     "minimal": {
-        "desc": "3-pane: Brain, Body, Logs",
-        "panes": ["brain", "body", "logs"],
+        "desc": "4-pane: Brain, Body, Logs, Status",
+        "panes": ["brain", "body", "logs", "status"],
     },
     "debug": {
-        "desc": "4-pane: Brain, Safety, Comms, Logs",
-        "panes": ["brain", "safety", "comms", "logs"],
+        "desc": "5-pane: Brain, Safety, Comms, Logs, Status",
+        "panes": ["brain", "safety", "comms", "logs", "status"],
     },
 }
 
@@ -53,6 +55,7 @@ PANE_TITLES = {
     "safety": "🛡️  Safety (Health/Bounds)",
     "comms": "💬 Comms (Messaging)",
     "logs": "📋 Full Logs",
+    "status": "📊 Status (Agents/Swarm/Improvements)",
 }
 
 PANE_COLORS = {
@@ -62,7 +65,224 @@ PANE_COLORS = {
     "safety": "red",
     "comms": "magenta",
     "logs": "white",
+    "status": "blue",
 }
+
+
+# ---------------------------------------------------------------------------
+# File-based status helpers (agents, swarm, improvements, episodes)
+# ---------------------------------------------------------------------------
+
+_AGENT_STATUS_PATH = os.path.expanduser("~/.opencastor/agent_status.json")
+_SWARM_MEMORY_PATH = os.path.expanduser("~/.opencastor/swarm_memory.json")
+_IMPROVEMENT_HISTORY_PATH = os.path.expanduser("~/.opencastor/improvement_history.json")
+_EPISODES_DIR = os.path.expanduser("~/.opencastor/episodes/")
+
+
+def _read_json_file(path: str, max_age_s: float = 30) -> object:
+    """Read and parse a JSON file if it exists and is not stale.
+
+    Args:
+        path: Absolute path to the JSON file.
+        max_age_s: Maximum file age in seconds before it is considered stale.
+
+    Returns:
+        Parsed JSON data, or ``None`` if the file is missing, stale, or invalid.
+    """
+    try:
+        if not os.path.exists(path):
+            return None
+        age = time.time() - os.path.getmtime(path)
+        if age > max_age_s:
+            return None
+        with open(path) as fh:
+            return json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _get_agents_lines() -> list:
+    """Return display lines for the Agents status panel.
+
+    Reads ``~/.opencastor/agent_status.json`` (max 10 s old).
+
+    Returns:
+        List of formatted strings, one per agent.
+    """
+    data = _read_json_file(_AGENT_STATUS_PATH, max_age_s=10)
+    if data is None:
+        return ["[no agent data]"]
+    agents = data.get("agents", {})
+    if not agents:
+        return ["[no agents running]"]
+    lines = []
+    for name, health in agents.items():
+        status = health.get("status", "?")
+        uptime = health.get("uptime_s", 0.0)
+        lines.append(f"{name:<14} {status:<10} uptime={uptime}s")
+    return lines
+
+
+def _get_swarm_lines() -> list:
+    """Return display lines for the Swarm panel.
+
+    Reads ``~/.opencastor/swarm_memory.json``.
+
+    Returns:
+        List of formatted strings describing fleet and patch state.
+    """
+    data = _read_json_file(_SWARM_MEMORY_PATH)
+    if data is None:
+        return ["[solo mode]"]
+    peers = sum(1 for k in data if "consensus" in str(k))
+    patches = sum(1 for k in data if str(k).startswith("swarm_patch:"))
+    return [f"Fleet: {peers} peers | Patches: {patches} synced"]
+
+
+def _get_improvements_lines() -> list:
+    """Return display lines for the Sisyphus Improvements panel.
+
+    Reads ``~/.opencastor/improvement_history.json`` and shows the last 5
+    patches.
+
+    Returns:
+        List of formatted strings, one per patch entry.
+    """
+    data = _read_json_file(_IMPROVEMENT_HISTORY_PATH)
+    if data is None:
+        return ["[no improvements yet]"]
+    patches = data if isinstance(data, list) else data.get("patches", [])
+    if not patches:
+        return ["[no improvements yet]"]
+    lines = []
+    for patch in list(patches)[-5:]:
+        icon = "✅" if patch.get("status") == "success" else "❌"
+        kind = str(patch.get("kind", "?"))
+        name = str(patch.get("name", "?"))
+        date = str(patch.get("date", "?"))
+        status_tag = "" if patch.get("status") == "success" else " (failed)"
+        lines.append(f"{icon} {kind:<12} {name:<32}{status_tag:10} {date}")
+    return lines
+
+
+def _get_episode_count() -> int:
+    """Count recorded episode JSON files in ``~/.opencastor/episodes/``.
+
+    Returns:
+        Number of ``.json`` files found; 0 if directory is missing.
+    """
+    try:
+        return sum(1 for f in os.listdir(_EPISODES_DIR) if f.endswith(".json"))
+    except OSError:
+        return 0
+
+
+# ---------------------------------------------------------------------------
+# Curses-style render functions (stdscr can be a mock for testing)
+# ---------------------------------------------------------------------------
+
+
+def _render_agents_panel(stdscr, y: int, x: int, width: int) -> None:
+    """Draw the Agents status panel onto a curses window.
+
+    Args:
+        stdscr: A curses window (or mock object for testing).
+        y: Top-left row offset.
+        x: Left column offset.
+        width: Maximum display width in characters.
+    """
+    for i, line in enumerate(_get_agents_lines()):
+        try:
+            stdscr.addstr(y + i, x, line[:width])
+        except Exception:
+            pass
+
+
+def _render_swarm_panel(stdscr, y: int, x: int, width: int) -> None:
+    """Draw the Swarm status panel onto a curses window.
+
+    Args:
+        stdscr: A curses window (or mock object for testing).
+        y: Top-left row offset.
+        x: Left column offset.
+        width: Maximum display width in characters.
+    """
+    for i, line in enumerate(_get_swarm_lines()):
+        try:
+            stdscr.addstr(y + i, x, line[:width])
+        except Exception:
+            pass
+
+
+def _render_improvements_panel(stdscr, y: int, x: int, width: int) -> None:
+    """Draw the Sisyphus Improvements panel onto a curses window.
+
+    Args:
+        stdscr: A curses window (or mock object for testing).
+        y: Top-left row offset.
+        x: Left column offset.
+        width: Maximum display width in characters.
+    """
+    for i, line in enumerate(_get_improvements_lines()):
+        try:
+            stdscr.addstr(y + i, x, line[:width])
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Terminal status loop — used by the 'status' tmux pane
+# ---------------------------------------------------------------------------
+
+_DIVIDER = "─" * 60
+
+
+def _run_status_loop(interval: float = 2.0) -> None:
+    """Continuously render agent/swarm/improvement status to the terminal.
+
+    Designed to run inside a dedicated tmux pane as the status monitor.
+
+    Args:
+        interval: Refresh interval in seconds.
+    """
+    try:
+        while True:
+            # Clear terminal
+            sys.stdout.write("\033[2J\033[H")
+            sys.stdout.flush()
+
+            now = time.strftime("%Y-%m-%d %H:%M:%S")
+            print(f"📊 OpenCastor Status Monitor  [{now}]")
+            print(_DIVIDER)
+
+            # Agents section
+            print("▶ Agents")
+            for line in _get_agents_lines():
+                print(f"  {line}")
+            print()
+
+            # Swarm section
+            print("▶ Swarm")
+            for line in _get_swarm_lines():
+                print(f"  {line}")
+            print()
+
+            # Improvements section
+            print("▶ Improvements (last 5)")
+            for line in _get_improvements_lines():
+                print(f"  {line}")
+            print()
+
+            # Episode counter
+            ep_count = _get_episode_count()
+            print(f"▶ Episodes: {ep_count} recorded")
+            print()
+            print(_DIVIDER)
+            print(f"  Refreshes every {interval}s  |  Ctrl+C to quit")
+
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        pass
 
 
 def check_tmux():
@@ -95,6 +315,7 @@ def build_log_command(config_path, pane_name):
 
     Each pane runs the robot and filters logs to its subsystem.
     The 'logs' pane shows everything unfiltered.
+    The 'status' pane runs the live status monitor (agents/swarm/improvements).
     """
     if pane_name == "logs":
         # Full unfiltered log — tail the log file or run the robot
@@ -102,6 +323,13 @@ def build_log_command(config_path, pane_name):
             "echo '📋 Full Logs — watching all OpenCastor output'; echo; "
             "tail -f /tmp/opencastor.log 2>/dev/null || "
             "echo 'Waiting for robot to start...'; sleep 999999"
+        )
+
+    if pane_name == "status":
+        # Live status monitor reads JSON status files periodically
+        return (
+            f"{sys.executable} -c "
+            f"'from castor.dashboard_tui import _run_status_loop; _run_status_loop()'"
         )
 
     pattern = PANE_FILTERS.get(pane_name, "")

@@ -73,11 +73,61 @@ class ApplyStage:
 
             patch.applied = True
             self._log_history(patch, success=True)
+            self._broadcast_to_swarm(patch)
             return True
         except Exception as e:
             logger.error("Failed to apply patch %s: %s", patch.id, e)
             self._log_history(patch, success=False, error=str(e))
             return False
+
+    def set_swarm_config(self, config: dict) -> None:
+        """Inject swarm config so patches are broadcast to fleet.
+
+        Args:
+            config: Dict with keys ``enabled``, ``patch_sync``, ``robot_id``,
+                and optional ``shared_memory_path``.
+        """
+        self._swarm_config = config
+
+    def _broadcast_to_swarm(self, patch: Patch) -> None:
+        """Publish applied patch to the swarm fleet via PatchSync, if configured."""
+        try:
+            swarm_cfg = getattr(self, "_swarm_config", None) or {}
+            if not swarm_cfg.get("enabled", False) or not swarm_cfg.get("patch_sync", False):
+                return
+
+            from castor.swarm.patch_sync import PatchSync
+            from castor.swarm.shared_memory import SharedMemory
+
+            robot_id = swarm_cfg.get("robot_id", "unknown")
+            mem_path = swarm_cfg.get("shared_memory_path", None)
+            mem = SharedMemory(robot_id=robot_id, persist_path=mem_path)
+            mem.load()
+            syncer = PatchSync(robot_id=robot_id, shared_memory=mem)
+
+            patch_data: dict = {}
+            if hasattr(patch, "key"):
+                patch_data = {
+                    "key": patch.key,
+                    "new_value": patch.new_value,
+                    "file": getattr(patch, "file", ""),
+                }
+            elif hasattr(patch, "rule"):
+                patch_data = {
+                    "rule": str(patch.rule),
+                    "conditions": getattr(patch, "conditions", []),
+                }
+
+            syncer.publish_patch(
+                patch_type=patch.type,
+                patch_data=patch_data,
+                rationale=getattr(patch, "rationale", ""),
+                qa_passed=True,
+            )
+            mem.save()
+            logger.info("Patch %s broadcast to swarm fleet", patch.id)
+        except Exception as e:
+            logger.debug(f"Swarm broadcast skipped: {e}")
 
     def rollback(self, patch_id: str) -> bool:
         """Rollback a previously applied patch by restoring old values."""

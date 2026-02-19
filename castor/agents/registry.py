@@ -57,12 +57,15 @@ class AgentRegistry:
         self._classes[agent_class.name] = agent_class
         logger.debug(f"Registered agent class '{agent_class.name}'")
 
-    def spawn(self, name: str, config: Optional[Dict[str, Any]] = None) -> BaseAgent:
+    def spawn(self, name: str, config: Optional[Dict[str, Any]] = None, **kwargs: Any) -> BaseAgent:
         """Instantiate a registered agent by name and store it.
 
         Args:
             name: Registry key (matches the agent class ``name`` attribute).
             config: Optional configuration dict forwarded to the agent constructor.
+            **kwargs: Extra keyword arguments forwarded directly to the agent
+                constructor (e.g. ``shared_state=`` for ObserverAgent /
+                NavigatorAgent).
 
         Returns:
             The newly created :class:`BaseAgent` instance.
@@ -74,7 +77,7 @@ class AgentRegistry:
             raise KeyError(
                 f"No agent class registered for name '{name}'. Available: {list(self._classes)}"
             )
-        agent = self._classes[name](config=config or {})
+        agent = self._classes[name](config=config or {}, **kwargs)
         self._agents[name] = agent
         self._spawn_times[name] = time.monotonic()
         logger.info(f"Spawned agent '{name}'")
@@ -123,3 +126,22 @@ class AgentRegistry:
             Dict mapping agent name → :meth:`~BaseAgent.health` dict.
         """
         return {name: agent.health() for name, agent in self._agents.items()}
+
+    def write_status_file(self, path: str = None) -> None:
+        """Write current agent health to ~/.opencastor/agent_status.json.
+
+        Args:
+            path: Destination path. Defaults to ``~/.opencastor/agent_status.json``.
+        """
+        import json
+        import os
+        import time
+
+        path = path or os.path.expanduser("~/.opencastor/agent_status.json")
+        data = {
+            "timestamp": time.time(),
+            "agents": self.health_report(),
+        }
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(data, f, indent=2, default=str)

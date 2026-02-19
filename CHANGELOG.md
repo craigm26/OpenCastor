@@ -5,6 +5,36 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.20.4] - 2026-02-20 🔌 Agent Runtime Wiring + Dashboard
+
+### Highlights
+Agents are now live — the robot spawns ObserverAgent and NavigatorAgent at startup,
+feeds them real sensor data, blends their output into the tiered brain, and shuts them
+down gracefully. Sisyphus patches broadcast to the fleet automatically. The TUI shows
+everything in real-time.
+
+### Added
+- **Agent roster runtime integration** (`castor/main.py`):
+  - Reads `agent_roster` config at startup, spawns agents with shared `SharedState`
+  - ObserverAgent fed Hailo detections + depth data every tick
+  - NavigatorAgent suggestion (`nav_direction`, `nav_speed`) blended into tiered brain
+  - Graceful `stop_all()` on shutdown
+- **Sisyphus → PatchSync hookup** (`castor/learner/apply_stage.py`):
+  - `set_swarm_config()` injects swarm credentials
+  - `_broadcast_to_swarm()` publishes every applied patch to fleet SharedMemory
+  - Auto-injected from main.py when swarm is enabled
+- **Dashboard TUI overhaul** (`castor/dashboard_tui.py`):
+  - Agents panel — live status from `~/.opencastor/agent_status.json`
+  - Swarm panel — fleet peers + synced patches from `swarm_memory.json`
+  - Improvements panel — last 5 Sisyphus patches with ✅/❌ icons
+  - Episode counter — live count from `~/.opencastor/episodes/`
+- **`AgentRegistry.write_status_file()`** — runtime writes agent health for TUI
+- **`bob.rcan.yaml`** — Pi config updated with `agent_roster` + `swarm` sections
+- **27 new integration tests**
+
+### Stats
+- **1,998 tests** passing (11 skipped) | **49,267 LOC** | 8 providers
+
 ## [2026.2.20.3] - 2026-02-20 🤖 Agent Swarm Architecture (Phase 2-4)
 
 ### Highlights

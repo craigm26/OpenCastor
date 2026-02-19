@@ -593,6 +593,52 @@ def main():
     signal.signal(signal.SIGTERM, _graceful_shutdown)
     signal.signal(signal.SIGINT, _graceful_shutdown)
 
+    # 7b. AGENT ROSTER (Phase 2-3)
+    _agent_registry = None
+    _agent_shared_state = None
+    _agent_observer = None
+    _agent_navigator = None
+    roster_cfg = config.get("agent_roster", [])
+    if roster_cfg:
+        try:
+            from castor.agents import AgentRegistry, SharedState
+            from castor.agents.navigator import NavigatorAgent
+            from castor.agents.observer import ObserverAgent
+
+            _agent_shared_state = SharedState()
+            _agent_registry = AgentRegistry()
+            _agent_registry.register(ObserverAgent)
+            _agent_registry.register(NavigatorAgent)
+
+            for entry in roster_cfg:
+                if not entry.get("enabled", True):
+                    continue
+                agent_name = entry.get("name", "")
+                agent_config = entry.get("config", {})
+                try:
+                    if agent_name in ("observer", "navigator"):
+                        agent = _agent_registry.spawn(
+                            agent_name,
+                            config=agent_config,
+                            shared_state=_agent_shared_state,
+                        )
+                    else:
+                        agent = _agent_registry.spawn(agent_name, config=agent_config)
+                    logger.info(f"Agent '{agent_name}' registered from roster")
+                    if agent_name == "observer":
+                        _agent_observer = agent
+                    elif agent_name == "navigator":
+                        _agent_navigator = agent
+                except Exception as e:
+                    logger.warning(f"Could not spawn agent '{agent_name}': {e}")
+
+            logger.info(f"Agent roster: {len(_agent_registry.list_agents())} agent(s) registered")
+        except ImportError as e:
+            logger.debug(f"Agent roster skipped: {e}")
+
+    # 7c. SWARM CONFIG snapshot (injected into SisyphusLoop after learner section)
+    swarm_cfg = config.get("swarm", {})
+
     # 8. THE CONTROL LOOP
     latency_budget = config.get("agent", {}).get("latency_budget_ms", 3000)
     logger.info("Entering Perception-Action Loop. Press Ctrl+C to stop.")
@@ -616,6 +662,19 @@ def main():
         except ImportError:
             logger.debug("Learner module not available")
 
+    # Wire swarm config into SisyphusLoop's ApplyStage (if learner enabled)
+    _sisyphus_loop = None
+    if learner_cfg.get("enabled", False) and swarm_cfg:
+        try:
+            from castor.learner import SisyphusLoop
+
+            _sisyphus_loop = SisyphusLoop(config=learner_cfg)
+            robot_uuid = config.get("metadata", {}).get("robot_uuid", "unknown")
+            _sisyphus_loop.apply_stage.set_swarm_config({**swarm_cfg, "robot_id": robot_uuid})
+            logger.info("SisyphusLoop: swarm config injected into ApplyStage")
+        except ImportError as e:
+            logger.debug(f"SisyphusLoop init skipped: {e}")
+
     try:
         while not _shutdown_requested:
             loop_start = time.time()
@@ -629,6 +688,31 @@ def main():
             # --- PHASE 1: OBSERVE ---
             frame_bytes = camera.capture_jpeg()
             fs.ns.write("/dev/camera", {"t": time.time(), "size": len(frame_bytes)})
+
+            # Feed frame to ObserverAgent if running
+            if _agent_observer is not None:
+                try:
+                    import asyncio
+
+                    hailo_dets = []
+                    if tiered is not None and hasattr(tiered, "reactive"):
+                        for d in getattr(tiered.reactive, "last_detections", []):
+                            hailo_dets.append(
+                                {
+                                    "label": getattr(d, "class_name", str(d)),
+                                    "confidence": getattr(d, "confidence", 0.0),
+                                    "bbox": list(getattr(d, "bbox", [0.0, 0.0, 0.0, 0.0])),
+                                }
+                            )
+                    depth_map = getattr(camera, "last_depth", None)
+                    sensor_pkg = {
+                        "hailo_detections": hailo_dets,
+                        "depth_map": depth_map,
+                        "frame_shape": (480, 640),
+                    }
+                    asyncio.run(_agent_observer.observe(sensor_pkg))
+                except Exception as e:
+                    logger.debug(f"ObserverAgent observe error: {e}")
 
             # --- PHASE 2: ORIENT & DECIDE ---
             # Build instruction with memory context
@@ -654,6 +738,22 @@ def main():
                     if len(valid) > 0:
                         front_dist_mm = float(np.percentile(valid, 5))
                         sensor_data = {"front_distance_m": front_dist_mm / 1000.0}
+
+                # Blend NavigatorAgent suggestion into sensor context
+                if _agent_navigator is not None and _agent_shared_state is not None:
+                    try:
+                        import asyncio
+
+                        nav_action = asyncio.run(_agent_navigator.act({}))
+                        nav_dir = nav_action.get("direction", "forward")
+                        nav_speed = nav_action.get("speed", 0.5)
+                        logger.debug(f"NavigatorAgent suggests: {nav_dir} @ {nav_speed:.2f}")
+                        if sensor_data is None:
+                            sensor_data = {}
+                        sensor_data["nav_direction"] = nav_dir
+                        sensor_data["nav_speed"] = nav_speed
+                    except Exception as e:
+                        logger.debug(f"NavigatorAgent act error: {e}")
 
                 thought = tiered.think(frame_bytes, instruction, sensor_data=sensor_data)
             else:
@@ -794,6 +894,16 @@ def main():
         raise
     finally:
         logger.info("🛑 Shutdown sequence starting...")
+
+        # Phase 0: Stop all agents
+        if _agent_registry is not None:
+            try:
+                import asyncio
+
+                asyncio.run(_agent_registry.stop_all())
+                logger.info("  ✓ All agents stopped")
+            except Exception as e:
+                logger.debug(f"Agent shutdown error: {e}")
 
         # Phase 1: Stop motors immediately (safety first)
         if driver and not args.simulate:
