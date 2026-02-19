@@ -5,6 +5,47 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.20.0] - 2026-02-20 🧠 Self-Improving Loop
+
+### Highlights
+The robot learns from its mistakes. The **Sisyphus Loop** analyzes episodes,
+identifies failures, generates fixes, verifies them, and applies improvements
+automatically. Inspired by Oh-My-OpenCode's PM→Dev→QA/QC pattern.
+
+### Added
+- **Self-Improving Loop** (`castor/learner/` package — 10 modules):
+  - `episode.py` — Episode data model with full serialization
+  - `episode_store.py` — JSON file persistence with retention policy
+  - `pm_stage.py` — Analyzes episodes, identifies failures and root causes
+  - `dev_stage.py` — Generates config/behavior/prompt patches from analysis
+  - `qa_stage.py` — Safety bounds verification, consistency checks
+  - `apply_stage.py` — Applies verified patches with rollback support
+  - `sisyphus.py` — Orchestrates PM→Dev→QA→Apply with retry (up to 3x)
+  - `alma.py` — Cross-episode pattern analysis (ALMA consolidation)
+  - `patches.py` — ConfigPatch, BehaviorPatch, PromptPatch types
+- **`castor improve` CLI** — analyze episodes, view history, rollback patches
+- **Wizard Step 7: Self-Improving Loop** — opt-in setup with 4 cost presets:
+  - Free ($0): Ollama local analysis
+  - Budget ($0): HuggingFace free API
+  - Smart (~$1-3/mo): Gemini Flash-Lite
+  - Premium (~$5-15/mo): Claude Sonnet
+- **Episode recording** in main control loop (saved on shutdown)
+- **Auto-apply preferences**: config-only, config+behavior, or manual review
+- 107 new tests (1437 total)
+
+### Changed
+- Learner is **disabled by default** — users must opt-in via wizard or YAML
+- Wizard now has 8 steps (added self-improving loop setup)
+
+### Design
+```
+Episode → PM (Analyze) → Dev (Patch) → QA (Verify) → Apply (if pass)
+                                              ↓
+                                        Retry (up to 3x)
+                                              ↓
+                                     Human review queue
+```
+
 ## [2026.2.19.1] - 2026-02-19
 
 ### Added

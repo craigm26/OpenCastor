@@ -1294,6 +1294,144 @@ def choose_brain_architecture(primary_provider, secondary_models, already_authed
 
 
 # ---------------------------------------------------------------------------
+# Self-Improving Loop Setup (Step 7)
+# ---------------------------------------------------------------------------
+
+LEARNER_PRESETS = [
+    {
+        "name": "Free (Local Only)",
+        "desc": "Ollama/llama.cpp for analysis — slower but $0",
+        "provider": "ollama",
+        "model": "gemma3:1b",
+        "cost_est": "$0/month",
+        "cadence": "every_10",
+        "cadence_n": 10,
+    },
+    {
+        "name": "Budget (HuggingFace)",
+        "desc": "Free HF API for analysis — good balance",
+        "provider": "huggingface",
+        "model": "Qwen/Qwen2.5-7B-Instruct",
+        "cost_est": "$0/month (free tier)",
+        "cadence": "every_5",
+        "cadence_n": 5,
+    },
+    {
+        "name": "Smart (Gemini Flash)",
+        "desc": "Gemini 2.5 Flash-Lite for deeper analysis",
+        "provider": "google",
+        "model": "gemini-2.5-flash-lite",
+        "cost_est": "~$1-3/month",
+        "cadence": "every_episode",
+        "cadence_n": 1,
+    },
+    {
+        "name": "Premium (Claude)",
+        "desc": "Claude for best root-cause analysis",
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-6",
+        "cost_est": "~$5-15/month",
+        "cadence": "every_episode",
+        "cadence_n": 1,
+    },
+]
+
+
+def choose_learner_setup(primary_provider, already_authed):
+    """Guide user through self-improving loop setup. Disabled by default."""
+    print(f"\n{Colors.GREEN}{'=' * 60}{Colors.ENDC}")
+    print(f"{Colors.BOLD}  🔄 SELF-IMPROVING LOOP (Sisyphus){Colors.ENDC}")
+    print(f"{Colors.GREEN}{'=' * 60}{Colors.ENDC}")
+    print()
+    print("  OpenCastor can learn from its own mistakes.")
+    print()
+    print("  After each task, the robot analyzes what happened,")
+    print("  identifies failures, generates fixes, verifies them,")
+    print("  and applies improvements automatically.")
+    print()
+    print(f"  {Colors.BOLD}How it works:{Colors.ENDC}")
+    print("    1. PM stage    — analyzes episode outcomes")
+    print("    2. Dev stage   — generates config/behavior patches")
+    print("    3. QA stage    — verifies patches are safe")
+    print("    4. Apply stage — applies if verified (rollback available)")
+    print()
+    print("  ⚠️  This uses AI calls to analyze episodes, which may")
+    print("  incur costs depending on your chosen provider.")
+    print()
+    print(f"  {Colors.GREEN}Enable self-improving loop?{Colors.ENDC}")
+    print()
+    print(f"  [0] {Colors.BOLD}No — skip (default){Colors.ENDC}")
+
+    for i, preset in enumerate(LEARNER_PRESETS, 1):
+        print(f"  [{i}] {preset['name']:<24s} {preset['desc']}")
+        print(
+            f"      Est. cost: {preset['cost_est']} | Cadence: every {preset['cadence_n']} episode(s)"
+        )
+
+    print()
+    choice = input_default("Selection", "0").strip()
+
+    if choice == "0" or not choice:
+        print(f"\n  Self-improving loop: {Colors.BOLD}disabled{Colors.ENDC}")
+        print("  You can enable it later in your RCAN config or re-run the wizard.")
+        return {}
+
+    try:
+        idx = int(choice) - 1
+        if not (0 <= idx < len(LEARNER_PRESETS)):
+            return {}
+    except ValueError:
+        return {}
+
+    preset = LEARNER_PRESETS[idx]
+
+    # Auth the learner provider if needed
+    if preset["provider"] not in ("ollama", "llamacpp", "mlx"):
+        if preset["provider"] not in already_authed and preset["provider"] != primary_provider:
+            print(f"\n  Authenticating {preset['provider']} for learner...")
+            authenticate_provider(preset["provider"], already_authed=already_authed)
+
+    # Ask about auto-apply preferences
+    print(f"\n  {Colors.GREEN}Auto-apply preferences:{Colors.ENDC}")
+    print("  The learner can auto-apply safe improvements or queue them for review.")
+    print()
+    print("  [1] Auto-apply config tuning only (safest, recommended)")
+    print("  [2] Auto-apply config + behavior rules")
+    print("  [3] Queue everything for manual review")
+    print()
+    apply_choice = input_default("Selection", "1").strip()
+
+    auto_config = apply_choice in ("1", "2")
+    auto_behavior = apply_choice == "2"
+
+    result = {
+        "learner": {
+            "enabled": True,
+            "provider": preset["provider"],
+            "model": preset["model"],
+            "cadence": preset["cadence"],
+            "cadence_n": preset["cadence_n"],
+            "max_retries": 3,
+            "auto_apply_config": auto_config,
+            "auto_apply_behavior": auto_behavior,
+            "auto_apply_code": False,  # Always needs human review
+        },
+    }
+
+    print(f"\n  {Colors.GREEN}✓ Self-improving loop enabled!{Colors.ENDC}")
+    print(f"    Provider: {preset['provider']}/{preset['model']}")
+    print(f"    Cadence: every {preset['cadence_n']} episode(s)")
+    print(f"    Est. cost: {preset['cost_est']}")
+    print(
+        f"    Auto-apply: config={'yes' if auto_config else 'no'}, "
+        f"behavior={'yes' if auto_behavior else 'no'}, code=no"
+    )
+    print("\n    Run `castor improve --status` to see improvement history.")
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Legacy choose_provider — used by Advanced flow
 # ---------------------------------------------------------------------------
 def choose_provider():
@@ -2090,7 +2228,10 @@ def main():
         # Step 6: Brain Architecture
         tiered_config = choose_brain_architecture(provider_key, secondary_models, already_authed)
 
-        # Step 7: Messaging channel (optional)
+        # Step 7: Self-Improving Loop (optional, disabled by default)
+        learner_config = choose_learner_setup(provider_key, already_authed)
+
+        # Step 8: Messaging channel (optional)
         print(f"\n{Colors.GREEN}--- MESSAGING (optional) ---{Colors.ENDC}")
         print("  Connect a messaging app to talk to your robot.")
         print("  [0] Skip for now")
@@ -2124,6 +2265,10 @@ def main():
 
             # Merge remaining keys (tiered_brain, reactive)
             rcan_data.update(tiered_config)
+
+        # Merge learner config
+        if learner_config:
+            rcan_data.update(learner_config)
     else:
         # -- Advanced Path (legacy) --
         agent_config = choose_provider()

@@ -1,8 +1,7 @@
 """Tests for llama.cpp provider."""
 
 import json
-from unittest.mock import patch, MagicMock
-import pytest
+from unittest.mock import MagicMock, patch
 
 
 class TestLlamaCppProvider:

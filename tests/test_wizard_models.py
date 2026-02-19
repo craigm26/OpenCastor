@@ -390,3 +390,29 @@ class TestBrainPresets:
         free = [p for p in BRAIN_PRESETS if p["cost"] == "free"]
         assert len(free) >= 1
         assert free[0]["primary"]["provider"] == "huggingface"
+
+
+class TestLearnerPresets:
+    def test_all_presets_have_required_fields(self):
+        from castor.wizard import LEARNER_PRESETS
+
+        for preset in LEARNER_PRESETS:
+            assert "name" in preset
+            assert "provider" in preset
+            assert "model" in preset
+            assert "cost_est" in preset
+            assert "cadence_n" in preset
+
+    def test_default_is_disabled(self):
+        """The learner should be disabled by default (user must opt in)."""
+        # Verify that main.py defaults to False
+
+        with open("castor/main.py") as f:
+            source = f.read()
+        assert 'learner_cfg.get("enabled", False)' in source
+
+    def test_free_option_exists(self):
+        from castor.wizard import LEARNER_PRESETS
+
+        free = [p for p in LEARNER_PRESETS if "$0" in p["cost_est"]]
+        assert len(free) >= 1

@@ -1,8 +1,8 @@
 """Tests for Hailo-8 vision module."""
 
+from unittest.mock import MagicMock, patch
+
 import numpy as np
-import pytest
-from unittest.mock import patch, MagicMock
 
 
 class TestHailoDetection:
@@ -60,7 +60,7 @@ class TestHailoVision:
         assert result == []
 
     def test_detect_obstacles_result_structure(self):
-        from castor.hailo_vision import HailoVision, HailoDetection
+        from castor.hailo_vision import HailoVision
 
         hv = HailoVision.__new__(HailoVision)
         hv.available = True

@@ -26,6 +26,8 @@ Usage:
     castor replay session.jsonl                        # Replay a recorded session
     castor benchmark --config robot.rcan.yaml          # Performance profiling
     castor lint --config robot.rcan.yaml               # Deep config validation
+    castor improve --episodes 10                       # Self-improving loop (Sisyphus)
+    castor improve --status                            # Improvement history
     castor learn                                       # Interactive tutorial
     castor fleet status                                # Multi-robot status
     castor export --config robot.rcan.yaml             # Export config bundle
@@ -545,6 +547,96 @@ def cmd_lint(args) -> None:
 
     issues = run_lint(args.config)
     print_lint_report(issues, args.config)
+
+
+def cmd_improve(args) -> None:
+    """Self-improving loop — analyze episodes and apply improvements."""
+    try:
+        from castor.learner import ALMAConsolidation, EpisodeStore, SisyphusLoop
+    except ImportError:
+        print("Error: castor.learner module not found. Upgrade OpenCastor.")
+        return
+
+    store = EpisodeStore()
+
+    if args.status:
+        # Show improvement stats
+        from castor.learner.apply_stage import ApplyStage
+
+        applier = ApplyStage()
+        history = applier.get_history()
+        print("\n  🧠 Self-Improving Loop Status")
+        print(f"  {'=' * 40}")
+        print(f"  Episodes stored:        {len(store.list_recent(9999))}")
+        print(f"  Improvements applied:   {len([h for h in history if h.get('applied')])}")
+        print(f"  Improvements rejected:  {len([h for h in history if not h.get('applied')])}")
+        print()
+        return
+
+    if args.improvements:
+        from castor.learner.apply_stage import ApplyStage
+
+        applier = ApplyStage()
+        history = applier.get_history()
+        if not history:
+            print("  No improvements applied yet.")
+            return
+        print("\n  Applied Improvements:")
+        print(f"  {'=' * 50}")
+        for h in history[-20:]:
+            status = "✅" if h.get("applied") else "❌"
+            print(
+                f"  {status} {h.get('id', '?')[:8]} | {h.get('type', '?'):<15} | {h.get('rationale', '')[:40]}"
+            )
+        print()
+        return
+
+    if args.rollback:
+        from castor.learner.apply_stage import ApplyStage
+
+        applier = ApplyStage()
+        success = applier.rollback(args.rollback)
+        if success:
+            print(f"  ✅ Rolled back improvement {args.rollback}")
+        else:
+            print(f"  ❌ Could not rollback {args.rollback} (not found or already rolled back)")
+        return
+
+    # Run the Sisyphus loop
+    config = {}
+    if args.config:
+        import yaml
+
+        with open(args.config) as f:
+            config = yaml.safe_load(f) or {}
+
+    episodes = store.list_recent(args.episodes)
+    if not episodes:
+        print("  No episodes recorded yet. Run the robot first, then come back.")
+        print("  Episodes are automatically recorded during `castor run`.")
+        return
+
+    print(f"\n  🔄 Sisyphus Loop — Analyzing {len(episodes)} episodes...")
+    print()
+
+    if args.batch:
+        # ALMA batch consolidation
+        alma = ALMAConsolidation(config=config.get("learner", {}))
+        patches = alma.consolidate(episodes)
+        print(f"  Found {len(patches)} cross-episode patterns")
+        for p in patches:
+            print(f"    → {p.type}: {p.rationale[:60]}")
+    else:
+        # Per-episode analysis
+        loop = SisyphusLoop(config=config.get("learner", {}))
+        for ep in episodes:
+            result = loop.run_episode(ep)
+            status = "✅ improved" if result.applied else "⏭️ no action"
+            print(f"  Episode {ep.id[:8]}: {status}")
+            if result.patch and result.applied:
+                print(f"    Patch: {result.patch.type} — {result.patch.rationale[:50]}")
+
+    print("\n  Done. Run `castor improve --status` to see stats.")
 
 
 def cmd_learn(args) -> None:
@@ -1656,6 +1748,30 @@ def main() -> None:
     )
     p_learn.add_argument("--lesson", type=int, default=None, help="Jump to a specific lesson (1-7)")
 
+    # castor improve
+    p_improve = sub.add_parser(
+        "improve",
+        help="Self-improving loop (Sisyphus pattern) — analyze episodes and apply improvements",
+        epilog=(
+            "Examples:\n"
+            "  castor improve --episodes 10         # Analyze last 10 episodes\n"
+            "  castor improve --status              # Show improvement history\n"
+            "  castor improve --improvements         # List all applied patches\n"
+            "  castor improve --rollback abc123      # Rollback a specific patch\n"
+            "  castor improve --batch --config bot.rcan.yaml  # Batch analysis\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_improve.add_argument("--config", help="RCAN config file")
+    p_improve.add_argument(
+        "--episodes", type=int, default=5, help="Number of episodes to analyze (default: 5)"
+    )
+    p_improve.add_argument("--status", action="store_true", help="Show improvement stats")
+    p_improve.add_argument("--improvements", action="store_true", help="List applied improvements")
+    p_improve.add_argument("--rollback", type=str, help="Rollback a specific improvement by ID")
+    p_improve.add_argument("--batch", action="store_true", help="Run ALMA batch consolidation")
+    p_improve.add_argument("--dry-run", action="store_true", help="Analyze but don't apply patches")
+
     # castor fleet
     p_fleet = sub.add_parser(
         "fleet",
@@ -2033,6 +2149,7 @@ def main() -> None:
         "benchmark": cmd_benchmark,
         "lint": cmd_lint,
         "learn": cmd_learn,
+        "improve": cmd_improve,
         "fleet": cmd_fleet,
         "export": cmd_export,
         # Batch 4 (OpenClaw-inspired)

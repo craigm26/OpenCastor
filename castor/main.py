@@ -601,6 +601,21 @@ def main():
     _latency_overrun_count = 0
     _LATENCY_WARN_THRESHOLD = 5  # consecutive overruns before suggesting action
 
+    # Episode recording for self-improving loop
+    _episode_actions = []
+    _episode_sensors = []
+    _episode_start = time.time()
+    _episode_store = None
+    learner_cfg = config.get("learner", {})
+    if learner_cfg.get("enabled", False):
+        try:
+            from castor.learner import EpisodeStore
+
+            _episode_store = EpisodeStore()
+            logger.info("Learner: episode recording enabled")
+        except ImportError:
+            logger.debug("Learner module not available")
+
     try:
         while not _shutdown_requested:
             loop_start = time.time()
@@ -686,6 +701,24 @@ def main():
                                 audit.log_motor_command(safe_action)
                         elif action_type == "stop":
                             driver.stop()
+
+                # Record for self-improving loop
+                if _episode_store is not None:
+                    _episode_actions.append(
+                        {
+                            "type": thought.action.get("type", "unknown"),
+                            "params": thought.action,
+                            "timestamp": time.time(),
+                            "result": "ok",
+                        }
+                    )
+                    if sensor_data:
+                        _episode_sensors.append(
+                            {
+                                **sensor_data,
+                                "timestamp": time.time(),
+                            }
+                        )
 
                 # Record episode in memory
                 fs.memory.record_episode(
@@ -830,6 +863,25 @@ def main():
                 audit.log_shutdown("graceful")
             except Exception:
                 pass
+
+        # Save episode for self-improving loop
+        if _episode_store is not None and _episode_actions:
+            try:
+                from castor.learner import Episode
+
+                ep = Episode(
+                    goal=config.get("metadata", {}).get("robot_name", "session"),
+                    actions=_episode_actions,
+                    sensor_readings=_episode_sensors,
+                    success=not _shutdown_requested,  # graceful = success
+                    duration_s=time.time() - _episode_start,
+                )
+                _episode_store.save(ep)
+                logger.info(
+                    f"Episode saved: {ep.id[:8]} ({len(ep.actions)} actions, {ep.duration_s:.0f}s)"
+                )
+            except Exception as exc:
+                logger.debug(f"Episode save failed: {exc}")
 
         logger.info("🤖 OpenCastor Offline. Goodbye.")
 

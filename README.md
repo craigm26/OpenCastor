@@ -51,7 +51,7 @@ Supports **Linux, macOS (Apple Silicon & Intel), Windows 11, Raspberry Pi, Docke
 Installer flags: `--dry-run`, `--no-rpi`, `--skip-wizard`
 </details>
 
-## ✨ What's New in v2026.2.19.0
+## ✨ What's New in v2026.2.20.0
 
 - **8 AI providers** — Anthropic, Google, OpenAI, HuggingFace, Ollama, llama.cpp, MLX, Claude OAuth proxy
 - **Tiered brain architecture** — reactive rules → fast inference → deep planning
@@ -60,6 +60,25 @@ Installer flags: `--dry-run`, `--no-rpi`, `--skip-wizard`
 - **Community Hub** — browse, install, and share robot recipes with `castor hub`
 - **Interactive wizard** — provider selection, auth, messaging setup with recall of previous choices
 - **`castor doctor`** — full system health diagnostic
+
+## 🔄 Self-Improving Loop (Sisyphus Pattern)
+
+Your robot learns from its mistakes. After each task, the **Sisyphus Loop** analyzes what happened, identifies failures, generates fixes, verifies them, and applies improvements automatically.
+
+```
+Episode → PM (Analyze) → Dev (Patch) → QA (Verify) → Apply
+```
+
+- **Disabled by default** — opt-in via `castor wizard` or YAML config
+- **4 cost tiers** — from $0 (local Ollama) to ~$5-15/mo (Claude)
+- **Auto-apply preferences** — config tuning only, behavior rules, or manual review
+- **Rollback** — undo any improvement with `castor improve --rollback <id>`
+- **ALMA consolidation** — cross-episode pattern analysis for deeper learning
+
+```bash
+castor improve --episodes 10    # Analyze last 10 episodes
+castor improve --status         # View improvement history
+```
 
 ## 🧠 Tiered Brain Architecture
 
