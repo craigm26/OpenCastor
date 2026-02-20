@@ -21,7 +21,7 @@ class CacheStats:
     """Tracks Anthropic prompt cache hit/miss statistics."""
 
     total_calls: int = 0
-    cache_hits: int = 0          # calls where cache_read_input_tokens > 0
+    cache_hits: int = 0  # calls where cache_read_input_tokens > 0
     cache_misses: int = 0
     total_tokens_saved: int = 0  # sum of cache_read_input_tokens
     total_tokens_spent: int = 0  # sum of cache_creation_input_tokens
@@ -88,20 +88,24 @@ def build_cached_system_prompt(base_prompt: str, rcan_config: dict | None = None
 
     # Block 0: Base system prompt — most static, cache first
     base_text = base_prompt or "You are an AI-powered robot."
-    blocks.append({
-        "type": "text",
-        "text": base_text,
-        "cache_control": {"type": "ephemeral"},  # Cache this breakpoint
-    })
+    blocks.append(
+        {
+            "type": "text",
+            "text": base_text,
+            "cache_control": {"type": "ephemeral"},  # Cache this breakpoint
+        }
+    )
 
     # Block 1: RCAN config summary (robot-specific but session-static)
     if rcan_config:
         rcan_summary = _format_rcan_summary(rcan_config)
-        blocks.append({
-            "type": "text",
-            "text": f"<robot-config>\n{rcan_summary}\n</robot-config>",
-            "cache_control": {"type": "ephemeral"},  # Cache up to here too
-        })
+        blocks.append(
+            {
+                "type": "text",
+                "text": f"<robot-config>\n{rcan_summary}\n</robot-config>",
+                "cache_control": {"type": "ephemeral"},  # Cache up to here too
+            }
+        )
 
     return blocks
 

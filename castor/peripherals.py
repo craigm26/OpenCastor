@@ -35,15 +35,17 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PeripheralInfo:
-    name: str                # "OAK-D Lite", "Logitech C920", "RPLiDAR A1"
-    category: str            # camera | depth | npu | lidar | imu | motor | serial | display | sensor | unknown
-    interface: str           # usb | i2c | serial | pcie | csi
+    name: str  # "OAK-D Lite", "Logitech C920", "RPLiDAR A1"
+    category: (
+        str  # camera | depth | npu | lidar | imu | motor | serial | display | sensor | unknown
+    )
+    interface: str  # usb | i2c | serial | pcie | csi
     device_path: str | None  # /dev/video0, /dev/ttyUSB0, None
-    usb_id: str | None       # "03e7:2485" or None
+    usb_id: str | None  # "03e7:2485" or None
     i2c_address: int | None  # 0x40, 0x68, or None
-    driver_hint: str         # "depthai", "v4l2", "rplidar", "hailo", "pca9685"
-    rcan_snippet: str        # suggested RCAN yaml block (multiline string)
-    confidence: str          # "identified" | "probable" | "unknown"
+    driver_hint: str  # "depthai", "v4l2", "rplidar", "hailo", "pca9685"
+    rcan_snippet: str  # suggested RCAN yaml block (multiline string)
+    confidence: str  # "identified" | "probable" | "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -56,34 +58,19 @@ _USB_DEVICES: dict[str, dict] = {
         "name": "OAK-D / OAK-D Lite / OAK-D Pro",
         "category": "depth",
         "driver_hint": "depthai",
-        "rcan_snippet": (
-            "camera:\n"
-            '  type: "oakd"\n'
-            "  depth_enabled: true\n"
-            "  fps: 30"
-        ),
+        "rcan_snippet": ('camera:\n  type: "oakd"\n  depth_enabled: true\n  fps: 30'),
     },
     "03e7:f63b": {
         "name": "OAK-D (Myriad X)",
         "category": "depth",
         "driver_hint": "depthai",
-        "rcan_snippet": (
-            "camera:\n"
-            '  type: "oakd"\n'
-            "  depth_enabled: true\n"
-            "  fps: 30"
-        ),
+        "rcan_snippet": ('camera:\n  type: "oakd"\n  depth_enabled: true\n  fps: 30'),
     },
     "03e7:2150": {
         "name": "OAK-1 / OAK-1 Lite",
         "category": "camera",
         "driver_hint": "depthai",
-        "rcan_snippet": (
-            "camera:\n"
-            '  type: "oakd"\n'
-            "  depth_enabled: false\n"
-            "  fps: 30"
-        ),
+        "rcan_snippet": ('camera:\n  type: "oakd"\n  depth_enabled: false\n  fps: 30'),
     },
     # Intel RealSense
     "8086:0b3a": {
@@ -91,11 +78,7 @@ _USB_DEVICES: dict[str, dict] = {
         "category": "depth",
         "driver_hint": "pyrealsense2",
         "rcan_snippet": (
-            "camera:\n"
-            '  type: "realsense"\n'
-            '  serial: ""\n'
-            "  depth_enabled: true\n"
-            "  fps: 30"
+            'camera:\n  type: "realsense"\n  serial: ""\n  depth_enabled: true\n  fps: 30'
         ),
     },
     "8086:0b07": {
@@ -103,11 +86,7 @@ _USB_DEVICES: dict[str, dict] = {
         "category": "depth",
         "driver_hint": "pyrealsense2",
         "rcan_snippet": (
-            "camera:\n"
-            '  type: "realsense"\n'
-            '  serial: ""\n'
-            "  depth_enabled: true\n"
-            "  fps: 30"
+            'camera:\n  type: "realsense"\n  serial: ""\n  depth_enabled: true\n  fps: 30'
         ),
     },
     "8086:0b64": {
@@ -115,11 +94,7 @@ _USB_DEVICES: dict[str, dict] = {
         "category": "depth",
         "driver_hint": "pyrealsense2",
         "rcan_snippet": (
-            "camera:\n"
-            '  type: "realsense"\n'
-            '  serial: ""\n'
-            "  depth_enabled: true\n"
-            "  fps: 30"
+            'camera:\n  type: "realsense"\n  serial: ""\n  depth_enabled: true\n  fps: 30'
         ),
     },
     # Motor controllers / serial
@@ -127,257 +102,146 @@ _USB_DEVICES: dict[str, dict] = {
         "name": "STM32 Virtual COM / motor controller",
         "category": "motor",
         "driver_hint": "serial",
-        "rcan_snippet": (
-            "driver:\n"
-            '  type: "serial"\n'
-            '  port: "/dev/ttyACM0"\n'
-            "  baud: 115200"
-        ),
+        "rcan_snippet": ('driver:\n  type: "serial"\n  port: "/dev/ttyACM0"\n  baud: 115200'),
     },
     "0483:df11": {
         "name": "STM32 DFU",
         "category": "serial",
         "driver_hint": "serial",
-        "rcan_snippet": (
-            "driver:\n"
-            '  type: "serial"\n'
-            '  port: "/dev/ttyACM0"\n'
-            "  baud: 115200"
-        ),
+        "rcan_snippet": ('driver:\n  type: "serial"\n  port: "/dev/ttyACM0"\n  baud: 115200'),
     },
     # CH340 USB-Serial (cheap Arduino clones)
     "1a86:7523": {
         "name": "CH340 USB-Serial (Arduino clone)",
         "category": "serial",
         "driver_hint": "serial",
-        "rcan_snippet": (
-            "driver:\n"
-            '  type: "arduino"\n'
-            '  port: "/dev/ttyUSB0"\n'
-            "  baud: 115200"
-        ),
+        "rcan_snippet": ('driver:\n  type: "arduino"\n  port: "/dev/ttyUSB0"\n  baud: 115200'),
     },
     "1a86:55d4": {
         "name": "CH341 USB-Serial",
         "category": "serial",
         "driver_hint": "serial",
-        "rcan_snippet": (
-            "driver:\n"
-            '  type: "serial"\n'
-            '  port: "/dev/ttyUSB0"\n'
-            "  baud: 115200"
-        ),
+        "rcan_snippet": ('driver:\n  type: "serial"\n  port: "/dev/ttyUSB0"\n  baud: 115200'),
     },
     # Arduino
     "2341:0043": {
         "name": "Arduino Uno",
         "category": "serial",
         "driver_hint": "arduino",
-        "rcan_snippet": (
-            "driver:\n"
-            '  type: "arduino"\n'
-            '  port: "/dev/ttyACM0"\n'
-            "  baud: 115200"
-        ),
+        "rcan_snippet": ('driver:\n  type: "arduino"\n  port: "/dev/ttyACM0"\n  baud: 115200'),
     },
     "2341:0001": {
         "name": "Arduino Uno (older)",
         "category": "serial",
         "driver_hint": "arduino",
-        "rcan_snippet": (
-            "driver:\n"
-            '  type: "arduino"\n'
-            '  port: "/dev/ttyACM0"\n'
-            "  baud: 115200"
-        ),
+        "rcan_snippet": ('driver:\n  type: "arduino"\n  port: "/dev/ttyACM0"\n  baud: 115200'),
     },
     "2341:8036": {
         "name": "Arduino Leonardo",
         "category": "serial",
         "driver_hint": "arduino",
-        "rcan_snippet": (
-            "driver:\n"
-            '  type: "arduino"\n'
-            '  port: "/dev/ttyACM0"\n'
-            "  baud: 115200"
-        ),
+        "rcan_snippet": ('driver:\n  type: "arduino"\n  port: "/dev/ttyACM0"\n  baud: 115200'),
     },
     "2341:0042": {
         "name": "Arduino Mega 2560",
         "category": "serial",
         "driver_hint": "arduino",
-        "rcan_snippet": (
-            "driver:\n"
-            '  type: "arduino"\n'
-            '  port: "/dev/ttyACM0"\n'
-            "  baud: 115200"
-        ),
+        "rcan_snippet": ('driver:\n  type: "arduino"\n  port: "/dev/ttyACM0"\n  baud: 115200'),
     },
     # Pololu
     "1ffb:0089": {
         "name": "Pololu USB Servo Controller",
         "category": "motor",
         "driver_hint": "serial",
-        "rcan_snippet": (
-            "driver:\n"
-            '  type: "pololu"\n'
-            '  port: "/dev/ttyACM0"\n'
-            "  baud: 9600"
-        ),
+        "rcan_snippet": ('driver:\n  type: "pololu"\n  port: "/dev/ttyACM0"\n  baud: 9600'),
     },
     # USB cameras
     "0c45:636b": {
         "name": "Microdia USB Camera",
         "category": "camera",
         "driver_hint": "v4l2",
-        "rcan_snippet": (
-            "camera:\n"
-            '  type: "usb"\n'
-            '  device: "/dev/video0"\n'
-            "  fps: 30"
-        ),
+        "rcan_snippet": ('camera:\n  type: "usb"\n  device: "/dev/video0"\n  fps: 30'),
     },
     "046d:082d": {
         "name": "Logitech HD Pro Webcam C920",
         "category": "camera",
         "driver_hint": "v4l2",
-        "rcan_snippet": (
-            "camera:\n"
-            '  type: "usb"\n'
-            '  device: "/dev/video0"\n'
-            "  fps: 30"
-        ),
+        "rcan_snippet": ('camera:\n  type: "usb"\n  device: "/dev/video0"\n  fps: 30'),
     },
     "046d:085e": {
         "name": "Logitech BRIO Ultra HD",
         "category": "camera",
         "driver_hint": "v4l2",
-        "rcan_snippet": (
-            "camera:\n"
-            '  type: "usb"\n'
-            '  device: "/dev/video0"\n'
-            "  fps: 30"
-        ),
+        "rcan_snippet": ('camera:\n  type: "usb"\n  device: "/dev/video0"\n  fps: 30'),
     },
     "046d:0825": {
         "name": "Logitech HD C270",
         "category": "camera",
         "driver_hint": "v4l2",
-        "rcan_snippet": (
-            "camera:\n"
-            '  type: "usb"\n'
-            '  device: "/dev/video0"\n'
-            "  fps: 30"
-        ),
+        "rcan_snippet": ('camera:\n  type: "usb"\n  device: "/dev/video0"\n  fps: 30'),
     },
     "045e:097d": {
         "name": "Microsoft Modern Webcam",
         "category": "camera",
         "driver_hint": "v4l2",
-        "rcan_snippet": (
-            "camera:\n"
-            '  type: "usb"\n'
-            '  device: "/dev/video0"\n'
-            "  fps: 30"
-        ),
+        "rcan_snippet": ('camera:\n  type: "usb"\n  device: "/dev/video0"\n  fps: 30'),
     },
     # LiDAR / serial adapters
     "10c4:ea60": {
         "name": "Silicon Labs CP2102 (LiDAR/GPS/serial)",
         "category": "lidar",
         "driver_hint": "serial",
-        "rcan_snippet": (
-            "lidar:\n"
-            '  type: "rplidar"\n'
-            '  port: "/dev/ttyUSB0"'
-        ),
+        "rcan_snippet": ('lidar:\n  type: "rplidar"\n  port: "/dev/ttyUSB0"'),
     },
     "0403:6001": {
         "name": "FTDI FT232R (Hokuyo/Arduino/serial)",
         "category": "serial",
         "driver_hint": "serial",
-        "rcan_snippet": (
-            "driver:\n"
-            '  type: "serial"\n'
-            '  port: "/dev/ttyUSB0"\n'
-            "  baud: 115200"
-        ),
+        "rcan_snippet": ('driver:\n  type: "serial"\n  port: "/dev/ttyUSB0"\n  baud: 115200'),
     },
     "0403:6015": {
         "name": "FTDI FT231X (RPLiDAR A1/A2)",
         "category": "lidar",
         "driver_hint": "rplidar",
-        "rcan_snippet": (
-            "lidar:\n"
-            '  type: "rplidar"\n'
-            '  port: "/dev/ttyUSB0"'
-        ),
+        "rcan_snippet": ('lidar:\n  type: "rplidar"\n  port: "/dev/ttyUSB0"'),
     },
     "0403:6010": {
         "name": "FTDI FT2232 Dual USB-Serial",
         "category": "serial",
         "driver_hint": "serial",
-        "rcan_snippet": (
-            "driver:\n"
-            '  type: "serial"\n'
-            '  port: "/dev/ttyUSB0"\n'
-            "  baud: 115200"
-        ),
+        "rcan_snippet": ('driver:\n  type: "serial"\n  port: "/dev/ttyUSB0"\n  baud: 115200'),
     },
     "067b:2303": {
         "name": "Prolific PL2303 USB-Serial",
         "category": "serial",
         "driver_hint": "serial",
-        "rcan_snippet": (
-            "driver:\n"
-            '  type: "serial"\n'
-            '  port: "/dev/ttyUSB0"\n'
-            "  baud: 115200"
-        ),
+        "rcan_snippet": ('driver:\n  type: "serial"\n  port: "/dev/ttyUSB0"\n  baud: 115200'),
     },
     # Google Coral USB accelerator
     "18d1:9302": {
         "name": "Google Coral USB Accelerator (Edge TPU)",
         "category": "npu",
         "driver_hint": "coral",
-        "rcan_snippet": (
-            "npu:\n"
-            '  type: "coral"\n'
-            '  device: "usb"'
-        ),
+        "rcan_snippet": ('npu:\n  type: "coral"\n  device: "usb"'),
     },
     "18d1:9303": {
         "name": "Google Coral USB Accelerator v2",
         "category": "npu",
         "driver_hint": "coral",
-        "rcan_snippet": (
-            "npu:\n"
-            '  type: "coral"\n'
-            '  device: "usb"'
-        ),
+        "rcan_snippet": ('npu:\n  type: "coral"\n  device: "usb"'),
     },
     # Stereolabs ZED
     "2b03:f580": {
         "name": "Stereolabs ZED 2",
         "category": "depth",
         "driver_hint": "pyzed",
-        "rcan_snippet": (
-            "camera:\n"
-            '  type: "zed"\n'
-            "  depth_enabled: true\n"
-            "  fps: 30"
-        ),
+        "rcan_snippet": ('camera:\n  type: "zed"\n  depth_enabled: true\n  fps: 30'),
     },
     "2b03:f881": {
         "name": "Stereolabs ZED Mini",
         "category": "depth",
         "driver_hint": "pyzed",
-        "rcan_snippet": (
-            "camera:\n"
-            '  type: "zed"\n'
-            "  depth_enabled: true\n"
-            "  fps: 30"
-        ),
+        "rcan_snippet": ('camera:\n  type: "zed"\n  depth_enabled: true\n  fps: 30'),
     },
 }
 
@@ -392,36 +256,21 @@ _I2C_DEVICES: dict[int, dict] = {
         "category": "motor",
         "driver_hint": "pca9685",
         "rcan_type": "pca9685",
-        "rcan_snippet": (
-            "driver:\n"
-            '  type: "pca9685"\n'
-            "  i2c_bus: 1\n"
-            "  address: 0x40"
-        ),
+        "rcan_snippet": ('driver:\n  type: "pca9685"\n  i2c_bus: 1\n  address: 0x40'),
     },
     0x41: {
         "name": "PCA9685 (alt addr 0x41)",
         "category": "motor",
         "driver_hint": "pca9685",
         "rcan_type": "pca9685",
-        "rcan_snippet": (
-            "driver:\n"
-            '  type: "pca9685"\n'
-            "  i2c_bus: 1\n"
-            "  address: 0x41"
-        ),
+        "rcan_snippet": ('driver:\n  type: "pca9685"\n  i2c_bus: 1\n  address: 0x41'),
     },
     0x42: {
         "name": "PCA9685 (alt addr 0x42)",
         "category": "motor",
         "driver_hint": "pca9685",
         "rcan_type": "pca9685",
-        "rcan_snippet": (
-            "driver:\n"
-            '  type: "pca9685"\n'
-            "  i2c_bus: 1\n"
-            "  address: 0x42"
-        ),
+        "rcan_snippet": ('driver:\n  type: "pca9685"\n  i2c_bus: 1\n  address: 0x42'),
     },
     # ADC
     0x48: {
@@ -429,24 +278,14 @@ _I2C_DEVICES: dict[int, dict] = {
         "category": "sensor",
         "driver_hint": "ads1115",
         "rcan_type": "ads1115",
-        "rcan_snippet": (
-            "sensor:\n"
-            '  type: "ads1115"\n'
-            "  i2c_bus: 1\n"
-            "  address: 0x48"
-        ),
+        "rcan_snippet": ('sensor:\n  type: "ads1115"\n  i2c_bus: 1\n  address: 0x48'),
     },
     0x49: {
         "name": "ADS1115 ADC (alt addr 0x49)",
         "category": "sensor",
         "driver_hint": "ads1115",
         "rcan_type": "ads1115",
-        "rcan_snippet": (
-            "sensor:\n"
-            '  type: "ads1115"\n'
-            "  i2c_bus: 1\n"
-            "  address: 0x49"
-        ),
+        "rcan_snippet": ('sensor:\n  type: "ads1115"\n  i2c_bus: 1\n  address: 0x49'),
     },
     # IMU — MPU-6050
     0x68: {
@@ -454,23 +293,14 @@ _I2C_DEVICES: dict[int, dict] = {
         "category": "imu",
         "driver_hint": "mpu6050",
         "rcan_type": "mpu6050",
-        "rcan_snippet": (
-            "imu:\n"
-            '  type: "mpu6050"\n'
-            "  i2c_bus: 1"
-        ),
+        "rcan_snippet": ('imu:\n  type: "mpu6050"\n  i2c_bus: 1'),
     },
     0x69: {
         "name": "MPU-6050 IMU (alt addr 0x69)",
         "category": "imu",
         "driver_hint": "mpu6050",
         "rcan_type": "mpu6050",
-        "rcan_snippet": (
-            "imu:\n"
-            '  type: "mpu6050"\n'
-            "  i2c_bus: 1\n"
-            "  address: 0x69"
-        ),
+        "rcan_snippet": ('imu:\n  type: "mpu6050"\n  i2c_bus: 1\n  address: 0x69'),
     },
     # IMU — BNO055
     0x28: {
@@ -478,22 +308,14 @@ _I2C_DEVICES: dict[int, dict] = {
         "category": "imu",
         "driver_hint": "bno055",
         "rcan_type": "bno055",
-        "rcan_snippet": (
-            "imu:\n"
-            '  type: "bno055"\n'
-            "  i2c_bus: 1"
-        ),
+        "rcan_snippet": ('imu:\n  type: "bno055"\n  i2c_bus: 1'),
     },
     0x29: {
         "name": "VL53L0X ToF distance sensor",
         "category": "sensor",
         "driver_hint": "vl53l0x",
         "rcan_type": "vl53l0x",
-        "rcan_snippet": (
-            "sensor:\n"
-            '  type: "vl53l0x"\n'
-            "  i2c_bus: 1"
-        ),
+        "rcan_snippet": ('sensor:\n  type: "vl53l0x"\n  i2c_bus: 1'),
     },
     # OLED display
     0x3C: {
@@ -501,24 +323,14 @@ _I2C_DEVICES: dict[int, dict] = {
         "category": "display",
         "driver_hint": "ssd1306",
         "rcan_type": "ssd1306",
-        "rcan_snippet": (
-            "display:\n"
-            '  type: "ssd1306"\n'
-            "  i2c_bus: 1\n"
-            "  address: 0x3C"
-        ),
+        "rcan_snippet": ('display:\n  type: "ssd1306"\n  i2c_bus: 1\n  address: 0x3C'),
     },
     0x3D: {
         "name": "SSD1306 OLED display (alt addr 0x3D)",
         "category": "display",
         "driver_hint": "ssd1306",
         "rcan_type": "ssd1306",
-        "rcan_snippet": (
-            "display:\n"
-            '  type: "ssd1306"\n'
-            "  i2c_bus: 1\n"
-            "  address: 0x3D"
-        ),
+        "rcan_snippet": ('display:\n  type: "ssd1306"\n  i2c_bus: 1\n  address: 0x3D'),
     },
     # Magnetometer
     0x1E: {
@@ -526,11 +338,7 @@ _I2C_DEVICES: dict[int, dict] = {
         "category": "imu",
         "driver_hint": "hmc5883l",
         "rcan_type": "hmc5883l",
-        "rcan_snippet": (
-            "imu:\n"
-            '  type: "hmc5883l"\n'
-            "  i2c_bus: 1"
-        ),
+        "rcan_snippet": ('imu:\n  type: "hmc5883l"\n  i2c_bus: 1'),
     },
     # ICM-42688 IMU
     0x6A: {
@@ -538,23 +346,14 @@ _I2C_DEVICES: dict[int, dict] = {
         "category": "imu",
         "driver_hint": "icm42688",
         "rcan_type": "icm42688",
-        "rcan_snippet": (
-            "imu:\n"
-            '  type: "icm42688"\n'
-            "  i2c_bus: 1"
-        ),
+        "rcan_snippet": ('imu:\n  type: "icm42688"\n  i2c_bus: 1'),
     },
     0x6B: {
         "name": "ICM-42688 IMU (alt addr 0x6B)",
         "category": "imu",
         "driver_hint": "icm42688",
         "rcan_type": "icm42688",
-        "rcan_snippet": (
-            "imu:\n"
-            '  type: "icm42688"\n'
-            "  i2c_bus: 1\n"
-            "  address: 0x6B"
-        ),
+        "rcan_snippet": ('imu:\n  type: "icm42688"\n  i2c_bus: 1\n  address: 0x6B'),
     },
     # BMP/BME environment sensors
     0x77: {
@@ -562,23 +361,14 @@ _I2C_DEVICES: dict[int, dict] = {
         "category": "sensor",
         "driver_hint": "bme280",
         "rcan_type": "bme280",
-        "rcan_snippet": (
-            "sensor:\n"
-            '  type: "bme280"\n'
-            "  i2c_bus: 1"
-        ),
+        "rcan_snippet": ('sensor:\n  type: "bme280"\n  i2c_bus: 1'),
     },
     0x76: {
         "name": "BME280 environment sensor (alt addr 0x76)",
         "category": "sensor",
         "driver_hint": "bme280",
         "rcan_type": "bme280",
-        "rcan_snippet": (
-            "sensor:\n"
-            '  type: "bme280"\n'
-            "  i2c_bus: 1\n"
-            "  address: 0x76"
-        ),
+        "rcan_snippet": ('sensor:\n  type: "bme280"\n  i2c_bus: 1\n  address: 0x76'),
     },
 }
 
@@ -586,25 +376,26 @@ _I2C_DEVICES: dict[int, dict] = {
 # RCAN snippet helpers
 # ---------------------------------------------------------------------------
 
-_CATEGORY_ORDER = ["depth", "camera", "npu", "lidar", "imu", "motor", "sensor", "display", "serial", "unknown"]
+_CATEGORY_ORDER = [
+    "depth",
+    "camera",
+    "npu",
+    "lidar",
+    "imu",
+    "motor",
+    "sensor",
+    "display",
+    "serial",
+    "unknown",
+]
 
 
 def _make_usb_camera_snippet(device_path: str) -> str:
-    return (
-        "camera:\n"
-        f'  type: "usb"\n'
-        f'  device: "{device_path}"\n'
-        "  fps: 30"
-    )
+    return f'camera:\n  type: "usb"\n  device: "{device_path}"\n  fps: 30'
 
 
 def _make_serial_snippet(device_path: str) -> str:
-    return (
-        "driver:\n"
-        f'  type: "serial"\n'
-        f'  port: "{device_path}"\n'
-        "  baud: 115200"
-    )
+    return f'driver:\n  type: "serial"\n  port: "{device_path}"\n  baud: 115200'
 
 
 # ---------------------------------------------------------------------------
@@ -665,7 +456,9 @@ def scan_usb() -> list[PeripheralInfo]:
         else:
             # Unknown device — include it anyway with lower confidence
             peripheral = PeripheralInfo(
-                name=f"Unknown USB device ({usb_label[:50]})" if usb_label else f"Unknown USB ({vid_pid})",
+                name=f"Unknown USB device ({usb_label[:50]})"
+                if usb_label
+                else f"Unknown USB ({vid_pid})",
                 category="unknown",
                 interface="usb",
                 device_path=None,
@@ -828,14 +621,13 @@ def scan_serial() -> list[PeripheralInfo]:
     for symlink in glob.glob("/dev/serial/by-id/*"):
         try:
             import os
+
             target = os.path.realpath(symlink)
             id_map[target] = symlink.split("/")[-1]
         except OSError:
             pass
 
-    serial_nodes = sorted(
-        glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*")
-    )
+    serial_nodes = sorted(glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*"))
 
     for dev_path in serial_nodes:
         friendly = id_map.get(dev_path, "")
@@ -877,6 +669,7 @@ def scan_npu() -> list[PeripheralInfo]:
     if not hailo_detected:
         try:
             import importlib
+
             importlib.import_module("hailo_platform")
             hailo_detected = True
             logger.info("Hailo NPU detected via hailo_platform module")
@@ -884,21 +677,19 @@ def scan_npu() -> list[PeripheralInfo]:
             pass
 
     if hailo_detected:
-        results.append(PeripheralInfo(
-            name="Hailo-8 / Hailo-8L NPU",
-            category="npu",
-            interface="pcie",
-            device_path=hailo_devs[0] if hailo_devs else None,
-            usb_id=None,
-            i2c_address=None,
-            driver_hint="hailo",
-            rcan_snippet=(
-                "npu:\n"
-                '  type: "hailo"\n'
-                '  device: "/dev/hailo0"'
-            ),
-            confidence="identified",
-        ))
+        results.append(
+            PeripheralInfo(
+                name="Hailo-8 / Hailo-8L NPU",
+                category="npu",
+                interface="pcie",
+                device_path=hailo_devs[0] if hailo_devs else None,
+                usb_id=None,
+                i2c_address=None,
+                driver_hint="hailo",
+                rcan_snippet=('npu:\n  type: "hailo"\n  device: "/dev/hailo0"'),
+                confidence="identified",
+            )
+        )
 
     # --- Google Coral USB ---
     coral_usb_detected = any(
@@ -915,40 +706,36 @@ def scan_npu() -> list[PeripheralInfo]:
         pass
 
     if coral_usb_detected and not any(p.driver_hint == "coral" for p in results):
-        results.append(PeripheralInfo(
-            name="Google Coral USB Accelerator",
-            category="npu",
-            interface="usb",
-            device_path=None,
-            usb_id="18d1:9302",
-            i2c_address=None,
-            driver_hint="coral",
-            rcan_snippet=(
-                "npu:\n"
-                '  type: "coral"\n'
-                '  device: "usb"'
-            ),
-            confidence="identified",
-        ))
+        results.append(
+            PeripheralInfo(
+                name="Google Coral USB Accelerator",
+                category="npu",
+                interface="usb",
+                device_path=None,
+                usb_id="18d1:9302",
+                i2c_address=None,
+                driver_hint="coral",
+                rcan_snippet=('npu:\n  type: "coral"\n  device: "usb"'),
+                confidence="identified",
+            )
+        )
 
     # --- Google Coral PCIe ---
     coral_pcie_devs = glob.glob("/dev/apex_*")
     if coral_pcie_devs:
-        results.append(PeripheralInfo(
-            name="Google Coral PCIe Accelerator",
-            category="npu",
-            interface="pcie",
-            device_path=coral_pcie_devs[0],
-            usb_id=None,
-            i2c_address=None,
-            driver_hint="coral",
-            rcan_snippet=(
-                "npu:\n"
-                '  type: "coral"\n'
-                f'  device: "{coral_pcie_devs[0]}"'
-            ),
-            confidence="identified",
-        ))
+        results.append(
+            PeripheralInfo(
+                name="Google Coral PCIe Accelerator",
+                category="npu",
+                interface="pcie",
+                device_path=coral_pcie_devs[0],
+                usb_id=None,
+                i2c_address=None,
+                driver_hint="coral",
+                rcan_snippet=(f'npu:\n  type: "coral"\n  device: "{coral_pcie_devs[0]}"'),
+                confidence="identified",
+            )
+        )
         logger.info("Google Coral PCIe detected: %s", coral_pcie_devs)
 
     return results
@@ -972,22 +759,21 @@ def scan_csi() -> list[PeripheralInfo]:
             for line in output.splitlines():
                 if line.strip().startswith(("0 :", "1 :", "0:", "1:")):
                     cam_name = line.split(":")[-1].strip() or "Raspberry Pi Camera"
-                    results.append(PeripheralInfo(
-                        name=f"CSI Camera: {cam_name}",
-                        category="camera",
-                        interface="csi",
-                        device_path="/dev/video0",
-                        usb_id=None,
-                        i2c_address=None,
-                        driver_hint="libcamera",
-                        rcan_snippet=(
-                            "camera:\n"
-                            '  type: "csi"\n'
-                            '  device: "/dev/video0"\n'
-                            "  fps: 30"
-                        ),
-                        confidence="identified",
-                    ))
+                    results.append(
+                        PeripheralInfo(
+                            name=f"CSI Camera: {cam_name}",
+                            category="camera",
+                            interface="csi",
+                            device_path="/dev/video0",
+                            usb_id=None,
+                            i2c_address=None,
+                            driver_hint="libcamera",
+                            rcan_snippet=(
+                                'camera:\n  type: "csi"\n  device: "/dev/video0"\n  fps: 30'
+                            ),
+                            confidence="identified",
+                        )
+                    )
                     logger.info("CSI camera found: %s", cam_name)
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
@@ -1003,22 +789,19 @@ def scan_csi() -> list[PeripheralInfo]:
             )
             output = proc.stdout.lower()
             if "bm2835" in output or "unicam" in output:
-                results.append(PeripheralInfo(
-                    name="Raspberry Pi Camera (CSI)",
-                    category="camera",
-                    interface="csi",
-                    device_path="/dev/video0",
-                    usb_id=None,
-                    i2c_address=None,
-                    driver_hint="v4l2",
-                    rcan_snippet=(
-                        "camera:\n"
-                        '  type: "csi"\n'
-                        '  device: "/dev/video0"\n'
-                        "  fps: 30"
-                    ),
-                    confidence="identified",
-                ))
+                results.append(
+                    PeripheralInfo(
+                        name="Raspberry Pi Camera (CSI)",
+                        category="camera",
+                        interface="csi",
+                        device_path="/dev/video0",
+                        usb_id=None,
+                        i2c_address=None,
+                        driver_hint="v4l2",
+                        rcan_snippet=('camera:\n  type: "csi"\n  device: "/dev/video0"\n  fps: 30'),
+                        confidence="identified",
+                    )
+                )
                 logger.info("Raspberry Pi CSI camera detected via v4l2-ctl")
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
@@ -1130,8 +913,11 @@ def scan_all(i2c_buses: list[int] | None = None) -> list[PeripheralInfo]:
     for p in deduplicated:
         logger.info(
             "Peripheral: [%s] %s — %s via %s (confidence: %s)",
-            p.category, p.name, p.device_path or p.usb_id or f"0x{p.i2c_address:02X}" if p.i2c_address else "?",
-            p.interface, p.confidence,
+            p.category,
+            p.name,
+            p.device_path or p.usb_id or f"0x{p.i2c_address:02X}" if p.i2c_address else "?",
+            p.interface,
+            p.confidence,
         )
 
     return deduplicated
@@ -1243,9 +1029,7 @@ def _print_scan_table_rich(peripherals: list[PeripheralInfo], color: bool) -> No
 
     # Legend
     console.print(
-        "  [green]✓[/green] identified  "
-        "[yellow]~[/yellow] probable  "
-        "[dim]?[/dim] unknown\n"
+        "  [green]✓[/green] identified  [yellow]~[/yellow] probable  [dim]?[/dim] unknown\n"
     )
 
 

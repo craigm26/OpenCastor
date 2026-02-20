@@ -69,16 +69,21 @@ def _load_env_file(path: str | None = None) -> int:
 _CAMERA_TYPE_PRIORITY = ["oakd", "realsense", "usb", "csi"]
 
 _USB_CAMERA_IDS = {
-    "03e7:2485", "03e7:f63b",   # OAK-D family
-    "8086:0b3a", "8086:0b07",   # Intel RealSense
-    "046d:082d", "046d:085e",   # Logitech webcams
-    "045e:097d", "0c45:636b",   # Microsoft / Microdia
+    "03e7:2485",
+    "03e7:f63b",  # OAK-D family
+    "8086:0b3a",
+    "8086:0b07",  # Intel RealSense
+    "046d:082d",
+    "046d:085e",  # Logitech webcams
+    "045e:097d",
+    "0c45:636b",  # Microsoft / Microdia
 }
 
 
 def _lsusb_ids() -> set:
     """Return set of VID:PID strings from lsusb, or empty set on failure."""
     import subprocess
+
     try:
         out = subprocess.run(["lsusb"], capture_output=True, text=True, timeout=3)
         ids = set()
@@ -113,6 +118,7 @@ def apply_hardware_overrides(config: dict) -> dict:
     scan_results = []
     try:
         from castor.peripherals import scan_all
+
         scan_results = scan_all()
     except Exception:
         pass
@@ -138,9 +144,12 @@ def apply_hardware_overrides(config: dict) -> dict:
                 available_types.add("usb")
             try:
                 import subprocess
+
                 out = subprocess.run(
                     ["libcamera-hello", "--list-cameras"],
-                    capture_output=True, text=True, timeout=3,
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
                 )
                 if "0 :" in out.stdout:
                     available_types.add("csi")
@@ -148,15 +157,15 @@ def apply_hardware_overrides(config: dict) -> dict:
                 pass
 
         if available_types and configured_type not in available_types:
-            best_type = next(
-                (t for t in _CAMERA_TYPE_PRIORITY if t in available_types), None
-            )
+            best_type = next((t for t in _CAMERA_TYPE_PRIORITY if t in available_types), None)
             if best_type:
                 logger.warning(
                     "⚡ Hardware override: camera.type '%s' not detected — "
                     "switching to '%s' (detected: %s). "
                     "Update your RCAN config to silence this warning.",
-                    configured_type, best_type, ", ".join(sorted(available_types)),
+                    configured_type,
+                    best_type,
+                    ", ".join(sorted(available_types)),
                 )
                 cam_cfg["type"] = best_type
 
@@ -178,9 +187,8 @@ def apply_hardware_overrides(config: dict) -> dict:
         else:
             try:
                 import smbus2
-                bus_num = int(
-                    driver.get("port", "/dev/i2c-1").replace("/dev/i2c-", "")
-                )
+
+                bus_num = int(driver.get("port", "/dev/i2c-1").replace("/dev/i2c-", ""))
                 with smbus2.SMBus(bus_num) as bus:
                     for addr in [0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47]:
                         try:
@@ -196,7 +204,8 @@ def apply_hardware_overrides(config: dict) -> dict:
             logger.warning(
                 "⚡ Hardware override: PCA9685 not at %s — found at %s. "
                 "Update your RCAN config to silence this warning.",
-                hex(configured_addr), hex(actual_addr),
+                hex(configured_addr),
+                hex(actual_addr),
             )
             driver["address"] = hex(actual_addr)
 

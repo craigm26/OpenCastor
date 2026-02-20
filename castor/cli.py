@@ -274,6 +274,7 @@ def cmd_doctor(args) -> None:
     # Peripheral scan section
     try:
         from castor.peripherals import print_scan_table, scan_all
+
         print("  Connected Peripherals\n")
         peripherals = scan_all()
         print_scan_table(peripherals, color=True)
@@ -1540,23 +1541,25 @@ def cmd_scan(args) -> None:
     peripherals = scan_all(i2c_buses=[i2c_bus])
 
     if getattr(args, "json", False):
-        print(_json.dumps(
-            [
-                {
-                    "name": p.name,
-                    "category": p.category,
-                    "interface": p.interface,
-                    "device_path": p.device_path,
-                    "usb_id": p.usb_id,
-                    "i2c_address": p.i2c_address,
-                    "driver_hint": p.driver_hint,
-                    "rcan_snippet": p.rcan_snippet,
-                    "confidence": p.confidence,
-                }
-                for p in peripherals
-            ],
-            indent=2,
-        ))
+        print(
+            _json.dumps(
+                [
+                    {
+                        "name": p.name,
+                        "category": p.category,
+                        "interface": p.interface,
+                        "device_path": p.device_path,
+                        "usb_id": p.usb_id,
+                        "i2c_address": p.i2c_address,
+                        "driver_hint": p.driver_hint,
+                        "rcan_snippet": p.rcan_snippet,
+                        "confidence": p.confidence,
+                    }
+                    for p in peripherals
+                ],
+                indent=2,
+            )
+        )
     else:
         print_scan_table(peripherals, color=not getattr(args, "no_color", False))
 
@@ -2406,11 +2409,16 @@ def main() -> None:
     p_scan.add_argument("--json", action="store_true", help="Output as JSON")
     p_scan.add_argument("--no-color", action="store_true", help="Plain text output")
     p_scan.add_argument(
-        "--i2c-bus", type=int, default=1, dest="i2c_bus",
+        "--i2c-bus",
+        type=int,
+        default=1,
+        dest="i2c_bus",
         help="I2C bus to scan (default: 1)",
     )
     p_scan.add_argument(
-        "--suggest", action="store_true", default=True,
+        "--suggest",
+        action="store_true",
+        default=True,
         help="Print suggested RCAN config snippets (default: true)",
     )
 

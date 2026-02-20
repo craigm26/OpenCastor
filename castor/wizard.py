@@ -223,9 +223,9 @@ MODELS = {
             "id": "gemini-3-flash-preview",
             "label": "Gemini 3 Flash — Agentic Vision (Preview)",
             "desc": "Think→Act→Observe loop: zooms in on obstacles, annotates images, "
-                    "grounds decisions in visual evidence. 5-10% vision benchmark boost "
-                    "via code execution. Best for: fine-grained object ID, hazard labels, "
-                    "navigation in cluttered scenes.",
+            "grounds decisions in visual evidence. 5-10% vision benchmark boost "
+            "via code execution. Best for: fine-grained object ID, hazard labels, "
+            "navigation in cluttered scenes.",
             "tags": ["preview", "agentic", "vision", "code-execution"],
             "recommended": False,
             "agentic_vision": True,

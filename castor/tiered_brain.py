@@ -196,10 +196,9 @@ class TieredBrain:
                 # This keeps the system prompt prefix stable across ticks so cache hits occur.
                 # Per Claude Code's cache-first lesson: static content in system, dynamic in user.
                 from castor.prompt_cache import build_sensor_reminder
+
                 sensor_reminder = build_sensor_reminder(sensor_data or {})
-                plan_instruction = (
-                    f"{sensor_reminder}\n\n" if sensor_reminder else ""
-                ) + (
+                plan_instruction = (f"{sensor_reminder}\n\n" if sensor_reminder else "") + (
                     f"You are the strategic planner for a robot. "
                     f"The fast brain's last response: {thought.raw_text[:200]}\n\n"
                     f"Current task: {instruction}\n\n"
