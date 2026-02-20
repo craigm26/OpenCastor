@@ -109,6 +109,25 @@ if [ -f "$HOME/.opencastor-audit.log" ]; then
   echo "${GREEN}[OK]${RESET} Audit log removed"
 fi
 
+# Remove PATH entry from shell profiles
+remove_from_profile() {
+  local profile="$1"
+  if [ -f "$profile" ] && grep -qF "# opencastor" "$profile" 2>/dev/null; then
+    # Remove the comment line and the export line
+    grep -vF "# opencastor" "$profile" | grep -vF "# OpenCastor" | grep -vF "/opencastor/venv/bin" > "${profile}.tmp" && mv "${profile}.tmp" "$profile"
+    echo "${GREEN}[OK]${RESET} Removed castor from PATH in $profile"
+  fi
+}
+remove_from_profile "$HOME/.bashrc"
+remove_from_profile "$HOME/.bash_profile"
+remove_from_profile "$HOME/.zshrc"
+remove_from_profile "$HOME/.zprofile"
+FISH_CONFIG="$HOME/.config/fish/config.fish"
+if [ -f "$FISH_CONFIG" ] && grep -qF "opencastor" "$FISH_CONFIG" 2>/dev/null; then
+  grep -vF "opencastor" "$FISH_CONFIG" | grep -v "^# OpenCastor$" > "${FISH_CONFIG}.tmp" && mv "${FISH_CONFIG}.tmp" "$FISH_CONFIG"
+  echo "${GREEN}[OK]${RESET} Removed castor from PATH in $FISH_CONFIG"
+fi
+
 # Ask about credentials
 echo ""
 if [ -d "$CONFIG_DIR" ]; then

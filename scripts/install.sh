@@ -321,13 +321,60 @@ if ! ls *.rcan.yaml &>/dev/null; then
   info "Edit robot.rcan.yaml to customize, or run 'castor wizard' to generate a new one."
 fi
 
+# ── PATH setup — add venv/bin to shell profile ────────
+CASTOR_PATH_LINE="export PATH=\"$INSTALL_DIR/venv/bin:\$PATH\" # opencastor"
+
+add_to_shell_profile() {
+  local profile="$1"
+  if [ -f "$profile" ] || [ "$profile" = "$HOME/.bashrc" ] || [ "$profile" = "$HOME/.zshrc" ]; then
+    if ! grep -qF "# opencastor" "$profile" 2>/dev/null; then
+      echo "" >> "$profile"
+      echo "# OpenCastor — makes 'castor' available in every shell" >> "$profile"
+      echo "$CASTOR_PATH_LINE" >> "$profile"
+      info "Added castor to PATH in $profile"
+    else
+      info "castor already in PATH in $profile (skipping)"
+    fi
+  fi
+}
+
+if [ "$DRY_RUN" = false ]; then
+  # Detect shell and update the right profile(s)
+  CURRENT_SHELL="$(basename "${SHELL:-bash}")"
+  case "$CURRENT_SHELL" in
+    zsh)
+      add_to_shell_profile "$HOME/.zshrc"
+      add_to_shell_profile "$HOME/.zprofile"
+      ;;
+    fish)
+      FISH_CONFIG="$HOME/.config/fish/config.fish"
+      mkdir -p "$(dirname "$FISH_CONFIG")"
+      if ! grep -qF "opencastor" "$FISH_CONFIG" 2>/dev/null; then
+        echo "" >> "$FISH_CONFIG"
+        echo "# OpenCastor" >> "$FISH_CONFIG"
+        echo "fish_add_path $INSTALL_DIR/venv/bin" >> "$FISH_CONFIG"
+        info "Added castor to PATH in $FISH_CONFIG"
+      fi
+      ;;
+    *)
+      # bash / sh — update .bashrc and .bash_profile
+      add_to_shell_profile "$HOME/.bashrc"
+      add_to_shell_profile "$HOME/.bash_profile"
+      ;;
+  esac
+  # Also export for the current session immediately
+  export PATH="$INSTALL_DIR/venv/bin:$PATH"
+else
+  echo "${YELLOW}[DRY-RUN]${RESET} Would add castor to PATH in shell profile"
+fi
+
 # ── Done ──────────────────────────────────────────────
 echo ""
 echo "${GREEN}================================================${RESET}"
 echo "  ${BOLD}OpenCastor installed successfully!${RESET}"
 echo ""
 echo "  ${BOLD}Quick Start:${RESET}"
-echo "    cd $INSTALL_DIR && source venv/bin/activate"
+echo "    cd $INSTALL_DIR"
 echo "    castor run --config *.rcan.yaml"
 echo ""
 echo "  ${BOLD}Useful Commands:${RESET}"
@@ -339,6 +386,6 @@ echo "    castor dashboard       Open the web dashboard"
 echo ""
 echo "  ${BOLD}Verify Install:${RESET}  bash scripts/install-check.sh"
 echo ""
-echo "  ${YELLOW}Tip:${RESET} You can re-run ${BOLD}castor wizard${RESET} anytime to"
-echo "  reconfigure your robot, change AI provider, or add channels."
+echo "  ${YELLOW}Tip:${RESET} ${BOLD}castor${RESET} is now available in every new terminal."
+echo "  To use it in this session run: ${BOLD}source ~/.bashrc${RESET}"
 echo "${GREEN}================================================${RESET}"
