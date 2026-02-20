@@ -5,6 +5,40 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.20.9] - 2026-02-19 💬 OpenClaw-style WhatsApp access control
+
+### Highlights
+The WhatsApp channel now works exactly like OpenClaw's messaging integration:
+owner can message their own linked number, access is controlled by `allow_from`,
+unknown senders get a pairing flow, and groups are policy-gated.
+
+### Added
+- **`dm_policy`** — `allowlist` | `pairing` | `open` (default: `allowlist`)
+- **`allow_from`** — E.164 phone number allowlist; owner auto-added at connect time
+- **`self_chat_mode: true`** — owner can message their own linked WhatsApp number
+  and the robot responds (was previously blocked by `IsFromMe` filter)
+- **`group_policy`** — `disabled` | `open` | `allowlist` (default: `disabled`)
+- **`ack_reaction`** — emoji reaction sent on receipt (e.g. `"👀"`)
+- **`_dispatch(coro)`** — extracted helper for scheduling async coroutines from
+  neonize's sync thread; makes unit testing clean (no asyncio in tests)
+- **`approve_pairing(code)`** — approve a pending pairing request by code
+- **`list_pairing_requests()`** — return all pending pairing codes
+- **Owner auto-detected** — `_owner_number` set from `client.get_me()` on connect;
+  auto-appended to `allow_from` so the robot always responds to its owner
+- **`bob.rcan.yaml` updated** — `allow_from: ["+19169967105"]`, `self_chat_mode: true`,
+  `ack_reaction: "👀"`
+- **25 new tests** covering all dm_policy modes, self-chat, group policy,
+  pairing flow, ack reactions, owner auto-add
+
+### How to chat with your robot via WhatsApp
+1. Run: `castor run --config bob.rcan.yaml` (or `castor dashboard`)
+2. Open WhatsApp on your phone
+3. Tap your own name / "Saved Messages" (message yourself)
+4. Type anything — the robot reads it and replies
+
+### Stats
+- **2,233 tests** (2,222 passing, 11 skipped) | **55,499 LOC** | 8 providers
+
 ## [2026.2.20.8] - 2026-02-19 📊 Dashboard auto-start + live exchange stats bar
 
 ### Highlights
