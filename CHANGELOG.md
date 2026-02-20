@@ -5,6 +5,25 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.20.7] - 2026-02-19 🔧 Installer PATH fix
+
+### Fixed
+- **Installer auto-adds `castor` to PATH** — `scripts/install.sh` now writes
+  `export PATH="~/opencastor/venv/bin:$PATH"` to the correct shell profile
+  (`~/.bashrc` for bash, `~/.zshrc`/`~/.zprofile` for zsh, `config.fish` for fish).
+  Idempotent — won't duplicate on reinstall. Also `export`s immediately so `castor`
+  works in the same terminal session without needing `source venv/bin/activate`.
+  Success banner updated: no longer shows the manual activate step.
+- **Uninstaller cleans up PATH entry** — `scripts/uninstall.sh` now strips the
+  opencastor PATH line from all shell profiles on removal.
+- **`scripts/sync-version.py`** — now also patches `scripts/install.sh` VERSION
+  variable so the installer always ships the correct version string.
+- **`install.sh VERSION`** — was frozen at `2026.2.20.0`; now correctly tracks
+  the current release via sync-version.py.
+
+### Stats
+- **2,173 tests** (2,162 passing, 11 skipped) | **55,006 LOC** | 8 providers
+
 ## [2026.2.20.6] - 2026-02-19 🧠 Brand · Vision · Peripherals · Prompt Cache
 
 ### Highlights

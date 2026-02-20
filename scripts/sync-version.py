@@ -166,6 +166,23 @@ def main():
         if replace_version_in_file(f, version, v_version):
             changed += 1
 
+    # Update install.sh VERSION variable (bare version, no v prefix)
+    install_sh = ROOT / "scripts" / "install.sh"
+    if install_sh.exists():
+        text = install_sh.read_text()
+        new_text = re.sub(
+            r'^(VERSION=")[^"]+(")',
+            f'\\g<1>{version}\\g<2>',
+            text,
+            flags=re.MULTILINE,
+        )
+        if new_text != text:
+            install_sh.write_text(new_text)
+            print(f"  scripts/install.sh              → VERSION={version}")
+            changed += 1
+        else:
+            print(f"  scripts/install.sh              → already {version}")
+
     # Update stats
     print("\n📊  Collecting stats...")
     loc = get_loc()
