@@ -39,6 +39,9 @@ class ReactiveLayer:
         self.min_obstacle_m = config.get("reactive", {}).get("min_obstacle_m", 0.3)
         self.blank_threshold = config.get("reactive", {}).get("blank_threshold", 100)
         self.hailo_enabled = config.get("reactive", {}).get("hailo_vision", False)
+        # If camera_required=False, blank/missing frames are NOT a blocking condition.
+        # The brain will run text-only (messaging, sensor data) without a live frame.
+        self.camera_required = config.get("camera", {}).get("camera_required", True)
         self._hailo = None
         self.last_detections = []  # Expose for telemetry/logging
 
@@ -58,13 +61,18 @@ class ReactiveLayer:
 
     def evaluate(self, frame_bytes: bytes, sensor_data: dict | None = None) -> dict | None:
         """Check reactive safety rules. Returns action dict or None."""
-        # Rule 1: Blank/missing frame → wait
+        # Rule 1: Blank/missing frame → wait (skipped if camera_required=False)
         if not frame_bytes or len(frame_bytes) < self.blank_threshold:
-            return {"type": "wait", "duration_ms": 500, "reason": "no_camera_data"}
+            if self.camera_required:
+                return {"type": "wait", "duration_ms": 500, "reason": "no_camera_data"}
+            # camera_required=False: pass through to fast brain (text/sensor-only mode)
+            return None
 
-        # Rule 2: All-black frame (camera blocked/failed)
+        # Rule 2: All-black frame (camera blocked/failed) — skipped if camera_required=False
         if frame_bytes == b"\x00" * len(frame_bytes):
-            return {"type": "wait", "duration_ms": 500, "reason": "blank_frame"}
+            if self.camera_required:
+                return {"type": "wait", "duration_ms": 500, "reason": "blank_frame"}
+            return None
 
         # Rule 3: Depth-based obstacle proximity
         if sensor_data:

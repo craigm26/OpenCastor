@@ -783,6 +783,68 @@ def main():
     except Exception as e:
         logger.debug(f"Audit log skipped: {e}")
 
+    # 6h. CHANNELS (messaging — WhatsApp, Telegram, etc.)
+    import queue as _queue
+
+    _active_channels: list = []
+    _channel_map: dict = {}  # ch_name → channel obj
+    _reply_queue: _queue.Queue[tuple] = _queue.Queue()  # (ch_obj, chat_id) pending replies
+
+    channels_cfg = config.get("channels", {})
+    if channels_cfg:
+        try:
+            from castor.channels import create_channel
+
+            def _make_on_message(ch_name: str, ch_obj):
+                """Return a callback that injects user messages into the brain context."""
+
+                def _on_message(channel_name: str, chat_id: str, text: str) -> str | None:
+                    logger.info(f"[{ch_name}] Incoming from {chat_id}: {text!r}")
+                    fs.context.push(
+                        "user",
+                        text,
+                        metadata={"channel": ch_name, "chat_id": chat_id},
+                    )
+                    # Queue a reply slot so the next brain thought is sent back
+                    _reply_queue.put((ch_obj, chat_id))
+                    return None  # ack handled by ack_reaction; brain replies on next tick
+
+                return _on_message
+
+            for ch_name, ch_cfg in channels_cfg.items():
+                if not ch_cfg.get("enabled", False):
+                    continue
+                try:
+                    import asyncio as _asyncio
+
+                    # Create channel; wire callback after so we have ch reference
+                    ch = create_channel(ch_name, config=ch_cfg, on_message=None)
+                    ch._on_message_callback = _make_on_message(ch_name, ch)
+
+                    # Run channel in a persistent event loop on a daemon thread.
+                    # This keeps self._loop alive for the lifetime of the process,
+                    # allowing asyncio.run_coroutine_threadsafe() to work correctly.
+                    _ch_loop = _asyncio.new_event_loop()
+
+                    def _run_channel_loop(_loop=_ch_loop, _ch=ch):
+                        _asyncio.set_event_loop(_loop)
+                        _loop.run_until_complete(_ch.start())
+                        _loop.run_forever()  # keep loop alive for _dispatch()
+
+                    _ch_thread = threading.Thread(
+                        target=_run_channel_loop,
+                        name=f"channel-{ch_name}",
+                        daemon=True,
+                    )
+                    _ch_thread.start()
+                    _active_channels.append(ch)
+                    _channel_map[ch_name] = ch
+                    logger.info(f"Channel '{ch_name}' started ✓")
+                except Exception as e:
+                    logger.warning(f"Channel '{ch_name}' failed to start: {e}")
+        except ImportError as e:
+            logger.debug(f"Channels skipped (import error): {e}")
+
     # 7. SIGNAL HANDLING (graceful shutdown on SIGTERM/SIGINT)
     import signal
 
@@ -1036,6 +1098,26 @@ def main():
 
                 # Push to context window
                 fs.context.push("brain", thought.raw_text[:200], metadata=thought.action)
+
+                # Drain pending channel replies — send brain response back to sender
+                while not _reply_queue.empty():
+                    try:
+                        _ch_obj, _chat_id = _reply_queue.get_nowait()
+                        _reply_text = thought.raw_text.strip() or "(no response)"
+                        _reply_text = _reply_text[:4000]  # WhatsApp limit
+
+                        def _send_reply(_ch=_ch_obj, _cid=_chat_id, _txt=_reply_text):
+                            import asyncio as _aio
+
+                            try:
+                                _aio.run(_ch.send_message(_cid, _txt))
+                            except Exception as _e:
+                                logger.debug(f"Channel reply send error: {_e}")
+
+                        threading.Thread(target=_send_reply, daemon=True).start()
+                        logger.info(f"Queued channel reply to {_chat_id}: {_reply_text[:60]!r}...")
+                    except Exception as _e:
+                        logger.debug(f"Channel reply error: {_e}")
 
                 # Speak the raw reasoning (truncated)
                 speaker.say(thought.raw_text[:120])

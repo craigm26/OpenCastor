@@ -5,6 +5,37 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.20.10] - 2026-02-19 📡 Channel messaging wired into main loop
+
+### Highlights
+Channels (WhatsApp, Telegram, etc.) are now fully integrated into the robot's
+main loop. Incoming messages inject into the brain context; the next brain
+thought is sent back as a reply. Also fixes blank-frame blocking when
+`camera_required: false` so the robot stays responsive even without a live
+camera feed.
+
+### Added
+- **Channel startup in `main.py` (§6h)** — parses `config["channels"]`, creates
+  and starts all enabled channels in persistent daemon event loops (loop stays
+  alive so `asyncio.run_coroutine_threadsafe` keeps working)
+- **Brain→channel reply loop** — `_reply_queue` collects `(channel_obj, chat_id)`
+  pairs from `on_message` callbacks; main loop drains the queue after each
+  brain thought and fires `send_message()` in a background thread
+- **`camera_required: false`** in RCAN camera config — when set, blank/missing
+  frames no longer trigger a reactive `wait` action; the brain runs in
+  text/sensor-only mode (messaging still works without a camera)
+- **`castor/tiered_brain.py`** — `ReactiveLayer` reads `camera.camera_required`
+  (default `true`); blank-frame rules are skipped when `false`
+- **`bob.rcan.yaml` fixes** — `camera.type: oakd` (was `csi`), `camera_required: false`,
+  full WhatsApp block with `allow_from`, `self_chat_mode`, `ack_reaction`
+
+### Fixed
+- Robot was stuck in `blank_frame` wait loop when CSI camera fails at boot;
+  now continues autonomously (messaging-only mode) if `camera_required: false`
+- WhatsApp `allow_from`/`self_chat_mode` config was missing from `bob.rcan.yaml`
+- `castor/channels/__init__.py` — channels were never launched from `main.py`;
+  they are now started with a persistent event loop per channel
+
 ## [2026.2.20.9] - 2026-02-19 💬 OpenClaw-style WhatsApp access control
 
 ### Highlights
