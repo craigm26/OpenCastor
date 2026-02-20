@@ -25,6 +25,185 @@ logger = logging.getLogger("OpenCastor")
 
 
 # ---------------------------------------------------------------------------
+# Env file loader — runs before EVERYTHING else
+# ---------------------------------------------------------------------------
+def _load_env_file(path: str | None = None) -> int:
+    """Load KEY=VALUE pairs from ~/.opencastor/env into os.environ.
+
+    Rules:
+      - Existing env vars are NEVER overwritten (shell export wins over file)
+      - Blank lines and # comments are skipped
+      - Returns number of variables loaded
+    """
+    path = path or os.path.expanduser("~/.opencastor/env")
+    if not os.path.exists(path):
+        return 0
+    loaded = 0
+    try:
+        with open(path) as f:
+            for raw in f:
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("export "):
+                    line = line[7:]
+                if "=" not in line:
+                    continue
+                key, _, val = line.partition("=")
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = val
+                    loaded += 1
+        if loaded:
+            logger.debug(f"Loaded {loaded} env var(s) from {path}")
+    except Exception as e:
+        logger.debug(f"Could not load env file {path}: {e}")
+    return loaded
+
+
+# ---------------------------------------------------------------------------
+# Hardware-detection-wins override
+# ---------------------------------------------------------------------------
+# Camera type priority: depth cameras first, then usb, then csi
+_CAMERA_TYPE_PRIORITY = ["oakd", "realsense", "usb", "csi"]
+
+_USB_CAMERA_IDS = {
+    "03e7:2485", "03e7:f63b",   # OAK-D family
+    "8086:0b3a", "8086:0b07",   # Intel RealSense
+    "046d:082d", "046d:085e",   # Logitech webcams
+    "045e:097d", "0c45:636b",   # Microsoft / Microdia
+}
+
+
+def _lsusb_ids() -> set:
+    """Return set of VID:PID strings from lsusb, or empty set on failure."""
+    import subprocess
+    try:
+        out = subprocess.run(["lsusb"], capture_output=True, text=True, timeout=3)
+        ids = set()
+        for line in out.stdout.splitlines():
+            parts = line.split()
+            for p in parts:
+                if len(p) == 9 and p[4] == ":":
+                    ids.add(p.lower())
+        return ids
+    except Exception:
+        return set()
+
+
+def apply_hardware_overrides(config: dict) -> dict:
+    """Scan connected hardware at startup and override stale RCAN config.
+
+    Real hardware ALWAYS wins over the wizard/config file. The wizard ran
+    when certain hardware was plugged in; at boot time, reality is ground truth.
+
+    Overrides applied:
+      - camera.type: if configured type not detected, pick best available
+      - drivers[].address: if PCA9685 not at configured I2C addr, find actual addr
+
+    Each override logs a warning so the user knows to update the config file.
+    """
+    import glob
+
+    cam_cfg = config.setdefault("camera", {})
+    configured_type = cam_cfg.get("type", "auto")
+
+    # Try castor.peripherals (available in newer installs)
+    scan_results = []
+    try:
+        from castor.peripherals import scan_all
+        scan_results = scan_all()
+    except Exception:
+        pass
+
+    # --- Camera override ---
+    if configured_type != "auto":
+        available_types: set = set()
+
+        if scan_results:
+            for p in scan_results:
+                if p.category in ("camera", "depth"):
+                    available_types.add(p.driver_hint)
+        else:
+            # Fallback: direct USB + device checks
+            usb_ids = _lsusb_ids()
+            if "03e7:2485" in usb_ids or "03e7:f63b" in usb_ids:
+                available_types.add("oakd")
+            if "8086:0b3a" in usb_ids or "8086:0b07" in usb_ids:
+                available_types.add("realsense")
+            if usb_ids & _USB_CAMERA_IDS:
+                available_types.add("usb")
+            if glob.glob("/dev/video*"):
+                available_types.add("usb")
+            try:
+                import subprocess
+                out = subprocess.run(
+                    ["libcamera-hello", "--list-cameras"],
+                    capture_output=True, text=True, timeout=3,
+                )
+                if "0 :" in out.stdout:
+                    available_types.add("csi")
+            except Exception:
+                pass
+
+        if available_types and configured_type not in available_types:
+            best_type = next(
+                (t for t in _CAMERA_TYPE_PRIORITY if t in available_types), None
+            )
+            if best_type:
+                logger.warning(
+                    "⚡ Hardware override: camera.type '%s' not detected — "
+                    "switching to '%s' (detected: %s). "
+                    "Update your RCAN config to silence this warning.",
+                    configured_type, best_type, ", ".join(sorted(available_types)),
+                )
+                cam_cfg["type"] = best_type
+
+    # --- PCA9685 I2C address override ---
+    for driver in config.get("drivers", []):
+        if "pca9685" not in driver.get("protocol", ""):
+            continue
+        try:
+            configured_addr = int(str(driver.get("address", "0x40")), 16)
+        except ValueError:
+            continue
+
+        actual_addr = None
+        if scan_results:
+            for p in scan_results:
+                if p.driver_hint == "pca9685" and p.i2c_address is not None:
+                    actual_addr = p.i2c_address
+                    break
+        else:
+            try:
+                import smbus2
+                bus_num = int(
+                    driver.get("port", "/dev/i2c-1").replace("/dev/i2c-", "")
+                )
+                with smbus2.SMBus(bus_num) as bus:
+                    for addr in [0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47]:
+                        try:
+                            bus.read_byte(addr)
+                            actual_addr = addr
+                            break
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+        if actual_addr is not None and actual_addr != configured_addr:
+            logger.warning(
+                "⚡ Hardware override: PCA9685 not at %s — found at %s. "
+                "Update your RCAN config to silence this warning.",
+                hex(configured_addr), hex(actual_addr),
+            )
+            driver["address"] = hex(actual_addr)
+
+    return config
+
+
+# ---------------------------------------------------------------------------
 # Config loader
 # ---------------------------------------------------------------------------
 def load_config(path: str) -> dict:
@@ -392,9 +571,20 @@ def main():
     except Exception:
         pass  # crash module is optional
 
+    # 0.5. LOAD ENV FILE — before any provider reads os.environ
+    # ~/.opencastor/env contains HF_TOKEN, GOOGLE_API_KEY, etc.
+    # Never overwrites vars already exported in the shell environment.
+    _load_env_file()
+
     # 1. BOOT SEQUENCE
     logger.info("Booting OpenCastor Runtime...")
     config = load_config(args.config)
+
+    # 1b-pre. HARDWARE DETECTION WINS
+    # Real hardware at boot time overrides anything the wizard wrote to the config.
+    # Detected OAK-D but config says CSI? Switches to OAK-D automatically.
+    # Found PCA9685 at 0x41 but config says 0x40? Uses the real address.
+    config = apply_hardware_overrides(config)
 
     # 1a. STARTUP HEALTH CHECK
     try:
