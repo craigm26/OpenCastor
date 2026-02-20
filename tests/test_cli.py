@@ -1040,15 +1040,33 @@ class TestCmdWizard:
 # cmd_dashboard
 # =====================================================================
 class TestCmdDashboard:
-    def test_calls_subprocess(self):
-        """cmd_dashboard should call subprocess.run with streamlit."""
-        args = _make_args()
-        with patch("subprocess.run") as mock_run:
+    def test_launches_tui_dashboard(self, tmp_path):
+        """cmd_dashboard should launch the tmux TUI dashboard (not Streamlit)."""
+        cfg = tmp_path / "robot.rcan.yaml"
+        cfg.write_text("robot:\n  name: test\n")
+        args = _make_args(config=str(cfg), layout="full", simulate=False, kill=False)
+        with patch("castor.dashboard_tui.launch_dashboard") as mock_launch:
             cmd_dashboard(args)
-        mock_run.assert_called_once()
-        call_args = mock_run.call_args[0][0]
-        assert "streamlit" in call_args
-        assert "castor/dashboard.py" in call_args
+        mock_launch.assert_called_once_with(str(cfg), "full", False)
+
+    def test_kill_flag_kills_session(self):
+        """cmd_dashboard --kill should kill existing session and return."""
+        args = _make_args(config="robot.rcan.yaml", layout="full", simulate=False, kill=True)
+        with patch("castor.dashboard_tui.kill_existing_session") as mock_kill:
+            cmd_dashboard(args)
+        mock_kill.assert_called_once()
+
+    def test_auto_detects_single_rcan_file(self, tmp_path, monkeypatch):
+        """cmd_dashboard auto-detects a single *.rcan.yaml in cwd."""
+        monkeypatch.chdir(tmp_path)
+        cfg = tmp_path / "mybot.rcan.yaml"
+        cfg.write_text("robot:\n  name: mybot\n")
+        args = _make_args(config="robot.rcan.yaml", layout="full", simulate=False, kill=False)
+        with patch("castor.dashboard_tui.launch_dashboard") as mock_launch:
+            cmd_dashboard(args)
+        # Should have auto-detected mybot.rcan.yaml instead of robot.rcan.yaml
+        call_config = mock_launch.call_args[0][0]
+        assert "mybot.rcan.yaml" in call_config
 
 
 # =====================================================================
