@@ -1092,7 +1092,7 @@ These are areas where we need community input and further design work:
 
 This is a living proposal. We want your input:
 
-- **Discord**: `#agent-swarm` channel
+- **GitHub Discussions**: [Start or join a thread](https://github.com/craigm26/OpenCastor/discussions)
 - **GitHub Issues**: Tag with `layer-3-swarm`
 - **PRs**: Start with the `SwarmAgent` base class and `Blackboard` — those are the foundation everything else builds on
 
