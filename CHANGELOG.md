@@ -5,6 +5,57 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.20.6] - 2026-02-19 🧠 Brand · Vision · Peripherals · Prompt Cache
+
+### Highlights
+New brain+neural identity, Gemini 3 Flash agentic vision, universal plug-and-play
+peripheral detection (`castor scan`), prompt-cache-first Anthropic architecture, and
+a hardware-wins boot sequence that gets the robot moving even when the config file
+lags behind reality.
+
+### Added
+- **New brand identity** — brain+neural+connector icon design replaces old C-shape robot.
+  `site/assets/logo.svg`, `logo-white.svg`, `icon.svg`, `icon-dark.svg`, `favicon.svg`.
+  `brand/` directory with 4 canonical variants:
+  `neural-gradient/`, `flat-solid/`, `geometric/`, `badge/` + `VARIANTS.md` spec.
+  Full PNG export set (16×16 → 512×512) via `rsvg-convert`. All nav/footer logos updated
+  across `index.html`, `hub.html`, `docs.html`.
+- **Gemini 3 Flash Agentic Vision** (`castor/providers/google_provider.py`) —
+  `_AGENTIC_VISION_MODELS` set; `code_execution` tool auto-enabled for `gemini-3-flash-preview`;
+  system prompt addendum injected. Opt-in/opt-out via `agentic_vision:` RCAN key.
+  5 new tests.
+- **Plug-and-play peripheral auto-detection** (`castor/peripherals.py`) —
+  30+ USB VID:PIDs, 18 I2C addresses, V4L2/CSI/NPU/serial scanning.
+  `castor scan` CLI prints detected hardware + RCAN config snippets.
+  `castor doctor` — peripheral health section appended.
+  `docs/peripherals.md` — 740-line guide for all supported hardware classes.
+  16 new tests.
+- **Prompt cache-first architecture** (`castor/prompt_cache.py`) —
+  `CacheStats` dataclass, `build_cached_system_prompt()` (static robot identity + safety rules),
+  `build_sensor_reminder()` delivers per-tick sensor state as `<castor-state>` XML in user
+  messages (never system prompt). `anthropic_provider.py` updated with `cache_control`
+  breakpoints and `extra_headers: anthropic-beta: prompt-caching-2024-07-31`.
+  Cache hit-rate alert surfaced in `castor doctor` (warns below 50% after 10-call warmup).
+  RCAN schema: `prompt_caching: bool`, `cache_alert_threshold: float`.
+  28 new tests.
+- **Hardware-detection-wins boot sequence** (`castor/main.py`) —
+  `_load_env_file()`: reads `~/.opencastor/env` on every boot, loads `HF_TOKEN`,
+  `GOOGLE_API_KEY`, etc. into `os.environ` before any provider init (shell exports win).
+  `apply_hardware_overrides(config)`: real hardware detected at boot ALWAYS overrides
+  RCAN config. Camera priority: `oakd → realsense → usb → csi`. PCA9685: scans 0x40–0x47
+  for actual address if configured one is absent. Logs `⚡ Hardware override` warnings with
+  update hints. Validated on Pi: OAK-D online, Qwen firing at 700–930 ms, real move/stop
+  decisions from live frames.
+- **Website reframe** — OG description, hero sub-headline, and feature cards now emphasize
+  universal plug-and-play; OAK-D/Hailo-8 are examples, not requirements.
+
+### Fixed
+- Camera config: `camera.type: "auto"` now tries `oakd → realsense → usb → csi → none`
+  preventing blank-frame loops when the configured camera isn't present at boot.
+
+### Stats
+- **2,173 tests** (2,162 passing, 11 skipped) | **55,006 LOC** | 8 providers
+
 ## [2026.2.20.5] - 2026-02-20 🎮 Demo · Validate · Community
 
 ### Highlights
