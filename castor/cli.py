@@ -273,7 +273,7 @@ def cmd_doctor(args) -> None:
 
     # Peripheral scan section
     try:
-        from castor.peripherals import scan_all, print_scan_table
+        from castor.peripherals import print_scan_table, scan_all
         print("  Connected Peripherals\n")
         peripherals = scan_all()
         print_scan_table(peripherals, color=True)
@@ -1532,8 +1532,9 @@ def _list_hf_models(api, task: str, limit: int = 15) -> None:
 
 def cmd_scan(args) -> None:
     """Auto-detect connected hardware peripherals."""
-    from castor.peripherals import scan_all, print_scan_table
     import json as _json
+
+    from castor.peripherals import print_scan_table, scan_all
 
     i2c_bus = getattr(args, "i2c_bus", 1)
     peripherals = scan_all(i2c_buses=[i2c_bus])

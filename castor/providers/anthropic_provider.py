@@ -2,8 +2,9 @@ import base64
 import logging
 import os
 
-from .base import BaseProvider, Thought
 from castor.prompt_cache import CacheStats, build_cached_system_prompt
+
+from .base import BaseProvider, Thought
 
 logger = logging.getLogger("OpenCastor.Anthropic")
 

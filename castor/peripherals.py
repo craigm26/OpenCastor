@@ -24,8 +24,7 @@ import glob
 import logging
 import re
 import subprocess
-import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -761,7 +760,6 @@ def scan_i2c(bus: int = 1) -> list[PeripheralInfo]:
         return results
 
     # Parse the hex grid output; addresses shown as hex values (not '--' or 'UU')
-    addr_pattern = re.compile(r"\b([0-9a-fA-F]{2})\b")
     # i2cdetect output looks like:
     #      0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
     # 00:          -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -1183,9 +1181,9 @@ def _confidence_icon(confidence: str, use_color: bool = True) -> str:
 
 def _print_scan_table_rich(peripherals: list[PeripheralInfo], color: bool) -> None:
     """Rich-formatted scan table."""
+    from rich import box
     from rich.console import Console
     from rich.table import Table
-    from rich import box
 
     console = Console(no_color=not color)
 
