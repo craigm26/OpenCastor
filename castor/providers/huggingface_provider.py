@@ -119,6 +119,19 @@ class HuggingFaceProvider(BaseProvider):
 
         text = response.choices[0].message.content
         action = self._clean_json(text)
+        try:
+            from castor.runtime_stats import record_api_call
+
+            usage = getattr(response, "usage", None)
+            record_api_call(
+                tokens_in=getattr(usage, "prompt_tokens", 0) if usage else 0,
+                tokens_out=getattr(usage, "completion_tokens", 0) if usage else 0,
+                bytes_in=len(image_bytes) + len(instruction.encode()),
+                bytes_out=len(text.encode()),
+                model=self.model_name,
+            )
+        except Exception:
+            pass
         return Thought(text, action)
 
     def _think_text(self, instruction: str) -> Thought:
@@ -133,6 +146,19 @@ class HuggingFaceProvider(BaseProvider):
 
         text = response.choices[0].message.content
         action = self._clean_json(text)
+        try:
+            from castor.runtime_stats import record_api_call
+
+            usage = getattr(response, "usage", None)
+            record_api_call(
+                tokens_in=getattr(usage, "prompt_tokens", 0) if usage else 0,
+                tokens_out=getattr(usage, "completion_tokens", 0) if usage else 0,
+                bytes_in=len(instruction.encode()),
+                bytes_out=len(text.encode()),
+                model=self.model_name,
+            )
+        except Exception:
+            pass
         return Thought(text, action)
 
     def list_models(self, task: str = "text-generation", limit: int = 20):

@@ -585,6 +585,14 @@ def main():
     # Never overwrites vars already exported in the shell environment.
     _load_env_file()
 
+    # Reset runtime stats for fresh session
+    try:
+        from castor.runtime_stats import reset as _reset_stats
+
+        _reset_stats()
+    except Exception:
+        pass
+
     # 1. BOOT SEQUENCE
     logger.info("Booting OpenCastor Runtime...")
     config = load_config(args.config)
@@ -1052,6 +1060,16 @@ def main():
                     )
             else:
                 _latency_overrun_count = 0
+
+            # Record runtime stats for dashboard status bar
+            try:
+                from castor.runtime_stats import record_tick
+
+                _loop_tick = fs.proc._loop_count if hasattr(fs.proc, "_loop_count") else 0
+                _last_act = thought.action.get("type", "—") if thought and thought.action else "—"
+                record_tick(_loop_tick, _last_act)
+            except Exception:
+                pass
 
             # Sleep to prevent API rate limiting
             time.sleep(1.0)

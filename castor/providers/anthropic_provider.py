@@ -140,6 +140,21 @@ class AnthropicProvider(BaseProvider):
             # Track cache stats
             self._cache_stats.record(response.usage)
             self._cache_stats.alert_if_low(logger=logger)
+            # Track runtime stats
+            try:
+                from castor.runtime_stats import record_api_call
+
+                usage = response.usage
+                record_api_call(
+                    tokens_in=getattr(usage, "input_tokens", 0),
+                    tokens_out=getattr(usage, "output_tokens", 0),
+                    tokens_cached=getattr(usage, "cache_read_input_tokens", 0),
+                    bytes_in=len(instruction.encode()),
+                    bytes_out=len(response.content[0].text.encode()) if response.content else 0,
+                    model=self.model_name,
+                )
+            except Exception:
+                pass
             text = response.content[0].text
             action = self._clean_json(text)
             return Thought(text, action)
@@ -163,6 +178,16 @@ class AnthropicProvider(BaseProvider):
             )
             text = response["content"][0]["text"]
             action = self._clean_json(text)
+            try:
+                from castor.runtime_stats import record_api_call
+
+                record_api_call(
+                    bytes_in=len(instruction.encode()),
+                    bytes_out=len(text.encode()),
+                    model=self.model_name,
+                )
+            except Exception:
+                pass
             return Thought(text, action)
         except Exception as e:
             logger.error(f"CLI error: {e}")

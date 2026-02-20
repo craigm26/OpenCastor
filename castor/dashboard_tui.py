@@ -237,8 +237,83 @@ def _render_improvements_panel(stdscr, y: int, x: int, width: int) -> None:
 _DIVIDER = "─" * 60
 
 
+def _get_runtime_stats() -> dict:
+    """Read runtime stats from file. Returns empty dict on failure."""
+    try:
+        import json as _json
+
+        path = os.path.expanduser("~/.opencastor/runtime_stats.json")
+        mtime = os.path.getmtime(path)
+        if time.time() - mtime > 60:
+            return {}  # stale — robot probably not running
+        with open(path) as f:
+            return _json.load(f)
+    except Exception:
+        return {}
+
+
+def _fmt_tokens(n: int) -> str:
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}k"
+    return str(n)
+
+
+def _fmt_bytes(n: int) -> str:
+    if n >= 1_048_576:
+        return f"{n / 1_048_576:.1f} MB"
+    if n >= 1_024:
+        return f"{n / 1_024:.1f} KB"
+    return f"{n} B"
+
+
+def _fmt_uptime(secs: float) -> str:
+    s = int(secs)
+    if s >= 3600:
+        return f"{s // 3600}h {(s % 3600) // 60}m"
+    if s >= 60:
+        return f"{s // 60}m {s % 60}s"
+    return f"{s}s"
+
+
+def _render_stats_bar(stats: dict) -> str:
+    """Build the bottom status bar string from runtime stats."""
+    if not stats:
+        return "  ── waiting for robot ──"
+
+    uptime = time.time() - stats.get("session_start", time.time())
+    model = stats.get("last_model", "—")
+    if "/" in model:
+        model = model.split("/")[-1]
+    model = model.replace("claude-", "").replace("-instruct", "").replace("-preview", "")[:20]
+
+    tok_in = stats.get("tokens_in", 0)
+    tok_out = stats.get("tokens_out", 0)
+    tok_cached = stats.get("tokens_cached", 0)
+    calls = stats.get("api_calls", 0)
+    data = stats.get("bytes_in", 0) + stats.get("bytes_out", 0)
+    tick = stats.get("tick", 0)
+    action = stats.get("last_action", "—")[:16]
+
+    parts = [
+        f"⏱ {_fmt_uptime(uptime)}",
+        f"🧠 {model}",
+        f"↓{_fmt_tokens(tok_in)} ↑{_fmt_tokens(tok_out)} tok",
+    ]
+    if tok_cached:
+        parts.append(f"💾{_fmt_tokens(tok_cached)} cached")
+    parts += [
+        f"🔁 {calls} calls",
+        f"↕ {_fmt_bytes(data)}",
+        f"tick {tick}",
+        f"act: {action}",
+    ]
+    return "   │   ".join(parts)
+
+
 def _run_status_loop(interval: float = 2.0) -> None:
-    """Continuously render agent/swarm/improvement status to the terminal.
+    """Continuously render agent/swarm/improvement/stats status to the terminal.
 
     Designed to run inside a dedicated tmux pane as the status monitor.
 
@@ -277,8 +352,35 @@ def _run_status_loop(interval: float = 2.0) -> None:
             ep_count = _get_episode_count()
             print(f"▶ Episodes: {ep_count} recorded")
             print()
+
+            # ── Runtime stats (token / data / exchange) ──────────────────
+            stats = _get_runtime_stats()
+            print(_DIVIDER)
+            print("▶ Exchange Stats")
+            if stats:
+                uptime = time.time() - stats.get("session_start", time.time())
+                print(f"  ⏱  Uptime      {_fmt_uptime(uptime)}")
+                print(f"  🧠 Model       {stats.get('last_model', '—')}")
+                print(
+                    f"  📥 Tokens in   {_fmt_tokens(stats.get('tokens_in', 0))}"
+                    f"   📤 out  {_fmt_tokens(stats.get('tokens_out', 0))}"
+                )
+                cached = stats.get("tokens_cached", 0)
+                if cached:
+                    print(f"  💾 Cached      {_fmt_tokens(cached)}")
+                print(f"  🔁 API calls   {stats.get('api_calls', 0)}")
+                print(
+                    f"  ↕  Data vol    {_fmt_bytes(stats.get('bytes_in', 0) + stats.get('bytes_out', 0))}"
+                    f"   (↓{_fmt_bytes(stats.get('bytes_in', 0))} ↑{_fmt_bytes(stats.get('bytes_out', 0))})"
+                )
+                print(f"  🎬 Tick        {stats.get('tick', 0)}")
+                print(f"  ⚡ Last act    {stats.get('last_action', '—')}")
+            else:
+                print("  Robot not running or no data yet.")
             print(_DIVIDER)
             print(f"  Refreshes every {interval}s  |  Ctrl+C to quit")
+            print()
+            print(_render_stats_bar(stats))
 
             time.sleep(interval)
     except KeyboardInterrupt:
@@ -385,33 +487,30 @@ def launch_dashboard(config_path, layout_name="full", simulate=False, run_comman
         ],
     )
 
-    # Set tmux options for nice display
-    subprocess.run(["tmux", "set-option", "-t", SESSION_NAME, "status-style", "bg=black,fg=green"])
-    subprocess.run(
-        [
-            "tmux",
-            "set-option",
-            "-t",
-            SESSION_NAME,
-            "status-left",
-            "#[bold] 🤖 OpenCastor Dashboard ",
-        ]
+    # ── tmux options — status bar with live exchange stats ───────────────
+    def _tset(*args):
+        subprocess.run(["tmux", "set-option", "-t", SESSION_NAME, *args], capture_output=True)
+
+    _tset("status-style", "bg=colour234,fg=colour250")
+    _tset("status-interval", "2")  # refresh every 2 s
+    _tset("status-left-length", "40")
+    _tset("status-right-length", "180")
+    _tset(
+        "status-left",
+        "#[bg=colour28,fg=colour255,bold] 🤖 OpenCastor  #[bg=colour234,fg=colour245] v2026 ",
     )
-    subprocess.run(
-        [
-            "tmux",
-            "set-option",
-            "-t",
-            SESSION_NAME,
-            "status-right",
-            " %H:%M | #{pane_title} ",
-        ]
+    # Right side: pulls live stats written by runtime_stats.py every tick
+    _tset(
+        "status-right",
+        "#[fg=colour245]#(cat /tmp/opencastor_status_bar.txt 2>/dev/null"
+        " || echo ' waiting for robot...')  "
+        "#[fg=colour238]│#[fg=colour250]  %H:%M:%S ",
     )
-    subprocess.run(["tmux", "set-option", "-t", SESSION_NAME, "pane-border-style", "fg=colour240"])
-    subprocess.run(
-        ["tmux", "set-option", "-t", SESSION_NAME, "pane-active-border-style", "fg=green"]
-    )
-    subprocess.run(["tmux", "set-option", "-t", SESSION_NAME, "mouse", "on"])
+    _tset("pane-border-style", "fg=colour238")
+    _tset("pane-active-border-style", "fg=colour34")
+    _tset("pane-border-status", "top")
+    _tset("pane-border-format", " #[bold]#{pane_title}#[nobold] ")
+    _tset("mouse", "on")
 
     # Rename first pane
     subprocess.run(["tmux", "select-pane", "-t", f"{SESSION_NAME}:0.0", "-T", "🤖 Robot Runtime"])

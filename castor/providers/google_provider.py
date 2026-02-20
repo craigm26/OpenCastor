@@ -85,6 +85,19 @@ class GoogleProvider(BaseProvider):
                     f"Agentic Vision response parts: {[p.function_call or p.text[:40] if hasattr(p, 'text') else '...' for p in response.candidates[0].content.parts]}"
                 )
 
+            try:
+                from castor.runtime_stats import record_api_call
+
+                usage = getattr(response, "usage_metadata", None)
+                record_api_call(
+                    tokens_in=getattr(usage, "prompt_token_count", 0) if usage else 0,
+                    tokens_out=getattr(usage, "candidates_token_count", 0) if usage else 0,
+                    bytes_in=len(image_bytes) + len(instruction.encode()),
+                    bytes_out=len(text.encode()),
+                    model=self.model_name,
+                )
+            except Exception:
+                pass
             return Thought(text, action)
         except Exception as e:
             logger.error(f"Gemini error: {e}")

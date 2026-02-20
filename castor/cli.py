@@ -163,14 +163,41 @@ def cmd_wizard(args) -> None:
     run_wizard()
 
 
-def cmd_dashboard(args) -> None:
-    """Launch the Streamlit dashboard."""
-    import subprocess
+def _auto_detect_config(specified: str = "robot.rcan.yaml") -> str:
+    """Return the RCAN config to use.
 
-    subprocess.run(
-        [sys.executable, "-m", "streamlit", "run", "castor/dashboard.py"],
-        check=True,
-    )
+    Priority:
+      1. Explicitly specified path (if it exists)
+      2. Single *.rcan.yaml in cwd
+      3. Fallback to the specified path (let caller handle missing file)
+    """
+    import glob as _glob
+
+    if os.path.exists(specified):
+        return specified
+    matches = sorted(_glob.glob("*.rcan.yaml"))
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        print(f"  Multiple configs found: {matches}")
+        print(f"  Using: {matches[0]}  (pass --config to choose)")
+        return matches[0]
+    return specified
+
+
+def cmd_dashboard(args) -> None:
+    """Launch the tmux terminal dashboard — starts the robot immediately."""
+    from castor.dashboard_tui import kill_existing_session, launch_dashboard
+
+    if getattr(args, "kill", False):
+        kill_existing_session()
+        print("  Dashboard session killed.")
+        return
+
+    config = _auto_detect_config(getattr(args, "config", "robot.rcan.yaml"))
+    layout = getattr(args, "layout", "full")
+    simulate = getattr(args, "simulate", False)
+    launch_dashboard(config, layout, simulate)
 
 
 def cmd_dashboard_tui(args) -> None:
@@ -182,7 +209,8 @@ def cmd_dashboard_tui(args) -> None:
         print("  Dashboard session killed.")
         return
 
-    launch_dashboard(args.config, args.layout, args.simulate)
+    config = _auto_detect_config(args.config)
+    launch_dashboard(config, args.layout, args.simulate)
 
 
 def cmd_token(args) -> None:
@@ -1896,8 +1924,24 @@ def main() -> None:
     p_wizard.add_argument("--web", action="store_true", help="Open browser-based wizard")
     p_wizard.add_argument("--web-port", type=int, default=8080, help="Port for web wizard")
 
-    # castor dashboard
-    sub.add_parser("dashboard", help="Launch the Streamlit web UI")
+    # castor dashboard — starts robot + tmux TUI immediately
+    p_dash = sub.add_parser(
+        "dashboard",
+        help="Launch tmux dashboard and start the robot immediately",
+    )
+    p_dash.add_argument(
+        "--config",
+        default="robot.rcan.yaml",
+        help="RCAN config file (auto-detected if omitted)",
+    )
+    p_dash.add_argument(
+        "--layout",
+        default="full",
+        choices=["full", "minimal", "debug"],
+        help="Dashboard layout (default: full)",
+    )
+    p_dash.add_argument("--simulate", action="store_true", help="Simulation mode (no hardware)")
+    p_dash.add_argument("--kill", action="store_true", help="Kill existing dashboard session")
 
     # castor dashboard-tui
     p_tui = sub.add_parser(

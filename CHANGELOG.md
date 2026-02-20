@@ -5,6 +5,47 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.20.8] - 2026-02-19 📊 Dashboard auto-start + live exchange stats bar
+
+### Highlights
+`castor dashboard` now starts the robot immediately on entry — no separate
+`castor run` needed. A Claude Code-style status bar at the bottom of every tmux
+session shows live token counts, cached tokens, API call count, data volume,
+current tick, and last action — updated every 2 seconds from the running robot.
+
+### Added
+- **`castor/runtime_stats.py`** — thread-safe singleton stats tracker:
+  `record_api_call(tokens_in, tokens_out, tokens_cached, bytes_in, bytes_out, model)`,
+  `record_tick(tick, action)`, `reset()`, `get_status_bar_string()`.
+  Writes `~/.opencastor/runtime_stats.json` (structured) and
+  `/tmp/opencastor_status_bar.txt` (compact one-liner) on every call.
+- **Live tmux status bar** — `launch_dashboard()` now sets `status-right` to
+  `#(cat /tmp/opencastor_status_bar.txt)` with `status-interval 2`.
+  Displays: `⏱ uptime │ 🧠 model │ ↓Xtok ↑Ytok │ 💾 cached │ 🔁 N calls │ ↕ data │ tick N │ action`
+- **`castor dashboard` starts robot immediately** — `cmd_dashboard` now drives
+  the tmux TUI directly (was Streamlit). Accepts `--config`, `--layout`,
+  `--simulate`, `--kill`. Auto-detects `*.rcan.yaml` in cwd if `--config` omitted.
+- **`_auto_detect_config()`** helper in `cli.py` — used by both `castor dashboard`
+  and `castor dashboard-tui`. Finds single `*.rcan.yaml` in cwd automatically.
+- **Provider hooks** — `anthropic_provider`, `huggingface_provider`,
+  `google_provider` each call `record_api_call()` after every LLM response.
+  Anthropic path records `cache_read_input_tokens` for the cache savings display.
+- **Main loop hook** — `castor/main.py` calls `record_tick()` each tick and
+  `reset()` at startup for clean per-session stats.
+- **Status pane expanded** — `_run_status_loop()` now includes an Exchange Stats
+  section with per-field breakdown (tokens in/out, cached, calls, data vol, tick, action).
+- **34 new tests** (`tests/test_runtime_stats.py`): accumulation, reset,
+  file persistence, formatting helpers, thread safety.
+
+### Changed
+- `castor dashboard` argparser now accepts `--config`, `--layout`, `--simulate`,
+  `--kill` (was a no-arg Streamlit launcher).
+- tmux status bar style: dark grey background, green active pane border,
+  pane titles visible at top of each pane.
+
+### Stats
+- **2,207 tests** (2,196 passing, 11 skipped) | **55,006 LOC** | 8 providers
+
 ## [2026.2.20.7] - 2026-02-19 🔧 Installer PATH fix
 
 ### Fixed
