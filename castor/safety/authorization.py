@@ -12,7 +12,7 @@ import logging
 import re
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -43,6 +43,12 @@ _DEFAULT_DESTRUCTIVE_PATTERNS: list[str] = [
 
 # Default work order TTL: 1 hour
 DEFAULT_TTL_SECONDS = 3600.0
+
+# Default audit log path
+DEFAULT_AUDIT_LOG_PATH = Path("~/.opencastor/audit.jsonl")
+
+# Work orders persistence file (relative to audit log directory)
+_ORDERS_FILENAME = "work_orders.json"
 
 
 @dataclass
@@ -131,18 +137,91 @@ class WorkAuthority:
         role_resolver: dict[str, str] | None = None,
         ttl: float = DEFAULT_TTL_SECONDS,
         detector: DestructiveActionDetector | None = None,
+        audit_log_path: str | Path | None = None,
+        persist_orders: bool = False,
     ):
-        self._orders: dict[str, WorkOrder] = {}
         # Maps principal -> role (e.g. {"alice": "CREATOR", "bob": "LEASEE"})
         self._roles: dict[str, str] = role_resolver or {}
         self._ttl = ttl
         self._audit_log: list[dict] = []
         self.detector = detector or DestructiveActionDetector()
 
+        # Resolve audit log path
+        resolved = Path(audit_log_path) if audit_log_path else DEFAULT_AUDIT_LOG_PATH
+        self._audit_log_path: Path = resolved.expanduser().resolve()
+
+        # Ensure parent directory exists
+        try:
+            self._audit_log_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            logger.warning("Could not create audit log directory: %s", self._audit_log_path.parent)
+
+        # Path for persisting work orders (same directory as audit log)
+        self._orders_path: Path = self._audit_log_path.parent / _ORDERS_FILENAME
+        self._persist_orders = persist_orders
+
+        # Load persisted orders, then purge expired ones
+        self._orders: dict[str, WorkOrder] = {}
+        if self._persist_orders:
+            self._load_orders()
+        self._cleanup_expired()
+
+    # ------------------------------------------------------------------
+    # Audit log path property
+    # ------------------------------------------------------------------
+
+    @property
+    def audit_log_path(self) -> str:
+        """Return the resolved audit log file path as a string."""
+        return str(self._audit_log_path)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
     def _audit(self, event: str, **kwargs: object) -> None:
         entry = {"event": event, "timestamp": time.time(), **kwargs}
         self._audit_log.append(entry)
         logger.info("AUDIT: %s", json.dumps(entry, default=str))
+        # Append to JSONL file
+        try:
+            with self._audit_log_path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(entry, default=str) + "\n")
+        except OSError:
+            logger.warning("Failed to write audit entry to %s", self._audit_log_path)
+
+    def _save_orders(self) -> None:
+        """Persist current work orders to disk."""
+        if not self._persist_orders:
+            return
+        try:
+            data = {oid: asdict(wo) for oid, wo in self._orders.items()}
+            tmp = self._orders_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data, default=str), encoding="utf-8")
+            tmp.replace(self._orders_path)
+        except OSError:
+            logger.warning("Failed to persist work orders to %s", self._orders_path)
+
+    def _load_orders(self) -> None:
+        """Load previously persisted work orders, skipping expired ones."""
+        if not self._orders_path.is_file():
+            return
+        try:
+            data = json.loads(self._orders_path.read_text(encoding="utf-8"))
+            now = time.time()
+            for oid, fields in data.items():
+                try:
+                    wo = WorkOrder(**fields)
+                    # Skip orders that are already expired or fully executed
+                    if wo.executed:
+                        continue
+                    if wo.expires_at > 0 and now > wo.expires_at:
+                        continue
+                    self._orders[oid] = wo
+                except (TypeError, KeyError):
+                    logger.warning("Skipping malformed work order: %s", oid)
+        except (OSError, json.JSONDecodeError):
+            logger.warning("Failed to load work orders from %s", self._orders_path)
 
     def _get_role(self, principal: str) -> str:
         return self._roles.get(principal, "NONE")
@@ -160,6 +239,8 @@ class WorkAuthority:
         for oid in expired:
             self._orders[oid].revoked = True
             self._audit("auto_expired", order_id=oid)
+        if expired:
+            self._save_orders()
 
     def request_authorization(
         self,
@@ -188,6 +269,7 @@ class WorkAuthority:
             target=target,
             principal=principal,
         )
+        self._save_orders()
         return order
 
     def approve(self, order_id: str, principal: str) -> bool:
@@ -247,6 +329,7 @@ class WorkAuthority:
         order.authorized_at = now
         order.expires_at = now + self._ttl
         self._audit("approved", order_id=order_id, principal=principal)
+        self._save_orders()
         return True
 
     def check_authorization(self, action_type: str, target: str) -> Optional[WorkOrder]:
@@ -262,6 +345,7 @@ class WorkAuthority:
             return False
         order.executed = True
         self._audit("executed", order_id=order_id)
+        self._save_orders()
         return True
 
     def revoke(self, order_id: str, principal: str) -> bool:
@@ -276,6 +360,7 @@ class WorkAuthority:
 
         order.revoked = True
         self._audit("revoked", order_id=order_id, principal=principal)
+        self._save_orders()
         return True
 
     def list_pending(self) -> list[WorkOrder]:
