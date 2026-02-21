@@ -96,6 +96,21 @@ def fleet_status(timeout: float = 5.0):
     print()
 
 
+def get_peers(timeout: float = 3.0) -> list:
+    """Discover RCAN peers on the local network and return them as a list of dicts.
+
+    Each dict has keys: robot_name, model, ruri, capabilities, addresses, port,
+    status, discovered_at.
+
+    Args:
+        timeout: How long to scan in seconds (default: 3.0).
+
+    Returns:
+        List of peer dicts, empty if none found or zeroconf not installed.
+    """
+    return _discover_peers(timeout)
+
+
 def _discover_peers(timeout: float) -> list:
     """Discover RCAN peers via mDNS."""
     try:

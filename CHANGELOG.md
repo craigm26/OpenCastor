@@ -5,6 +5,39 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.21.4] - 2026-02-21 ✨ mDNS Fleet API, llama.cpp Streaming + Vision, 4 Operator Docs
+
+### Added
+- **`castor/fleet.py`** — public `get_peers(timeout=3.0) -> list` API for programmatic peer
+  discovery; wraps existing `_discover_peers()` with documented return shape (#42)
+- **`castor/providers/llamacpp_provider.py`** — major improvement (#43):
+  - `think_stream()` generator: yields tokens one-by-one from both Ollama SSE and direct
+    llama-cpp-python backends
+  - Vision support: auto-detects llava/bakllava/moondream/minicpm-v model names and passes
+    base64 image in prompt; accepts `clip_model_path` config key for GGUF clip models
+  - Typed exceptions: `LlamaCppModelNotFoundError`, `LlamaCppConnectionError`,
+    `LlamaCppOOMError` (all subclass `LlamaCppError`)
+  - Validates GGUF file exists before attempting to load (raises `LlamaCppModelNotFoundError`)
+  - Distinguishes Ollama unreachable (URLError → `LlamaCppConnectionError`) vs generic error
+  - `__del__` frees direct model memory on garbage collection
+- **`docs/agents.md`** — agent orchestration operator manual: all 5 specialists, RCAN config
+  keys, monitoring commands, custom agent template (#46)
+- **`docs/swarm.md`** — swarm deployment guide: 2-robot quick start, mDNS setup, role
+  config, troubleshooting, known limitations (#47)
+- **`docs/learner.md`** — Sisyphus operator manual: enable/disable, all CLI commands,
+  auto-apply modes, reading PM reports, tuning parameters, rollback, cost estimates (#48)
+- **`docs/recipes-cli.md`** — advanced CLI recipes for fleet, self-improvement, recording,
+  replay, interactive REPL, diagnostics, config management, hub (#49)
+
+### Tests Added
+- `tests/test_providers.py` — 7 new `TestLlamaCppProvider` tests (typed exceptions, vision
+  flag, Ollama think, streaming, mock model-not-found)
+- `tests/test_rcan_mdns.py` — 14 new tests: `TestParseServiceInfo` (11 cases covering TXT
+  record parsing, byte/str keys, fallback addresses) + `TestBrowserCallbacks` (3 cases)
+
+### Test Results
+- **2332 passed, 8 skipped, 0 failed** (was 2311 before this release)
+
 ## [2026.2.21.3] - 2026-02-21 🟢 Fix 5 Failing Tests + Stale README
 
 ### Fixed

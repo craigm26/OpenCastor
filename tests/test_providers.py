@@ -355,3 +355,141 @@ class TestAgenticVisionGoogle:
         )
         assert provider._is_agentic_vision is True
         assert "code_execution" in (captured.get("tools") or [])
+
+
+# =====================================================================
+# LlamaCppProvider — typed exceptions + vision + streaming
+# =====================================================================
+
+
+class TestLlamaCppProvider:
+    """Tests for LlamaCppProvider (mocked backends)."""
+
+    def test_model_not_found_raises_typed_error(self, tmp_path):
+        from castor.providers.llamacpp_provider import LlamaCppModelNotFoundError, LlamaCppProvider
+
+        missing = str(tmp_path / "missing.gguf")
+        with pytest.raises(LlamaCppModelNotFoundError, match="not found"):
+            LlamaCppProvider({"provider": "llamacpp", "model": missing})
+
+    def test_ollama_connection_error_on_unreachable_server(self):
+        """Non-existent server raises LlamaCppConnectionError during init."""
+        import urllib.error
+
+        from castor.providers.llamacpp_provider import LlamaCppConnectionError, LlamaCppProvider
+
+        with patch(
+            "castor.providers.llamacpp_provider.urllib.request.urlopen",
+            side_effect=urllib.error.URLError("connection refused"),
+        ):
+            with pytest.raises(LlamaCppConnectionError, match="Cannot reach Ollama"):
+                LlamaCppProvider(
+                    {"provider": "llamacpp", "model": "gemma3:1b",
+                     "base_url": "http://localhost:19999/v1"}
+                )
+
+    def test_ollama_think_returns_thought(self):
+        """think() via Ollama returns a valid Thought."""
+        from castor.providers.llamacpp_provider import LlamaCppProvider
+
+        warmup_resp = MagicMock()
+        warmup_resp.read.return_value = b'{"status":"ok"}'
+        warmup_resp.__enter__ = lambda s: s
+        warmup_resp.__exit__ = MagicMock(return_value=False)
+
+        import json as _json
+        think_payload = _json.dumps(
+            {"choices": [{"message": {"content": '{"action":"stop"}'}}]}
+        ).encode()
+        think_resp = MagicMock()
+        think_resp.read.return_value = think_payload
+        think_resp.__enter__ = lambda s: s
+        think_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch(
+            "castor.providers.llamacpp_provider.urllib.request.urlopen",
+            side_effect=[warmup_resp, think_resp],
+        ):
+            p = LlamaCppProvider({"provider": "llamacpp", "model": "gemma3:1b"})
+            thought = p.think(b"", "stop the robot")
+
+        assert thought.raw_text is not None
+        assert thought.action is not None
+        assert thought.action.get("action") == "stop"
+
+    def test_vision_model_detected_by_name(self):
+        """llava in model name sets _is_vision_model=True."""
+        from castor.providers.llamacpp_provider import LlamaCppProvider
+
+        warmup = MagicMock()
+        warmup.read.return_value = b"{}"
+        warmup.__enter__ = lambda s: s
+        warmup.__exit__ = MagicMock(return_value=False)
+
+        with patch(
+            "castor.providers.llamacpp_provider.urllib.request.urlopen",
+            return_value=warmup,
+        ):
+            p = LlamaCppProvider({"provider": "llamacpp", "model": "llava:13b"})
+
+        assert p._is_vision_model is True
+
+    def test_non_vision_model_flag_false(self):
+        """Plain text model does not set vision flag."""
+        from castor.providers.llamacpp_provider import LlamaCppProvider
+
+        warmup = MagicMock()
+        warmup.read.return_value = b"{}"
+        warmup.__enter__ = lambda s: s
+        warmup.__exit__ = MagicMock(return_value=False)
+
+        with patch(
+            "castor.providers.llamacpp_provider.urllib.request.urlopen",
+            return_value=warmup,
+        ):
+            p = LlamaCppProvider({"provider": "llamacpp", "model": "gemma3:1b"})
+
+        assert p._is_vision_model is False
+
+    def test_think_stream_yields_tokens_and_returns_thought(self):
+        """think_stream() yields individual tokens from Ollama SSE stream."""
+        from castor.providers.llamacpp_provider import LlamaCppProvider
+
+        warmup = MagicMock()
+        warmup.read.return_value = b"{}"
+        warmup.__enter__ = lambda s: s
+        warmup.__exit__ = MagicMock(return_value=False)
+
+        # Simulate SSE lines from Ollama streaming endpoint
+        sse_lines = [
+            b'data: {"choices":[{"delta":{"content":"{\\"action\\""}}]}\n',
+            b'data: {"choices":[{"delta":{"content":":\\"stop\\"}"}}]}\n',
+            b"data: [DONE]\n",
+        ]
+        stream_resp = MagicMock()
+        stream_resp.__enter__ = lambda s: s
+        stream_resp.__exit__ = MagicMock(return_value=False)
+        stream_resp.__iter__ = lambda s: iter(sse_lines)
+
+        with patch(
+            "castor.providers.llamacpp_provider.urllib.request.urlopen",
+            side_effect=[warmup, stream_resp],
+        ):
+            p = LlamaCppProvider({"provider": "llamacpp", "model": "gemma3:1b"})
+            tokens = list(p.think_stream(b"", "stop"))
+
+        assert len(tokens) >= 1
+        full = "".join(tokens)
+        assert "action" in full or "stop" in full
+
+    def test_typed_exceptions_are_subclass_of_base(self):
+        from castor.providers.llamacpp_provider import (
+            LlamaCppConnectionError,
+            LlamaCppError,
+            LlamaCppModelNotFoundError,
+            LlamaCppOOMError,
+        )
+
+        assert issubclass(LlamaCppModelNotFoundError, LlamaCppError)
+        assert issubclass(LlamaCppConnectionError, LlamaCppError)
+        assert issubclass(LlamaCppOOMError, LlamaCppError)
