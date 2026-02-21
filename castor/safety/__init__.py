@@ -5,6 +5,7 @@ from castor.safety.authorization import DestructiveActionDetector, WorkAuthority
 from castor.safety.bounds import (
     BoundsChecker,
     BoundsResult,
+    BoundsStatus,
     ForceBounds,
     JointBounds,
     WorkspaceBounds,
@@ -21,6 +22,7 @@ __all__ = [
     "DestructiveActionDetector",
     "BoundsChecker",
     "BoundsResult",
+    "BoundsStatus",
     "ForceBounds",
     "JointBounds",
     "WorkspaceBounds",

@@ -10,6 +10,8 @@ Run with:
 """
 
 import argparse
+import hashlib
+import hmac
 import logging
 import os
 import signal
@@ -19,7 +21,7 @@ from typing import Any, Dict, Optional
 import yaml
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from castor.auth import (
@@ -215,12 +217,31 @@ async def send_command(cmd: CommandRequest):
 
 @app.post("/api/action", dependencies=[Depends(verify_token)])
 async def direct_action(action: ActionRequest):
-    """Send a direct motor command, bypassing the brain."""
+    """Send a direct motor command, bypassing the brain.
+
+    Requires bearer auth (enforced via verify_token dependency).
+    Bounds are checked against the safety layer before executing.
+    """
     if state.driver is None:
         raise HTTPException(status_code=503, detail="No hardware driver active")
 
-    _execute_action(action.model_dump(exclude_none=True))
-    return {"status": "executed", "action": action.model_dump(exclude_none=True)}
+    action_dict = action.model_dump(exclude_none=True)
+
+    # Run bounds check via the virtual filesystem safety layer
+    if state.fs:
+        ok = state.fs.write("/dev/motor", action_dict, principal="api")
+        if not ok:
+            raise HTTPException(
+                status_code=422,
+                detail="Action rejected by safety layer (bounds violation or e-stop active)",
+            )
+        # Use the safety-clamped action
+        clamped = state.fs.read("/dev/motor", principal="api")
+        if clamped:
+            action_dict = clamped
+
+    _execute_action(action_dict)
+    return {"status": "executed", "action": action_dict}
 
 
 @app.post("/api/stop", dependencies=[Depends(verify_token)])
@@ -366,6 +387,52 @@ async def whoami(request: Request):
     return {"name": "anonymous", "role": "GUEST", "auth_method": "none"}
 
 
+@app.get("/api/audit", dependencies=[Depends(verify_token)])
+async def get_audit_log():
+    """Expose the WorkAuthority audit log (requested, approved, denied, executed, revoked events)."""
+    if not state.fs:
+        raise HTTPException(status_code=503, detail="Filesystem not initialized")
+    try:
+        safety_layer = state.fs.safety
+        work_authority = getattr(safety_layer, "work_authority", None)
+        if work_authority is None:
+            return {"audit_log": [], "note": "WorkAuthority not initialized"}
+        return {"audit_log": work_authority.get_audit_log()}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Audit log unavailable: {exc}") from exc
+
+
+@app.get("/api/stream/mjpeg", dependencies=[Depends(verify_token)])
+async def mjpeg_stream():
+    """MJPEG live camera stream.
+
+    Opens a persistent HTTP chunked response that pushes JPEG frames
+    in multipart/x-mixed-replace format. Compatible with <img src=> tags
+    and VLC without any plugins.
+    """
+    import asyncio
+
+    async def _frame_generator():
+        boundary = b"--opencastor-frame"
+        while True:
+            frame = _capture_live_frame()
+            if frame:
+                yield (
+                    boundary
+                    + b"\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                    + str(len(frame)).encode()
+                    + b"\r\n\r\n"
+                    + frame
+                    + b"\r\n"
+                )
+            await asyncio.sleep(0.033)  # ~30 fps cap
+
+    return StreamingResponse(
+        _frame_generator(),
+        media_type="multipart/x-mixed-replace; boundary=opencastor-frame",
+    )
+
+
 @app.get("/api/rcan/peers", dependencies=[Depends(verify_token)])
 async def get_peers():
     """List discovered RCAN peers on the local network."""
@@ -471,9 +538,35 @@ async def fs_permissions():
 # ---------------------------------------------------------------------------
 # Webhook endpoints for messaging channels
 # ---------------------------------------------------------------------------
+def _verify_twilio_signature(request_url: str, form_params: dict, signature: str) -> bool:
+    """Verify Twilio HMAC-SHA1 webhook signature.
+
+    https://www.twilio.com/docs/usage/webhooks/webhooks-security
+    """
+    auth_token = os.getenv("TWILIO_AUTH_TOKEN", "")
+    if not auth_token:
+        return True  # No token configured — skip verification (log warning at startup)
+
+    # Build the validation string: URL + sorted POST params
+    s = request_url
+    for key in sorted(form_params.keys()):
+        s += key + (form_params[key] or "")
+
+    expected = hmac.new(
+        auth_token.encode("utf-8"), s.encode("utf-8"), hashlib.sha1
+    ).digest()
+    import base64
+
+    expected_b64 = base64.b64encode(expected).decode("utf-8")
+    return hmac.compare_digest(expected_b64, signature)
+
+
 @app.post("/webhooks/whatsapp")
 async def whatsapp_webhook(request: Request):
-    """Twilio WhatsApp webhook endpoint (for whatsapp_twilio channel only)."""
+    """Twilio WhatsApp webhook endpoint (for whatsapp_twilio channel only).
+
+    Verifies X-Twilio-Signature before processing.
+    """
     channel = state.channels.get("whatsapp_twilio")
     if not channel:
         raise HTTPException(
@@ -482,8 +575,18 @@ async def whatsapp_webhook(request: Request):
             "This webhook is for the legacy Twilio integration only.",
         )
 
+    # HMAC signature verification
+    twilio_sig = request.headers.get("X-Twilio-Signature", "")
     form = await request.form()
-    reply = await channel.handle_webhook(dict(form))
+    form_dict = dict(form)
+    if twilio_sig:
+        request_url = str(request.url)
+        if not _verify_twilio_signature(request_url, form_dict, twilio_sig):
+            raise HTTPException(status_code=403, detail="Invalid Twilio signature")
+    elif os.getenv("TWILIO_AUTH_TOKEN"):
+        raise HTTPException(status_code=403, detail="Missing X-Twilio-Signature header")
+
+    reply = await channel.handle_webhook(form_dict)
     return JSONResponse(content={"reply": reply})
 
 
@@ -497,13 +600,56 @@ async def whatsapp_status():
     return {"status": "connected" if connected else "disconnected"}
 
 
+def _verify_slack_signature(body: bytes, timestamp: str, signature: str) -> bool:
+    """Verify Slack HMAC-SHA256 webhook signature.
+
+    https://api.slack.com/authentication/verifying-requests-from-slack
+    """
+    signing_secret = os.getenv("SLACK_SIGNING_SECRET", "")
+    if not signing_secret:
+        return True  # No secret configured — skip verification
+
+    # Reject requests older than 5 minutes to prevent replay attacks
+    try:
+        age = abs(time.time() - float(timestamp))
+        if age > 300:
+            return False
+    except (TypeError, ValueError):
+        return False
+
+    base = f"v0:{timestamp}:{body.decode('utf-8')}"
+    expected = "v0=" + hmac.new(
+        signing_secret.encode("utf-8"), base.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+
 @app.post("/webhooks/slack")
 async def slack_webhook(request: Request):
-    """Slack Events API fallback webhook (Socket Mode is preferred)."""
-    body = await request.json()
+    """Slack Events API fallback webhook (Socket Mode is preferred).
+
+    Verifies X-Slack-Signature before processing.
+    """
+    body = await request.body()
+    timestamp = request.headers.get("X-Slack-Request-Timestamp", "")
+    signature = request.headers.get("X-Slack-Signature", "")
+
+    if signature:
+        if not _verify_slack_signature(body, timestamp, signature):
+            raise HTTPException(status_code=403, detail="Invalid Slack signature")
+    elif os.getenv("SLACK_SIGNING_SECRET"):
+        raise HTTPException(status_code=403, detail="Missing X-Slack-Signature header")
+
+    import json
+
+    try:
+        payload = json.loads(body)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
     # Slack URL verification challenge
-    if body.get("type") == "url_verification":
-        return {"challenge": body["challenge"]}
+    if payload.get("type") == "url_verification":
+        return {"challenge": payload["challenge"]}
     return {"ok": True}
 
 
@@ -813,7 +959,8 @@ async def on_startup():
                     logger.warning("Offline fallback init failed: %s", _of_exc)
 
             # Initialize driver (simulation-safe)
-            from castor.main import Camera, Speaker, get_driver
+            from castor.drivers import get_driver
+            from castor.main import Camera, Speaker
 
             state.driver = get_driver(state.config)
 

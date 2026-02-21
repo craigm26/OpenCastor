@@ -232,28 +232,14 @@ def load_config(path: str) -> dict:
 # Driver factory
 # ---------------------------------------------------------------------------
 def _builtin_get_driver(config: dict):
-    """Built-in driver factory: initialise the appropriate driver from *config*."""
-    if not config.get("drivers"):
-        return None
+    """Built-in driver factory: initialise the appropriate driver from *config*.
 
-    driver_config = config["drivers"][0]
-    protocol = driver_config.get("protocol", "")
+    Supports protocol-based lookup for built-in drivers and the ``class`` key
+    for external/plugin drivers (see castor/drivers/__init__.py).
+    """
+    from castor.drivers import get_driver as _drivers_get_driver
 
-    if protocol == "pca9685_rc":
-        from castor.drivers.pca9685 import PCA9685RCDriver
-
-        return PCA9685RCDriver(driver_config)
-    elif "pca9685" in protocol:
-        from castor.drivers.pca9685 import PCA9685Driver
-
-        return PCA9685Driver(driver_config)
-    elif "dynamixel" in protocol:
-        from castor.drivers.dynamixel import DynamixelDriver
-
-        return DynamixelDriver(driver_config)
-    else:
-        logger.warning(f"Unknown driver protocol: {protocol}. Running without hardware.")
-        return None
+    return _drivers_get_driver(config)
 
 
 def get_driver(config: dict):
@@ -940,6 +926,16 @@ def main():
     # 7c. SWARM CONFIG snapshot (injected into SisyphusLoop after learner section)
     swarm_cfg = config.get("swarm", {})
 
+    # 7d. OPENTELEMETRY (opt-in via OPENCASTOR_OTEL_EXPORTER env var)
+    try:
+        from castor.telemetry import get_telemetry
+
+        _tel = get_telemetry()
+        _robot_name = config.get("metadata", {}).get("robot_name", "opencastor")
+        _tel.enable(service_name=_robot_name, exporter="auto")
+    except Exception as _otel_exc:
+        logger.debug(f"OpenTelemetry init skipped: {_otel_exc}")
+
     # 8. THE CONTROL LOOP
     latency_budget = config.get("agent", {}).get("latency_budget_ms", 3000)
     logger.info("Entering Perception-Action Loop. Press Ctrl+C to stop.")
@@ -1025,6 +1021,22 @@ def main():
             if context_ctx:
                 instruction = f"{instruction}\n\n{context_ctx}"
 
+            # --- SAFETY: PHASE 2a — Scan instruction for prompt injection ---
+            try:
+                from castor.safety import check_input_safety
+
+                safety_result = check_input_safety(instruction)
+                if not safety_result.safe:
+                    logger.warning(
+                        "SAFETY: Prompt injection detected in instruction "
+                        f"(verdict={safety_result.verdict}): {instruction[:80]!r}. Skipping tick."
+                    )
+                    fs.proc.record_thought("SAFETY_BLOCKED", {"type": "blocked", "reason": "prompt_injection"})
+                    time.sleep(0.5)
+                    continue
+            except Exception as _sf_exc:
+                logger.debug(f"Safety input scan unavailable: {_sf_exc}")
+
             if tiered:
                 # Build sensor data from depth camera if available
                 sensor_data = None
@@ -1084,6 +1096,55 @@ def main():
                 # Geofence check
                 if action_to_execute and geofence:
                     action_to_execute = geofence.check_action(action_to_execute)
+
+                if action_to_execute:
+                    # --- SAFETY: PHASE 3a — Bounds check before executing ---
+                    try:
+                        from castor.safety import BoundsChecker
+                        from castor.safety.bounds import BoundsStatus
+
+                        _bounds = BoundsChecker.from_virtual_fs(fs.ns)
+                        _br = _bounds.check_action(action_to_execute)
+                        if _br.violated:
+                            logger.warning(
+                                f"SAFETY: Bounds violation — {_br.details}. Action blocked."
+                            )
+                            action_to_execute = None
+                        elif not _br.ok:
+                            logger.warning(f"SAFETY: Bounds warning — {_br.details}")
+                    except Exception as _bc_exc:
+                        logger.debug(f"Bounds check unavailable: {_bc_exc}")
+
+                    # --- SAFETY: PHASE 3b — Work authorization for destructive actions ---
+                    if action_to_execute:
+                        try:
+                            from castor.safety import WorkAuthority
+                            from castor.safety.authorization import DestructiveActionDetector
+
+                            _detector = DestructiveActionDetector()
+                            _action_type = action_to_execute.get("type", "")
+                            if _detector.is_destructive(action_type=_action_type):
+                                _authority = getattr(fs, "_work_authority", None)
+                                if _authority is None:
+                                    logger.warning(
+                                        f"SAFETY: Destructive action '{_action_type}' "
+                                        "blocked — WorkAuthority not initialized."
+                                    )
+                                    action_to_execute = None
+                                else:
+                                    _authorized = _authority.check_authorization(
+                                        action_type=_action_type,
+                                        target=str(action_to_execute.get("target", "motor")),
+                                        principal="brain",
+                                    )
+                                    if not _authorized:
+                                        logger.warning(
+                                            f"SAFETY: Destructive action '{_action_type}' "
+                                            "denied — no valid work order."
+                                        )
+                                        action_to_execute = None
+                        except Exception as _wa_exc:
+                            logger.debug(f"Work authorization check unavailable: {_wa_exc}")
 
                 if action_to_execute:
                     # Write action through the safety layer (clamping + rate limiting)
@@ -1171,6 +1232,23 @@ def main():
             # --- PHASE 4: TELEMETRY & LATENCY CHECK ---
             latency = (time.time() - loop_start) * 1000
             fs.proc.record_loop_iteration(latency)
+
+            # OpenTelemetry metrics
+            try:
+                from castor.telemetry import get_telemetry
+
+                _tel = get_telemetry()
+                _action_type = (thought.action or {}).get("type", "none") if thought else "none"
+                _provider_name = config.get("agent", {}).get("provider", "unknown")
+                _tel.record_action(latency_ms=latency, action_type=_action_type, provider=_provider_name)
+                # Safety score
+                _safety_snap = fs.proc.snapshot() if hasattr(fs.proc, "snapshot") else {}
+                _sscore = _safety_snap.get("safety_score", 1.0) if isinstance(_safety_snap, dict) else 1.0
+                _robot_name = config.get("metadata", {}).get("robot_name", "opencastor")
+                _tel.record_safety_score(_sscore, robot_name=_robot_name)
+            except Exception:
+                pass
+
             if latency > latency_budget:
                 _latency_overrun_count += 1
                 logger.warning(f"Loop Lag: {latency:.2f}ms (Budget: {latency_budget}ms)")

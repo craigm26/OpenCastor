@@ -1274,12 +1274,85 @@ def cmd_quickstart(args) -> None:
 
 
 def cmd_plugins(args) -> None:
-    """List or manage plugins."""
-    from castor.plugins import list_plugins, load_plugins, print_plugins
+    """List or install plugins."""
+    subcmd = getattr(args, "plugin_subcmd", None)
+    if subcmd == "install":
+        _cmd_plugin_install(args)
+    else:
+        from castor.plugins import list_plugins, load_plugins, print_plugins
 
-    load_plugins()
-    plugins = list_plugins()
-    print_plugins(plugins)
+        load_plugins()
+        plugins = list_plugins()
+        print_plugins(plugins)
+
+
+def _cmd_plugin_install(args) -> None:
+    """Install a plugin from a URL (git clone) or a local .py path."""
+    import json
+    import shutil
+    import subprocess
+    import urllib.parse
+
+    source = args.source
+    plugins_dir = os.path.expanduser("~/.opencastor/plugins")
+    provenance_file = os.path.join(plugins_dir, "_provenance.json")
+    os.makedirs(plugins_dir, exist_ok=True)
+
+    # Load existing provenance
+    provenance: dict = {}
+    if os.path.exists(provenance_file):
+        try:
+            with open(provenance_file) as f:
+                provenance = json.load(f)
+        except Exception:
+            pass
+
+    # Determine install type
+    is_url = source.startswith("http://") or source.startswith("https://") or source.startswith("git@")
+
+    if is_url:
+        # Clone the repository into plugins_dir/<repo-name>/
+        repo_name = urllib.parse.urlparse(source).path.rstrip("/").rsplit("/", 1)[-1]
+        repo_name = repo_name.removesuffix(".git")
+        dest = os.path.join(plugins_dir, repo_name)
+
+        if os.path.exists(dest):
+            print(f"  Updating existing plugin '{repo_name}' from {source}...")
+            result = subprocess.run(["git", "-C", dest, "pull"], capture_output=True, text=True)
+        else:
+            print(f"  Cloning plugin '{repo_name}' from {source}...")
+            result = subprocess.run(
+                ["git", "clone", "--depth=1", source, dest],
+                capture_output=True, text=True,
+            )
+
+        if result.returncode != 0:
+            print(f"  [ERROR] git failed: {result.stderr.strip()}")
+            raise SystemExit(1)
+
+        print(f"  Plugin '{repo_name}' installed to {dest}")
+        provenance[repo_name] = {"source": source, "type": "git", "path": dest}
+    else:
+        # Copy a local .py file
+        if not os.path.isfile(source):
+            print(f"  [ERROR] File not found: {source}")
+            raise SystemExit(1)
+        if not source.endswith(".py"):
+            print(f"  [ERROR] Plugin must be a .py file (got: {source})")
+            raise SystemExit(1)
+
+        plugin_name = os.path.basename(source)[:-3]
+        dest = os.path.join(plugins_dir, os.path.basename(source))
+        shutil.copy2(source, dest)
+        print(f"  Plugin '{plugin_name}' installed to {dest}")
+        provenance[plugin_name] = {"source": os.path.abspath(source), "type": "local", "path": dest}
+
+    # Persist provenance record
+    with open(provenance_file, "w") as f:
+        json.dump(provenance, f, indent=2)
+
+    print(f"  Provenance recorded in {provenance_file}")
+    print("  Run 'castor plugins' to see all installed plugins.\n")
 
 
 def cmd_plugin(args) -> None:
@@ -2540,13 +2613,21 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    # castor plugins
-    sub.add_parser(
+    # castor plugins [install <source>]
+    p_plugins = sub.add_parser(
         "plugins",
-        help="List loaded and available plugins",
-        epilog="Example: castor plugins",
+        help="List loaded plugins or install a new one",
+        epilog=(
+            "Examples:\n"
+            "  castor plugins\n"
+            "  castor plugins install ./my_plugin.py\n"
+            "  castor plugins install https://github.com/user/my-plugin\n"
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    p_plugins_sub = p_plugins.add_subparsers(dest="plugin_subcmd")
+    p_plugin_install = p_plugins_sub.add_parser("install", help="Install a plugin")
+    p_plugin_install.add_argument("source", help="Local .py file path or git URL")
 
     # castor plugin install <url-or-path>
     p_plugin = sub.add_parser(

@@ -5,9 +5,14 @@ Exposes a composite view of the safety subsystem's state, available
 via ``/proc/safety`` in the virtual filesystem.
 """
 
+import json
+import logging
+import os
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger("OpenCastor.Safety.State")
 
 
 @dataclass
@@ -66,12 +71,93 @@ def compute_safety_score(snap: SafetyStateSnapshot) -> float:
 
 
 class SafetyTelemetry:
-    """Captures safety state snapshots from a SafetyLayer."""
+    """Captures safety state snapshots from a SafetyLayer.
 
-    def __init__(self, start_time: Optional[float] = None):
+    Supports optional persistence to a rolling JSONL file so operators can
+    review historical safety score trends across sessions.
+    """
+
+    #: Max lines kept in the rolling log file (older lines are trimmed on rotate).
+    MAX_LOG_LINES = 10_000
+
+    def __init__(
+        self,
+        start_time: Optional[float] = None,
+        log_path: Optional[str] = None,
+    ):
         self._start_time = start_time or time.time()
+        self._log_path = log_path or os.path.join(
+            os.path.expanduser("~/.opencastor"), "safety_telemetry.jsonl"
+        )
+        self._log_enabled = False
+        self._log_interval = 5.0  # seconds between persisted snapshots
+        self._last_persisted: float = 0.0
 
-    def snapshot(self, safety_layer: Any) -> SafetyStateSnapshot:
+    def enable_persistence(self, log_path: Optional[str] = None, interval_seconds: float = 5.0) -> None:
+        """Enable rolling-file persistence for snapshot history.
+
+        Args:
+            log_path: Path to the JSONL file (default: ~/.opencastor/safety_telemetry.jsonl).
+            interval_seconds: Minimum seconds between writes to avoid I/O saturation.
+        """
+        if log_path:
+            self._log_path = log_path
+        self._log_interval = interval_seconds
+        self._log_enabled = True
+        os.makedirs(os.path.dirname(self._log_path), exist_ok=True)
+        logger.info(f"Safety telemetry persistence enabled: {self._log_path}")
+
+    def _persist(self, snap: "SafetyStateSnapshot") -> None:
+        """Append the snapshot to the rolling JSONL log file."""
+        if not self._log_enabled:
+            return
+        now = time.time()
+        if now - self._last_persisted < self._log_interval:
+            return
+        try:
+            with open(self._log_path, "a") as f:
+                f.write(json.dumps(snap.to_dict()) + "\n")
+            self._last_persisted = now
+            self._rotate_if_needed()
+        except Exception as exc:
+            logger.warning(f"Safety telemetry write failed: {exc}")
+
+    def _rotate_if_needed(self) -> None:
+        """Trim the log file to MAX_LOG_LINES by discarding oldest entries."""
+        try:
+            with open(self._log_path, "r") as f:
+                lines = f.readlines()
+            if len(lines) > self.MAX_LOG_LINES:
+                with open(self._log_path, "w") as f:
+                    f.writelines(lines[-self.MAX_LOG_LINES :])
+        except Exception:
+            pass
+
+    def read_history(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Read the last ``limit`` snapshots from the rolling log file."""
+        if not os.path.exists(self._log_path):
+            return []
+        try:
+            with open(self._log_path, "r") as f:
+                lines = f.readlines()
+            result = []
+            for line in lines[-limit:]:
+                line = line.strip()
+                if line:
+                    try:
+                        result.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        pass
+            return result
+        except Exception:
+            return []
+
+    def snapshot(self, safety_layer: Any) -> "SafetyStateSnapshot":
+        snap = self._snapshot_impl(safety_layer)
+        self._persist(snap)
+        return snap
+
+    def _snapshot_impl(self, safety_layer: Any) -> "SafetyStateSnapshot":
         """Capture a point-in-time snapshot from the given SafetyLayer.
 
         Args:
@@ -129,6 +215,3 @@ class SafetyTelemetry:
         snap.safety_score = compute_safety_score(snap)
         return snap
 
-    def snapshot_dict(self, safety_layer: Any) -> Dict[str, Any]:
-        """Capture and return as a serializable dict."""
-        return self.snapshot(safety_layer).to_dict()

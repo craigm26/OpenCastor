@@ -12,6 +12,7 @@ __all__ = [
     "create_channel",
     "get_available_channels",
     "get_ready_channels",
+    "get_session_store",
 ]
 
 logger = logging.getLogger("OpenCastor.Channels")
@@ -117,3 +118,10 @@ def create_channel(
     from castor.registry import get_registry
 
     return get_registry().create_channel(name, config, on_message)
+
+
+def get_session_store():
+    """Return the process-wide ChannelSessionStore for multi-channel routing."""
+    from castor.channels.session import get_session_store as _get
+
+    return _get()

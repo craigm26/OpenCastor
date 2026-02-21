@@ -31,18 +31,18 @@ class BoundsStatus(str, Enum):
 class BoundsResult:
     """Outcome of a bounds check."""
 
-    status: str = "ok"  # "ok" | "warning" | "violation"
+    status: BoundsStatus = BoundsStatus.OK
     details: str = ""
     margin: float = float("inf")  # distance to nearest limit
 
     # Helpers
     @property
     def ok(self) -> bool:
-        return self.status == "ok"
+        return self.status == BoundsStatus.OK
 
     @property
     def violated(self) -> bool:
-        return self.status == "violation"
+        return self.status == BoundsStatus.VIOLATION
 
     @staticmethod
     def combine(results: List[BoundsResult]) -> BoundsResult:
@@ -50,7 +50,7 @@ class BoundsResult:
         if not results:
             return BoundsResult()
         worst = BoundsResult()
-        priority = {"ok": 0, "warning": 1, "violation": 2}
+        priority = {BoundsStatus.OK: 0, BoundsStatus.WARNING: 1, BoundsStatus.VIOLATION: 2}
         for r in results:
             if priority.get(r.status, 0) > priority.get(worst.status, 0):
                 worst = r
@@ -150,7 +150,7 @@ class WorkspaceBounds:
             d = _distance_to_sphere_surface(x, y, z, self.sphere)
             if d > 0:
                 results.append(
-                    BoundsResult("violation", f"outside workspace sphere by {d:.4f}m", -d)
+                    BoundsResult(BoundsStatus.VIOLATION, f"outside workspace sphere by {d:.4f}m", -d)
                 )
             elif -d < self.warning_margin:
                 results.append(
@@ -159,37 +159,37 @@ class WorkspaceBounds:
                     )
                 )
             else:
-                results.append(BoundsResult("ok", "inside workspace sphere", -d))
+                results.append(BoundsResult(BoundsStatus.OK, "inside workspace sphere", -d))
 
         # Check allowed envelope (box)
         if self.box is not None:
             d = _distance_to_box_surface(x, y, z, self.box)
             if d > 0:
-                results.append(BoundsResult("violation", f"outside workspace box by {d:.4f}m", -d))
+                results.append(BoundsResult(BoundsStatus.VIOLATION, f"outside workspace box by {d:.4f}m", -d))
             elif -d < self.warning_margin:
                 results.append(
-                    BoundsResult("warning", f"near workspace box boundary ({-d:.4f}m margin)", -d)
+                    BoundsResult(BoundsStatus.WARNING, f"near workspace box boundary ({-d:.4f}m margin)", -d)
                 )
             else:
-                results.append(BoundsResult("ok", "inside workspace box", -d))
+                results.append(BoundsResult(BoundsStatus.OK, "inside workspace box", -d))
 
         # Check forbidden zones
         for i, fs in enumerate(self.forbidden_spheres):
             d = _distance_to_sphere_surface(x, y, z, fs)
             if d <= 0:
-                results.append(BoundsResult("violation", f"inside forbidden sphere zone {i}", d))
+                results.append(BoundsResult(BoundsStatus.VIOLATION, f"inside forbidden sphere zone {i}", d))
             elif d < self.warning_margin:
                 results.append(
-                    BoundsResult("warning", f"near forbidden sphere zone {i} ({d:.4f}m)", d)
+                    BoundsResult(BoundsStatus.WARNING, f"near forbidden sphere zone {i} ({d:.4f}m)", d)
                 )
 
         for i, fb in enumerate(self.forbidden_boxes):
             d = _distance_to_box_surface(x, y, z, fb)
             if d <= 0:
-                results.append(BoundsResult("violation", f"inside forbidden box zone {i}", d))
+                results.append(BoundsResult(BoundsStatus.VIOLATION, f"inside forbidden box zone {i}", d))
             elif d < self.warning_margin:
                 results.append(
-                    BoundsResult("warning", f"near forbidden box zone {i} ({d:.4f}m)", d)
+                    BoundsResult(BoundsStatus.WARNING, f"near forbidden box zone {i} ({d:.4f}m)", d)
                 )
 
         return BoundsResult.combine(results) if results else BoundsResult()
@@ -266,7 +266,7 @@ class JointBounds:
                         )
                     )
                 else:
-                    results.append(BoundsResult("ok", f"joint {joint_id} position ok", margin))
+                    results.append(BoundsResult(BoundsStatus.OK, f"joint {joint_id} position ok", margin))
 
         if velocity is not None:
             abs_vel = abs(velocity)
@@ -288,7 +288,7 @@ class JointBounds:
                     )
                 )
             else:
-                results.append(BoundsResult("ok", f"joint {joint_id} velocity ok", margin))
+                results.append(BoundsResult(BoundsStatus.OK, f"joint {joint_id} velocity ok", margin))
 
         if torque is not None:
             abs_t = abs(torque)
@@ -310,7 +310,7 @@ class JointBounds:
                     )
                 )
             else:
-                results.append(BoundsResult("ok", f"joint {joint_id} torque ok", margin))
+                results.append(BoundsResult(BoundsStatus.OK, f"joint {joint_id} torque ok", margin))
 
         return BoundsResult.combine(results) if results else BoundsResult()
 
@@ -366,7 +366,7 @@ class ForceBounds:
                 f"EE force {abs(force_n):.2f}N near limit {limit:.2f}N ({margin:.2f}N margin)",
                 margin,
             )
-        return BoundsResult("ok", "force within limits", margin)
+        return BoundsResult(BoundsStatus.OK, "force within limits", margin)
 
     def check_contact_force(self, force_n: float) -> BoundsResult:
         margin = self.max_contact_force - abs(force_n)
@@ -376,7 +376,7 @@ class ForceBounds:
                 f"contact force {abs(force_n):.2f}N exceeds limit {self.max_contact_force:.2f}N",
                 -abs(margin),
             )
-        return BoundsResult("ok", "contact force ok", margin)
+        return BoundsResult(BoundsStatus.OK, "contact force ok", margin)
 
     def check_gripper_force(self, force_n: float) -> BoundsResult:
         margin = self.max_gripper_force - abs(force_n)
@@ -386,7 +386,7 @@ class ForceBounds:
                 f"gripper force {abs(force_n):.2f}N exceeds limit {self.max_gripper_force:.2f}N",
                 -abs(margin),
             )
-        return BoundsResult("ok", "gripper force ok", margin)
+        return BoundsResult(BoundsStatus.OK, "gripper force ok", margin)
 
 
 # ---------------------------------------------------------------------------
