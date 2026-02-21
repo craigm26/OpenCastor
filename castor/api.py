@@ -10,11 +10,14 @@ Run with:
 """
 
 import argparse
+import collections
 import hashlib
 import hmac
 import logging
 import os
+import posixpath
 import signal
+import threading
 import time
 from typing import Any, Dict, Optional
 
@@ -24,6 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from castor.api_errors import CastorAPIError, register_error_handlers
 from castor.auth import (
     list_available_channels,
     list_available_providers,
@@ -55,6 +59,49 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register structured JSON error handlers (replaces plain FastAPI HTTPException text)
+register_error_handlers(app)
+
+# ---------------------------------------------------------------------------
+# Rate limiting
+# ---------------------------------------------------------------------------
+_COMMAND_RATE_LIMIT = int(os.getenv("OPENCASTOR_COMMAND_RATE", "5"))  # max calls/second/IP
+_MAX_STREAMS = int(os.getenv("OPENCASTOR_MAX_STREAMS", "3"))  # max concurrent MJPEG clients
+_rate_lock = threading.Lock()
+_command_history: Dict[str, list] = collections.defaultdict(list)  # ip -> [timestamps]
+_active_streams = 0
+
+
+def _check_command_rate(client_ip: str) -> None:
+    """Sliding-window rate limit for /api/command. Raises 429 on breach."""
+    now = time.time()
+    with _rate_lock:
+        history = _command_history[client_ip]
+        _command_history[client_ip] = [t for t in history if now - t < 1.0]
+        if len(_command_history[client_ip]) >= _COMMAND_RATE_LIMIT:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded ({_COMMAND_RATE_LIMIT} req/s). Try again shortly.",
+                headers={"Retry-After": "1"},
+            )
+        _command_history[client_ip].append(now)
+
+
+# ---------------------------------------------------------------------------
+# VFS path validation
+# ---------------------------------------------------------------------------
+
+def _validate_vfs_path(path: str) -> str:
+    """Normalise and validate a VFS path. Rejects traversal attempts."""
+    if "\x00" in path:
+        raise HTTPException(status_code=400, detail="Invalid path: null byte in path")
+    # posixpath.normpath resolves '..' and redundant slashes
+    normalized = posixpath.normpath("/" + path.lstrip("/"))
+    # After normalisation, the path must start with '/' (i.e. no escaping)
+    if not normalized.startswith("/"):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    return normalized
 
 
 class AppState:
@@ -165,7 +212,7 @@ def _maybe_wrap_rcan(payload: dict, request: Request) -> dict:
 
 @app.get("/api/status", dependencies=[Depends(verify_token)])
 async def get_status(request: Request):
-    """Return current runtime status and available integrations."""
+    """Return current runtime status, provider health, and available integrations."""
     from castor.safety.authorization import DEFAULT_AUDIT_LOG_PATH
 
     payload = {
@@ -180,12 +227,28 @@ async def get_status(request: Request):
         "last_thought": state.last_thought,
         "audit_log_path": str(DEFAULT_AUDIT_LOG_PATH.expanduser()),
     }
+
+    # Provider health check (non-blocking — skip if brain not ready)
+    if state.brain is not None:
+        try:
+            payload["provider_health"] = state.brain.health_check()
+        except Exception as exc:
+            payload["provider_health"] = {"ok": False, "error": str(exc)}
+
+    # Offline fallback status
+    if state.offline_fallback is not None:
+        payload["fallback_ready"] = state.offline_fallback.fallback_ready
+        payload["using_fallback"] = state.offline_fallback.is_using_fallback
+    else:
+        payload["fallback_ready"] = None
+
     return _maybe_wrap_rcan(payload, request)
 
 
 @app.post("/api/command", dependencies=[Depends(verify_token)])
-async def send_command(cmd: CommandRequest):
+async def send_command(cmd: CommandRequest, request: Request):
     """Send an instruction to the robot's brain and receive the action."""
+    _check_command_rate(request.client.host if request.client else "unknown")
     if state.brain is None:
         raise HTTPException(status_code=503, detail="Brain not initialized")
 
@@ -281,10 +344,11 @@ async def fs_read(req: FSReadRequest):
     """Read a virtual filesystem path."""
     if not state.fs:
         raise HTTPException(status_code=503, detail="Filesystem not initialized")
-    data = state.fs.read(req.path, principal="api")
-    if data is None and not state.fs.exists(req.path):
-        raise HTTPException(status_code=404, detail=f"Path not found: {req.path}")
-    return {"path": req.path, "data": data}
+    safe_path = _validate_vfs_path(req.path)
+    data = state.fs.read(safe_path, principal="api")
+    if data is None and not state.fs.exists(safe_path):
+        raise HTTPException(status_code=404, detail=f"Path not found: {safe_path}")
+    return {"path": safe_path, "data": data}
 
 
 @app.post("/api/fs/write", dependencies=[Depends(verify_token)])
@@ -292,10 +356,11 @@ async def fs_write(req: FSWriteRequest):
     """Write to a virtual filesystem path."""
     if not state.fs:
         raise HTTPException(status_code=503, detail="Filesystem not initialized")
-    ok = state.fs.write(req.path, req.data, principal="api")
+    safe_path = _validate_vfs_path(req.path)
+    ok = state.fs.write(safe_path, req.data, principal="api")
     if not ok:
         raise HTTPException(status_code=403, detail="Write denied")
-    return {"path": req.path, "status": "written"}
+    return {"path": safe_path, "status": "written"}
 
 
 @app.get("/api/fs/ls", dependencies=[Depends(verify_token)])
@@ -409,23 +474,41 @@ async def mjpeg_stream():
     Opens a persistent HTTP chunked response that pushes JPEG frames
     in multipart/x-mixed-replace format. Compatible with <img src=> tags
     and VLC without any plugins.
+
+    Concurrent streams are capped at ``OPENCASTOR_MAX_STREAMS`` (default 3)
+    to prevent CPU/memory exhaustion.
     """
     import asyncio
 
+    global _active_streams
+    with _rate_lock:
+        if _active_streams >= _MAX_STREAMS:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Max concurrent streams ({_MAX_STREAMS}) reached. Try again later.",
+                headers={"Retry-After": "5"},
+            )
+        _active_streams += 1
+
     async def _frame_generator():
-        boundary = b"--opencastor-frame"
-        while True:
-            frame = _capture_live_frame()
-            if frame:
-                yield (
-                    boundary
-                    + b"\r\nContent-Type: image/jpeg\r\nContent-Length: "
-                    + str(len(frame)).encode()
-                    + b"\r\n\r\n"
-                    + frame
-                    + b"\r\n"
-                )
-            await asyncio.sleep(0.033)  # ~30 fps cap
+        global _active_streams
+        try:
+            boundary = b"--opencastor-frame"
+            while True:
+                frame = _capture_live_frame()
+                if frame:
+                    yield (
+                        boundary
+                        + b"\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                        + str(len(frame)).encode()
+                        + b"\r\n\r\n"
+                        + frame
+                        + b"\r\n"
+                    )
+                await asyncio.sleep(0.033)  # ~30 fps cap
+        finally:
+            with _rate_lock:
+                _active_streams -= 1
 
     return StreamingResponse(
         _frame_generator(),

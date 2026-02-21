@@ -5,6 +5,37 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.21.7] - 2026-02-21 🔒 Security, health checks, LLM learner stages, TieredBrain tests
+
+### Security (closes #51, #52)
+- **`castor/api.py`** — Path traversal guard on all VFS endpoints: `_validate_vfs_path()`
+  normalises paths with `posixpath.normpath` and rejects null bytes before any read/write
+- **`castor/api.py`** — Per-IP rate limiting: sliding-window on `POST /api/command`
+  (`OPENCASTOR_COMMAND_RATE` env, default 5 req/s) and concurrent-stream cap on
+  `GET /api/stream/mjpeg` (`OPENCASTOR_MAX_STREAMS` env, default 3); returns 429 with
+  `Retry-After` header
+
+### Added (closes #53, #54, #55, #56, #58)
+- **`castor/providers/base.py`** — `health_check() -> dict` on `BaseProvider`; returns
+  `{ok, latency_ms, error}`; called at startup via `GET /api/status`
+- **`castor/offline_fallback.py`** — `probe_fallback()` method + `fallback_ready` property;
+  startup probe so broken fallbacks are discovered before they're needed;
+  `GET /api/status` now exposes `fallback_ready` and `using_fallback`
+- **`castor/api_errors.py`** — `CastorAPIError` exception + `register_error_handlers()`;
+  all errors now return `{"error": str, "code": str, "status": int}` JSON envelope
+- **`castor/learner/pm_stage.py`** — `PMStage(provider=…)`: optional LLM augmentation
+  after heuristic analysis; merges additional improvements and refined root-cause from LLM
+- **`castor/learner/dev_stage.py`** — `DevStage(provider=…)`: optional LLM fill for
+  patches where heuristic produces `new_value=None`
+- **`castor/learner/qa_stage.py`** — `QAStage(provider=…)`: optional LLM semantic check
+  added to heuristic safety/consistency/type checks
+- **`tests/test_tiered_brain.py`** — 22 new tests: `camera_required=False` bypass,
+  Layer 3 swarm pass-through / override / error fallback, `get_stats()` edge cases
+
+### Changed
+- `castor/api.py` — `GET /api/status` now includes `provider_health`, `fallback_ready`,
+  `using_fallback`; error responses standardised to new envelope
+
 ## [2026.2.21.6] - 2026-02-21 🤖 Layer 3 Agent Swarm (closes #12)
 
 ### Added

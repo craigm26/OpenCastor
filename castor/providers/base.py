@@ -180,6 +180,35 @@ class BaseProvider(ABC):
 
     # ── Shared helpers ────────────────────────────────────────────────────────
 
+    def health_check(self) -> dict:
+        """Verify the provider is reachable and returning valid responses.
+
+        Returns a dict with keys:
+            ``ok``          — True if the provider responded without error.
+            ``latency_ms``  — Round-trip time in milliseconds.
+            ``error``       — Error message string, or None on success.
+
+        The default implementation calls ``think(b"", "ping")`` which
+        exercises the full API path.  Override for a cheaper probe
+        (e.g. a ``/health`` HTTP endpoint) when available.
+        """
+        import time
+
+        t0 = time.time()
+        try:
+            self.think(b"", "ping")
+            return {
+                "ok": True,
+                "latency_ms": round((time.time() - t0) * 1000, 1),
+                "error": None,
+            }
+        except Exception as exc:
+            return {
+                "ok": False,
+                "latency_ms": round((time.time() - t0) * 1000, 1),
+                "error": str(exc),
+            }
+
     @abstractmethod
     def think(
         self,

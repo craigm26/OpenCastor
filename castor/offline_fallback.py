@@ -57,6 +57,7 @@ class OfflineFallbackManager:
         self._fallback = None
         self._channel_send = channel_send_fn
         self._using_fallback = False
+        self._fallback_ready = False
         self._monitor: Optional[ConnectivityMonitor] = None
 
         # Build fallback provider if configured
@@ -66,9 +67,11 @@ class OfflineFallbackManager:
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def start(self) -> None:
-        """Start the connectivity monitor."""
+        """Start the connectivity monitor and probe the fallback provider."""
         if self._fallback is None:
             return  # nothing to manage
+        # Probe at startup so operators know immediately if fallback is broken
+        self.probe_fallback()
         interval = float(self._config.get("check_interval_s", 30))
         self._monitor = ConnectivityMonitor(
             on_change=self._on_connectivity_change,
@@ -94,6 +97,38 @@ class OfflineFallbackManager:
     @property
     def is_using_fallback(self) -> bool:
         return self._using_fallback
+
+    @property
+    def fallback_ready(self) -> bool:
+        """True if the fallback provider has been probed and is responding."""
+        return self._fallback_ready
+
+    def probe_fallback(self) -> bool:
+        """Probe the fallback provider with a lightweight health check.
+
+        Called at ``start()`` so operators discover unreachable fallbacks at
+        startup rather than during a live outage.  Returns True if reachable.
+        """
+        if self._fallback is None:
+            self._fallback_ready = False
+            return False
+        try:
+            result = self._fallback.health_check()
+            self._fallback_ready = bool(result.get("ok", False))
+            if self._fallback_ready:
+                logger.info(
+                    "Offline fallback probe OK (%.0fms)",
+                    result.get("latency_ms", 0),
+                )
+            else:
+                logger.warning(
+                    "Offline fallback probe failed: %s",
+                    result.get("error", "unknown"),
+                )
+        except Exception as exc:
+            logger.warning("Offline fallback probe exception: %s", exc)
+            self._fallback_ready = False
+        return self._fallback_ready
 
     # ── Internal ──────────────────────────────────────────────────────────────
 

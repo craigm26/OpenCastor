@@ -100,6 +100,9 @@ def _reset_state_and_env(monkeypatch):
     # Reset the module-level API_TOKEN
     api_mod.API_TOKEN = None
 
+    # Clear rate-limiter history so tests don't trip each other's per-IP limits
+    api_mod._command_history.clear()
+
     yield
 
 
@@ -311,7 +314,7 @@ class TestCommandEndpoint:
     def test_command_503_when_brain_not_loaded(self, client):
         resp = client.post("/api/command", json={"instruction": "go forward"})
         assert resp.status_code == 503
-        assert "Brain not initialized" in resp.json()["detail"]
+        assert "Brain not initialized" in resp.json()["error"]
 
     def test_command_success(self, client, api_mod):
         api_mod.state.brain = _make_mock_brain("turning left", {"type": "move", "angular": -0.5})
@@ -380,7 +383,7 @@ class TestActionEndpoint:
     def test_action_503_when_no_driver(self, client):
         resp = client.post("/api/action", json={"type": "move", "linear": 0.5})
         assert resp.status_code == 503
-        assert "No hardware driver active" in resp.json()["detail"]
+        assert "No hardware driver active" in resp.json()["error"]
 
     def test_action_move(self, client, api_mod):
         api_mod.state.driver = _make_mock_driver()
@@ -477,7 +480,7 @@ class TestEStopClearEndpoint:
         api_mod.state.fs.clear_estop.return_value = False
         resp = client.post("/api/estop/clear")
         assert resp.status_code == 403
-        assert "Insufficient permissions" in resp.json()["detail"]
+        assert "Insufficient permissions" in resp.json()["error"]
 
 
 # =====================================================================
@@ -665,7 +668,7 @@ class TestAuthTokenEndpoint:
             json={"subject": "user1", "role": "GUEST"},
         )
         assert resp.status_code == 501
-        assert "JWT not configured" in resp.json()["detail"]
+        assert "JWT not configured" in resp.json()["error"]
 
     def test_issue_token_invalid_role(self, client, monkeypatch):
         monkeypatch.setenv("OPENCASTOR_JWT_SECRET", "testsecret")
@@ -730,7 +733,7 @@ class TestRCANMessageEndpoint:
     def test_rcan_message_no_router(self, client):
         resp = client.post("/rcan", json={"type": "command", "payload": {}})
         assert resp.status_code == 501
-        assert "RCAN router not initialized" in resp.json()["detail"]
+        assert "RCAN router not initialized" in resp.json()["error"]
 
     def test_rcan_message_invalid_body(self, client, api_mod):
         router = MagicMock()

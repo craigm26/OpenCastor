@@ -13,15 +13,27 @@ Cache-safe forking note (Claude Code lesson):
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 
 from .patches import BehaviorPatch, ConfigPatch, Patch
 from .pm_stage import AnalysisReport, ImprovementSuggestion
 from .qa_stage import QAResult
 
+_log = logging.getLogger("OpenCastor.Learner.DevStage")
+
 
 class DevStage:
-    """Maps improvement suggestions to concrete patches."""
+    """Maps improvement suggestions to concrete patches.
+
+    If a *provider* is supplied (any ``BaseProvider`` instance), the stage
+    will additionally call the LLM to propose better patch values when the
+    heuristic cannot determine a concrete ``new_value``.  Gracefully degrades
+    to heuristic-only when provider is ``None`` or when the LLM call fails.
+    """
+
+    def __init__(self, provider=None):
+        self._provider = provider
 
     def generate_fix(
         self,
@@ -43,7 +55,13 @@ class DevStage:
         if previous_attempt and qa_feedback:
             return self._adjust_for_feedback(previous_attempt, suggestion, qa_feedback)
 
-        return self._suggestion_to_patch(suggestion)
+        patch = self._suggestion_to_patch(suggestion)
+
+        # If the heuristic produced a patch with no concrete value, ask the LLM
+        if self._provider is not None and isinstance(patch, ConfigPatch) and patch.new_value is None:
+            self._llm_fill_value(patch, suggestion, report)
+
+        return patch
 
     def _suggestion_to_patch(self, suggestion: ImprovementSuggestion) -> Patch:
         if suggestion.type == "config":
@@ -107,6 +125,36 @@ class DevStage:
             # Move 50% toward midpoint
             return value + (mid - value) * 0.5
         return value
+
+    def _llm_fill_value(
+        self, patch: ConfigPatch, suggestion: ImprovementSuggestion, report: AnalysisReport
+    ) -> None:
+        """Ask the LLM to propose a concrete ``new_value`` for a config patch.
+
+        Injects all context as a user message so the provider's cached
+        system-prompt prefix remains stable (cache-safe design).
+        Modifies *patch* in place.  Silently skips on any error.
+        """
+        import json
+
+        try:
+            instruction = (
+                f"Propose a concrete new value for robot config key '{patch.key}'. "
+                f"Current value: {json.dumps(patch.old_value)}. "
+                f"Rationale: {patch.rationale}. "
+                f"Efficiency score: {report.efficiency_score:.2f}. "
+                f"Return ONLY valid JSON: "
+                f'{{\"new_value\": <value>, \"rationale\": \"<brief explanation>\"}}'
+            )
+            thought = self._provider.think(b"", instruction)
+            if thought.action and isinstance(thought.action, dict):
+                val = thought.action.get("new_value")
+                if val is not None:
+                    patch.new_value = self._fix_type(patch.old_value, val)
+                if thought.action.get("rationale"):
+                    patch.rationale = thought.action["rationale"]
+        except Exception as exc:
+            _log.debug("LLM value suggestion skipped: %s", exc)
 
     def _fix_type(self, old_value: Any, new_value: Any) -> Any:
         """Try to cast new_value to the type of old_value."""

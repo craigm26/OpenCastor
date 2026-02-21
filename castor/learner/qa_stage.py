@@ -12,11 +12,14 @@ Cache-safe forking note (Claude Code lesson):
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 from .episode import Episode
 from .patches import BehaviorPatch, ConfigPatch, Patch, PromptPatch
+
+_log = logging.getLogger("OpenCastor.Learner.QAStage")
 
 # Safety bounds: key → (min, max)
 SAFETY_BOUNDS: dict[str, tuple[float, float]] = {
@@ -56,7 +59,16 @@ class QAResult:
 
 
 class QAStage:
-    """Verifies patches meet safety and consistency requirements."""
+    """Verifies patches meet safety and consistency requirements.
+
+    If a *provider* is supplied (any ``BaseProvider`` instance), the stage
+    will additionally call the LLM to flag any semantic issues the heuristic
+    checks may have missed.  Gracefully degrades to heuristic-only when
+    provider is ``None`` or when the LLM call fails.
+    """
+
+    def __init__(self, provider=None):
+        self._provider = provider
 
     def verify(self, patch: Patch, episode: Episode) -> QAResult:
         """Run all QA checks on a patch."""
@@ -71,11 +83,61 @@ class QAStage:
             c.name in ("safety_bounds", "type_check") and not c.passed for c in checks
         )
 
+        # LLM semantic check (additive — only adds checks, never removes existing ones)
+        if self._provider is not None and all_passed:
+            llm_check = self._llm_semantic_check(patch, episode)
+            if llm_check is not None:
+                checks.append(llm_check)
+                if not llm_check.passed:
+                    all_passed = False
+                    retry = True
+
         return QAResult(
             approved=all_passed,
             checks=checks,
             retry_suggested=retry,
         )
+
+    # ------------------------------------------------------------------
+    # LLM semantic check (cache-safe: context injected as user message)
+    # ------------------------------------------------------------------
+
+    def _llm_semantic_check(self, patch: Patch, episode: Episode) -> Optional[QACheck]:
+        """Ask the LLM whether the patch makes semantic sense for this episode.
+
+        Returns a ``QACheck`` or ``None`` if the LLM call fails.
+        """
+        import json
+
+        try:
+            patch_summary = {}
+            if isinstance(patch, ConfigPatch):
+                patch_summary = {
+                    "type": "config",
+                    "key": patch.key,
+                    "old_value": patch.old_value,
+                    "new_value": patch.new_value,
+                    "rationale": patch.rationale,
+                }
+            instruction = (
+                f"Evaluate whether this robot config patch is safe and sensible. "
+                f"Patch: {json.dumps(patch_summary)}. "
+                f"Episode goal: '{episode.goal}', success: {episode.success}. "
+                f"Return ONLY valid JSON: "
+                f'{{\"approved\": true|false, \"reason\": \"<brief>\"}}'
+            )
+            thought = self._provider.think(b"", instruction)
+            if thought.action and isinstance(thought.action, dict):
+                approved = bool(thought.action.get("approved", True))
+                reason = thought.action.get("reason", "LLM check")
+                return QACheck(
+                    name="llm_semantic",
+                    passed=approved,
+                    detail=reason,
+                )
+        except Exception as exc:
+            _log.debug("LLM semantic check skipped: %s", exc)
+        return None
 
     def _check_safety_bounds(self, patch: Patch) -> QACheck:
         """Verify config values are within safety bounds."""

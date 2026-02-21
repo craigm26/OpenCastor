@@ -104,7 +104,17 @@ _FAILURE_HINTS: dict[str, str] = {
 
 
 class PMStage:
-    """Analyzes episode outcomes and identifies improvement opportunities."""
+    """Analyzes episode outcomes and identifies improvement opportunities.
+
+    If a *provider* is supplied (any ``BaseProvider`` instance), the stage
+    will additionally call the LLM to augment the heuristic analysis with
+    deeper insights.  Gracefully degrades to heuristic-only when provider
+    is ``None`` or when the LLM call fails.
+    """
+
+    def __init__(self, provider=None, rcan_config: Optional[dict[str, Any]] = None):
+        self._provider = provider
+        self._rcan_config = rcan_config
 
     def analyze(self, episode: Episode) -> AnalysisReport:
         """Analyze a single episode and produce an AnalysisReport."""
@@ -125,10 +135,68 @@ class PMStage:
         # Identify suboptimalities even on success
         report.suboptimalities = self._find_inefficiencies(episode)
 
-        # Generate improvement suggestions
+        # Generate improvement suggestions (heuristic)
         report.improvements = self._suggest_improvements(episode, report)
 
+        # Augment with LLM insights when a provider is configured
+        if self._provider is not None:
+            self._augment_with_llm(episode, report)
+
         return report
+
+    # ------------------------------------------------------------------
+    # LLM augmentation (cache-safe: uses parent system prompt + user msg)
+    # ------------------------------------------------------------------
+
+    def _augment_with_llm(self, episode: Episode, report: AnalysisReport) -> None:
+        """Call the configured LLM to augment heuristic improvements.
+
+        Per the cache-safe design principle, stage context is injected as
+        a user message rather than modifying the system prompt, so the
+        provider's cached system-prompt prefix remains stable across ticks.
+        """
+        import json
+        import logging
+
+        _log = logging.getLogger("OpenCastor.Learner.PMStage")
+
+        try:
+            from castor.prompt_cache import build_cached_system_prompt
+
+            episode_summary = {
+                "id": episode.id,
+                "goal": episode.goal,
+                "success": episode.success,
+                "duration_s": episode.duration_s,
+                "action_count": len(episode.actions),
+                "actions": episode.actions[:20],  # first 20 to keep within token budget
+            }
+            heuristic_summary = {
+                "efficiency_score": report.efficiency_score,
+                "root_cause": report.root_cause,
+                "suboptimalities": report.suboptimalities,
+                "existing_improvements": [i.to_dict() for i in report.improvements],
+            }
+            instruction = (
+                f"Analyze this robot episode and return ONLY valid JSON with this shape: "
+                f'{{\"additional_improvements\": [...], \"refined_root_cause\": \"\"}}. '
+                f"Episode: {json.dumps(episode_summary)}. "
+                f"Heuristic report: {json.dumps(heuristic_summary)}. "
+                f"Each improvement in additional_improvements must have: "
+                f"type, description, config_key, current_value, suggested_value, rationale."
+            )
+            thought = self._provider.think(b"", instruction)
+            if thought.action and isinstance(thought.action, dict):
+                # Merge LLM improvements with heuristic ones
+                for raw in thought.action.get("additional_improvements", []):
+                    try:
+                        report.improvements.append(ImprovementSuggestion.from_dict(raw))
+                    except Exception:
+                        pass
+                if thought.action.get("refined_root_cause"):
+                    report.root_cause = thought.action["refined_root_cause"]
+        except Exception as exc:
+            _log.debug("LLM augmentation skipped: %s", exc)
 
     def _compute_efficiency(self, episode: Episode) -> float:
         """Ratio of optimal actions to actual actions (capped at 1.0)."""

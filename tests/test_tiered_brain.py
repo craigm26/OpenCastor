@@ -166,3 +166,115 @@ class TestTieredBrain:
         # Reactive layer should catch this
         fast.think.assert_not_called()
         assert thought.action["type"] == "stop"
+
+
+# ---------------------------------------------------------------------------
+# ReactiveLayer — camera_required=False bypass
+# ---------------------------------------------------------------------------
+
+
+class TestReactiveLayerCameraNotRequired:
+    def test_blank_frame_bypassed(self):
+        layer = ReactiveLayer({"camera": {"camera_required": False}})
+        assert layer.evaluate(b"") is None
+
+    def test_all_zero_frame_bypassed(self):
+        layer = ReactiveLayer({"camera": {"camera_required": False}})
+        assert layer.evaluate(b"\x00" * 500) is None
+
+    def test_obstacle_still_fires_without_camera(self):
+        layer = ReactiveLayer({"camera": {"camera_required": False}})
+        # Use a non-zero frame so Rules 1&2 don't fire; Rule 3 (obstacle) should fire
+        action = layer.evaluate(b"\xff" * 500, {"front_distance_m": 0.1})
+        assert action is not None
+        assert action["type"] == "stop"
+
+
+# ---------------------------------------------------------------------------
+# TieredBrain — Layer 3 (agent swarm)
+# ---------------------------------------------------------------------------
+
+
+class TestTieredBrainLayer3:
+    SOLID_FRAME = b"\xff\xd8\xff" + b"\x42" * 500
+
+    def _make_orchestrator(self, action_type):
+        orc = MagicMock()
+        orc.sync_think.return_value = {"type": action_type}
+        return orc
+
+    def test_orchestrator_none_by_default(self):
+        fast = MagicMock()
+        fast.think.return_value = Thought("ok", {"type": "move"})
+        brain = TieredBrain(fast)
+        assert brain.orchestrator is None
+
+    def test_idle_swarm_passes_through(self):
+        fast = MagicMock()
+        fast.think.return_value = Thought("ok", {"type": "move", "linear": 0.5})
+        brain = TieredBrain(fast)
+        brain.orchestrator = self._make_orchestrator("idle")
+        thought = brain.think(self.SOLID_FRAME, "go")
+        assert thought.action["type"] == "move"
+        assert brain.stats["swarm_count"] == 0
+
+    def test_none_type_swarm_passes_through(self):
+        fast = MagicMock()
+        fast.think.return_value = Thought("ok", {"type": "move", "linear": 0.5})
+        brain = TieredBrain(fast)
+        orc = MagicMock()
+        orc.sync_think.return_value = {"type": None}
+        brain.orchestrator = orc
+        thought = brain.think(self.SOLID_FRAME, "go")
+        assert thought.action["type"] == "move"
+
+    def test_swarm_stop_overrides_fast_brain(self):
+        fast = MagicMock()
+        fast.think.return_value = Thought("ok", {"type": "move", "linear": 0.5})
+        brain = TieredBrain(fast)
+        brain.orchestrator = self._make_orchestrator("stop")
+        thought = brain.think(self.SOLID_FRAME, "go")
+        assert thought.action["type"] == "stop"
+        assert brain.stats["swarm_count"] == 1
+
+    def test_swarm_error_is_non_fatal(self):
+        fast = MagicMock()
+        fast.think.return_value = Thought("ok", {"type": "move", "linear": 0.5})
+        brain = TieredBrain(fast)
+        orc = MagicMock()
+        orc.sync_think.side_effect = RuntimeError("swarm crash")
+        brain.orchestrator = orc
+        thought = brain.think(self.SOLID_FRAME, "go")
+        assert thought.action["type"] == "move"  # fall back to fast brain
+
+
+# ---------------------------------------------------------------------------
+# TieredBrain — get_stats()
+# ---------------------------------------------------------------------------
+
+
+class TestTieredBrainGetStats:
+    SOLID_FRAME = b"\xff\xd8\xff" + b"\x42" * 500
+
+    def test_pct_keys_present(self):
+        fast = MagicMock()
+        fast.think.return_value = Thought("ok", {"type": "move"})
+        brain = TieredBrain(fast)
+        brain.think(self.SOLID_FRAME, "go")
+        stats = brain.get_stats()
+        for k in ("reactive_pct", "fast_pct", "planner_pct", "swarm_pct"):
+            assert k in stats
+
+    def test_no_div_by_zero_at_zero_ticks(self):
+        fast = MagicMock()
+        fast.think.return_value = Thought("ok", {"type": "move"})
+        brain = TieredBrain(fast)
+        stats = brain.get_stats()
+        assert stats["total_ticks"] == 0
+        assert stats["reactive_pct"] == 0.0
+
+    def test_swarm_pct_in_stats(self):
+        fast = MagicMock()
+        fast.think.return_value = Thought("ok", {"type": "move"})
+        brain = TieredBrain(fast)
+        assert "swarm_count" in brain.stats
