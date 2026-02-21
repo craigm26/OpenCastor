@@ -5,6 +5,54 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.21.8] - 2026-02-21 🔒 Prompt injection defense, streaming think, driver health checks
+
+### Security (closes #59, #65)
+- **`castor/providers/base.py`** — `_check_instruction_safety()`: scans every incoming
+  instruction for prompt injection before forwarding to the LLM; returns a blocking
+  `{"type":"stop","reason":"prompt_injection_blocked"}` Thought on BLOCK verdict
+- All four providers (Anthropic, Google, OpenAI, Ollama) call the new guard at the top of
+  `think()` and `think_stream()`
+- **`castor/api.py`** — Per-sender webhook rate limiting (`_check_webhook_rate()`):
+  sliding 60-second window on `/webhooks/whatsapp` (by phone number) and
+  `/webhooks/slack` (by user ID); `OPENCASTOR_WEBHOOK_RATE` env (default 10/min)
+
+### Added (closes #60, #61, #62, #64, #66, #67)
+- **`castor/channels/base.py`** — Async-safe callback dispatch in `handle_message()`:
+  coroutine callbacks are `await`-ed; synchronous callbacks are offloaded with
+  `asyncio.to_thread()` to avoid blocking the event loop (#60)
+- **`castor/providers/ollama_provider.py`** — `health_check()` override: pings the
+  Ollama root endpoint (no model loading, uses `health_timeout`) (#61)
+- **`castor/providers/openai_provider.py`** — `health_check()` override: calls
+  `client.models.list()` (no inference cost) (#61)
+- **`castor/providers/google_provider.py`** — `health_check()` override: calls
+  `genai.list_models()` (no inference cost) (#61)
+- **`castor/channels/discord_channel.py`** — `on_message` handler wrapped in
+  `try/except`; errors are logged, not propagated (#62)
+- **`castor/channels/telegram_channel.py`** — `_on_text` handler wrapped in
+  `try/except` (#62)
+- **`castor/channels/slack_channel.py`** — `handle_mention` and `handle_dm` handlers
+  wrapped in `try/except` (#62)
+- **`castor/providers/google_provider.py`** — `think_stream()`: streams Gemini tokens
+  via `generate_content(stream=True)` (#64)
+- **`castor/providers/openai_provider.py`** — `think_stream()`: streams GPT tokens via
+  `chat.completions.create(stream=True)` (#64)
+- **`castor/providers/anthropic_provider.py`** — `think_stream()`: streams Claude tokens
+  via `messages.stream()`; CLI path falls back to non-streaming (#64)
+- **`castor/learner/sisyphus.py`** — Per-stage timing in `ImprovementResult`
+  (`duration_ms`, `stage_durations`); `SisyphusStats.total_duration_ms` /
+  `avg_duration_ms`; `provider=` wired into `PMStage`, `DevStage`, `QAStage` (#66)
+- **`castor/drivers/base.py`** — `DriverBase.health_check() -> dict`; default returns
+  `{"ok": False, "mode": "mock", "error": None}` (#67)
+- **`castor/drivers/dynamixel.py`** — `health_check()`: pings the first connected
+  Dynamixel motor via `packetHandler.ping()` (#67)
+- **`castor/drivers/pca9685.py`** — `health_check()` on both `PCA9685RCDriver` and
+  `PCA9685Driver`: returns `ok=True` when I2C hardware is active (#67)
+
+### Closed (duplicate / already implemented)
+- #63 — PCA9685 mock fallback already existed via `HAS_PCA9685` flag and
+  `self.pca = None` pattern; driver `health_check()` added as part of #67
+
 ## [2026.2.21.7] - 2026-02-21 🔒 Security, health checks, LLM learner stages, TieredBrain tests
 
 ### Security (closes #51, #52)

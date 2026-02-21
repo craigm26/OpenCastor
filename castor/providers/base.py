@@ -229,6 +229,27 @@ class BaseProvider(ABC):
         """
         pass
 
+    def _check_instruction_safety(self, instruction: str) -> Optional["Thought"]:
+        """Scan an incoming instruction for prompt injection before sending to the LLM.
+
+        Returns a blocking Thought if the instruction is BLOCK-level dangerous,
+        or None if safe to proceed.  Gracefully degrades when the safety module
+        is unavailable.
+        """
+        try:
+            from castor.safety.anti_subversion import ScanVerdict, check_input_safety
+
+            result = check_input_safety(instruction, principal="user_instruction")
+            if result.verdict == ScanVerdict.BLOCK:
+                reasons = "; ".join(result.reasons)
+                return Thought(
+                    f"Blocked: prompt injection detected ({reasons})",
+                    {"type": "stop", "reason": "prompt_injection_blocked"},
+                )
+        except ImportError:
+            pass
+        return None
+
     def check_output_safety(self, text: str, principal: str = "ai_provider") -> bool:
         """Scan AI output for prompt injection before executing as actions.
 

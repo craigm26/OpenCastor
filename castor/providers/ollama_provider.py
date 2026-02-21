@@ -398,6 +398,23 @@ class OllamaProvider(BaseProvider):
         available = [m["name"] for m in self.list_models()]
         raise OllamaModelNotFoundError(model, available)
 
+    def health_check(self) -> dict:
+        """Cheap health probe: ping the Ollama server root (no model loading)."""
+        t0 = time.time()
+        try:
+            self._ping()
+            return {
+                "ok": True,
+                "latency_ms": round((time.time() - t0) * 1000, 1),
+                "error": None,
+            }
+        except Exception as exc:
+            return {
+                "ok": False,
+                "latency_ms": round((time.time() - t0) * 1000, 1),
+                "error": str(exc),
+            }
+
     def think(
         self,
         image_bytes: bytes,
@@ -413,6 +430,10 @@ class OllamaProvider(BaseProvider):
         Returns:
             A Thought object with the model's response and parsed action.
         """
+        safety_block = self._check_instruction_safety(instruction)
+        if safety_block is not None:
+            return safety_block
+
         try:
             if self.is_vision and image_bytes:
                 return self._think_vision(image_bytes, instruction)

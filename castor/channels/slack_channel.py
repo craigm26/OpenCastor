@@ -62,9 +62,12 @@ class SlackChannel(BaseChannel):
             if not text:
                 return
 
-            reply = await self.handle_message(chat_id, text)
-            if reply:
-                await say(reply[:4000])
+            try:
+                reply = await self.handle_message(chat_id, text)
+                if reply:
+                    await say(reply[:4000])
+            except Exception as exc:
+                self.logger.error("Slack handle_mention handler error: %s", exc)
 
         @self.app.event("message")
         async def handle_dm(event, say):
@@ -80,9 +83,12 @@ class SlackChannel(BaseChannel):
             if not text:
                 return
 
-            reply = await self.handle_message(chat_id, text)
-            if reply:
-                await say(reply[:4000])
+            try:
+                reply = await self.handle_message(chat_id, text)
+                if reply:
+                    await say(reply[:4000])
+            except Exception as exc:
+                self.logger.error("Slack handle_dm handler error: %s", exc)
 
     async def start(self):
         """Start the Slack Socket Mode handler."""

@@ -175,6 +175,15 @@ class PCA9685RCDriver(DriverBase):
         self._set_pulse(self.thr_ch, thr_us)
         self._set_pulse(self.steer_ch, steer_us)
 
+    def health_check(self) -> dict:
+        """Check PCA9685 RC driver availability.
+
+        Returns ok=True when real I2C hardware is connected, ok=False in mock mode.
+        """
+        if self.pca is None:
+            return {"ok": False, "mode": "mock", "error": "PCA9685 unavailable (mock mode)"}
+        return {"ok": True, "mode": "hardware", "error": None}
+
     def stop(self):
         """Neutral throttle + center steering."""
         if self.pca is None:
@@ -250,6 +259,15 @@ class PCA9685Driver(DriverBase):
 
         self.motor_left.throttle = left_speed
         self.motor_right.throttle = right_speed
+
+    def health_check(self) -> dict:
+        """Check PCA9685 differential-drive driver availability.
+
+        Returns ok=True when real I2C hardware is connected, ok=False in mock mode.
+        """
+        if self.pca is None:
+            return {"ok": False, "mode": "mock", "error": "PCA9685/motor libs unavailable (mock mode)"}
+        return {"ok": True, "mode": "hardware", "error": None}
 
     def stop(self):
         if self.motor_left is not None:

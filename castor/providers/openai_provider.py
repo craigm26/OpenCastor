@@ -1,6 +1,8 @@
 import base64
 import logging
 import os
+import time
+from typing import Iterator
 
 from .base import BaseProvider, Thought
 
@@ -31,12 +33,33 @@ class OpenAIProvider(BaseProvider):
 
         self.client = OpenAI(**kwargs)
 
+    def health_check(self) -> dict:
+        """Cheap health probe: list models endpoint (no inference cost)."""
+        t0 = time.time()
+        try:
+            self.client.models.list()
+            return {
+                "ok": True,
+                "latency_ms": round((time.time() - t0) * 1000, 1),
+                "error": None,
+            }
+        except Exception as exc:
+            return {
+                "ok": False,
+                "latency_ms": round((time.time() - t0) * 1000, 1),
+                "error": str(exc),
+            }
+
     def think(
         self,
         image_bytes: bytes,
         instruction: str,
         surface: str = "whatsapp",
     ) -> Thought:
+        safety_block = self._check_instruction_safety(instruction)
+        if safety_block is not None:
+            return safety_block
+
         is_blank = not image_bytes or image_bytes == b"\x00" * len(image_bytes)
         system = (
             self.build_messaging_prompt(surface=surface)
@@ -83,3 +106,61 @@ class OpenAIProvider(BaseProvider):
         except Exception as e:
             logger.error(f"OpenAI error: {e}")
             return Thought(f"Error: {e}", None)
+
+    def think_stream(
+        self,
+        image_bytes: bytes,
+        instruction: str,
+        surface: str = "whatsapp",
+    ) -> Iterator[str]:
+        """Stream tokens from the OpenAI model.
+
+        Yields individual text chunks as they arrive.
+        """
+        safety_block = self._check_instruction_safety(instruction)
+        if safety_block is not None:
+            yield safety_block.raw_text
+            return
+
+        is_blank = not image_bytes or image_bytes == b"\x00" * len(image_bytes)
+        system = (
+            self.build_messaging_prompt(surface=surface)
+            if is_blank
+            else self.system_prompt
+        )
+
+        try:
+            if is_blank:
+                messages = [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": instruction},
+                ]
+            else:
+                b64_image = base64.b64encode(image_bytes).decode("utf-8")
+                messages = [
+                    {"role": "system", "content": system},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": instruction},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/jpeg;base64,{b64_image}"},
+                            },
+                        ],
+                    },
+                ]
+
+            stream = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                max_tokens=300,
+                stream=True,
+            )
+            for chunk in stream:
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    yield delta
+        except Exception as e:
+            logger.error(f"OpenAI streaming error: {e}")
+            yield f"Error: {e}"

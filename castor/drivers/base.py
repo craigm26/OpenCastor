@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Dict
 
 __all__ = ["DriverBase"]
 
@@ -10,6 +11,19 @@ class DriverBase(ABC):
     When the underlying hardware SDK is unavailable, drivers should degrade
     gracefully to a mock/logging mode rather than raising import errors.
     """
+
+    def health_check(self) -> Dict:
+        """Check whether the hardware is accessible and responsive.
+
+        Returns a dict with keys:
+            ``ok``    — True if the hardware is reachable.
+            ``mode``  — "hardware" if real hardware is active, "mock" otherwise.
+            ``error`` — Error message string, or None on success.
+
+        The default implementation returns ``{"ok": False, "mode": "mock", "error": None}``.
+        Override in concrete drivers to probe the actual hardware.
+        """
+        return {"ok": False, "mode": "mock", "error": None}
 
     @abstractmethod
     def move(self, linear: float = 0.0, angular: float = 0.0) -> None:

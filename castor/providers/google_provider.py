@@ -1,5 +1,7 @@
 import logging
 import os
+import time
+from typing import Iterator
 
 from .base import BaseProvider, Thought
 
@@ -69,12 +71,35 @@ class GoogleProvider(BaseProvider):
             tools=tools if tools else None,
         )
 
+    def health_check(self) -> dict:
+        """Cheap health probe: list models (no inference cost)."""
+        import google.generativeai as genai
+
+        t0 = time.time()
+        try:
+            next(iter(genai.list_models()), None)
+            return {
+                "ok": True,
+                "latency_ms": round((time.time() - t0) * 1000, 1),
+                "error": None,
+            }
+        except Exception as exc:
+            return {
+                "ok": False,
+                "latency_ms": round((time.time() - t0) * 1000, 1),
+                "error": str(exc),
+            }
+
     def think(
         self,
         image_bytes: bytes,
         instruction: str,
         surface: str = "whatsapp",
     ) -> Thought:
+        safety_block = self._check_instruction_safety(instruction)
+        if safety_block is not None:
+            return safety_block
+
         is_blank = not image_bytes or image_bytes == b"\x00" * len(image_bytes)
 
         try:
@@ -116,6 +141,45 @@ class GoogleProvider(BaseProvider):
         except Exception as e:
             logger.error(f"Gemini error: {e}")
             return Thought(f"Error: {e}", None)
+
+    def think_stream(
+        self,
+        image_bytes: bytes,
+        instruction: str,
+        surface: str = "whatsapp",
+    ) -> Iterator[str]:
+        """Stream tokens from the Gemini model.
+
+        Yields individual text chunks as they arrive.
+        """
+        safety_block = self._check_instruction_safety(instruction)
+        if safety_block is not None:
+            yield safety_block.raw_text
+            return
+
+        is_blank = not image_bytes or image_bytes == b"\x00" * len(image_bytes)
+
+        try:
+            if is_blank:
+                messaging_ctx = self.build_messaging_prompt(surface=surface)
+                response = self.model.generate_content(
+                    [f"{messaging_ctx}\n\nUser: {instruction}"],
+                    stream=True,
+                )
+            else:
+                image_part = {"mime_type": "image/jpeg", "data": image_bytes}
+                response = self.model.generate_content([instruction, image_part], stream=True)
+
+            for chunk in response:
+                try:
+                    text = chunk.text
+                    if text:
+                        yield text
+                except Exception:
+                    continue
+        except Exception as e:
+            logger.error(f"Gemini streaming error: {e}")
+            yield f"Error: {e}"
 
     def _extract_text(self, response) -> str:
         """Extract final text from response, skipping code/execution parts."""

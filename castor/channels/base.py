@@ -4,6 +4,8 @@ Channels receive commands from users on external platforms (WhatsApp, Telegram,
 Discord, Slack) and forward them to the robot's brain.
 """
 
+import asyncio
+import inspect
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -94,7 +96,12 @@ class BaseChannel(ABC):
                     enriched_text = text
                     user_id = chat_id
 
-                reply = self._on_message_callback(self.name, chat_id, text)
+                if inspect.iscoroutinefunction(self._on_message_callback):
+                    reply = await self._on_message_callback(self.name, chat_id, text)
+                else:
+                    reply = await asyncio.to_thread(
+                        self._on_message_callback, self.name, chat_id, text
+                    )
 
                 # Record brain reply in session store
                 try:

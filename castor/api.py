@@ -68,8 +68,10 @@ register_error_handlers(app)
 # ---------------------------------------------------------------------------
 _COMMAND_RATE_LIMIT = int(os.getenv("OPENCASTOR_COMMAND_RATE", "5"))  # max calls/second/IP
 _MAX_STREAMS = int(os.getenv("OPENCASTOR_MAX_STREAMS", "3"))  # max concurrent MJPEG clients
+_WEBHOOK_RATE_LIMIT = int(os.getenv("OPENCASTOR_WEBHOOK_RATE", "10"))  # max webhook calls/minute/sender
 _rate_lock = threading.Lock()
 _command_history: Dict[str, list] = collections.defaultdict(list)  # ip -> [timestamps]
+_webhook_history: Dict[str, list] = collections.defaultdict(list)  # sender_id -> [timestamps]
 _active_streams = 0
 
 
@@ -86,6 +88,24 @@ def _check_command_rate(client_ip: str) -> None:
                 headers={"Retry-After": "1"},
             )
         _command_history[client_ip].append(now)
+
+
+def _check_webhook_rate(sender_id: str) -> None:
+    """Sliding-window rate limit for webhook endpoints (per-sender, 1-minute window).
+
+    Raises 429 when a sender exceeds _WEBHOOK_RATE_LIMIT messages per minute.
+    """
+    now = time.time()
+    with _rate_lock:
+        history = _webhook_history[sender_id]
+        _webhook_history[sender_id] = [t for t in history if now - t < 60.0]
+        if len(_webhook_history[sender_id]) >= _WEBHOOK_RATE_LIMIT:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Webhook rate limit exceeded ({_WEBHOOK_RATE_LIMIT} req/min). Try again later.",
+                headers={"Retry-After": "60"},
+            )
+        _webhook_history[sender_id].append(now)
 
 
 # ---------------------------------------------------------------------------
@@ -669,6 +689,10 @@ async def whatsapp_webhook(request: Request):
     elif os.getenv("TWILIO_AUTH_TOKEN"):
         raise HTTPException(status_code=403, detail="Missing X-Twilio-Signature header")
 
+    # Rate limit by sender phone number
+    sender_id = form_dict.get("From", "unknown")
+    _check_webhook_rate(sender_id)
+
     reply = await channel.handle_webhook(form_dict)
     return JSONResponse(content={"reply": reply})
 
@@ -730,9 +754,14 @@ async def slack_webhook(request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
-    # Slack URL verification challenge
+    # Slack URL verification challenge (exempt from rate limiting)
     if payload.get("type") == "url_verification":
         return {"challenge": payload["challenge"]}
+
+    # Rate limit by Slack user ID
+    sender_id = payload.get("event", {}).get("user", "unknown")
+    _check_webhook_rate(sender_id)
+
     return {"ok": True}
 
 

@@ -12,8 +12,9 @@ Cache-safe forking note (Claude Code lesson):
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from typing import Any, Optional
+import time
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional
 
 from .apply_stage import MAX_RETRIES, ApplyStage
 from .dev_stage import DevStage
@@ -36,6 +37,8 @@ class ImprovementResult:
     applied: bool = False
     retries: int = 0
     error: Optional[str] = None
+    duration_ms: Optional[float] = None
+    stage_durations: Dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -46,6 +49,8 @@ class ImprovementResult:
             "applied": self.applied,
             "retries": self.retries,
             "error": self.error,
+            "duration_ms": self.duration_ms,
+            "stage_durations": self.stage_durations,
         }
 
 
@@ -56,6 +61,14 @@ class SisyphusStats:
     episodes_analyzed: int = 0
     improvements_applied: int = 0
     improvements_rejected: int = 0
+    total_duration_ms: float = 0.0
+
+    @property
+    def avg_duration_ms(self) -> float:
+        """Average duration per episode in milliseconds."""
+        if self.episodes_analyzed == 0:
+            return 0.0
+        return self.total_duration_ms / self.episodes_analyzed
 
 
 class SisyphusLoop:
@@ -68,24 +81,28 @@ class SisyphusLoop:
     ) -> None:
         self.config = config or {}
         self.provider = provider
-        self.pm = PMStage()
-        self.dev = DevStage()
-        self.qa = QAStage()
+        self.pm = PMStage(provider=provider)
+        self.dev = DevStage(provider=provider)
+        self.qa = QAStage(provider=provider)
         self.apply_stage = ApplyStage()
         self.stats = SisyphusStats()
 
     def run_episode(self, episode: Episode) -> ImprovementResult:
         """Run the full improvement loop on a single episode."""
         result = ImprovementResult(episode_id=episode.id)
+        episode_start = time.monotonic()
 
         try:
             # PM: Analyze
+            t0 = time.monotonic()
             report = self.pm.analyze(episode)
+            result.stage_durations["pm_ms"] = round((time.monotonic() - t0) * 1000, 1)
             result.report = report
             self.stats.episodes_analyzed += 1
 
             if not report.improvements:
                 logger.info("No improvements suggested for episode %s", episode.id)
+                result.duration_ms = round((time.monotonic() - episode_start) * 1000, 1)
                 return result
 
             # Dev→QA→Apply loop with retries
@@ -96,10 +113,14 @@ class SisyphusLoop:
                 result.retries = attempt
 
                 # Dev: Generate fix
+                t0 = time.monotonic()
                 patch = self.dev.generate_fix(
                     report,
                     previous_attempt=patch,
                     qa_feedback=qa_result,
+                )
+                result.stage_durations[f"dev_ms_attempt{attempt}"] = round(
+                    (time.monotonic() - t0) * 1000, 1
                 )
                 if not patch:
                     logger.info("Dev stage produced no patch on attempt %d", attempt)
@@ -108,17 +129,25 @@ class SisyphusLoop:
                 result.patch = patch
 
                 # QA: Verify
+                t0 = time.monotonic()
                 qa_result = self.qa.verify(patch, episode)
+                result.stage_durations[f"qa_ms_attempt{attempt}"] = round(
+                    (time.monotonic() - t0) * 1000, 1
+                )
                 result.qa_result = qa_result
 
                 if qa_result.approved:
                     # Apply
+                    t0 = time.monotonic()
                     applied = self.apply_stage.apply(patch, qa_result)
+                    result.stage_durations["apply_ms"] = round((time.monotonic() - t0) * 1000, 1)
                     result.applied = applied
                     if applied:
                         self.stats.improvements_applied += 1
                     else:
                         self.stats.improvements_rejected += 1
+                    result.duration_ms = round((time.monotonic() - episode_start) * 1000, 1)
+                    self.stats.total_duration_ms += result.duration_ms
                     return result
 
                 if not qa_result.retry_suggested:
@@ -133,6 +162,8 @@ class SisyphusLoop:
             logger.error("Sisyphus loop error for episode %s: %s", episode.id, e)
             result.error = str(e)
 
+        result.duration_ms = round((time.monotonic() - episode_start) * 1000, 1)
+        self.stats.total_duration_ms += result.duration_ms
         return result
 
     def run_batch(self, episodes: list[Episode]) -> list[ImprovementResult]:

@@ -75,11 +75,14 @@ class DiscordChannel(BaseChannel):
                 return
 
             chat_id = str(message.channel.id)
-            reply = await self.handle_message(chat_id, text)
-            if reply:
-                # Discord has a 2000 char limit
-                for i in range(0, len(reply), 2000):
-                    await message.channel.send(reply[i : i + 2000])
+            try:
+                reply = await self.handle_message(chat_id, text)
+                if reply:
+                    # Discord has a 2000 char limit
+                    for i in range(0, len(reply), 2000):
+                        await message.channel.send(reply[i : i + 2000])
+            except Exception as exc:
+                self.logger.error("Discord on_message handler error: %s", exc)
 
     async def start(self):
         """Start the Discord bot in the background."""

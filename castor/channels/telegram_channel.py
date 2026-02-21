@@ -90,6 +90,9 @@ class TelegramChannel(BaseChannel):
         chat_id = str(update.effective_chat.id)
         text = update.message.text
 
-        reply = await self.handle_message(chat_id, text)
-        if reply:
-            await update.message.reply_text(reply[:4096])
+        try:
+            reply = await self.handle_message(chat_id, text)
+            if reply:
+                await update.message.reply_text(reply[:4096])
+        except Exception as exc:
+            self.logger.error("Telegram _on_text handler error: %s", exc)

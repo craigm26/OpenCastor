@@ -1,6 +1,7 @@
 import base64
 import logging
 import os
+from typing import Iterator
 
 from castor.prompt_cache import CacheStats, build_cached_system_prompt
 
@@ -112,6 +113,10 @@ class AnthropicProvider(BaseProvider):
         instruction: str,
         surface: str = "whatsapp",
     ) -> Thought:
+        safety_block = self._check_instruction_safety(instruction)
+        if safety_block is not None:
+            return safety_block
+
         # Route through CLI if using OAuth token
         if getattr(self, "_use_cli", False):
             return self._think_via_cli(instruction)
@@ -207,6 +212,65 @@ class AnthropicProvider(BaseProvider):
         except Exception as e:
             logger.error(f"CLI error: {e}")
             return Thought(f"Error: {e}", None)
+
+    def think_stream(
+        self,
+        image_bytes: bytes,
+        instruction: str,
+        surface: str = "whatsapp",
+    ) -> Iterator[str]:
+        """Stream tokens from the Anthropic Claude model.
+
+        Yields individual text chunks as they arrive.
+        Falls back to a single-shot think() via the CLI path (which does not
+        support streaming yet).
+        """
+        safety_block = self._check_instruction_safety(instruction)
+        if safety_block is not None:
+            yield safety_block.raw_text
+            return
+
+        # CLI path doesn't support streaming — fall back to non-streaming
+        if getattr(self, "_use_cli", False):
+            thought = self._think_via_cli(instruction)
+            yield thought.raw_text
+            return
+
+        is_blank = not image_bytes or image_bytes == b"\x00" * len(image_bytes)
+        system_arg = (
+            self.build_messaging_prompt(surface=surface)
+            if is_blank
+            else self._cached_system_blocks
+        )
+        b64_image = base64.b64encode(image_bytes).decode("utf-8") if not is_blank else ""
+
+        content = []
+        if not is_blank and len(image_bytes) > 100:
+            content.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/jpeg",
+                        "data": b64_image,
+                    },
+                }
+            )
+        content.append({"type": "text", "text": instruction})
+
+        try:
+            with self.client.messages.stream(
+                model=self.model_name,
+                max_tokens=1024,
+                system=system_arg,
+                messages=[{"role": "user", "content": content}],
+                extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
+            ) as stream:
+                for text in stream.text_stream:
+                    yield text
+        except Exception as e:
+            logger.error(f"Anthropic streaming error: {e}")
+            yield f"Error: {e}"
 
     @property
     def cache_stats(self) -> dict:

@@ -118,6 +118,28 @@ class DynamixelDriver(DriverBase):
 
         return (ticks - 2048) * 0.088
 
+    def health_check(self) -> dict:
+        """Probe the first connected Dynamixel motor (or ID 1 as default).
+
+        Returns ok=True if the servo responds to a ping over the serial port.
+        Returns ok=False with mode="mock" when running without the SDK.
+        """
+        if self.portHandler is None or self.packetHandler is None:
+            return {"ok": False, "mode": "mock", "error": "Dynamixel SDK unavailable or port not open"}
+
+        motor_id = self.connected_motors[0] if self.connected_motors else 1
+        try:
+            _model_num, result, _error = self.packetHandler.ping(self.portHandler, motor_id)
+            if result == COMM_SUCCESS:
+                return {"ok": True, "mode": "hardware", "error": None}
+            return {
+                "ok": False,
+                "mode": "hardware",
+                "error": f"Ping failed on motor {motor_id}: comm_result={result}",
+            }
+        except Exception as exc:
+            return {"ok": False, "mode": "hardware", "error": str(exc)}
+
     def stop(self):
         self.disengage(self.connected_motors)
 
