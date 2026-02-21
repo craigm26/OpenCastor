@@ -497,6 +497,22 @@ def cmd_status(args) -> None:
         label = "ready" if ready else "not configured"
         print(f"    [{icon}] {name:12s} {label}")
 
+    # Show plugin-registered components from the component registry
+    from castor.registry import get_registry
+
+    registry = get_registry()
+    plugin_providers = registry.list_plugin_providers()
+    plugin_drivers = registry.list_plugin_drivers()
+    plugin_channels = registry.list_plugin_channels()
+    if plugin_providers or plugin_drivers or plugin_channels:
+        print("\n  Plugin Components:")
+        for name in plugin_providers:
+            print(f"    [+] provider  {name}")
+        for name in plugin_drivers:
+            print(f"    [+] driver    {name}")
+        for name in plugin_channels:
+            print(f"    [+] channel   {name}")
+
     audit_path = DEFAULT_AUDIT_LOG_PATH.expanduser()
     print(f"\n  Audit Log: {audit_path}")
     print()

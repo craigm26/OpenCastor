@@ -83,6 +83,27 @@ class PluginRegistry:
         else:
             logger.warning(f"Unknown hook event: {event}")
 
+    def add_provider(self, name: str, cls: type) -> None:
+        """Register a custom AI provider with the component registry."""
+        from castor.registry import get_registry
+
+        get_registry().add_provider(name, cls)
+        logger.debug(f"Plugin provider registered: {name}")
+
+    def add_driver(self, name: str, cls: type) -> None:
+        """Register a custom hardware driver with the component registry."""
+        from castor.registry import get_registry
+
+        get_registry().add_driver(name, cls)
+        logger.debug(f"Plugin driver registered: {name}")
+
+    def add_channel(self, name: str, cls: type) -> None:
+        """Register a custom messaging channel with the component registry."""
+        from castor.registry import get_registry
+
+        get_registry().add_channel(name, cls)
+        logger.debug(f"Plugin channel registered: {name}")
+
     def fire(self, event: str, *args, **kwargs):
         """Fire all hooks for an event."""
         for fn in self.hooks.get(event, []):
