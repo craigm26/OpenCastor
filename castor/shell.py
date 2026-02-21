@@ -67,16 +67,16 @@ class CastorShell(cmd.Cmd):
                  look what color is the object ahead?"""
         instruction = arg.strip() if arg.strip() else "Describe what you see in detail."
 
-        if self.camera:
+        if self.camera and self.camera.is_available():
             frame = self.camera.capture_jpeg()
             print(f"  Captured frame: {len(frame):,} bytes")
         else:
-            frame = b"\x00" * 1024
-            print("  No camera -- using blank frame.")
+            frame = b""
+            print("  No camera — text-only mode.")
 
         if self.brain:
             start = time.time()
-            thought = self.brain.think(frame, instruction)
+            thought = self.brain.think(frame, instruction, surface="terminal")
             latency = (time.time() - start) * 1000
             print(f"\n  AI says ({latency:.0f}ms):")
             print(f"  {thought.raw_text}\n")
@@ -108,9 +108,8 @@ class CastorShell(cmd.Cmd):
             return
 
         if self.brain:
-            frame = b"\x00" * 1024
             start = time.time()
-            thought = self.brain.think(frame, instruction)
+            thought = self.brain.think(b"", instruction, surface="terminal")
             latency = (time.time() - start) * 1000
             print(f"\n  AI response ({latency:.0f}ms):")
             print(f"  {thought.raw_text}\n")

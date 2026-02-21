@@ -86,8 +86,8 @@ def launch_repl(config_path: str):
         if not b:
             print("No brain available.")
             return None
-        frame = cam.capture_jpeg() if cam else b"\x00" * 1024
-        return b.think(frame, instruction)
+        frame = (cam.capture_jpeg() if (cam and cam.is_available()) else b"")
+        return b.think(frame, instruction, surface="terminal")
 
     def move(linear=0.0, angular=0.0):
         """Move the robot."""

@@ -99,7 +99,7 @@ with col1:
         # Generate response
         with st.spinner("Thinking..."):
             if st.session_state.brain is not None:
-                thought = st.session_state.brain.think(b"\x00" * 1024, user_text)
+                thought = st.session_state.brain.think(b"", user_text, surface="dashboard")
                 reply = thought.raw_text
             else:
                 reply = f"[No brain connected] Received: {user_text}"

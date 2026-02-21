@@ -106,16 +106,29 @@ class AnthropicProvider(BaseProvider):
         os.chmod(cls.TOKEN_PATH, 0o600)
         return cls.TOKEN_PATH
 
-    def think(self, image_bytes: bytes, instruction: str) -> Thought:
-        b64_image = base64.b64encode(image_bytes).decode("utf-8")
-
+    def think(
+        self,
+        image_bytes: bytes,
+        instruction: str,
+        surface: str = "whatsapp",
+    ) -> Thought:
         # Route through CLI if using OAuth token
         if getattr(self, "_use_cli", False):
             return self._think_via_cli(instruction)
 
+        # Determine if we have a real camera frame
+        is_blank = not image_bytes or image_bytes == b"\x00" * len(image_bytes)
+
+        # Use the conversational messaging prompt when there's no live camera frame
+        if is_blank:
+            system_prompt = self.build_messaging_prompt(surface=surface)
+        else:
+            system_prompt = self.system_prompt  # action-JSON vision prompt
+
+        b64_image = base64.b64encode(image_bytes).decode("utf-8") if not is_blank else ""
+
         # Build message content -- include image only if it has real data
         content = []
-        is_blank = image_bytes == b"\x00" * len(image_bytes)
         if not is_blank and len(image_bytes) > 100:
             content.append(
                 {
@@ -130,10 +143,12 @@ class AnthropicProvider(BaseProvider):
         content.append({"type": "text", "text": instruction})
 
         try:
+            # Use cached system blocks for vision/action mode; plain string for messaging
+            system_arg = self._cached_system_blocks if not is_blank else system_prompt
             response = self.client.messages.create(
                 model=self.model_name,
                 max_tokens=1024,
-                system=self._cached_system_blocks,  # list with cache_control breakpoints
+                system=system_arg,
                 messages=[{"role": "user", "content": content}],
                 extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
             )

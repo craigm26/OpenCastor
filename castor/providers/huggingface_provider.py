@@ -86,12 +86,17 @@ class HuggingFaceProvider(BaseProvider):
             self.is_vision,
         )
 
-    def think(self, image_bytes: bytes, instruction: str) -> Thought:
+    def think(
+        self,
+        image_bytes: bytes,
+        instruction: str,
+        surface: str = "whatsapp",
+    ) -> Thought:
         try:
             if self.is_vision and image_bytes:
                 return self._think_vision(image_bytes, instruction)
             else:
-                return self._think_text(instruction)
+                return self._think_text(instruction, surface=surface)
         except Exception as e:
             logger.error("HuggingFace inference error: %s", e)
             return Thought(f"Error: {e}", None)

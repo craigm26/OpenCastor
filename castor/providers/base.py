@@ -181,10 +181,22 @@ class BaseProvider(ABC):
     # ── Shared helpers ────────────────────────────────────────────────────────
 
     @abstractmethod
-    def think(self, image_bytes: bytes, instruction: str) -> Thought:
+    def think(
+        self,
+        image_bytes: bytes,
+        instruction: str,
+        surface: str = "whatsapp",
+    ) -> Thought:
         """
         Takes raw image bytes and a text instruction.
         Returns a structured Thought object.
+
+        Args:
+            image_bytes: JPEG frame bytes, or b'' for text-only (no camera).
+            instruction: Natural-language command or question from the operator.
+            surface:     Originating surface — "whatsapp" | "terminal" |
+                         "dashboard" | "voice". Used to select the right
+                         messaging prompt tone when no camera frame is present.
         """
         pass
 
