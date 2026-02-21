@@ -51,15 +51,16 @@ Supports **Linux, macOS (Apple Silicon & Intel), Windows 11, Raspberry Pi, Docke
 Installer flags: `--dry-run`, `--no-rpi`, `--skip-wizard`
 </details>
 
-## ✨ What's New in v2026.2.20.10
+## ✨ What's New in v2026.2.21.2
 
-- **8 AI providers** — Anthropic, Google, OpenAI, HuggingFace, Ollama, llama.cpp, MLX, Claude OAuth proxy
-- **Tiered brain architecture** — reactive rules → fast inference → deep planning
-- **Hailo-8 NPU vision** — on-device YOLOv8 object detection at ~250ms
-- **OAK-D stereo depth camera** — RGB + depth via DepthAI v3
-- **Community Hub** — browse, install, and share robot recipes with `castor hub`
-- **Interactive wizard** — provider selection, auth, messaging setup with recall of previous choices
-- **`castor doctor`** — full system health diagnostic
+- **Unified ComponentRegistry** — plug-in providers, drivers, and channels without touching core files
+- **Plugin manifest enforcement** — third-party plugins require a `plugin.json` before execution
+- **WorkAuthority audit logs** — tamper-evident on-disk record of every approved/denied action
+- **BoundsChecker wired into loop** — physical limits enforced on every motor command in real time
+- **base64 scan fix** — camera frames no longer trigger false-positive safety blocks (#38)
+- **CLAUDE.md fully refreshed** — developer guide now reflects all 131 modules, 8 providers, 16 presets
+
+> Previous highlights (v2026.2.20.x): 8 AI providers · Tiered brain · Hailo-8 NPU · OAK-D depth · Community Hub · Auto-start daemon · Offline fallback · `castor doctor`
 
 ## 🔄 Self-Improving Loop (Sisyphus Pattern)
 

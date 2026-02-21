@@ -94,7 +94,7 @@ class BaseChannel(ABC):
                     enriched_text = text
                     user_id = chat_id
 
-                reply = self._on_message_callback(self.name, chat_id, enriched_text)
+                reply = self._on_message_callback(self.name, chat_id, text)
 
                 # Record brain reply in session store
                 try:

@@ -630,9 +630,11 @@ class TestModuleLevelFlags:
         assert isinstance(HAS_DYNAMIXEL, bool)
 
     def test_pca9685_flag_false_in_test_env(self):
-        """In the test environment Adafruit libs are not installed."""
+        """HAS_PCA9685 is False when Adafruit libs are not installed."""
         from castor.drivers.pca9685 import HAS_PCA9685
 
+        if HAS_PCA9685:
+            pytest.skip("Adafruit libs are installed in this environment — flag is correctly True")
         assert HAS_PCA9685 is False
 
     def test_dynamixel_flag_false_in_test_env(self):

@@ -5,6 +5,27 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.21.3] - 2026-02-21 🟢 Fix 5 Failing Tests + Stale README
+
+### Fixed
+- **`castor/channels/base.py`** — `handle_message()` now passes the original `text` to the
+  `on_message` callback instead of the session-enriched string. Conversation context is stored
+  in the session store but no longer leaked into the callback's text parameter (#40)
+- **`castor/providers/base.py`** — `_clean_json()` rewritten to use brace-counting when
+  scanning backwards, correctly handling nested JSON objects like
+  `{"action": "move", "params": {"speed": 0.5}}`. Falls back to direct `json.loads()` first (#40)
+- **`castor/safety/state.py`** — `SafetyTelemetry.snapshot_dict()` method added; delegates
+  to `snapshot().to_dict()` for callers that need a plain dict (#40)
+- **`tests/test_drivers.py`** — `test_pca9685_flag_false_in_test_env` now skips gracefully
+  when Adafruit libs are installed (e.g., on a Raspberry Pi) rather than failing (#40)
+
+### Changed
+- **`README.md`** — "What's New" section updated to v2026.2.21.2/3; previously showed
+  v2026.2.20.10 which was 7 patch versions behind (#41)
+
+### Test Results
+- **2311 passed, 8 skipped, 0 failed** (was 5 failed before this release)
+
 ## [2026.2.21.2] - 2026-02-21 📚 Documentation Refresh + 11 New Issues
 
 ### Highlights

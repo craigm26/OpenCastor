@@ -157,6 +157,10 @@ class SafetyTelemetry:
         self._persist(snap)
         return snap
 
+    def snapshot_dict(self, safety_layer: Any) -> Dict[str, Any]:
+        """Return the current snapshot as a plain dict."""
+        return self.snapshot(safety_layer).to_dict()
+
     def _snapshot_impl(self, safety_layer: Any) -> "SafetyStateSnapshot":
         """Capture a point-in-time snapshot from the given SafetyLayer.
 

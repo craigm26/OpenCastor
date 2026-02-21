@@ -217,13 +217,24 @@ class BaseProvider(ABC):
         """Extract the last valid JSON object from messy LLM output."""
         try:
             clean = text.replace("```json", "").replace("```", "").strip()
-            # Walk backwards — action JSON is typically appended last
+            # Try direct parse first (handles plain JSON responses)
+            try:
+                return json.loads(clean)
+            except json.JSONDecodeError:
+                pass
+            # Walk backwards from the last '}', counting braces to find the
+            # matching outermost '{' — handles nested objects correctly.
             end = clean.rfind("}")
             if end == -1:
                 return None
-            start = clean.rfind("{", 0, end + 1)
-            if start == -1:
-                return None
-            return json.loads(clean[start : end + 1])
+            depth = 0
+            for i in range(end, -1, -1):
+                if clean[i] == "}":
+                    depth += 1
+                elif clean[i] == "{":
+                    depth -= 1
+                    if depth == 0:
+                        return json.loads(clean[i : end + 1])
+            return None
         except Exception:
             return None
