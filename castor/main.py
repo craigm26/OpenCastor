@@ -231,8 +231,8 @@ def load_config(path: str) -> dict:
 # ---------------------------------------------------------------------------
 # Driver factory
 # ---------------------------------------------------------------------------
-def get_driver(config: dict):
-    """Initialize the appropriate driver based on config."""
+def _builtin_get_driver(config: dict):
+    """Built-in driver factory: initialise the appropriate driver from *config*."""
     if not config.get("drivers"):
         return None
 
@@ -254,6 +254,18 @@ def get_driver(config: dict):
     else:
         logger.warning(f"Unknown driver protocol: {protocol}. Running without hardware.")
         return None
+
+
+def get_driver(config: dict):
+    """Initialise the appropriate hardware driver from *config*.
+
+    Thin wrapper around :meth:`~castor.registry.ComponentRegistry.get_driver`
+    that preserves backward compatibility.  Plugin-registered drivers take
+    precedence; built-in implementations fall back to :func:`_builtin_get_driver`.
+    """
+    from castor.registry import get_registry
+
+    return get_registry().get_driver(config)
 
 
 # ---------------------------------------------------------------------------

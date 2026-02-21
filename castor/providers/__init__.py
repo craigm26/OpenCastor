@@ -18,10 +18,11 @@ __all__ = [
 ]
 
 
-def get_provider(config: dict):
-    """
-    Factory function to initialize the correct AI provider.
-    Reads the 'provider' key from the RCAN agent config block.
+def _builtin_get_provider(config: dict):
+    """Built-in factory: initialise the correct AI provider from *config*.
+
+    Uses module-level class names so that test patches on
+    ``castor.providers.<ClassName>`` continue to work correctly.
     """
     provider_name = config.get("provider", "google").lower()
 
@@ -41,3 +42,15 @@ def get_provider(config: dict):
         return MLXProvider(config)
     else:
         raise ValueError(f"Unknown AI provider: {provider_name}")
+
+
+def get_provider(config: dict):
+    """Factory function to initialise the correct AI provider.
+
+    Thin wrapper around :meth:`~castor.registry.ComponentRegistry.get_provider`
+    that preserves backward compatibility.  Plugin-registered providers take
+    precedence; built-in implementations fall back to :func:`_builtin_get_provider`.
+    """
+    from castor.registry import get_registry
+
+    return get_registry().get_provider(config)

@@ -72,19 +72,15 @@ def get_ready_channels() -> List[str]:
     return [ch for ch in get_available_channels() if check_channel_ready(ch)]
 
 
-def create_channel(
+def _builtin_create_channel(
     name: str,
     config: Optional[dict] = None,
     on_message: Optional[Callable] = None,
 ):
-    """
-    Factory: instantiate a channel by name.
+    """Built-in channel factory: instantiate a channel by name.
 
-    Args:
-        name: Channel name (whatsapp, telegram, discord, slack).
-        config: Optional extra config dict.  Credentials are auto-resolved
-                from environment variables and merged.
-        on_message: Callback(channel_name, chat_id, text) -> reply_str.
+    Uses module-level ``_CHANNEL_CLASSES`` and ``resolve_channel_credentials``
+    so that test patches on ``castor.channels.*`` continue to work correctly.
     """
     if not _CHANNEL_CLASSES:
         _register_builtin_channels()
@@ -99,3 +95,25 @@ def create_channel(
     merged.update(env_creds)
 
     return cls(merged, on_message=on_message)
+
+
+def create_channel(
+    name: str,
+    config: Optional[dict] = None,
+    on_message: Optional[Callable] = None,
+):
+    """Factory: instantiate a channel by name.
+
+    Thin wrapper around :meth:`~castor.registry.ComponentRegistry.create_channel`
+    that preserves backward compatibility.  Plugin-registered channels take
+    precedence; built-in channels fall back to :func:`_builtin_create_channel`.
+
+    Args:
+        name: Channel name (whatsapp, telegram, discord, slack).
+        config: Optional extra config dict.  Credentials are auto-resolved
+                from environment variables and merged.
+        on_message: Callback(channel_name, chat_id, text) -> reply_str.
+    """
+    from castor.registry import get_registry
+
+    return get_registry().create_channel(name, config, on_message)
