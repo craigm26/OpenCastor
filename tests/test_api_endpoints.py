@@ -1300,3 +1300,131 @@ class TestCommandHistory:
         body = client.get("/api/command/history?limit=999").json()
         # Should not raise; count ≤ 50
         assert body["count"] <= 50
+
+
+# ---------------------------------------------------------------------------
+# POST /api/command/stream — rate-limit coverage  (#82)
+# ---------------------------------------------------------------------------
+
+class TestStreamCommandRateLimit:
+    def test_rate_limit_returns_429_with_think_stream(self, client, api_mod):
+        api_mod._COMMAND_RATE_LIMIT = 2
+        brain = MagicMock()
+        brain.think_stream.return_value = iter(["ok"])
+        brain._clean_json = MagicMock(return_value={"type": "stop"})
+        api_mod.state.brain = brain
+        api_mod._command_history.clear()
+
+        for i in range(3):
+            resp = client.post("/api/command/stream", json={"instruction": "cmd"})
+            if i < 2:
+                assert resp.status_code == 200
+            else:
+                assert resp.status_code == 429
+                body = resp.json()
+                # Structured error uses 'error' key (from api_errors.py)
+                assert "Rate limit" in body.get("error", body.get("detail", ""))
+
+    def test_rate_limit_returns_429_with_think_fallback(self, client, api_mod):
+        api_mod._COMMAND_RATE_LIMIT = 1
+        brain = MagicMock(spec=["think", "_clean_json"])
+        brain.think.return_value = MagicMock(raw_text="go", action={"type": "move"})
+        brain._clean_json = MagicMock(return_value={"type": "move"})
+        api_mod.state.brain = brain
+        api_mod._command_history.clear()
+
+        resp1 = client.post("/api/command/stream", json={"instruction": "go"})
+        assert resp1.status_code == 200
+
+        resp2 = client.post("/api/command/stream", json={"instruction": "go"})
+        assert resp2.status_code == 429
+        body = resp2.json()
+        assert "Rate limit" in body.get("error", body.get("detail", ""))
+
+    def test_rate_limit_clears_after_history_cleared(self, client, api_mod):
+        """After clearing the rate-limit history, new requests are accepted."""
+        api_mod._COMMAND_RATE_LIMIT = 1
+        api_mod.state.brain = _make_mock_brain()
+        api_mod._command_history.clear()
+
+        resp1 = client.post("/api/command/stream", json={"instruction": "go"})
+        assert resp1.status_code == 200
+
+        resp2 = client.post("/api/command/stream", json={"instruction": "go"})
+        assert resp2.status_code == 429
+
+        # Manually clear history (simulates the sliding window expiring)
+        api_mod._command_history.clear()
+
+        resp3 = client.post("/api/command/stream", json={"instruction": "go"})
+        assert resp3.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# GET /api/status — offline_fallback field  (#77)
+# ---------------------------------------------------------------------------
+
+class TestStatusOfflineFallback:
+    def test_status_returns_offline_fallback_disabled_when_none(self, client):
+        body = client.get("/api/status").json()
+        assert "offline_fallback" in body
+        assert body["offline_fallback"]["enabled"] is False
+
+    def test_status_returns_offline_fallback_when_enabled(self, client, api_mod):
+        fb = MagicMock()
+        fb.is_using_fallback = False
+        fb.fallback_ready = True
+        fb._config = {"provider": "ollama", "model": "llama3.2:3b"}
+        api_mod.state.offline_fallback = fb
+
+        body = client.get("/api/status").json()
+        assert body["offline_fallback"]["enabled"] is True
+        assert body["offline_fallback"]["using_fallback"] is False
+        assert body["offline_fallback"]["fallback_ready"] is True
+        assert body["offline_fallback"]["fallback_provider"] == "ollama"
+        assert body["offline_fallback"]["fallback_model"] == "llama3.2:3b"
+
+    def test_status_reports_when_using_fallback(self, client, api_mod):
+        fb = MagicMock()
+        fb.is_using_fallback = True
+        fb.fallback_ready = True
+        fb._config = {"provider": "llamacpp", "model": "phi-3"}
+        api_mod.state.offline_fallback = fb
+
+        body = client.get("/api/status").json()
+        assert body["offline_fallback"]["using_fallback"] is True
+        assert body["offline_fallback"]["fallback_provider"] == "llamacpp"
+
+
+# ---------------------------------------------------------------------------
+# GET /api/guardian/report  (#81)
+# ---------------------------------------------------------------------------
+
+class TestGuardianReport:
+    def test_returns_available_false_when_no_fs(self, client):
+        body = client.get("/api/guardian/report").json()
+        assert body["available"] is False
+
+    def test_returns_available_false_when_fs_has_no_shared_state(self, client, api_mod):
+        fs = _make_mock_fs()
+        # Explicitly delete the auto-created MagicMock attribute so hasattr() returns False
+        del fs._shared_state
+        api_mod.state.fs = fs
+        body = client.get("/api/guardian/report").json()
+        assert body["available"] is False
+
+    def test_returns_report_when_shared_state_has_guardian_data(self, client, api_mod):
+        from castor.agents.shared_state import SharedState
+
+        shared = SharedState()
+        report = {"estop_active": False, "vetoes": [], "approved": ["move"]}
+        shared.set("swarm.guardian_report", report)
+
+        fs = _make_mock_fs()
+        fs._shared_state = shared
+        api_mod.state.fs = fs
+
+        body = client.get("/api/guardian/report").json()
+        assert body["available"] is True
+        assert body["report"]["estop_active"] is False
+        assert body["report"]["approved"] == ["move"]

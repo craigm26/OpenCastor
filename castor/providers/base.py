@@ -1,6 +1,9 @@
 import json
+import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
+
+logger = logging.getLogger("OpenCastor.BaseProvider")
 
 
 class Thought:
@@ -183,6 +186,11 @@ class BaseProvider(ABC):
     def health_check(self) -> dict:
         """Verify the provider is reachable and returning valid responses.
 
+        Respects ``config["health_check_timeout_s"]`` (default: 5 s) to
+        avoid blocking gateway startup on slow or unreachable providers.
+        Uses ``concurrent.futures`` so it works on all platforms (including
+        Windows, which lacks SIGALRM).
+
         Returns a dict with keys:
             ``ok``          — True if the provider responded without error.
             ``latency_ms``  — Round-trip time in milliseconds.
@@ -192,15 +200,25 @@ class BaseProvider(ABC):
         exercises the full API path.  Override for a cheaper probe
         (e.g. a ``/health`` HTTP endpoint) when available.
         """
+        import concurrent.futures
         import time
 
+        timeout_s = float(self.config.get("health_check_timeout_s", 5.0))
         t0 = time.time()
         try:
-            self.think(b"", "ping")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(self.think, b"", "ping")
+                future.result(timeout=timeout_s)
             return {
                 "ok": True,
                 "latency_ms": round((time.time() - t0) * 1000, 1),
                 "error": None,
+            }
+        except concurrent.futures.TimeoutError:
+            return {
+                "ok": False,
+                "latency_ms": round((time.time() - t0) * 1000, 1),
+                "error": f"health_check timed out after {timeout_s}s",
             }
         except Exception as exc:
             return {
@@ -208,6 +226,27 @@ class BaseProvider(ABC):
                 "latency_ms": round((time.time() - t0) * 1000, 1),
                 "error": str(exc),
             }
+
+    def think_stream(
+        self,
+        image_bytes: bytes,
+        instruction: str,
+        surface: str = "whatsapp",
+    ) -> Iterator[str]:
+        """Stream LLM tokens for this provider.
+
+        The default implementation calls :meth:`think` and yields the full
+        response text as a single chunk.  Concrete providers should override
+        this with a true streaming implementation (e.g. via the SDK's stream
+        API) for lower time-to-first-token.
+        """
+        logger.debug(
+            "%s.think_stream() using default (non-streaming) fallback",
+            type(self).__name__,
+        )
+        thought = self.think(image_bytes, instruction, surface)
+        if thought.raw_text:
+            yield thought.raw_text
 
     @abstractmethod
     def think(

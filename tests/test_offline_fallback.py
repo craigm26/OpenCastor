@@ -186,3 +186,84 @@ class TestLifecycle:
         fb_provider.health_check.assert_called_once()
         mock_cm.start.assert_called_once()
         mgr.stop()
+
+
+# ---------------------------------------------------------------------------
+# Runtime connectivity-change provider switching  (#83)
+# ---------------------------------------------------------------------------
+
+class TestConnectivityChange:
+    """Verify that _on_connectivity_change correctly switches active provider."""
+
+    def _make_manager(self):
+        config = {
+            "offline_fallback": {
+                "enabled": True,
+                "provider": "ollama",
+                "model": "llama3.2:3b",
+            }
+        }
+        primary = _make_primary()
+        fb = _make_fallback_provider(ok=True)
+        mgr = OfflineFallbackManager(config=config, primary_provider=primary)
+        mgr._fallback = fb
+        return mgr, primary, fb
+
+    def test_get_active_switches_to_fallback_when_offline(self):
+        mgr, primary, fb = self._make_manager()
+        assert mgr.get_active_provider() is primary
+
+        mgr._on_connectivity_change(online=False)
+
+        assert mgr.is_using_fallback is True
+        assert mgr.get_active_provider() is fb
+
+    def test_get_active_returns_primary_when_online_again(self):
+        mgr, primary, fb = self._make_manager()
+        # Simulate: we were offline
+        mgr._using_fallback = True
+
+        mgr._on_connectivity_change(online=True)
+
+        assert mgr.is_using_fallback is False
+        assert mgr.get_active_provider() is primary
+
+    def test_repeated_offline_events_do_not_double_switch(self):
+        """Multiple offline events should not flip back to primary."""
+        mgr, primary, fb = self._make_manager()
+        mgr._on_connectivity_change(online=False)
+        mgr._on_connectivity_change(online=False)
+
+        assert mgr.is_using_fallback is True
+        assert mgr.get_active_provider() is fb
+
+    def test_online_event_when_already_online_is_noop(self):
+        mgr, primary, fb = self._make_manager()
+        mgr._on_connectivity_change(online=True)  # already online
+
+        assert mgr.is_using_fallback is False
+        assert mgr.get_active_provider() is primary
+
+    def test_alert_sent_on_going_offline(self):
+        mgr, _, _ = self._make_manager()
+        alert_fn = MagicMock()
+        mgr._channel_send = alert_fn
+        mgr._config["alert_channel"] = "slack"
+
+        mgr._on_connectivity_change(online=False)
+
+        alert_fn.assert_called_once()
+        # Alert message should mention the fallback provider
+        msg = alert_fn.call_args[0][0]
+        assert "ollama" in msg.lower() or "fallback" in msg.lower()
+
+    def test_alert_sent_on_coming_back_online(self):
+        mgr, _, _ = self._make_manager()
+        mgr._using_fallback = True
+        alert_fn = MagicMock()
+        mgr._channel_send = alert_fn
+        mgr._config["alert_channel"] = "slack"
+
+        mgr._on_connectivity_change(online=True)
+
+        alert_fn.assert_called_once()

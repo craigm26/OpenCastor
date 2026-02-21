@@ -139,6 +139,63 @@ class TestDriversBlock:
 
 
 # ---------------------------------------------------------------------------
+# offline_fallback block  (#78)
+# ---------------------------------------------------------------------------
+
+class TestOfflineFallbackBlock:
+    def test_no_offline_fallback_block_is_valid(self):
+        ok, _ = validate_rcan_config(_VALID)
+        assert ok is True
+
+    def test_valid_ollama_fallback(self):
+        cfg = _make_config(offline_fallback={"enabled": True, "provider": "ollama"})
+        ok, _ = validate_rcan_config(cfg)
+        assert ok is True
+
+    def test_valid_llamacpp_fallback(self):
+        cfg = _make_config(offline_fallback={"enabled": True, "provider": "llamacpp"})
+        ok, _ = validate_rcan_config(cfg)
+        assert ok is True
+
+    def test_valid_mlx_fallback(self):
+        cfg = _make_config(offline_fallback={"enabled": True, "provider": "mlx"})
+        ok, _ = validate_rcan_config(cfg)
+        assert ok is True
+
+    def test_invalid_provider_name(self):
+        cfg = _make_config(offline_fallback={"enabled": True, "provider": "unknown"})
+        ok, errors = validate_rcan_config(cfg)
+        assert ok is False
+        assert any("offline_fallback.provider" in e for e in errors)
+
+    def test_empty_provider_is_invalid_when_enabled(self):
+        cfg = _make_config(offline_fallback={"enabled": True, "provider": ""})
+        ok, errors = validate_rcan_config(cfg)
+        assert ok is False
+        assert any("offline_fallback.provider" in e for e in errors)
+
+    def test_disabled_fallback_skips_provider_check(self):
+        cfg = _make_config(offline_fallback={"enabled": False, "provider": "unknown"})
+        ok, _ = validate_rcan_config(cfg)
+        assert ok is True
+
+    def test_offline_fallback_not_a_dict(self):
+        cfg = _make_config(offline_fallback="ollama")
+        ok, errors = validate_rcan_config(cfg)
+        assert ok is False
+        assert any("offline_fallback" in e for e in errors)
+
+    def test_error_message_lists_valid_providers(self):
+        cfg = _make_config(offline_fallback={"enabled": True, "provider": "gpt4"})
+        _, errors = validate_rcan_config(cfg)
+        joined = " ".join(errors)
+        # Error should mention the valid options
+        assert "ollama" in joined
+        assert "llamacpp" in joined
+        assert "mlx" in joined
+
+
+# ---------------------------------------------------------------------------
 # log_validation_result helper
 # ---------------------------------------------------------------------------
 

@@ -88,6 +88,21 @@ def validate_rcan_config(config: dict) -> Tuple[bool, List[str]]:
                 "(or use --simulate to skip hardware)"
             )
 
+    # ── offline_fallback block (optional) ─────────────────────────────────────
+    offline_fb = config.get("offline_fallback")
+    if offline_fb is not None:
+        if not isinstance(offline_fb, dict):
+            errors.append("'offline_fallback' must be a mapping (dict), not a scalar")
+        elif offline_fb.get("enabled"):
+            provider = str(offline_fb.get("provider", "")).lower().strip()
+            _VALID_FALLBACK_PROVIDERS = {"ollama", "llamacpp", "mlx"}
+            if provider not in _VALID_FALLBACK_PROVIDERS:
+                errors.append(
+                    f"offline_fallback.provider must be one of: "
+                    f"{', '.join(sorted(_VALID_FALLBACK_PROVIDERS))} "
+                    f"(got '{provider or '<empty>'}')"
+                )
+
     return len(errors) == 0, errors
 
 

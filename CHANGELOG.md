@@ -5,6 +5,38 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.21.10] - 2026-02-21 🛡️ Provider streaming default, driver mock fix, guardian API, offline validation
+
+### Fixed (closes #79)
+- **`castor/drivers/base.py`** — `DriverBase.health_check()` default now returns `{ok: True, mode: "mock"}`.
+  Mock mode is functioning correctly; returning `ok=False` was causing false alarms in telemetry/monitoring.
+
+### Added (closes #76, #77, #78, #80, #81)
+- **`castor/providers/base.py`** — `BaseProvider.think_stream()` default: yields the full `think()` response
+  as a single chunk with a debug log line. All providers now have a guaranteed streaming interface; the
+  `/api/command/stream` endpoint no longer silently degrades without logging (#76)
+- **`castor/providers/base.py`** — `BaseProvider.health_check()` now respects
+  `config["health_check_timeout_s"]` (default 5 s) via `concurrent.futures`; cross-platform, no SIGALRM (#80)
+- **`castor/config_validation.py`** — `validate_rcan_config()` validates the optional `offline_fallback`
+  block: when `enabled: true`, rejects unknown `provider` values (only `ollama`, `llamacpp`, `mlx` are
+  accepted) with a clear error listing the valid options (#78)
+- **`castor/api.py`** — `GET /api/status` now returns a structured `offline_fallback` dict:
+  `{enabled, using_fallback, fallback_ready, fallback_provider, fallback_model}` instead of top-level
+  `fallback_ready`/`using_fallback` fields (#77)
+- **`castor/api.py`** — `GET /api/guardian/report`: returns the last `GuardianAgent` safety report from
+  `swarm.guardian_report` in SharedState; `{available: false}` when guardian is not initialized (#81)
+
+### Tests (closes #82, #83)
+- **`tests/test_api_endpoints.py`** — `TestStreamCommandRateLimit`: 3 tests verifying `/api/command/stream`
+  correctly enforces 429 rate limiting for both `think_stream()` and `think()` fallback code paths (#82)
+- **`tests/test_api_endpoints.py`** — `TestStatusOfflineFallback`: 3 tests for the structured
+  `offline_fallback` field in `/api/status` (#77)
+- **`tests/test_api_endpoints.py`** — `TestGuardianReport`: 3 tests for `GET /api/guardian/report` (#81)
+- **`tests/test_offline_fallback.py`** — `TestConnectivityChange`: 6 tests verifying that
+  `_on_connectivity_change()` correctly switches the active provider and fires alerts (#83)
+- **`tests/test_config_validation.py`** — `TestOfflineFallbackBlock`: 9 tests for the new
+  `offline_fallback` block validation logic (#78)
+
 ## [2026.2.21.9] - 2026-02-21 🌊 Streaming API, learner endpoints, config validation
 
 ### Added (closes #68, #69, #70, #71, #72, #73, #74, #75)

@@ -257,12 +257,18 @@ async def get_status(request: Request):
         except Exception as exc:
             payload["provider_health"] = {"ok": False, "error": str(exc)}
 
-    # Offline fallback status
+    # Offline fallback status — structured dict so clients can query state
     if state.offline_fallback is not None:
-        payload["fallback_ready"] = state.offline_fallback.fallback_ready
-        payload["using_fallback"] = state.offline_fallback.is_using_fallback
+        fb = state.offline_fallback
+        payload["offline_fallback"] = {
+            "enabled": True,
+            "using_fallback": fb.is_using_fallback,
+            "fallback_ready": fb.fallback_ready,
+            "fallback_provider": fb._config.get("provider", "unknown"),
+            "fallback_model": fb._config.get("model", "unknown"),
+        }
     else:
-        payload["fallback_ready"] = None
+        payload["offline_fallback"] = {"enabled": False}
 
     return _maybe_wrap_rcan(payload, request)
 
@@ -821,6 +827,39 @@ async def submit_episode(body: EpisodeSubmitRequest, run_improvement: bool = Fal
         return response
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Episode submission error: {exc}") from exc
+
+
+# ---------------------------------------------------------------------------
+# Guardian report endpoint (#81)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/guardian/report", dependencies=[Depends(verify_token)])
+async def guardian_report():
+    """Return the current safety veto report from GuardianAgent.
+
+    Returns ``{"available": false}`` when the guardian is not initialized.
+    When active, returns the most recent guardian report published to
+    ``swarm.guardian_report`` in SharedState, including ``estop_active``,
+    ``vetoes``, and ``approved`` action lists.
+    """
+    # Guardian report lives in the AppState's shared agent state (if any)
+    # Try the orchestrator's guardian first, then fall through gracefully.
+    try:
+        from castor.agents.guardian import GuardianAgent
+        from castor.agents.shared_state import SharedState
+
+        # Look for a guardian attached to the fs or a module-level shared state
+        if state.fs is not None and hasattr(state.fs, "_shared_state"):
+            report = state.fs._shared_state.get("swarm.guardian_report", None)
+            if report is not None:
+                return {"available": True, "report": report}
+
+        # No guardian state found — return a graceful unavailable response
+        return {"available": False, "reason": "Guardian not initialized"}
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Guardian report unavailable: {exc}"
+        ) from exc
 
 
 # ---------------------------------------------------------------------------

@@ -20,10 +20,11 @@ class DriverBase(ABC):
             ``mode``  — "hardware" if real hardware is active, "mock" otherwise.
             ``error`` — Error message string, or None on success.
 
-        The default implementation returns ``{"ok": False, "mode": "mock", "error": None}``.
-        Override in concrete drivers to probe the actual hardware.
+        The default implementation returns ``{"ok": True, "mode": "mock", "error": None}``
+        because mock mode is functioning correctly — the driver is available, just not
+        connected to real hardware.  Override in concrete drivers to probe actual hardware.
         """
-        return {"ok": False, "mode": "mock", "error": None}
+        return {"ok": True, "mode": "mock", "error": None}
 
     @abstractmethod
     def move(self, linear: float = 0.0, angular: float = 0.0) -> None:
