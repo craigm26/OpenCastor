@@ -5,6 +5,61 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.20.11] - 2026-02-20 💬 Messaging Prompt System
+
+### Highlights
+Introduces a canonical, surface-aware messaging pre-prompt that lives in all
+OpenCastor releases. `BaseProvider.build_messaging_prompt()` is the single
+source of truth for how robots communicate with humans via text or voice —
+across WhatsApp, terminal, dashboard, Discord, and future surfaces. All seven
+providers now honour the `surface=` parameter and use the shared prompt when
+operating in text-only (no camera) mode.
+
+### Added
+- **`BaseProvider.build_messaging_prompt()`** — canonical conversational system
+  prompt shared by all providers and all surfaces. Accepts:
+  - `robot_name` — from RCAN metadata
+  - `surface` — `"whatsapp"` | `"terminal"` | `"dashboard"` | `"voice"` |
+    `"discord"` | `"slack"` | `"irc"` | `"signal"` | `"sms"`
+  - `hardware` — live subsystem status dict (motors, camera, speaker)
+  - `capabilities` — RCAN capability names gate command vocabulary
+  - `sensor_snapshot` — live telemetry (distance, battery, speed, heading)
+  - `memory_context` — episodic/semantic memory from the virtual filesystem
+  - Front-loads natural-language → JSON command mappings; response rules
+    route commands to reply + action JSON, questions to plain English only
+- **`surface=` parameter on `BaseProvider.think()`** — all seven providers
+  (Anthropic, HuggingFace, OpenAI, Ollama, Google, MLX, LlamaCpp) accept and
+  thread `surface` through to the messaging prompt at call time
+- **`_CHANNEL_SURFACE` routing table in `api.py`** — `_handle_channel_message`
+  resolves channel name → surface automatically:
+  - WhatsApp / Telegram / Signal / SMS → `"whatsapp"`
+  - Discord / Slack / dashboard → `"dashboard"`
+  - IRC / terminal → `"terminal"`
+  - Voice channel → `"voice"`
+- **Surface-aware call sites wired**:
+  - `castor shell` (`do_look`, `do_think`) → `surface="terminal"`
+  - Streamlit dashboard chat → `surface="dashboard"`
+  - `castor/repl.py` `look()` → `surface="terminal"`
+  - Anthropic provider uses `build_messaging_prompt()` in text-only mode
+    (keeps cached system blocks for vision/action path)
+
+### Fixed
+- `_capture_live_frame()` now checks `camera.is_available()` and sniffs 16
+  bytes to reject null-padding (`b"\x00"*N`) returned on CSI capture failure;
+  returns `b""` so vision inference is never called for text-only messages
+- `HuggingFaceProvider.think()` guard: `if self.is_vision and image_bytes`
+  (empty bytes are falsy — routes to `_think_text` instead of `_think_vision`)
+- WhatsApp group policy evaluated before self-chat guard so owner can message
+  their own groups (`is_from_me=True` in group context no longer short-circuits)
+- Channel YAML config now passed to `create_channel()` so `group_policy`,
+  `self_chat_mode`, `allow_from` take effect from `bob.rcan.yaml`
+- Telegram channel `NameError: 'Update' is not defined` when
+  `python-telegram-bot` is not installed — stub fallback types added
+- neonize `err-client-outdated` (405): rebuilt `neonize-linux-arm64.so` from
+  source with whatsmeow updated 2025-12-05 → 2026-02-19
+- All blank-frame call sites changed from `b"\x00"*1024` to `b""` (shell,
+  dashboard, repl) so vision guard works correctly
+
 ## [2026.2.20.10] - 2026-02-19 📡 Channel messaging wired into main loop
 
 ### Highlights

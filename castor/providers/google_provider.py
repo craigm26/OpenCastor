@@ -69,11 +69,25 @@ class GoogleProvider(BaseProvider):
             tools=tools if tools else None,
         )
 
-    def think(self, image_bytes: bytes, instruction: str) -> Thought:
-        image_part = {"mime_type": "image/jpeg", "data": image_bytes}
+    def think(
+        self,
+        image_bytes: bytes,
+        instruction: str,
+        surface: str = "whatsapp",
+    ) -> Thought:
+        is_blank = not image_bytes or image_bytes == b"\x00" * len(image_bytes)
 
         try:
-            response = self.model.generate_content([instruction, image_part])
+            if is_blank:
+                # Text-only: prepend messaging prompt (Gemini system_instruction is
+                # set at model init, so we inject it as a leading text part here)
+                messaging_ctx = self.build_messaging_prompt(surface=surface)
+                response = self.model.generate_content(
+                    [f"{messaging_ctx}\n\nUser: {instruction}"]
+                )
+            else:
+                image_part = {"mime_type": "image/jpeg", "data": image_bytes}
+                response = self.model.generate_content([instruction, image_part])
 
             # Agentic Vision responses may include executable_code + code_execution_result
             # parts before the final text. Collect all text parts.

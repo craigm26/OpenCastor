@@ -79,7 +79,12 @@ class MLXProvider(BaseProvider):
 
         self.is_vision = self.model_name in VISION_MODELS or config.get("vision_enabled", False)
 
-    def think(self, image_bytes: bytes, instruction: str) -> Thought:
+    def think(
+        self,
+        image_bytes: bytes,
+        instruction: str,
+        surface: str = "whatsapp",
+    ) -> Thought:
         try:
             if self._use_server:
                 return self._think_server(image_bytes, instruction)

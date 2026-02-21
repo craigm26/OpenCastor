@@ -73,7 +73,12 @@ class LlamaCppProvider(BaseProvider):
             except Exception as e:
                 logger.warning(f"Ollama pre-load failed ({e}), will load on first call")
 
-    def think(self, image_bytes: bytes, instruction: str) -> Thought:
+    def think(
+        self,
+        image_bytes: bytes,
+        instruction: str,
+        surface: str = "whatsapp",
+    ) -> Thought:
         try:
             if self._direct_model:
                 return self._think_direct(instruction)

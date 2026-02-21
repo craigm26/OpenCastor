@@ -41,7 +41,7 @@ logger = logging.getLogger("OpenCastor.Gateway")
 app = FastAPI(
     title="OpenCastor Gateway",
     description="REST API for controlling your robot and receiving messages from channels.",
-    version="2026.2.17.5",
+    version=__import__("importlib.metadata", fromlist=["version"]).version("opencastor"),
 )
 
 # CORS: configurable via OPENCASTOR_CORS_ORIGINS env var (comma-separated).
@@ -586,10 +586,29 @@ def _speak_reply(text: str):
         pass
 
 
+# Map channel names to prompt surface types.
+# Governs tone/format injected into build_messaging_prompt().
+_CHANNEL_SURFACE: dict[str, str] = {
+    "whatsapp": "whatsapp",   # no markdown, short, phone-friendly
+    "telegram": "whatsapp",   # same constraints
+    "signal":   "whatsapp",
+    "sms":      "whatsapp",
+    "discord":  "dashboard",  # supports markdown, richer context
+    "slack":    "dashboard",
+    "irc":      "terminal",   # plain text only
+    "terminal": "terminal",
+    "dashboard": "dashboard",
+    "voice":    "voice",      # TTS path — no symbols, spoken phrasing
+}
+
+
 def _handle_channel_message(channel_name: str, chat_id: str, text: str) -> str:
     """Callback invoked by channels when a message arrives."""
     if state.brain is None:
         return "Robot brain is not initialized. Please load a config first."
+
+    # Resolve prompt surface from channel name (default: whatsapp)
+    surface = _CHANNEL_SURFACE.get(channel_name.lower(), "whatsapp")
 
     # Push the incoming message into the context window
     if state.fs:
@@ -607,7 +626,7 @@ def _handle_channel_message(channel_name: str, chat_id: str, text: str) -> str:
 
     # Use live camera frame so the brain can see what's in front of it
     image_bytes = _capture_live_frame()
-    thought = state.brain.think(image_bytes, instruction)
+    thought = state.brain.think(image_bytes, instruction, surface=surface)
     state.last_thought = {
         "raw_text": thought.raw_text,
         "action": thought.action,

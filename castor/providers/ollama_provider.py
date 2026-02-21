@@ -398,7 +398,12 @@ class OllamaProvider(BaseProvider):
         available = [m["name"] for m in self.list_models()]
         raise OllamaModelNotFoundError(model, available)
 
-    def think(self, image_bytes: bytes, instruction: str) -> Thought:
+    def think(
+        self,
+        image_bytes: bytes,
+        instruction: str,
+        surface: str = "whatsapp",
+    ) -> Thought:
         """Generate a response from the Ollama model.
 
         Args:
@@ -412,7 +417,7 @@ class OllamaProvider(BaseProvider):
             if self.is_vision and image_bytes:
                 return self._think_vision(image_bytes, instruction)
             else:
-                return self._think_text(instruction)
+                return self._think_text(instruction, surface=surface)
         except OllamaConnectionError:
             raise
         except Exception as e:
@@ -446,12 +451,12 @@ class OllamaProvider(BaseProvider):
         action = self._clean_json(text)
         return Thought(text, action)
 
-    def _think_text(self, instruction: str) -> Thought:
+    def _think_text(self, instruction: str, surface: str = "whatsapp") -> Thought:
         """Text-only inference via /api/chat."""
         payload = {
             "model": self.model_name,
             "messages": [
-                {"role": "system", "content": self.system_prompt},
+                {"role": "system", "content": self.build_messaging_prompt(surface=surface)},
                 {"role": "user", "content": instruction},
             ],
             "stream": False,
@@ -467,7 +472,12 @@ class OllamaProvider(BaseProvider):
         action = self._clean_json(text)
         return Thought(text, action)
 
-    def think_stream(self, image_bytes: bytes, instruction: str) -> Iterator[str]:
+    def think_stream(
+        self,
+        image_bytes: bytes,
+        instruction: str,
+        surface: str = "whatsapp",
+    ) -> Iterator[str]:
         """Stream tokens from the Ollama model.
 
         Yields individual text chunks as they arrive.
