@@ -250,13 +250,26 @@ class WhatsAppChannel(BaseChannel):
                         return
                 # open: fall through
 
-            # ── Extract text ──────────────────────────────────────────────
+            # ── Extract text or audio ─────────────────────────────────────
             msg = message.Message
             text = msg.conversation or ""
             if not text and hasattr(msg, "extendedTextMessage"):
                 ext = msg.extendedTextMessage
                 if ext and hasattr(ext, "text"):
                     text = ext.text or ""
+
+            # Handle voice/audio messages
+            if not text:
+                audio_msg = None
+                for attr in ("audioMessage", "voiceMessage"):
+                    candidate = getattr(msg, attr, None)
+                    if candidate is not None:
+                        audio_msg = candidate
+                        break
+
+                if audio_msg is not None:
+                    text = self._transcribe_audio_message(client, audio_msg) or ""
+
             if not text:
                 return
 
@@ -273,6 +286,46 @@ class WhatsAppChannel(BaseChannel):
 
         except Exception as e:
             self.logger.error(f"Error handling incoming message: {e}")
+
+    def _transcribe_audio_message(self, client, audio_msg) -> Optional[str]:
+        """Download and transcribe a WhatsApp audio/voice message.
+
+        Args:
+            client: neonize NewClient instance.
+            audio_msg: neonize audioMessage or voiceMessage protobuf object.
+
+        Returns:
+            Transcribed text, or None if unavailable.
+        """
+        try:
+            from castor import voice as voice_mod
+        except ImportError:
+            self.logger.warning("castor.voice not available — voice message ignored")
+            return None
+
+        try:
+            # neonize: client.download_media_message(audio_msg) → bytes
+            audio_bytes = client.download_media_message(audio_msg)
+            if not audio_bytes:
+                return None
+
+            # WhatsApp voice notes are OGG/Opus; audio files vary
+            mime = getattr(audio_msg, "mimetype", "") or ""
+            hint = "ogg"
+            if "mp4" in mime or "m4a" in mime:
+                hint = "m4a"
+            elif "mp3" in mime or "mpeg" in mime:
+                hint = "mp3"
+            elif "wav" in mime:
+                hint = "wav"
+
+            text = voice_mod.transcribe_bytes(audio_bytes, hint_format=hint)
+            if text:
+                self.logger.info("WhatsApp voice → text: %r", text[:80])
+            return text
+        except Exception as exc:
+            self.logger.error("WhatsApp audio transcription failed: %s", exc)
+            return None
 
     def _handle_pairing_request(self, client, chat_jid, sender_number: str, message):
         """Send a pairing code to an unknown sender."""

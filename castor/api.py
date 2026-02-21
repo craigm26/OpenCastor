@@ -22,7 +22,7 @@ import time
 from typing import Any, Dict, Optional
 
 import yaml
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -860,6 +860,73 @@ async def guardian_report():
         raise HTTPException(
             status_code=500, detail=f"Guardian report unavailable: {exc}"
         ) from exc
+
+
+# ---------------------------------------------------------------------------
+# Audio transcription endpoint (#89)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/audio/transcribe", dependencies=[Depends(verify_token)])
+async def audio_transcribe(
+    file: UploadFile = File(...),
+    engine: str = "auto",
+):
+    """Transcribe an uploaded audio file to text.
+
+    Accepts any common audio format (ogg, mp3, wav, m4a, webm, flac).
+    Uses the tiered transcription pipeline from ``castor.voice``:
+    Whisper API → local Whisper → Google SpeechRecognition.
+
+    Args:
+        file: Multipart audio upload.
+        engine: Force a specific engine ("whisper_api", "whisper_local",
+                "google") or "auto" (default).
+
+    Returns:
+        ``{"text": str, "engine": str, "duration_ms": float}``
+
+    Raises:
+        422 if no file is provided.
+        503 if no transcription engine is available.
+        500 on unexpected error.
+    """
+    import time as _time
+
+    try:
+        from castor import voice as voice_mod
+    except ImportError:
+        raise HTTPException(
+            status_code=503, detail="Voice transcription module not available"
+        )
+
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=422, detail="Empty audio file")
+
+    available = voice_mod.available_engines()
+    if not available and engine == "auto":
+        raise HTTPException(
+            status_code=503,
+            detail="No transcription engines available. "
+            "Set OPENAI_API_KEY for Whisper API or install 'whisper'/'SpeechRecognition'.",
+        )
+
+    filename = file.filename or "audio.ogg"
+    hint = filename.rsplit(".", 1)[-1].lower() if "." in filename else "ogg"
+
+    t0 = _time.time()
+    text = voice_mod.transcribe_bytes(audio_bytes, hint_format=hint, engine=engine)
+    duration_ms = round((_time.time() - t0) * 1000, 1)
+
+    if text is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Transcription failed — audio may be inaudible or in an unsupported format",
+        )
+
+    resolved_engine = engine if engine != "auto" else (available[0] if available else "unknown")
+    return {"text": text, "engine": resolved_engine, "duration_ms": duration_ms}
 
 
 # ---------------------------------------------------------------------------

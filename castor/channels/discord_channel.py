@@ -11,7 +11,7 @@ Setup:
 
 import asyncio
 import logging
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 from castor.channels.base import BaseChannel
 
@@ -23,6 +23,63 @@ try:
     HAS_DISCORD = True
 except ImportError:
     HAS_DISCORD = False
+
+
+_AUDIO_MIME_PREFIXES = ("audio/", "video/ogg")
+_AUDIO_EXTENSIONS = (".ogg", ".oga", ".mp3", ".mp4", ".m4a", ".wav", ".flac", ".webm", ".opus")
+
+
+def _find_audio_attachment(attachments) -> Optional["discord.Attachment"]:
+    """Return the first audio attachment from a Discord message, or None."""
+    for att in attachments:
+        ct = (att.content_type or "").lower()
+        fn = (att.filename or "").lower()
+        if any(ct.startswith(p) for p in _AUDIO_MIME_PREFIXES):
+            return att
+        if any(fn.endswith(ext) for ext in _AUDIO_EXTENSIONS):
+            return att
+    return None
+
+
+async def _handle_discord_audio(channel_obj, message, chat_id: str, attachment) -> None:
+    """Download a Discord audio attachment and transcribe it."""
+    import httpx
+
+    try:
+        from castor import voice as voice_mod
+    except ImportError:
+        logger.warning("castor.voice not available — voice input ignored")
+        await message.channel.send("🔇 Voice transcription not available on this server.")
+        return
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(attachment.url)
+            resp.raise_for_status()
+            audio_bytes = resp.content
+
+        fn = (attachment.filename or "audio.ogg").lower()
+        hint = "ogg"
+        for ext in _AUDIO_EXTENSIONS:
+            if fn.endswith(ext):
+                hint = ext.lstrip(".")
+                break
+
+        text = voice_mod.transcribe_bytes(audio_bytes, hint_format=hint)
+        if not text:
+            await message.channel.send(
+                "⚠️ Could not transcribe audio. Please try again or send text."
+            )
+            return
+
+        logger.info("Discord voice → text: %r", text[:80])
+        reply = await channel_obj.handle_message(chat_id, text)
+        if reply:
+            for i in range(0, len(reply), 2000):
+                await message.channel.send(reply[i : i + 2000])
+    except Exception as exc:
+        logger.error("Discord audio handler error: %s", exc)
+        await message.channel.send("⚠️ Error processing voice message.")
 
 
 class DiscordChannel(BaseChannel):
@@ -66,6 +123,14 @@ class DiscordChannel(BaseChannel):
             if not is_dm and not is_mentioned:
                 return
 
+            chat_id = str(message.channel.id)
+
+            # Handle audio attachments (voice input)
+            audio_attachment = _find_audio_attachment(message.attachments)
+            if audio_attachment is not None:
+                await _handle_discord_audio(self, message, chat_id, audio_attachment)
+                return
+
             text = message.content
             # Strip the bot mention from the message
             if is_mentioned:
@@ -74,7 +139,6 @@ class DiscordChannel(BaseChannel):
             if not text:
                 return
 
-            chat_id = str(message.channel.id)
             try:
                 reply = await self.handle_message(chat_id, text)
                 if reply:

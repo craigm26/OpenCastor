@@ -464,6 +464,33 @@ class Speaker:
             return
         threading.Thread(target=self._speak, args=(text,), daemon=True).start()
 
+    @staticmethod
+    def _split_sentences(text: str, max_chunk: int = 500) -> list:
+        """Split text into sentence-sized chunks for gTTS.
+
+        Splits on sentence-ending punctuation first, then falls back to
+        splitting on whitespace if a single sentence exceeds max_chunk.
+        """
+        import re
+
+        # Split on sentence boundaries while keeping the delimiter
+        raw = re.split(r"(?<=[.!?])\s+", text.strip())
+        chunks = []
+        for sentence in raw:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            # If a single sentence is too long, split on whitespace
+            while len(sentence) > max_chunk:
+                cut = sentence.rfind(" ", 0, max_chunk)
+                if cut == -1:
+                    cut = max_chunk
+                chunks.append(sentence[:cut].strip())
+                sentence = sentence[cut:].strip()
+            if sentence:
+                chunks.append(sentence)
+        return chunks or [text[:max_chunk]]
+
     def _speak(self, text: str):
         with self._lock:
             try:
@@ -479,14 +506,16 @@ class Speaker:
                         self.enabled = False
                         return
 
-                buf = io.BytesIO()
-                tts = gTTS(text=text[:200], lang=self.language)
-                tts.write_to_fp(buf)
-                buf.seek(0)
-                pygame.mixer.music.load(buf, "mp3")
-                pygame.mixer.music.play()
-                while pygame.mixer.music.get_busy():
-                    time.sleep(0.1)
+                for chunk in self._split_sentences(text):
+                    buf = io.BytesIO()
+                    tts = gTTS(text=chunk, lang=self.language)
+                    tts.write_to_fp(buf)
+                    buf.seek(0)
+                    pygame.mixer.music.load(buf, "mp3")
+                    pygame.mixer.music.play()
+                    while pygame.mixer.music.get_busy():
+                        time.sleep(0.1)
+                    time.sleep(0.15)  # brief pause between sentences
             except Exception as exc:
                 logger.debug(f"TTS error: {exc}")
 

@@ -41,6 +41,10 @@ if "gateway_url" not in st.session_state:
     )
 if "api_token" not in st.session_state:
     st.session_state.api_token = os.getenv("OPENCASTOR_API_TOKEN", "")
+if "voice_mode" not in st.session_state:
+    st.session_state.voice_mode = False
+if "voice_speak_replies" not in st.session_state:
+    st.session_state.voice_speak_replies = True
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -70,6 +74,58 @@ with st.sidebar:
     st.session_state.api_token = st.text_input(
         "API Token", value=st.session_state.api_token, type="password"
     )
+
+    st.divider()
+    st.markdown("### 🎤 Voice Mode")
+    st.session_state.voice_mode = st.toggle(
+        "Continuous Voice Mode",
+        value=st.session_state.voice_mode,
+        help="When enabled, click 'Speak' to capture voice and auto-submit to the robot.",
+    )
+    if st.session_state.voice_mode:
+        st.session_state.voice_speak_replies = st.checkbox(
+            "Speak replies aloud",
+            value=st.session_state.voice_speak_replies,
+            help="Use browser speech synthesis to read the robot's reply.",
+        )
+        st.caption("🟢 Voice mode active — click '🎤 Speak' in the Command tab")
+
+        # Browser-side continuous speech recognition via JavaScript
+        st.components.v1.html(
+            """
+<script>
+function castorStartVoice() {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        alert('Voice input not supported in this browser. Try Chrome or Edge.');
+        return;
+    }
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = function(event) {
+        const text = event.results[0][0].transcript;
+        // Post to Streamlit via query param trick
+        const url = new URL(window.location.href);
+        url.searchParams.set('voice_input', text);
+        window.parent.postMessage({type: 'streamlit:setComponentValue', value: text}, '*');
+    };
+    recognition.onerror = function(e) {
+        console.warn('Voice recognition error:', e.error);
+    };
+    recognition.start();
+}
+window.castorStartVoice = castorStartVoice;
+</script>
+<button onclick="castorStartVoice()"
+  style="padding:8px 18px;border-radius:20px;background:#4CAF50;color:white;border:none;cursor:pointer;font-size:14px;">
+  🎤 Browser Voice
+</button>
+""",
+            height=60,
+        )
 
     st.divider()
     if st.button("EMERGENCY STOP", type="primary"):
@@ -112,16 +168,23 @@ with tab_cmd:
 
         c1, c2 = st.columns([1, 4])
         with c1:
-            if st.button("🎤 Speak"):
+            speak_label = "🎤 Speak" if not st.session_state.voice_mode else "🎤 Speak (Voice Mode)"
+            if st.button(speak_label):
                 try:
                     import speech_recognition as sr
 
                     r = sr.Recognizer()
                     with sr.Microphone() as source:
-                        st.toast("Listening...", icon="🎤")
-                        audio = r.listen(source, timeout=5)
+                        st.toast("Listening... speak now", icon="🎤")
+                        audio = r.listen(source, timeout=8, phrase_time_limit=30)
                         text = r.recognize_google(audio)
                         st.session_state["voice_input"] = text
+                        if st.session_state.voice_mode:
+                            st.toast(f"Heard: {text[:60]}", icon="✅")
+                except sr.WaitTimeoutError:
+                    st.toast("No speech detected — try again", icon="⏱️")
+                except sr.UnknownValueError:
+                    st.toast("Could not understand audio — try again", icon="❓")
                 except Exception as e:
                     st.toast(f"Voice error: {e}", icon="❌")
 
@@ -156,22 +219,58 @@ with tab_cmd:
             with st.chat_message("assistant"):
                 st.markdown(reply)
 
-            try:
-                from gtts import gTTS
+            # Browser speech synthesis (voice mode) — no char limit, no server TTS needed
+            if st.session_state.voice_mode and st.session_state.voice_speak_replies:
+                safe_reply = reply.replace("\\", "\\\\").replace("`", "\\`").replace('"', '\\"')
+                st.components.v1.html(
+                    f"""
+<script>
+(function() {{
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    synth.cancel();
+    const utt = new SpeechSynthesisUtterance(`{safe_reply}`);
+    utt.lang = 'en-US';
+    utt.rate = 1.0;
+    synth.speak(utt);
+}})();
+</script>
+""",
+                    height=0,
+                )
+            else:
+                # Server-side gTTS for non-voice-mode (sentence-chunked, no 200-char limit)
+                try:
+                    import tempfile
 
-                tts = gTTS(text=reply[:200], lang="en")
-                import tempfile
+                    from gtts import gTTS
 
-                tmp_mp3 = os.path.join(tempfile.gettempdir(), "castor_response.mp3")
-                tts.save(tmp_mp3)
-                if sys.platform == "darwin":
-                    os.system(f"afplay {tmp_mp3} &")
-                elif sys.platform == "win32":
-                    os.system(f'start /b "" "{tmp_mp3}"')
-                else:
-                    os.system(f"mpg321 {tmp_mp3} 2>/dev/null &")
-            except Exception:
-                pass
+                    def _split_sentences(text, max_chunk=500):
+                        import re
+                        raw = re.split(r"(?<=[.!?])\s+", text.strip())
+                        chunks = []
+                        for s in raw:
+                            while len(s) > max_chunk:
+                                cut = s.rfind(" ", 0, max_chunk)
+                                cut = cut if cut != -1 else max_chunk
+                                chunks.append(s[:cut].strip())
+                                s = s[cut:].strip()
+                            if s:
+                                chunks.append(s)
+                        return chunks or [text[:max_chunk]]
+
+                    for chunk in _split_sentences(reply):
+                        tts = gTTS(text=chunk, lang="en")
+                        tmp_mp3 = os.path.join(tempfile.gettempdir(), "castor_response.mp3")
+                        tts.save(tmp_mp3)
+                        if sys.platform == "darwin":
+                            os.system(f"afplay {tmp_mp3} &")
+                        elif sys.platform == "win32":
+                            os.system(f'start /b "" "{tmp_mp3}"')
+                        else:
+                            os.system(f"mpg321 {tmp_mp3} 2>/dev/null &")
+                except Exception:
+                    pass
 
             st.session_state.pop("voice_input", None)
 

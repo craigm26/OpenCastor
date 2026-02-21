@@ -9,7 +9,7 @@ without hardware, AI providers, or messaging SDKs.
 import base64
 import collections
 import time
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from starlette.testclient import TestClient
@@ -1428,3 +1428,70 @@ class TestGuardianReport:
         assert body["available"] is True
         assert body["report"]["estop_active"] is False
         assert body["report"]["approved"] == ["move"]
+
+
+# ---------------------------------------------------------------------------
+# Audio transcription endpoint (#89)
+# ---------------------------------------------------------------------------
+
+class TestAudioTranscribe:
+    def test_returns_text_when_transcription_succeeds(self, client):
+        import castor.voice as voice_mod
+
+        with patch.object(voice_mod, "transcribe_bytes", return_value="turn left"):
+            with patch.object(voice_mod, "available_engines", return_value=["google"]):
+                resp = client.post(
+                    "/api/audio/transcribe",
+                    files={"file": ("test.ogg", b"\x00" * 512, "audio/ogg")},
+                )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["text"] == "turn left"
+        assert "engine" in body
+        assert "duration_ms" in body
+
+    def test_returns_503_when_no_engines_available(self, client):
+        import castor.voice as voice_mod
+
+        with patch.object(voice_mod, "available_engines", return_value=[]):
+            resp = client.post(
+                "/api/audio/transcribe",
+                files={"file": ("test.ogg", b"\x00" * 512, "audio/ogg")},
+                params={"engine": "auto"},
+            )
+        assert resp.status_code == 503
+
+    def test_returns_503_when_transcription_returns_none(self, client):
+        import castor.voice as voice_mod
+
+        with patch.object(voice_mod, "transcribe_bytes", return_value=None):
+            with patch.object(voice_mod, "available_engines", return_value=["google"]):
+                resp = client.post(
+                    "/api/audio/transcribe",
+                    files={"file": ("test.wav", b"\x00" * 512, "audio/wav")},
+                )
+        assert resp.status_code == 503
+
+    def test_returns_422_for_empty_file(self, client):
+        import castor.voice as voice_mod
+
+        with patch.object(voice_mod, "available_engines", return_value=["google"]):
+            resp = client.post(
+                "/api/audio/transcribe",
+                files={"file": ("empty.ogg", b"", "audio/ogg")},
+            )
+        assert resp.status_code == 422
+
+    def test_engine_param_accepted(self, client):
+        import castor.voice as voice_mod
+
+        with patch.object(voice_mod, "transcribe_bytes", return_value="ok") as mock_fn:
+            with patch.object(voice_mod, "available_engines", return_value=["google"]):
+                resp = client.post(
+                    "/api/audio/transcribe",
+                    files={"file": ("audio.mp3", b"\x00" * 512, "audio/mp3")},
+                    params={"engine": "google"},
+                )
+        assert resp.status_code == 200
+        call_kwargs = mock_fn.call_args
+        assert "google" in str(call_kwargs)

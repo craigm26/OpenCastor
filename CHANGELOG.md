@@ -5,6 +5,47 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.21.11] - 2026-02-21 🎤 Full voice conversation layer — channels, transcription API, Speaker chunking
+
+### Added (closes #84, #85, #86, #87, #88, #89, #90, #91)
+- **`castor/voice.py`** — New shared audio transcription module with tiered engine pipeline:
+  Whisper API (OpenAI) → local `openai-whisper` → Google SpeechRecognition → `None`.
+  Exposed via `transcribe_bytes(audio_bytes, hint_format, engine)` and `available_engines()`.
+  Engine selection controllable via `CASTOR_VOICE_ENGINE` env var or per-call `engine` param (#85)
+- **`castor/channels/telegram_channel.py`** — `VOICE | AUDIO` message handler: downloads voice note
+  via Telegram Bot API, detects MIME type, transcribes with `castor.voice`, routes as text (#87)
+- **`castor/channels/discord_channel.py`** — Audio attachment detection in `on_message`: downloads
+  audio via httpx, transcribes, routes reply — supports all common audio formats (#84)
+- **`castor/channels/whatsapp_neonize.py`** — `audioMessage`/`voiceMessage` handling in
+  `_handle_incoming()`: downloads media via `client.download_media_message()`, transcribes with
+  `castor.voice`, falls back gracefully when voice module unavailable (#86)
+- **`castor/channels/slack_channel.py`** — `file_share` subtype handling in `handle_dm`: detects
+  audio MIME types, downloads via Slack Files API with Bearer auth, transcribes (#88)
+- **`castor/api.py`** — `POST /api/audio/transcribe`: multipart audio upload endpoint using
+  `castor.voice.transcribe_bytes()`; returns `{text, engine, duration_ms}`;
+  503 when no engines available or transcription fails; 422 for empty file (#89)
+
+### Fixed (closes #90, #91)
+- **`castor/main.py`** `Speaker._speak()` — Removed hard 200-character truncation (`text[:200]`).
+  Added `Speaker._split_sentences(text, max_chunk=500)` static method: splits on sentence boundaries
+  (`[.!?]`) with whitespace fallback for long sentences; each chunk spoken sequentially with 150ms
+  inter-sentence pause (#91)
+- **`castor/dashboard.py`** — Voice Mode sidebar toggle; continuous listen mode via
+  browser-native `SpeechRecognition` JavaScript bridge; browser `speechSynthesis` TTS for
+  voice-mode replies (no 200-char limit); `sr.Recognizer.listen()` timeout extended to 8s with
+  phrase_time_limit 30s; gTTS dashboard path now sentence-chunked (no truncation) (#90)
+
+### Tests (closes #85, #89)
+- **`tests/test_voice.py`** — 17 tests covering: `available_engines()`, `transcribe_bytes()` with
+  all 4 engine modes (`auto`, `whisper_api`, `whisper_local`, `google`), env var override,
+  hint format passthrough, and `Speaker._split_sentences()` correctness including no-truncation
+  regression guard (#85)
+- **`tests/test_api_endpoints.py`** — `TestAudioTranscribe`: 5 tests covering success path,
+  503 when no engines available, 503 when transcription returns None, 422 for empty file,
+  and engine parameter routing (#89)
+
+---
+
 ## [2026.2.21.10] - 2026-02-21 🛡️ Provider streaming default, driver mock fix, guardian API, offline validation
 
 ### Fixed (closes #79)
