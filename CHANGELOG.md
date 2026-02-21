@@ -5,6 +5,72 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.21.13] - 2026-02-21 🧠 Memory, Metrics, Tools, MQTT — issues #92–#101
+
+### Added
+- **`castor/memory.py`** (issue #92) — SQLite-backed episode memory store (`EpisodeMemory`).
+  Logs every brain decision (instruction → thought → action → latency → outcome) with FIFO eviction,
+  UUID per episode, image hash dedup, JSONL export, and `CASTOR_MEMORY_DB` env override.
+- **`castor/metrics.py`** (issue #99) — Prometheus text exposition metrics registry (stdlib-only,
+  zero external dependencies). Pre-registers 13 standard metrics: loop counter, command counter,
+  error counter, uptime gauge, latency gauge, camera FPS, brain/driver up flags, channel count,
+  loop duration histogram, and more. `get_registry()` singleton. `record_loop()`, `record_command()`,
+  `record_error()`, `update_status()` convenience helpers.
+- **`castor/tools.py`** (issue #97) — LLM function/tool calling registry. `ToolRegistry` with 4
+  built-in tools (`get_status`, `take_snapshot`, `announce_text`, `get_distance`). Auto-registers
+  placeholder tools from RCAN `agent.tools` config. Exports OpenAI and Anthropic tool schemas.
+  `call_from_dict()` handles both formats. `name` param made positional-only to avoid keyword conflict.
+- **`castor/drivers/composite.py`** (issue #96) — `CompositeDriver` stacks multiple sub-drivers
+  (base, gripper, pan-tilt) under one `DriverBase`. Routes action dict keys to the correct sub-driver
+  via RCAN `routing:` config. `health_check()` aggregates sub-driver health. `_NullDriver` fallback.
+- **`castor/channels/mqtt_channel.py`** (issue #98) — MQTT channel bridge via `paho-mqtt`.
+  Subscribes to `opencastor/input`, publishes replies to `opencastor/output` (configurable).
+  Handles TLS, auth, custom client ID, QoS. paho network loop runs in daemon thread; callbacks
+  dispatch via `asyncio.run_coroutine_threadsafe`.
+- **`castor/service.py`** (issue #100) — Satisfied by existing `castor/daemon.py` +
+  `castor daemon enable/disable/status/logs/restart` CLI commands.
+- **API endpoints** (issues #92 #93 #94 #95 #99):
+  - `GET /api/metrics` — Prometheus text format (no auth required, safe for scrapers)
+  - `POST /api/runtime/pause` / `POST /api/runtime/resume` — pause/resume perception loop
+  - `GET /api/runtime/status` — runtime pause state, uptime, brain/driver readiness
+  - `POST /api/config/reload` — hot-reload RCAN YAML without gateway restart
+  - `GET /api/provider/health` — detailed provider health + token usage stats
+  - `GET /api/memory/episodes` — list recent brain-decision episodes
+  - `GET /api/memory/export` — download all episodes as JSONL
+  - `DELETE /api/memory/episodes` — clear all episodes
+
+### Changed
+- **`castor/main.py`** — Integration: calls `get_registry().record_loop()` after each iteration (#99);
+  calls `EpisodeMemory.log_episode()` after each brain decision (#92); checks `/proc/paused` VFS flag
+  to honor `POST /api/runtime/pause` (#93).
+- **`castor/providers/base.py`** — Added `get_usage_stats() -> dict` method (default returns `{}`).
+- **`castor/providers/anthropic_provider.py`** — Implements `get_usage_stats()` via `runtime_stats`
+  and `_cache_stats` (cache hit/miss counts). (#95)
+- **`castor/providers/openai_provider.py`** — Implements `get_usage_stats()` via `runtime_stats`. (#95)
+- **`castor/channels/__init__.py`** — Registers `MQTTChannel` with graceful `ImportError` fallback.
+- **`castor/auth.py`** — Added `mqtt` entry to `CHANNEL_AUTH_MAP` (`MQTT_BROKER_HOST`, `MQTT_USERNAME`,
+  `MQTT_PASSWORD`).
+- **`castor/api.py`** — Added `asyncio` import, `paused: bool` field to `AppState`, new endpoints.
+- **`castor/dashboard.py`** (issue #101) — Added `GET /api/memory/episodes` fetch; new collapsible
+  "Episode Memory" expander showing episode history as a dataframe.
+- **`castor/watch.py`** (issue #101) — `_learner_panel()` now accepts `episodes` dict; shows SQLite
+  memory episode count and 3 most recent episodes (time, action type, latency) when Sisyphus learner
+  is off. Fetch loop polls `GET /api/memory/episodes?limit=5` each tick.
+- **`pyproject.toml`** — Added `mqtt = ["paho-mqtt>=2.0.0"]` optional extra; `paho-mqtt` included in
+  `channels` meta-extra.
+
+### Tests
+- `tests/test_memory.py` — 9 tests covering log, query, count, get, clear, export, FIFO eviction,
+  image hashing, source filtering, env var override. ✅ 9/9 pass
+- `tests/test_metrics.py` — 12 tests covering Counter, Gauge, Histogram, MetricsRegistry convenience
+  helpers, singleton. ✅ 12/12 pass
+- `tests/test_tools.py` — 14 tests covering schema generation, ToolResult, registry CRUD, OpenAI/
+  Anthropic call dispatch, built-in tools, config registration. ✅ 14/14 pass
+- `tests/test_composite_driver.py` — 9 tests covering instantiation, stop/close, float/dict move
+  forms, health_check, empty config, unknown protocol fallback. ✅ 9/9 pass
+- `tests/test_mqtt_channel.py` — 13 tests covering defaults, custom config, env vars, start without
+  paho, send when disconnected, callbacks, registry and auth map. ✅ 13/13 pass
+
 ## [2026.2.21.12] - 2026-02-21 📺 Single-page dashboards — Rich TUI + Streamlit rewrite, live OAK-D stream, MJPEG token auth
 
 ### Rewritten

@@ -42,6 +42,11 @@ CHANNEL_AUTH_MAP: Dict[str, list] = {
         ("SLACK_APP_TOKEN", "app_token"),
         ("SLACK_SIGNING_SECRET", "signing_secret"),
     ],
+    "mqtt": [
+        ("MQTT_BROKER_HOST", "broker_host"),
+        ("MQTT_USERNAME", "username"),
+        ("MQTT_PASSWORD", "password"),
+    ],
 }
 
 

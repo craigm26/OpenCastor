@@ -10,6 +10,7 @@ Run with:
 """
 
 import argparse
+import asyncio
 import collections
 import hashlib
 import hmac
@@ -142,6 +143,7 @@ class AppState:
     offline_fallback = None   # OfflineFallbackManager (optional)
     thought_history = None    # deque(maxlen=50) — ring buffer of recent thoughts
     learner = None            # SisyphusLoop instance (optional)
+    paused: bool = False      # Runtime pause flag (issue #93)
 
 
 state = AppState()
@@ -356,6 +358,178 @@ async def clear_estop():
             return {"status": "cleared"}
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     return {"status": "no_fs"}
+
+
+# ---------------------------------------------------------------------------
+# Runtime lifecycle endpoints  (issue #93)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/runtime/pause", dependencies=[Depends(verify_token)])
+async def runtime_pause():
+    """Pause the perception-action loop without stopping the gateway."""
+    state.paused = True
+    if state.fs:
+        state.fs.ns.write("/proc/paused", {"paused": True, "since": time.time()})
+    return {"paused": True}
+
+
+@app.post("/api/runtime/resume", dependencies=[Depends(verify_token)])
+async def runtime_resume():
+    """Resume the perception-action loop after a pause."""
+    state.paused = False
+    if state.fs:
+        state.fs.ns.write("/proc/paused", None)
+    return {"paused": False}
+
+
+@app.get("/api/runtime/status", dependencies=[Depends(verify_token)])
+async def runtime_status():
+    """Return current runtime pause/resume state and uptime."""
+    paused = getattr(state, "paused", False)
+    if state.fs:
+        paused_data = state.fs.ns.read("/proc/paused")
+        if isinstance(paused_data, dict) and paused_data.get("paused"):
+            paused = True
+    return {
+        "paused": paused,
+        "uptime_s": round(time.time() - state.boot_time, 1),
+        "brain_ready": state.brain is not None,
+        "driver_ready": state.driver is not None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Prometheus metrics endpoint  (issue #99)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/metrics")
+async def get_metrics():
+    """Prometheus text exposition format metrics (no auth — safe for scrapers)."""
+    from fastapi.responses import Response as _Response
+
+    from castor.metrics import get_registry
+
+    # Update live status gauges before rendering
+    try:
+        reg = get_registry()
+        robot = (state.config or {}).get("metadata", {}).get("robot_name", "robot")
+        reg.update_status(
+            robot=robot,
+            brain_up=state.brain is not None,
+            driver_up=state.driver is not None,
+            active_channels=len(state.channels),
+            uptime_s=round(time.time() - state.boot_time, 1),
+        )
+    except Exception:
+        pass
+
+    return _Response(
+        content=get_registry().render(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Config hot-reload endpoint  (issue #94)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/config/reload", dependencies=[Depends(verify_token)])
+async def reload_config():
+    """Reload the RCAN config file in-place without restarting the gateway."""
+    config_path = os.getenv("OPENCASTOR_CONFIG", "robot.rcan.yaml")
+    try:
+        with open(config_path) as _f:
+            new_config = yaml.safe_load(_f)
+        state.config = new_config
+        # Propagate updated model name to the active brain if changed
+        if state.brain and "agent" in new_config:
+            new_model = new_config["agent"].get("model")
+            if new_model:
+                state.brain.model_name = new_model
+        logger.info("Config reloaded from %s", config_path)
+        return {"status": "reloaded", "config_path": config_path}
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Config file not found: {config_path}")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Config reload failed: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Provider health detail endpoint  (issue #95)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/provider/health", dependencies=[Depends(verify_token)])
+async def provider_health():
+    """Detailed provider health check including latency and token usage."""
+    if state.brain is None:
+        raise HTTPException(status_code=503, detail="Brain not initialized")
+
+    try:
+        health = await asyncio.to_thread(state.brain.health_check)
+    except Exception as exc:
+        health = {"ok": False, "error": str(exc)}
+
+    usage: dict = {}
+    if hasattr(state.brain, "get_usage_stats"):
+        try:
+            usage = state.brain.get_usage_stats()
+        except Exception:
+            pass
+
+    provider_name = (state.config or {}).get("agent", {}).get("provider", "unknown")
+    return {
+        "provider": provider_name,
+        "model": getattr(state.brain, "model_name", None),
+        "health": health,
+        "usage": usage,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Episode memory endpoints  (issue #92)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/memory/episodes", dependencies=[Depends(verify_token)])
+async def list_episodes(limit: int = 50, source: Optional[str] = None):
+    """List recent brain-decision episodes from the SQLite memory store."""
+    from castor.memory import EpisodeMemory
+
+    mem = EpisodeMemory()
+    episodes = mem.query_recent(limit=min(limit, 500), source=source)
+    return {"episodes": episodes, "total": mem.count()}
+
+
+@app.get("/api/memory/export", dependencies=[Depends(verify_token)])
+async def export_episodes(limit: int = 1000):
+    """Export all episodes as JSONL (newline-delimited JSON) for download."""
+    import tempfile
+
+    from fastapi.responses import Response as _Response
+
+    from castor.memory import EpisodeMemory
+
+    mem = EpisodeMemory()
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as _f:
+        tmp_path = _f.name
+    mem.export_jsonl(tmp_path, limit=limit)
+    with open(tmp_path) as _f:
+        content = _f.read()
+    os.unlink(tmp_path)
+    return _Response(
+        content=content,
+        media_type="application/x-ndjson",
+        headers={"Content-Disposition": "attachment; filename=episodes.jsonl"},
+    )
+
+
+@app.delete("/api/memory/episodes", dependencies=[Depends(verify_token)])
+async def clear_episodes():
+    """Delete all episodes from the memory store."""
+    from castor.memory import EpisodeMemory
+
+    mem = EpisodeMemory()
+    deleted = mem.clear()
+    return {"deleted": deleted}
 
 
 # ---------------------------------------------------------------------------

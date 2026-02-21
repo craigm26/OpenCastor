@@ -107,6 +107,19 @@ class OpenAIProvider(BaseProvider):
             logger.error(f"OpenAI error: {e}")
             return Thought(f"Error: {e}", None)
 
+    def get_usage_stats(self) -> dict:
+        """Return session-level token usage from runtime_stats."""
+        try:
+            from castor.runtime_stats import get_stats
+            rs = get_stats()
+            return {
+                "prompt_tokens": rs.get("tokens_in", 0),
+                "completion_tokens": rs.get("tokens_out", 0),
+                "total_requests": rs.get("api_calls", 0),
+            }
+        except Exception:
+            return {}
+
     def think_stream(
         self,
         image_bytes: bytes,

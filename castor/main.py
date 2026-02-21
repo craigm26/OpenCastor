@@ -1011,6 +1011,16 @@ def main():
                 time.sleep(1.0)
                 continue
 
+            # Check runtime pause (issue #93)
+            try:
+                _paused_data = fs.ns.read("/proc/paused")
+                if isinstance(_paused_data, dict) and _paused_data.get("paused"):
+                    logger.debug("Loop paused via API. Waiting...")
+                    time.sleep(0.5)
+                    continue
+            except Exception:
+                pass
+
             # --- PHASE 1: OBSERVE ---
             frame_bytes = camera.capture_jpeg()
             fs.ns.write("/dev/camera", {"t": time.time(), "size": len(frame_bytes)})
@@ -1261,6 +1271,32 @@ def main():
             # --- PHASE 4: TELEMETRY & LATENCY CHECK ---
             latency = (time.time() - loop_start) * 1000
             fs.proc.record_loop_iteration(latency)
+
+            # Prometheus metrics (issue #99)
+            try:
+                from castor.metrics import get_registry as _get_metrics_registry
+                _metrics_robot = config.get("metadata", {}).get("robot_name", "robot")
+                _get_metrics_registry().record_loop(latency, robot=_metrics_robot)
+            except Exception:
+                pass
+
+            # Log episode to SQLite memory store (issue #92)
+            try:
+                if thought is not None:
+                    from castor.memory import EpisodeMemory as _EpisodeMemory
+                    _ep_mem = _EpisodeMemory()
+                    _img_hash = _EpisodeMemory.hash_image(frame_bytes) if frame_bytes else ""
+                    _ep_mem.log_episode(
+                        instruction=instruction[:200],
+                        raw_thought=thought.raw_text[:500] if thought.raw_text else "",
+                        action=thought.action,
+                        latency_ms=latency,
+                        image_hash=_img_hash,
+                        outcome="ok",
+                        source="runtime",
+                    )
+            except Exception:
+                pass
 
             # OpenTelemetry metrics
             try:

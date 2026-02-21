@@ -227,6 +227,20 @@ class BaseProvider(ABC):
                 "error": str(exc),
             }
 
+    def get_usage_stats(self) -> Dict[str, Any]:
+        """Return cumulative token-usage statistics for this session.
+
+        Returns a dict with provider-specific keys.  The base implementation
+        returns an empty dict; concrete providers should override this to
+        expose prompt_tokens, completion_tokens, total_cost_usd, etc.
+
+        Returns:
+            A dict, e.g.:
+            ``{"prompt_tokens": 1200, "completion_tokens": 450,
+               "total_requests": 10, "total_cost_usd": 0.012}``
+        """
+        return {}
+
     def think_stream(
         self,
         image_bytes: bytes,

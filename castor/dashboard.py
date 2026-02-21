@@ -128,12 +128,13 @@ def _dot_html(ok, true_col="#3fb950", false_col="#f85149", none_col="#6e7681") -
     return f'<span style="color:{color};font-size:0.9em;">●</span>'
 
 # ── fetch all data once per render ────────────────────────────────────────────
-health  = _get("/health")
-status  = _get("/api/status")
-proc    = _get("/api/fs/proc")
-driver  = _get("/api/driver/health")
-learner = _get("/api/learner/stats")
-hist    = _get("/api/command/history?limit=8")
+health   = _get("/health")
+status   = _get("/api/status")
+proc     = _get("/api/fs/proc")
+driver   = _get("/api/driver/health")
+learner  = _get("/api/learner/stats")
+hist     = _get("/api/command/history?limit=8")
+episodes = _get("/api/memory/episodes?limit=20")
 
 robot_name  = status.get("robot_name", health.get("robot_name", "Bob"))
 uptime      = health.get("uptime_s", 0)
@@ -424,6 +425,39 @@ if history_entries:
     )
 else:
     st.caption("No commands yet — type one above")
+
+# ── EPISODE HISTORY ──────────────────────────────────────────────────────────
+st.divider()
+with st.expander(
+    f"🧠 Episode Memory  — {episodes.get('total', 0)} total",
+    expanded=False,
+):
+    ep_list = episodes.get("episodes", [])
+    if ep_list:
+        import pandas as pd
+
+        ep_rows = []
+        for ep in ep_list:
+            ts = ep.get("ts", "")
+            hhmm = ts[11:19] if len(ts) > 18 else ts
+            action_type = (ep.get("action") or {}).get("type", ep.get("action_type", "—"))
+            ep_rows.append(
+                {
+                    "Time": hhmm,
+                    "Instruction": str(ep.get("instruction", ""))[:48],
+                    "Action": action_type,
+                    "Latency (ms)": f"{ep.get('latency_ms', 0):.0f}",
+                    "Outcome": ep.get("outcome", "—")[:24],
+                }
+            )
+        st.dataframe(
+            pd.DataFrame(ep_rows),
+            hide_index=True,
+            use_container_width=True,
+            height=min(300, 36 + 36 * len(ep_rows)),
+        )
+    else:
+        st.caption("No episodes recorded yet — start the runtime loop to capture them")
 
 # ── AUTO-REFRESH ──────────────────────────────────────────────────────────────
 time.sleep(refresh_s)

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opencastor"
-version = "2026.2.21.12"
+version = "2026.2.21.13"
 description = "The Universal Runtime for Embodied AI"
 readme = "README.md"
 license = "Apache-2.0"
@@ -76,11 +76,13 @@ whatsapp-twilio = ["twilio>=9.0.0"]
 telegram = ["python-telegram-bot>=21.0"]
 discord = ["discord.py>=2.3.0"]
 slack = ["slack-bolt>=1.18.0"]
+mqtt = ["paho-mqtt>=2.0.0"]
 channels = [
     "neonize>=0.3.10",
     "python-telegram-bot>=21.0",
     "discord.py>=2.3.0",
     "slack-bolt>=1.18.0",
+    "paho-mqtt>=2.0.0",
 ]
 rcan = [
     "PyJWT>=2.8.0",

@@ -31,7 +31,11 @@ def get_driver(config: dict):
             logger.warning(f"Failed to load external driver class '{fq_class}': {exc}")
             return None
 
-    if protocol == "pca9685_rc":
+    if protocol == "composite":
+        from castor.drivers.composite import CompositeDriver
+
+        return CompositeDriver(config)
+    elif protocol == "pca9685_rc":
         from castor.drivers.pca9685 import PCA9685RCDriver
 
         return PCA9685RCDriver(driver_config)

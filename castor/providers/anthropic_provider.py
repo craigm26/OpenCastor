@@ -182,6 +182,26 @@ class AnthropicProvider(BaseProvider):
             logger.error(f"Anthropic error: {e}")
             return Thought(f"Error: {e}", None)
 
+    def get_usage_stats(self) -> dict:
+        """Return session-level token usage and cache stats."""
+        stats: dict = {}
+        try:
+            from castor.runtime_stats import get_stats
+            rs = get_stats()
+            stats["prompt_tokens"] = rs.get("tokens_in", 0)
+            stats["completion_tokens"] = rs.get("tokens_out", 0)
+            stats["total_requests"] = rs.get("api_calls", 0)
+        except Exception:
+            pass
+        if hasattr(self, "_cache_stats"):
+            try:
+                cs = self._cache_stats
+                stats["cache_hits"] = getattr(cs, "hits", 0)
+                stats["cache_misses"] = getattr(cs, "misses", 0)
+            except Exception:
+                pass
+        return stats
+
     def _think_via_cli(self, instruction: str) -> Thought:
         """Call Claude via OAuth CLI client (uses Max/Pro subscription).
 

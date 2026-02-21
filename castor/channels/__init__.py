@@ -60,6 +60,13 @@ def _register_builtin_channels():
     except ImportError:
         logger.debug("Slack channel unavailable (slack-bolt not installed)")
 
+    try:
+        from castor.channels.mqtt_channel import MQTTChannel
+
+        _CHANNEL_CLASSES["mqtt"] = MQTTChannel
+    except ImportError:
+        logger.debug("MQTT channel unavailable (paho-mqtt not installed)")
+
 
 def get_available_channels() -> List[str]:
     """Return names of channels whose SDKs are installed."""

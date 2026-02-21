@@ -180,7 +180,7 @@ def _channels_panel(status: dict) -> Panel:
     return Panel(t, title="[bold]📡  Channels[/]", border_style="magenta", padding=(0, 1))
 
 
-def _learner_panel(learner: dict) -> Panel:
+def _learner_panel(learner: dict, episodes: dict) -> Panel:
     t = Table(show_header=False, box=None, padding=(0, 1))
     t.add_column(style="dim", width=12)
     t.add_column()
@@ -193,9 +193,26 @@ def _learner_panel(learner: dict) -> Panel:
         avg = learner.get("avg_duration_ms")
         t.add_row("Avg time", f"[white]{avg:.0f} ms[/]" if avg else "[dim]—[/]")
     else:
-        t.add_row("", "[dim]no data yet[/]")
+        # Show SQLite memory episode count even when Sisyphus learner is off
+        total = episodes.get("total", 0)
+        if total:
+            t.add_row("Mem eps", f"[cyan]{total}[/]")
+        else:
+            t.add_row("", "[dim]no data yet[/]")
 
-    return Panel(t, title="[bold]🧠  Learner[/]", border_style="yellow", padding=(0, 1))
+    # Recent episode rows from the memory store
+    ep_list = episodes.get("episodes", [])
+    if ep_list:
+        t.add_row("", "")  # spacer
+        t.add_row("[dim]Recent eps[/]", "")
+        for ep in ep_list[:3]:
+            ts = ep.get("ts", "")
+            hhmm = ts[11:16] if len(ts) > 15 else ts[:5]
+            action_type = (ep.get("action") or {}).get("type", "—")
+            lat = ep.get("latency_ms", 0)
+            t.add_row(hhmm, f"[white]{action_type}[/]  [dim]{lat:.0f}ms[/]")
+
+    return Panel(t, title="[bold]🧠  Learner / Memory[/]", border_style="yellow", padding=(0, 1))
 
 
 def _history_panel(history: dict) -> Panel:
@@ -229,6 +246,7 @@ def _build_layout(
     driver: dict,
     learner: dict,
     history: dict,
+    episodes: dict,
     robot_name: str,
     gateway_url: str,
     elapsed: float,
@@ -258,7 +276,7 @@ def _build_layout(
         Layout(_status_panel(health, proc), name="status", ratio=3),
         Layout(_driver_panel(driver), name="driver", ratio=2),
         Layout(_channels_panel(status), name="channels", ratio=3),
-        Layout(_learner_panel(learner), name="learner", ratio=2),
+        Layout(_learner_panel(learner, episodes), name="learner", ratio=2),
     )
 
     # Footer
@@ -319,10 +337,11 @@ def launch_watch(
                 driver = _get(f"{gateway_url}/api/driver/health")
                 learner = _get(f"{gateway_url}/api/learner/stats")
                 history = _get(f"{gateway_url}/api/command/history?limit=5")
+                episodes = _get(f"{gateway_url}/api/memory/episodes?limit=5")
                 elapsed = time.time() - start
 
                 layout = _build_layout(
-                    health, status, proc, driver, learner, history,
+                    health, status, proc, driver, learner, history, episodes,
                     robot_name, gateway_url, elapsed,
                 )
                 live.update(layout)
