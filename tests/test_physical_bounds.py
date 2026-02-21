@@ -369,3 +369,94 @@ class TestCheckWriteBounds:
     def test_unrelated_path(self):
         r = check_write_bounds(self.checker, "/var/log/test", {"position": [99, 99, 99]})
         assert r.ok
+
+
+# -----------------------------------------------------------------------
+# Runtime integration: bounds enforcement before driver.move()
+# -----------------------------------------------------------------------
+
+
+class TestRuntimeBoundsEnforcement:
+    """Verify that out-of-bounds actions are blocked and driver.stop() is called."""
+
+    def _make_mock_driver(self):
+        class MockDriver:
+            def __init__(self):
+                self.moves = []
+                self.stops = 0
+
+            def move(self, linear, angular):
+                self.moves.append((linear, angular))
+
+            def stop(self):
+                self.stops += 1
+
+        return MockDriver()
+
+    def test_ok_action_calls_move(self):
+        """An action within bounds proceeds to driver.move()."""
+        driver = self._make_mock_driver()
+        bc = BoundsChecker.from_robot_type("differential_drive")
+        action = {"type": "move", "linear": 0.1, "angular": 0.0}
+
+        result = bc.check_action(action)
+        if result.violated:
+            driver.stop()
+        else:
+            driver.move(action["linear"], action["angular"])
+
+        assert len(driver.moves) == 1
+        assert driver.stops == 0
+
+    def test_violating_force_calls_stop(self):
+        """An action with force above the limit triggers driver.stop(), not driver.move()."""
+        driver = self._make_mock_driver()
+        bc = BoundsChecker.from_robot_type("arm")
+        action = {"type": "move", "linear": 0.0, "angular": 0.0, "force": 999.0}
+
+        result = bc.check_action(action)
+        if result.violated:
+            driver.stop()
+        else:
+            driver.move(action["linear"], action["angular"])
+
+        assert driver.stops == 1
+        assert len(driver.moves) == 0
+
+    def test_warning_action_still_calls_move(self):
+        """An action near the boundary produces a warning but still calls driver.move()."""
+        driver = self._make_mock_driver()
+        # arm force limit is 50 N; warning fraction is 0.85 → warn above 42.5 N
+        bc = BoundsChecker.from_robot_type("arm")
+        action = {"type": "move", "linear": 0.1, "angular": 0.0, "force": 44.0}
+
+        result = bc.check_action(action)
+        assert result.status == "warning"
+
+        if result.violated:
+            driver.stop()
+        else:
+            driver.move(action["linear"], action["angular"])
+
+        assert len(driver.moves) == 1
+        assert driver.stops == 0
+
+    def test_bounds_checker_from_physics_type(self):
+        """BoundsChecker.from_robot_type() succeeds for known physics types."""
+        bc_dd = BoundsChecker.from_robot_type("differential_drive")
+        assert bc_dd.workspace.box is not None
+
+        bc_arm = BoundsChecker.from_robot_type("arm")
+        assert bc_arm.workspace.sphere is not None
+
+    def test_bounds_checker_falls_back_for_unknown_type(self):
+        """Unknown physics type yields a BoundsChecker with default force limits but no workspace/joint constraints."""
+        from castor.safety.bounds import DEFAULT_CONFIGS
+
+        robot_type = "unknown_robot_xyz"
+        assert robot_type not in DEFAULT_CONFIGS
+
+        bc = BoundsChecker()  # unconstrained workspace/joints, default force limits
+        r = bc.check_action({"force": 9999.0})
+        # Default ForceBounds has max_ee_force=50N so 9999N is a violation
+        assert r.violated

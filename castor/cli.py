@@ -479,6 +479,7 @@ def cmd_status(args) -> None:
         list_available_providers,
         load_dotenv_if_available,
     )
+    from castor.safety.authorization import DEFAULT_AUDIT_LOG_PATH
 
     load_dotenv_if_available()
 
@@ -496,6 +497,8 @@ def cmd_status(args) -> None:
         label = "ready" if ready else "not configured"
         print(f"    [{icon}] {name:12s} {label}")
 
+    audit_path = DEFAULT_AUDIT_LOG_PATH.expanduser()
+    print(f"\n  Audit Log: {audit_path}")
     print()
 
 
@@ -1261,6 +1264,25 @@ def cmd_plugins(args) -> None:
     load_plugins()
     plugins = list_plugins()
     print_plugins(plugins)
+
+
+def cmd_plugin(args) -> None:
+    """plugin install <url-or-path> -- install a plugin with provenance tracking."""
+    subcommand = getattr(args, "plugin_subcommand", None)
+    if subcommand == "install":
+        from castor.plugins import install_plugin
+
+        source = args.source
+        success = install_plugin(source)
+        if success:
+            print(f"  Plugin installed from: {source}")
+            print(f"  Provenance recorded in ~/.opencastor/plugins.lock")
+        else:
+            print(f"  Failed to install plugin from: {source}")
+            raise SystemExit(1)
+    else:
+        print("Usage: castor plugin install <url-or-path>")
+        raise SystemExit(1)
 
 
 def cmd_login(args) -> None:
@@ -2510,6 +2532,28 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
+    # castor plugin install <url-or-path>
+    p_plugin = sub.add_parser(
+        "plugin",
+        help="Manage plugins (install with provenance tracking)",
+        epilog=(
+            "Examples:\n"
+            "  castor plugin install https://example.com/my_plugin.py\n"
+            "  castor plugin install /local/path/my_plugin.py\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_plugin_sub = p_plugin.add_subparsers(dest="plugin_subcommand")
+    p_plugin_install = p_plugin_sub.add_parser(
+        "install",
+        help="Install a plugin from a URL or local path",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_plugin_install.add_argument(
+        "source",
+        help="URL or local file path to the plugin .py file",
+    )
+
     # castor scan — detect connected peripherals
     p_scan = sub.add_parser(
         "scan",
@@ -2780,6 +2824,7 @@ def main() -> None:
         "diff": cmd_diff,
         "quickstart": cmd_quickstart,
         "plugins": cmd_plugins,
+        "plugin": cmd_plugin,
         "audit": cmd_audit,
         "monitor": _cmd_monitor,
         "safety": cmd_safety,

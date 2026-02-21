@@ -164,6 +164,8 @@ def _maybe_wrap_rcan(payload: dict, request: Request) -> dict:
 @app.get("/api/status", dependencies=[Depends(verify_token)])
 async def get_status(request: Request):
     """Return current runtime status and available integrations."""
+    from castor.safety.authorization import DEFAULT_AUDIT_LOG_PATH
+
     payload = {
         "config_loaded": state.config is not None,
         "robot_name": (
@@ -174,6 +176,7 @@ async def get_status(request: Request):
         "channels_available": list_available_channels(),
         "channels_active": list(state.channels.keys()),
         "last_thought": state.last_thought,
+        "audit_log_path": str(DEFAULT_AUDIT_LOG_PATH.expanduser()),
     }
     return _maybe_wrap_rcan(payload, request)
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 
 import pytest
@@ -268,6 +269,97 @@ class TestAuditLog:
         log = authority.get_audit_log()
         events = [e["event"] for e in log]
         assert "approve_denied" in events
+
+
+# --- Audit log file persistence ---
+
+
+class TestAuditLogFilePersistence:
+    def test_audit_log_written_to_file(self, tmp_path) -> None:
+        log_file = tmp_path / "audit.jsonl"
+        auth = WorkAuthority(
+            role_resolver={"c": "CREATOR"},
+            audit_log_path=log_file,
+        )
+        auth.request_authorization("cut", "x", "bob")
+        assert log_file.exists()
+        lines = log_file.read_text().splitlines()
+        assert len(lines) >= 1
+        entry = json.loads(lines[0])
+        assert entry["event"] == "requested"
+        assert "timestamp" in entry
+
+    def test_audit_log_appends_across_instances(self, tmp_path) -> None:
+        log_file = tmp_path / "audit.jsonl"
+        auth1 = WorkAuthority(role_resolver={"c": "CREATOR"}, audit_log_path=log_file)
+        auth1.request_authorization("cut", "x", "bob")
+        first_count = len(log_file.read_text().splitlines())
+
+        auth2 = WorkAuthority(role_resolver={"c": "CREATOR"}, audit_log_path=log_file)
+        auth2.request_authorization("weld", "y", "carol")
+        total_lines = log_file.read_text().splitlines()
+        assert len(total_lines) > first_count
+
+    def test_custom_audit_log_path(self, tmp_path) -> None:
+        log_file = tmp_path / "subdir" / "custom.jsonl"
+        auth = WorkAuthority(audit_log_path=log_file)
+        assert auth.audit_log_path == str(log_file.resolve())
+        # Parent directory should be created automatically
+        assert log_file.parent.exists()
+
+    def test_default_audit_log_path_property(self) -> None:
+        from castor.safety.authorization import DEFAULT_AUDIT_LOG_PATH
+
+        auth = WorkAuthority()
+        expected = str(DEFAULT_AUDIT_LOG_PATH.expanduser().resolve())
+        assert auth.audit_log_path == expected
+
+
+# --- Work order persistence ---
+
+
+class TestWorkOrderPersistence:
+    def test_orders_persist_and_reload(self, tmp_path) -> None:
+        log_file = tmp_path / "audit.jsonl"
+        roles = {"c": "CREATOR", "op": "LEASEE"}
+
+        # First instance: request and approve an order
+        auth1 = WorkAuthority(role_resolver=roles, audit_log_path=log_file, persist_orders=True)
+        wo = auth1.request_authorization("cut", "x", "op")
+        auth1.approve(wo.order_id, "c")
+        order_id = wo.order_id
+
+        # Second instance: reload and verify the order is present
+        auth2 = WorkAuthority(role_resolver=roles, audit_log_path=log_file, persist_orders=True)
+        assert order_id in auth2._orders
+        reloaded = auth2._orders[order_id]
+        assert reloaded.is_approved
+        assert reloaded.authorized_by == "c"
+
+    def test_expired_orders_not_reloaded(self, tmp_path) -> None:
+        log_file = tmp_path / "audit.jsonl"
+        roles = {"c": "CREATOR", "op": "LEASEE"}
+
+        auth1 = WorkAuthority(
+            role_resolver=roles, ttl=0.01, audit_log_path=log_file, persist_orders=True
+        )
+        wo = auth1.request_authorization("cut", "x", "op")
+        auth1.approve(wo.order_id, "c")
+        time.sleep(0.02)
+
+        # Reload: expired order should not survive
+        auth2 = WorkAuthority(role_resolver=roles, audit_log_path=log_file, persist_orders=True)
+        assert auth2.check_authorization("cut", "x") is None
+
+    def test_no_persistence_by_default(self, tmp_path) -> None:
+        log_file = tmp_path / "audit.jsonl"
+        roles = {"c": "CREATOR", "op": "LEASEE"}
+
+        auth1 = WorkAuthority(role_resolver=roles, audit_log_path=log_file)
+        auth1.request_authorization("cut", "x", "op")
+
+        orders_file = log_file.parent / "work_orders.json"
+        assert not orders_file.exists()
 
 
 # --- Security iteration checks ---
