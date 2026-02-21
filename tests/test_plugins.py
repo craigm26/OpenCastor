@@ -1,8 +1,25 @@
 """Tests for castor.plugins -- extensible hook system."""
 
+import hashlib
+import json
 from unittest.mock import MagicMock, patch
 
 from castor.plugins import PluginRegistry, list_plugins, load_plugins
+
+
+def _make_manifest(plugins_dir, name, extra=None):
+    """Write a minimal valid plugin.json manifest."""
+    manifest = {
+        "name": name,
+        "version": "1.0.0",
+        "author": "Test Author",
+        "hooks": [],
+        "commands": [],
+    }
+    if extra:
+        manifest.update(extra)
+    (plugins_dir / f"{name}.json").write_text(json.dumps(manifest))
+    return manifest
 
 
 # =====================================================================
@@ -115,6 +132,7 @@ class TestLoadPlugins:
             "    registry.add_command('hello', lambda args: None, help='Say hello')\n"
         )
         (plugins_dir / "hello_plugin.py").write_text(plugin_code)
+        _make_manifest(plugins_dir, "hello_plugin", {"commands": ["hello"]})
 
         # Use a fresh registry for this test
         fresh_registry = PluginRegistry()
@@ -125,6 +143,97 @@ class TestLoadPlugins:
             load_plugins()
 
         assert "hello" in fresh_registry.commands
+
+    def test_load_plugins_skips_plugin_without_manifest(self, tmp_path):
+        """A plugin with no plugin.json must be skipped (security requirement)."""
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+
+        plugin_code = (
+            "def register(registry):\n"
+            "    registry.add_command('secret', lambda args: None)\n"
+        )
+        (plugins_dir / "no_manifest.py").write_text(plugin_code)
+        # Deliberately no .json manifest
+
+        fresh_registry = PluginRegistry()
+        with (
+            patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)),
+            patch("castor.plugins._registry", fresh_registry),
+        ):
+            load_plugins()
+
+        # Plugin must NOT be loaded without a manifest
+        assert "secret" not in fresh_registry.commands
+        assert "no_manifest" not in fresh_registry._loaded
+
+    def test_load_plugins_skips_plugin_with_missing_manifest_fields(self, tmp_path):
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+        (plugins_dir / "bad_manifest.py").write_text("def register(r): pass")
+        # Manifest missing required fields
+        (plugins_dir / "bad_manifest.json").write_text(json.dumps({"name": "bad"}))
+
+        fresh_registry = PluginRegistry()
+        with (
+            patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)),
+            patch("castor.plugins._registry", fresh_registry),
+        ):
+            load_plugins()
+
+        assert "bad_manifest" not in fresh_registry._loaded
+
+    def test_load_plugins_skips_plugin_with_invalid_json_manifest(self, tmp_path):
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+        (plugins_dir / "bad_json.py").write_text("def register(r): pass")
+        (plugins_dir / "bad_json.json").write_text("{not valid json")
+
+        fresh_registry = PluginRegistry()
+        with (
+            patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)),
+            patch("castor.plugins._registry", fresh_registry),
+        ):
+            load_plugins()
+
+        assert "bad_json" not in fresh_registry._loaded
+
+    def test_load_plugins_sha256_match_loads_plugin(self, tmp_path):
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+
+        plugin_code = "def register(r): r.add_command('sha_ok', None)\n"
+        py_path = plugins_dir / "sha_ok.py"
+        py_path.write_text(plugin_code)
+        sha = hashlib.sha256(plugin_code.encode()).hexdigest()
+        _make_manifest(plugins_dir, "sha_ok", {"sha256": sha, "commands": ["sha_ok"]})
+
+        fresh_registry = PluginRegistry()
+        with (
+            patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)),
+            patch("castor.plugins._registry", fresh_registry),
+        ):
+            load_plugins()
+
+        assert "sha_ok" in fresh_registry.commands
+
+    def test_load_plugins_sha256_mismatch_skips_plugin(self, tmp_path):
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+
+        plugin_code = "def register(r): r.add_command('bad_sha', None)\n"
+        py_path = plugins_dir / "sha_mismatch.py"
+        py_path.write_text(plugin_code)
+        _make_manifest(plugins_dir, "sha_mismatch", {"sha256": "deadbeef" * 8})
+
+        fresh_registry = PluginRegistry()
+        with (
+            patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)),
+            patch("castor.plugins._registry", fresh_registry),
+        ):
+            load_plugins()
+
+        assert "sha_mismatch" not in fresh_registry._loaded
 
     def test_load_plugins_skips_underscore_files(self, tmp_path):
         plugins_dir = tmp_path / "plugins"
@@ -145,6 +254,7 @@ class TestLoadPlugins:
         plugins_dir = tmp_path / "plugins"
         plugins_dir.mkdir()
         (plugins_dir / "broken.py").write_text("raise RuntimeError('broken plugin')")
+        _make_manifest(plugins_dir, "broken")
 
         fresh_registry = PluginRegistry()
         with (
@@ -165,7 +275,9 @@ class TestListPlugins:
         plugins_dir = tmp_path / "plugins"
         plugins_dir.mkdir()
         (plugins_dir / "motor_helper.py").write_text("def register(r): pass")
+        _make_manifest(plugins_dir, "motor_helper")
         (plugins_dir / "sensor_log.py").write_text("def register(r): pass")
+        _make_manifest(plugins_dir, "sensor_log")
         (plugins_dir / "readme.txt").write_text("not a plugin")
         (plugins_dir / "_hidden.py").write_text("def register(r): pass")
 
@@ -173,6 +285,7 @@ class TestListPlugins:
         with (
             patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)),
             patch("castor.plugins._registry", fresh_registry),
+            patch("castor.plugins._PLUGINS_LOCK", str(tmp_path / "plugins.lock")),
         ):
             result = list_plugins()
 
@@ -185,9 +298,185 @@ class TestListPlugins:
             assert "name" in p
             assert "path" in p
             assert "loaded" in p
+            assert "has_manifest" in p
+            assert "manifest" in p
+            assert "provenance" in p
             assert p["loaded"] is False  # Not loaded yet
+            assert p["has_manifest"] is True
 
     def test_list_plugins_no_dir_returns_empty(self, tmp_path):
         with patch("castor.plugins._PLUGINS_DIR", str(tmp_path / "nonexistent")):
             result = list_plugins()
         assert result == []
+
+    def test_list_plugins_missing_manifest_flagged(self, tmp_path):
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+        (plugins_dir / "no_manifest.py").write_text("def register(r): pass")
+        # No .json manifest
+
+        fresh_registry = PluginRegistry()
+        with (
+            patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)),
+            patch("castor.plugins._registry", fresh_registry),
+            patch("castor.plugins._PLUGINS_LOCK", str(tmp_path / "plugins.lock")),
+        ):
+            result = list_plugins()
+
+        assert len(result) == 1
+        assert result[0]["has_manifest"] is False
+        assert result[0]["manifest"] is None
+
+
+# =====================================================================
+# install_plugin
+# =====================================================================
+class TestInstallPlugin:
+    def _make_plugin_files(self, tmp_path, name="my_plugin", with_sha=False):
+        """Return (py_bytes, json_bytes) for a minimal plugin."""
+        code = b"def register(r): r.add_command('hello', None)\n"
+        sha = hashlib.sha256(code).hexdigest()
+        manifest = {
+            "name": name,
+            "version": "1.0.0",
+            "author": "Test",
+            "hooks": [],
+            "commands": ["hello"],
+        }
+        if with_sha:
+            manifest["sha256"] = sha
+        return code, json.dumps(manifest).encode(), sha
+
+    def test_install_from_local_path(self, tmp_path):
+        from castor.plugins import install_plugin
+
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        code, manifest_bytes, _ = self._make_plugin_files(tmp_path)
+        (src_dir / "my_plugin.py").write_bytes(code)
+        (src_dir / "my_plugin.json").write_bytes(manifest_bytes)
+
+        plugins_dir = tmp_path / "plugins"
+        lock_path = tmp_path / "plugins.lock"
+
+        with (
+            patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)),
+            patch("castor.plugins._PLUGINS_LOCK", str(lock_path)),
+        ):
+            result = install_plugin(str(src_dir / "my_plugin.py"))
+
+        assert result is True
+        assert (plugins_dir / "my_plugin.py").exists()
+        assert (plugins_dir / "my_plugin.json").exists()
+        assert lock_path.exists()
+        lock = json.loads(lock_path.read_text())
+        assert "my_plugin" in lock
+        assert "source" in lock["my_plugin"]
+        assert "sha256" in lock["my_plugin"]
+        assert "installed_at" in lock["my_plugin"]
+
+    def test_install_rejects_missing_manifest(self, tmp_path):
+        from castor.plugins import install_plugin
+
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "my_plugin.py").write_bytes(b"def register(r): pass\n")
+        # No manifest file
+
+        plugins_dir = tmp_path / "plugins"
+        lock_path = tmp_path / "plugins.lock"
+
+        with (
+            patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)),
+            patch("castor.plugins._PLUGINS_LOCK", str(lock_path)),
+        ):
+            result = install_plugin(str(src_dir / "my_plugin.py"))
+
+        assert result is False
+        assert not (plugins_dir / "my_plugin.py").exists()
+
+    def test_install_rejects_manifest_missing_fields(self, tmp_path):
+        from castor.plugins import install_plugin
+
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "my_plugin.py").write_bytes(b"def register(r): pass\n")
+        (src_dir / "my_plugin.json").write_text(json.dumps({"name": "incomplete"}))
+
+        plugins_dir = tmp_path / "plugins"
+        lock_path = tmp_path / "plugins.lock"
+
+        with (
+            patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)),
+            patch("castor.plugins._PLUGINS_LOCK", str(lock_path)),
+        ):
+            result = install_plugin(str(src_dir / "my_plugin.py"))
+
+        assert result is False
+        assert not (plugins_dir / "my_plugin.py").exists()
+
+    def test_install_rejects_sha256_mismatch(self, tmp_path):
+        from castor.plugins import install_plugin
+
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        code = b"def register(r): pass\n"
+        (src_dir / "my_plugin.py").write_bytes(code)
+        manifest = {
+            "name": "my_plugin",
+            "version": "1.0.0",
+            "author": "Attacker",
+            "hooks": [],
+            "commands": [],
+            "sha256": "deadbeef" * 8,  # wrong hash
+        }
+        (src_dir / "my_plugin.json").write_text(json.dumps(manifest))
+
+        plugins_dir = tmp_path / "plugins"
+        lock_path = tmp_path / "plugins.lock"
+
+        with (
+            patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)),
+            patch("castor.plugins._PLUGINS_LOCK", str(lock_path)),
+        ):
+            result = install_plugin(str(src_dir / "my_plugin.py"))
+
+        assert result is False
+        assert not (plugins_dir / "my_plugin.py").exists()
+
+    def test_install_with_correct_sha256_succeeds(self, tmp_path):
+        from castor.plugins import install_plugin
+
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        code, manifest_bytes, sha = self._make_plugin_files(tmp_path, with_sha=True)
+        (src_dir / "my_plugin.py").write_bytes(code)
+        (src_dir / "my_plugin.json").write_bytes(manifest_bytes)
+
+        plugins_dir = tmp_path / "plugins"
+        lock_path = tmp_path / "plugins.lock"
+
+        with (
+            patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)),
+            patch("castor.plugins._PLUGINS_LOCK", str(lock_path)),
+        ):
+            result = install_plugin(str(src_dir / "my_plugin.py"))
+
+        assert result is True
+        lock = json.loads(lock_path.read_text())
+        assert lock["my_plugin"]["sha256"] == sha
+
+    def test_install_rejects_non_py_source(self, tmp_path):
+        from castor.plugins import install_plugin
+
+        plugins_dir = tmp_path / "plugins"
+        lock_path = tmp_path / "plugins.lock"
+
+        with (
+            patch("castor.plugins._PLUGINS_DIR", str(plugins_dir)),
+            patch("castor.plugins._PLUGINS_LOCK", str(lock_path)),
+        ):
+            result = install_plugin("/some/path/plugin.txt")
+
+        assert result is False
+

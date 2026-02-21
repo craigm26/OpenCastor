@@ -144,7 +144,7 @@ command, familiarize yourself with the existing ones:
 | **Config** | `migrate`, `backup`, `restore`, `export`, `diff`, `profile` |
 | **Safety** | `approvals`, `privacy`, `audit` |
 | **Network** | `discover`, `fleet`, `network`, `schedule`, `token` |
-| **Advanced** | `search`, `plugins`, `upgrade`, `update-check` |
+| **Advanced** | `search`, `plugins`, `plugin`, `upgrade`, `update-check` |
 
 ### How to Add a New CLI Command
 
@@ -154,6 +154,90 @@ command, familiarize yourself with the existing ones:
 4. **Lazy-import** the implementation module inside the handler (keeps startup fast)
 5. **Add** the command to the group table above and to `CHANGELOG.md`
 6. **Write tests** in `tests/test_cli.py`
+
+## Writing Plugins
+
+Plugins extend OpenCastor with custom commands, drivers, providers, and hooks
+without modifying the core codebase.
+
+### Plugin Manifest (`plugin.json`)
+
+Every plugin **must** ship a `plugin.json` manifest alongside the `.py` file.
+This is a security requirement — plugins without a manifest are silently skipped
+at load time.
+
+```json
+{
+    "name": "my_plugin",
+    "version": "1.0.0",
+    "author": "Your Name",
+    "hooks": ["on_startup"],
+    "commands": ["my-cmd"],
+    "sha256": "<hex SHA-256 digest of my_plugin.py>"
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | ✅ | Plugin identifier (must match the `.py` filename stem) |
+| `version` | ✅ | Semver string, e.g. `"1.0.0"` |
+| `author` | ✅ | Plugin author name or contact |
+| `hooks` | ✅ | List of hook events registered (may be empty `[]`) |
+| `commands` | ✅ | List of CLI command names registered (may be empty `[]`) |
+| `sha256` | optional | SHA-256 hex digest of the `.py` file for integrity verification |
+
+Compute the SHA-256 digest to include in your manifest:
+
+```bash
+python -c "import hashlib; print(hashlib.sha256(open('my_plugin.py','rb').read()).hexdigest())"
+```
+
+### Plugin File Format
+
+```python
+# my_plugin.py
+
+def register(registry):
+    registry.add_command("my-cmd", my_handler, help="My custom command")
+    registry.add_hook("on_startup", my_startup_fn)
+
+def my_handler(args):
+    print("Hello from my plugin!")
+
+def my_startup_fn(config):
+    print("Robot booting up!")
+```
+
+### Installing a Plugin
+
+Use `castor plugin install` to fetch a plugin and record provenance in
+`~/.opencastor/plugins.lock`:
+
+```bash
+# From a URL (fetches both .py and .json manifest automatically)
+castor plugin install https://example.com/my_plugin.py
+
+# From a local path
+castor plugin install /path/to/my_plugin.py
+```
+
+The installer:
+1. Downloads/copies the `.py` file **and** the `plugin.json` manifest
+2. Validates the manifest (required fields + optional SHA-256 check)
+3. Writes both files to `~/.opencastor/plugins/`
+4. Records `source`, `installed_at`, and `sha256` in `~/.opencastor/plugins.lock`
+
+Plugins placed directly in `~/.opencastor/plugins/` without using
+`castor plugin install` must still have a valid `plugin.json` manifest or they
+will be skipped with a warning.
+
+### Listing Plugins
+
+```bash
+castor plugins
+```
+
+Shows each plugin's load status, manifest presence, version, and install source.
 
 ## Code Style
 
