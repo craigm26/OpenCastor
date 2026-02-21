@@ -5,6 +5,47 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.21.12] - 2026-02-21 📺 Single-page dashboards — Rich TUI + Streamlit rewrite, live OAK-D stream, MJPEG token auth
+
+### Rewritten
+- **`castor/watch.py`** — Complete rewrite as a full-screen Rich terminal dashboard mirroring the web layout.
+  Uses `rich.layout.Layout` with `Live(screen=True)`. Header row (robot · brain · driver · channels · uptime),
+  body split left (camera ASCII viewfinder with OAK-D USB3 stats + stream URL · recent commands) and right
+  (status/telemetry · driver · channels · learner), footer with keyboard hints. Polls `/health`, `/api/status`,
+  `/api/fs/proc`, `/api/driver/health`, `/api/learner/stats`, `/api/command/history`. `__main__` block added
+  for `python -m castor.watch` invocation. `OPENCASTOR_API_TOKEN` env var used for all requests.
+- **`castor/dashboard.py`** — Complete rewrite as single-page Streamlit (no tabs). HTML status bar header
+  with brain/driver/channels/camera/uptime colour-coded dots. Left column: live MJPEG `<img>` with
+  `?token=` query-param auth (works in browser without `Authorization` header) · voice mic button · chat
+  input. Right column: `st.metric()` cards (uptime, loops, latency, camera, speaker) · driver panel ·
+  channels dataframe · learner stats. Bottom: command history dataframe. Auto-refresh via
+  `time.sleep(refresh_s); st.rerun()`. Sidebar: settings, emergency stop, voice mode toggle.
+  Added `sys.path` guard to prevent `castor/watchdog.py` from shadowing the `watchdog` package.
+
+### Fixed
+- **`castor/api.py`** — `_frame_generator()` now uses `asyncio.to_thread(_capture_live_frame)` so the
+  blocking DepthAI `_oakd_rgb_q.get()` call doesn't stall the event loop. Without this fix the MJPEG
+  stream would return only the multipart boundary header (22 bytes) and no frames.
+- **`castor/api.py`** — `verify_token()` now accepts a `?token=` query parameter as a fallback when no
+  `Authorization: Bearer` header is present. Required for browser `<img>` and `<video>` tags which cannot
+  set custom request headers.
+- **`castor/dashboard.py`** — Launch with `--server.fileWatcherType none` to prevent Streamlit's
+  `watchdog` import from colliding with `castor/watchdog.py` (motor safety watchdog module).
+
+### Roadmap (new issues opened)
+- #92 — `castor/memory.py`: persistent episode memory store (SQLite)
+- #93 — `POST /api/runtime/pause` + `POST /api/runtime/resume` lifecycle control
+- #94 — `POST /api/config/reload`: hot-reload RCAN YAML without restart
+- #95 — `GET /api/provider/health`: per-provider token quota, rate limit, cost estimate
+- #96 — Composite driver: stack PCA9685 + gripper + pan-tilt in one RCAN config
+- #97 — LLM function/tool calling: define robot tools in RCAN, call from brain
+- #98 — MQTT channel bridge: subscribe to broker topics as robot command source
+- #99 — `GET /api/metrics`: Prometheus-compatible metrics endpoint
+- #100 — `castor service install/uninstall`: systemd service management
+- #101 — Learner improvement history panel + episode replay in dashboard and TUI
+
+---
+
 ## [2026.2.21.11] - 2026-02-21 🎤 Full voice conversation layer — channels, transcription API, Speaker chunking
 
 ### Added (closes #84, #85, #86, #87, #88, #89, #90, #91)

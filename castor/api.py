@@ -158,8 +158,15 @@ async def verify_token(request: Request):
     When JWT is configured (OPENCASTOR_JWT_SECRET), Bearer tokens are
     checked as JWT first.  Falls back to the static API token.
     If no auth is configured at all, access is open.
+
+    Also accepts the token via ``?token=`` query parameter for streaming
+    clients (browsers, VLC) that cannot set Authorization headers.
     """
-    auth = request.headers.get("Authorization", "")
+    # Allow token via query param (e.g. for MJPEG <img> tags and VLC)
+    query_token = request.query_params.get("token", "")
+    auth = request.headers.get("Authorization", "") or (
+        f"Bearer {query_token}" if query_token else ""
+    )
 
     # Try JWT first (if configured)
     jwt_secret = os.getenv("OPENCASTOR_JWT_SECRET")
@@ -519,7 +526,8 @@ async def mjpeg_stream():
         try:
             boundary = b"--opencastor-frame"
             while True:
-                frame = _capture_live_frame()
+                # Run blocking camera capture off the event loop so HTTP chunks flush properly
+                frame = await asyncio.to_thread(_capture_live_frame)
                 if frame:
                     yield (
                         boundary
@@ -529,7 +537,9 @@ async def mjpeg_stream():
                         + frame
                         + b"\r\n"
                     )
-                await asyncio.sleep(0.033)  # ~30 fps cap
+                else:
+                    # No frame yet — short sleep before retrying
+                    await asyncio.sleep(0.033)
         finally:
             with _rate_lock:
                 _active_streams -= 1
