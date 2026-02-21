@@ -7,6 +7,7 @@ without hardware, AI providers, or messaging SDKs.
 """
 
 import base64
+import collections
 import time
 from unittest.mock import AsyncMock, MagicMock
 
@@ -96,12 +97,16 @@ def _reset_state_and_env(monkeypatch):
     api_mod.state.mdns_browser = None
     api_mod.state.rcan_router = None
     api_mod.state.capability_registry = None
+    api_mod.state.offline_fallback = None
+    api_mod.state.thought_history = collections.deque(maxlen=50)
+    api_mod.state.learner = None
 
     # Reset the module-level API_TOKEN
     api_mod.API_TOKEN = None
 
     # Clear rate-limiter history so tests don't trip each other's per-IP limits
     api_mod._command_history.clear()
+    api_mod._webhook_history.clear()
 
     yield
 
@@ -1064,3 +1069,234 @@ class TestResponseFormat:
         assert "status" in body
         assert "action" in body
         assert body["status"] == "executed"
+
+
+# ---------------------------------------------------------------------------
+# POST /api/command/stream  (#68)
+# ---------------------------------------------------------------------------
+
+class TestStreamCommand:
+    def test_no_brain_returns_503(self, client):
+        resp = client.post("/api/command/stream", json={"instruction": "go"})
+        assert resp.status_code == 503
+
+    def test_streams_ndjson_with_think_stream(self, client, api_mod):
+        brain = MagicMock()
+        brain.think_stream.return_value = iter(["mov", "ing"])
+        brain._clean_json = MagicMock(return_value={"type": "move"})
+        api_mod.state.brain = brain
+
+        resp = client.post("/api/command/stream", json={"instruction": "go"})
+        assert resp.status_code == 200
+        assert "application/x-ndjson" in resp.headers["content-type"]
+
+        import json as _json
+        lines = [l for l in resp.text.splitlines() if l.strip()]
+        parsed = [_json.loads(l) for l in lines]
+        # All lines except last have done=False
+        assert all(not p["done"] for p in parsed[:-1])
+        # Last line has done=True
+        assert parsed[-1]["done"] is True
+        assert "action" in parsed[-1]
+
+    def test_falls_back_to_think_when_no_think_stream(self, client, api_mod):
+        brain = MagicMock(spec=["think", "_clean_json"])
+        brain.think.return_value = MagicMock(raw_text="ok", action={"type": "stop"})
+        brain._clean_json = MagicMock(return_value={"type": "stop"})
+        api_mod.state.brain = brain
+
+        resp = client.post("/api/command/stream", json={"instruction": "halt"})
+        assert resp.status_code == 200
+
+        import json as _json
+        lines = [l for l in resp.text.splitlines() if l.strip()]
+        parsed = [_json.loads(l) for l in lines]
+        assert len(parsed) >= 2
+        assert parsed[-1]["done"] is True
+
+
+# ---------------------------------------------------------------------------
+# GET /api/driver/health  (#69)
+# ---------------------------------------------------------------------------
+
+class TestDriverHealth:
+    def test_no_driver_returns_503(self, client):
+        resp = client.get("/api/driver/health")
+        assert resp.status_code == 503
+
+    def test_returns_health_dict_with_driver_type(self, client, api_mod):
+        driver = _make_mock_driver()
+        driver.health_check = MagicMock(
+            return_value={"ok": True, "mode": "mock", "error": None}
+        )
+        api_mod.state.driver = driver
+
+        body = client.get("/api/driver/health").json()
+        assert body["ok"] is True
+        assert body["mode"] == "mock"
+        assert "driver_type" in body
+
+    def test_unhealthy_driver_still_returns_200(self, client, api_mod):
+        driver = _make_mock_driver()
+        driver.health_check = MagicMock(
+            return_value={"ok": False, "mode": "hardware", "error": "ping failed"}
+        )
+        api_mod.state.driver = driver
+
+        body = client.get("/api/driver/health").json()
+        assert body["ok"] is False
+        assert body["error"] == "ping failed"
+
+
+# ---------------------------------------------------------------------------
+# GET /api/learner/stats  (#70)
+# ---------------------------------------------------------------------------
+
+class TestLearnerStats:
+    def test_no_learner_returns_available_false(self, client):
+        body = client.get("/api/learner/stats").json()
+        assert body == {"available": False}
+
+    def test_with_learner_returns_stats(self, client, api_mod):
+        from castor.learner.sisyphus import SisyphusStats
+
+        learner = MagicMock()
+        stats = SisyphusStats(
+            episodes_analyzed=5,
+            improvements_applied=3,
+            improvements_rejected=1,
+            total_duration_ms=500.0,
+        )
+        learner.stats = stats
+        api_mod.state.learner = learner
+
+        body = client.get("/api/learner/stats").json()
+        assert body["available"] is True
+        assert body["episodes_analyzed"] == 5
+        assert body["improvements_applied"] == 3
+        assert body["improvements_rejected"] == 1
+        assert body["avg_duration_ms"] == pytest.approx(100.0)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/learner/episodes  (#70)
+# ---------------------------------------------------------------------------
+
+class TestLearnerEpisodes:
+    def test_returns_empty_list_when_no_episodes(self, client, monkeypatch):
+        from castor.learner import episode_store as es_mod
+
+        mock_store = MagicMock()
+        mock_store.list_recent.return_value = []
+        monkeypatch.setattr(es_mod, "EpisodeStore", lambda: mock_store)
+
+        body = client.get("/api/learner/episodes").json()
+        assert body["count"] == 0
+        assert body["episodes"] == []
+
+    def test_returns_episodes_list(self, client, monkeypatch):
+        from castor.learner import episode_store as es_mod
+        from castor.learner.episode import Episode
+
+        ep = Episode(goal="navigate", success=True, duration_s=1.5)
+        mock_store = MagicMock()
+        mock_store.list_recent.return_value = [ep]
+        monkeypatch.setattr(es_mod, "EpisodeStore", lambda: mock_store)
+
+        body = client.get("/api/learner/episodes").json()
+        assert body["count"] == 1
+        assert body["episodes"][0]["goal"] == "navigate"
+        assert body["episodes"][0]["success"] is True
+
+    def test_limit_capped_at_100(self, client, monkeypatch):
+        from castor.learner import episode_store as es_mod
+
+        mock_store = MagicMock()
+        mock_store.list_recent.return_value = []
+        monkeypatch.setattr(es_mod, "EpisodeStore", lambda: mock_store)
+
+        client.get("/api/learner/episodes?limit=999")
+        mock_store.list_recent.assert_called_once_with(n=100)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/learner/episode  (#74)
+# ---------------------------------------------------------------------------
+
+class TestSubmitEpisode:
+    def test_missing_goal_returns_422(self, client):
+        resp = client.post("/api/learner/episode", json={"success": True})
+        assert resp.status_code == 422
+
+    def test_saves_episode_and_returns_id(self, client, monkeypatch):
+        from castor.learner import episode_store as es_mod
+
+        mock_store = MagicMock()
+        monkeypatch.setattr(es_mod, "EpisodeStore", lambda: mock_store)
+
+        resp = client.post(
+            "/api/learner/episode",
+            json={"goal": "dock", "success": False, "duration_s": 2.0},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "episode_id" in body
+        assert body["saved"] is True
+        mock_store.save.assert_called_once()
+
+    def test_run_improvement_flag_calls_learner(self, client, api_mod, monkeypatch):
+        from castor.learner import episode_store as es_mod
+        from castor.learner.sisyphus import ImprovementResult
+
+        mock_store = MagicMock()
+        monkeypatch.setattr(es_mod, "EpisodeStore", lambda: mock_store)
+
+        learner = MagicMock()
+        result = ImprovementResult(episode_id="test-id", applied=False)
+        learner.run_episode.return_value = result
+        api_mod.state.learner = learner
+
+        resp = client.post(
+            "/api/learner/episode?run_improvement=true",
+            json={"goal": "spin", "success": True},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "improvement" in body
+        learner.run_episode.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# GET /api/command/history  (#75)
+# ---------------------------------------------------------------------------
+
+class TestCommandHistory:
+    def test_empty_initially(self, client):
+        body = client.get("/api/command/history").json()
+        assert body["history"] == []
+        assert body["count"] == 0
+
+    def test_populated_after_command(self, client, api_mod):
+        api_mod.state.brain = _make_mock_brain()
+        client.post("/api/command", json={"instruction": "go forward"})
+
+        body = client.get("/api/command/history").json()
+        assert body["count"] >= 1
+        entry = body["history"][0]
+        assert entry["instruction"] == "go forward"
+        assert "raw_text" in entry
+        assert "action" in entry
+        assert "timestamp" in entry
+
+    def test_limit_param(self, client, api_mod):
+        api_mod.state.brain = _make_mock_brain()
+        for _ in range(5):
+            client.post("/api/command", json={"instruction": "test"})
+
+        body = client.get("/api/command/history?limit=3").json()
+        assert len(body["history"]) <= 3
+
+    def test_limit_capped_at_50(self, client, api_mod):
+        body = client.get("/api/command/history?limit=999").json()
+        # Should not raise; count ≤ 50
+        assert body["count"] <= 50

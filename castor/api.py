@@ -140,6 +140,8 @@ class AppState:
     rcan_router = None  # RCAN message router
     capability_registry = None  # Capability registry
     offline_fallback = None   # OfflineFallbackManager (optional)
+    thought_history = None    # deque(maxlen=50) — ring buffer of recent thoughts
+    learner = None            # SisyphusLoop instance (optional)
 
 
 state = AppState()
@@ -282,11 +284,7 @@ async def send_command(cmd: CommandRequest, request: Request):
 
     active = state.offline_fallback.get_active_provider() if state.offline_fallback else state.brain
     thought = active.think(image_bytes, cmd.instruction)
-    state.last_thought = {
-        "raw_text": thought.raw_text,
-        "action": thought.action,
-        "timestamp": time.time(),
-    }
+    _record_thought(cmd.instruction, thought.raw_text, thought.action)
 
     # Execute action on hardware if available
     if thought.action and state.driver:
@@ -639,6 +637,212 @@ async def fs_permissions():
 
 
 # ---------------------------------------------------------------------------
+# Thought history helper
+# ---------------------------------------------------------------------------
+
+def _record_thought(instruction: str, raw_text: str, action: Optional[dict]) -> None:
+    """Append a thought to the ring buffer and update last_thought."""
+    entry = {
+        "raw_text": raw_text,
+        "action": action,
+        "instruction": instruction,
+        "timestamp": time.time(),
+    }
+    state.last_thought = entry
+    if state.thought_history is not None:
+        state.thought_history.appendleft(entry)
+
+
+# ---------------------------------------------------------------------------
+# Streaming command endpoint (#68)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/command/stream", dependencies=[Depends(verify_token)])
+async def stream_command(cmd: CommandRequest, request: Request):
+    """Stream LLM tokens back as newline-delimited JSON (NDJSON).
+
+    Each line is a JSON object:
+    - Mid-stream: ``{"chunk": "token text", "done": false}``
+    - Final line: ``{"chunk": "", "done": true, "action": {...}}``
+
+    Falls back to non-streaming ``think()`` if the active provider does not
+    implement ``think_stream()``.
+    """
+    import json
+
+    _check_command_rate(request.client.host if request.client else "unknown")
+    if state.brain is None:
+        raise HTTPException(status_code=503, detail="Brain not initialized")
+
+    if cmd.image_base64:
+        import base64 as _b64
+
+        image_bytes = _b64.b64decode(cmd.image_base64)
+    else:
+        image_bytes = _capture_live_frame()
+
+    active = state.offline_fallback.get_active_provider() if state.offline_fallback else state.brain
+
+    async def _generate():
+        chunks = []
+        if hasattr(active, "think_stream"):
+            for chunk in active.think_stream(image_bytes, cmd.instruction):
+                chunks.append(chunk)
+                yield json.dumps({"chunk": chunk, "done": False}) + "\n"
+        else:
+            thought = active.think(image_bytes, cmd.instruction)
+            chunks.append(thought.raw_text)
+            yield json.dumps({"chunk": thought.raw_text, "done": False}) + "\n"
+
+        combined = "".join(chunks)
+        action = active._clean_json(combined) if hasattr(active, "_clean_json") else None
+        _record_thought(cmd.instruction, combined, action)
+
+        if action and state.driver:
+            _execute_action(action)
+
+        yield json.dumps({"chunk": "", "done": True, "action": action}) + "\n"
+
+    return StreamingResponse(_generate(), media_type="application/x-ndjson")
+
+
+# ---------------------------------------------------------------------------
+# Driver health endpoint (#69)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/driver/health", dependencies=[Depends(verify_token)])
+async def driver_health():
+    """Check hardware driver health.
+
+    Returns ``{"ok": bool, "mode": "hardware"|"mock", "error": str|null,
+    "driver_type": str}`` or HTTP 503 if no driver is initialized.
+    """
+    if state.driver is None:
+        raise HTTPException(status_code=503, detail="No hardware driver initialized")
+
+    result = state.driver.health_check()
+    result["driver_type"] = type(state.driver).__name__
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Learner endpoints (#70, #74)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/learner/stats", dependencies=[Depends(verify_token)])
+async def learner_stats():
+    """Return current Sisyphus loop statistics.
+
+    Returns ``{"available": false}`` when the learner is not initialized.
+    """
+    if state.learner is None:
+        return {"available": False}
+
+    s = state.learner.stats
+    return {
+        "available": True,
+        "episodes_analyzed": s.episodes_analyzed,
+        "improvements_applied": s.improvements_applied,
+        "improvements_rejected": s.improvements_rejected,
+        "total_duration_ms": s.total_duration_ms,
+        "avg_duration_ms": s.avg_duration_ms,
+    }
+
+
+@app.get("/api/learner/episodes", dependencies=[Depends(verify_token)])
+async def learner_episodes(limit: int = 20):
+    """Return the most recent recorded episodes.
+
+    Query param ``limit`` (default 20, max 100) controls how many to return.
+    """
+    limit = min(max(1, limit), 100)
+    try:
+        from castor.learner.episode_store import EpisodeStore
+
+        store = EpisodeStore()
+        episodes = store.list_recent(n=limit)
+        return {
+            "episodes": [
+                {
+                    "id": ep.id,
+                    "goal": ep.goal,
+                    "success": ep.success,
+                    "start_time": ep.start_time,
+                    "duration_s": ep.duration_s,
+                }
+                for ep in episodes
+            ],
+            "count": len(episodes),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Episode store error: {exc}") from exc
+
+
+class EpisodeSubmitRequest(BaseModel):
+    goal: str
+    success: bool
+    duration_s: float = 0.0
+    actions: Optional[list] = None
+    sensor_readings: Optional[list] = None
+    metadata: Optional[dict] = None
+
+
+@app.post("/api/learner/episode", dependencies=[Depends(verify_token)])
+async def submit_episode(body: EpisodeSubmitRequest, run_improvement: bool = False):
+    """Submit a recorded episode and optionally trigger the improvement loop.
+
+    Query param ``run_improvement=true`` runs the Sisyphus loop on the episode
+    immediately after saving and returns the improvement result.
+    """
+    try:
+        from castor.learner.episode import Episode
+        from castor.learner.episode_store import EpisodeStore
+        from castor.learner.sisyphus import SisyphusLoop
+
+        episode = Episode(
+            goal=body.goal,
+            success=body.success,
+            duration_s=body.duration_s,
+            actions=body.actions or [],
+            sensor_readings=body.sensor_readings or [],
+            metadata=body.metadata or {},
+        )
+
+        store = EpisodeStore()
+        store.save(episode)
+
+        response: Dict[str, Any] = {"episode_id": episode.id, "saved": True}
+
+        if run_improvement:
+            learner = state.learner or SisyphusLoop(config=state.config or {})
+            result = learner.run_episode(episode)
+            response["improvement"] = result.to_dict()
+
+        return response
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Episode submission error: {exc}") from exc
+
+
+# ---------------------------------------------------------------------------
+# Command history endpoint (#75)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/command/history", dependencies=[Depends(verify_token)])
+async def command_history(limit: int = 20):
+    """Return recent brain thought/action pairs.
+
+    Query param ``limit`` (default 20, max 50) controls how many to return.
+    History is a ring buffer that resets on gateway restart.
+    """
+    limit = min(max(1, limit), 50)
+    if state.thought_history is None:
+        return {"history": [], "count": 0}
+
+    entries = list(state.thought_history)[:limit]
+    return {"history": entries, "count": len(entries)}
+
+
+# ---------------------------------------------------------------------------
 # Webhook endpoints for messaging channels
 # ---------------------------------------------------------------------------
 def _verify_twilio_signature(request_url: str, form_params: dict, signature: str) -> bool:
@@ -963,6 +1167,9 @@ async def _stop_channels():
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
 async def on_startup():
+    # Always initialize thought history ring buffer (no config needed)
+    state.thought_history = collections.deque(maxlen=50)
+
     load_dotenv_if_available()
 
     config_path = os.getenv("OPENCASTOR_CONFIG", "robot.rcan.yaml")
@@ -971,6 +1178,11 @@ async def on_startup():
             with open(config_path) as f:
                 state.config = yaml.safe_load(f)
             logger.info(f"Loaded config: {state.config['metadata']['robot_name']}")
+
+            # Validate RCAN config before initialising anything
+            from castor.config_validation import log_validation_result
+
+            log_validation_result(state.config, label="Startup RCAN config")
 
             # Initialize virtual filesystem (use shared FS if runtime started it)
             from castor.main import get_shared_fs, set_shared_fs
@@ -1088,6 +1300,16 @@ async def on_startup():
             set_shared_speaker(state.speaker)
             if state.fs:
                 state.fs.proc.set_speaker("online" if state.speaker.enabled else "offline")
+
+            # Initialize Sisyphus learner loop (provider-wired for LLM augmentation)
+            try:
+                from castor.learner.sisyphus import SisyphusLoop
+
+                state.learner = SisyphusLoop(config=state.config, provider=state.brain)
+                logger.info("Learner loop initialized")
+            except Exception as _learner_exc:
+                logger.debug("Learner init skipped: %s", _learner_exc)
+
         except Exception as e:
             logger.warning(f"Config load error (gateway still operational): {e}")
     else:

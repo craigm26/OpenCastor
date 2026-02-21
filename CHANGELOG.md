@@ -5,6 +5,47 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.21.9] - 2026-02-21 🌊 Streaming API, learner endpoints, config validation
+
+### Added (closes #68, #69, #70, #71, #72, #73, #74, #75)
+- **`castor/api.py`** — `POST /api/command/stream`: NDJSON streaming endpoint; yields
+  tokens from `think_stream()` if available, falls back to `think()`; records thought
+  history and executes action on the driver (#68)
+- **`castor/api.py`** — `GET /api/driver/health`: exposes `driver.health_check()` dict
+  plus `driver_type` key; HTTP 503 when no driver is initialized (#69)
+- **`castor/api.py`** — `GET /api/learner/stats`: returns Sisyphus loop statistics
+  (`episodes_analyzed`, `improvements_applied`, `avg_duration_ms`, …); `available: false`
+  when learner is not running (#70)
+- **`castor/api.py`** — `GET /api/learner/episodes`: lists recent episodes from
+  `EpisodeStore`; `limit` query param (max 100) (#70)
+- **`castor/api.py`** — `POST /api/learner/episode`: saves a submitted episode and
+  optionally runs the Sisyphus improvement loop (`run_improvement=true`) (#74)
+- **`castor/api.py`** — `GET /api/command/history`: returns a ring buffer (max 50) of
+  recent instruction→thought→action pairs (#75)
+- **`castor/api.py`** — Ring buffer (`collections.deque(maxlen=50)`) in `AppState` and
+  `_record_thought()` helper to populate it on every `/api/command` call (#75)
+- **`castor/api.py`** — RCAN config validation via `log_validation_result()` called on
+  startup; logs errors but does not block startup (#71)
+- **`castor/api.py`** — `SisyphusLoop` auto-initialized in `on_startup()` when config
+  provides an agent/provider (#71)
+- **`castor/config_validation.py`** — New module: `validate_rcan_config()` returns
+  `(is_valid, errors)` tuple; checks top-level keys, `agent.model`, `metadata.robot_name`,
+  non-empty `drivers` list; `log_validation_result()` helper logs all errors (#71)
+- **`castor/learner/sisyphus.py`** — Per-stage timing (`stage_durations` dict) and
+  total/average duration tracking via `SisyphusStats.total_duration_ms` and
+  `avg_duration_ms` property; provider wired into PM/Dev/QA stages (#66/#73)
+
+### Tests
+- `tests/test_api_endpoints.py` — 6 new test classes covering all new endpoints:
+  `TestStreamCommand`, `TestDriverHealth`, `TestLearnerStats`, `TestLearnerEpisodes`,
+  `TestSubmitEpisode`, `TestCommandHistory` (72 new tests total across all new files)
+- `tests/test_config_validation.py` — 18 tests for `validate_rcan_config()` and
+  `log_validation_result()`
+- `tests/test_offline_fallback.py` — 17 tests for `OfflineFallbackManager`
+  (probe, switching, lifecycle, alert notifications)
+- `tests/test_learner/test_sisyphus_telemetry.py` — 17 tests for timing fields,
+  stats accumulation, and provider wiring
+
 ## [2026.2.21.8] - 2026-02-21 🔒 Prompt injection defense, streaming think, driver health checks
 
 ### Security (closes #59, #65)
