@@ -2,12 +2,11 @@
 
 ## Project Overview
 
-OpenCastor is a universal runtime for embodied AI. It connects LLM "brains" (Claude, Gemini, GPT-4.1, Ollama, HuggingFace, llama.cpp, MLX) to robot "bodies" (Raspberry Pi, Arduino, ESP32, LEGO, VEX) through a plug-and-play architecture, and exposes them to messaging platforms (WhatsApp, Telegram, Discord, Slack) for remote control. Configuration is driven by YAML files compliant with the [RCAN Standard](https://rcan.dev/spec/).
+OpenCastor is a universal runtime for embodied AI. It connects LLM "brains" (Gemini, GPT-4.1, Claude, Ollama, HuggingFace, llama.cpp, MLX) to robot "bodies" (Raspberry Pi, Jetson, Arduino, ESP32, LEGO) through a plug-and-play architecture, and exposes them to messaging platforms (WhatsApp, Telegram, Discord, Slack) for remote control. Configuration is driven by YAML files compliant with the [RCAN Standard](https://rcan.dev/spec/).
 
-**Version**: 2026.2.21.1
+**Version**: 2026.2.21.9
 **License**: Apache 2.0
 **Python**: 3.10+
-**Entry point**: `castor` or `opencastor` CLI commands (both registered in pyproject.toml)
 
 ## Quick Start
 
@@ -26,399 +25,486 @@ cp .env.example .env && nano .env
 docker compose up
 ```
 
-Or one-line install:
-```bash
-curl -fsSL https://opencastor.com/install | bash
-```
-
 ## Repository Structure
 
 ```
 OpenCastor/
-├── castor/                        # Main Python package (~131 files, ~36k LOC)
-│   ├── __init__.py                # Version string (__version__ = "2026.2.21.1")
-│   ├── __main__.py                # Entry point for `python -m castor`
-│   ├── cli.py                     # Unified CLI (40+ commands, castor/opencastor)
-│   ├── main.py                    # Core runtime: perception-action loop
-│   ├── api.py                     # FastAPI gateway server
-│   ├── auth.py                    # Unified auth manager (providers + channels)
-│   ├── wizard.py                  # Interactive terminal setup wizard
-│   ├── web_wizard.py              # Web-based setup wizard UI
-│   ├── dashboard.py               # Streamlit web UI (CastorDash)
-│   ├── dashboard_tui.py           # Terminal UI dashboard (tmux-based)
-│   ├── registry.py                # ComponentRegistry (plugin system)
-│   ├── plugins.py                 # Plugin loader
+├── castor/                           # Main Python package (~231 Python files)
+│   ├── __init__.py                   # Version string (__version__)
+│   ├── __main__.py                   # Package entry point
+│   ├── cli.py                        # Unified CLI entry point (48+ commands)
+│   ├── main.py                       # Core runtime: perception-action loop
+│   ├── api.py                        # FastAPI gateway server (all REST endpoints)
+│   ├── api_errors.py                 # Structured JSON error handling for API
+│   ├── auth.py                       # Unified auth manager (providers + channels)
+│   ├── wizard.py                     # Interactive setup wizard
+│   ├── web_wizard.py                 # Web-based configuration wizard
+│   ├── dashboard.py                  # Streamlit web UI (legacy)
+│   ├── dashboard_tui.py              # Terminal UI dashboard (tmux-based, preferred)
+│   ├── config_validation.py          # RCAN config validation (fail-fast on startup)
+│   ├── connectivity.py               # Internet & provider reachability checks
+│   ├── offline_fallback.py           # Auto-switch to local provider on connectivity loss
+│   ├── tiered_brain.py               # Multi-model switching by latency budget
+│   ├── prompt_cache.py               # LLM response caching (reduces API cost)
+│   ├── healthcheck.py                # Component health checks
+│   ├── hardware_detect.py            # Auto-detect cameras and drivers
+│   ├── hailo_vision.py               # Hailo-8 edge accelerator integration
+│   ├── registry.py                   # Component registry
+│   ├── crash.py                      # Crash handler
+│   ├── watchdog.py                   # System health monitor + crash recovery
+│   ├── telemetry.py                  # Performance metrics, memory usage tracking
+│   ├── runtime_stats.py              # Runtime statistics
+│   ├── battery.py                    # Battery monitoring
+│   ├── geofence.py                   # Geofencing utilities
+│   ├── peripherals.py                # Peripheral device management
+│   ├── fleet.py                      # Multi-robot fleet management
+│   ├── hub.py                        # Model hub integration
+│   ├── plugins.py                    # Plugin system
+│   ├── profiles.py                   # User profile management
+│   ├── daemon.py                     # systemd service management
+│   ├── audit.py                      # Audit logging
+│   ├── approvals.py                  # Work approval workflow
+│   ├── privacy.py                    # Privacy / data deletion utilities
+│   ├── schedule.py                   # Task scheduling
+│   ├── network.py                    # Network utilities
+│   ├── backup.py / restore.py        # Config backup & restore
+│   ├── export.py                     # Config bundle export
+│   ├── migrate.py                    # RCAN config migration
+│   ├── diff.py                       # Config diff viewer
+│   ├── lint.py                       # Deep config validation
+│   ├── conformance.py                # RCAN conformance checking
+│   ├── configure.py                  # Configuration CLI helpers
+│   ├── upgrade.py                    # Self-update + doctor
+│   ├── fix.py                        # Auto-fix common issues
+│   ├── update_check.py               # Version update checking
+│   ├── record.py                     # Episode recording
+│   ├── learn.py                      # Interactive learning tutorial
+│   ├── demo.py                       # Cinematic terminal demo
+│   ├── repl.py                       # Python REPL with robot objects
+│   ├── shell.py                      # Interactive command shell
+│   ├── watch.py                      # Live telemetry dashboard
+│   ├── logs.py                       # Log viewing utilities
+│   ├── benchmark.py                  # Performance profiling
+│   ├── calibrate.py                  # Interactive hardware calibration
+│   ├── test_hardware.py              # Hardware testing CLI
+│   ├── memory_search.py              # Memory search utilities
+│   ├── claude_proxy.py               # Claude API proxy
 │   │
-│   ├── providers/                 # LLM provider adapters (8 providers)
-│   │   ├── __init__.py            # get_provider() factory + ComponentRegistry hook
-│   │   ├── base.py                # BaseProvider ABC + Thought class
-│   │   ├── anthropic_provider.py  # Claude Opus 4.6 / Sonnet 4.5
-│   │   ├── google_provider.py     # Gemini 2.5 Flash/Pro, Gemini 3
-│   │   ├── openai_provider.py     # GPT-4.1, GPT-4.1 Mini, GPT-5
-│   │   ├── huggingface_provider.py # HuggingFace Transformers
-│   │   ├── ollama_provider.py     # Local Ollama (offline, zero cost)
-│   │   ├── llamacpp_provider.py   # llama.cpp GGUF (edge/RPi)
-│   │   └── mlx_provider.py        # Apple Silicon MLX (M1-M4)
+│   ├── providers/                    # LLM provider adapters
+│   │   ├── __init__.py               # get_provider() factory
+│   │   ├── base.py                   # BaseProvider ABC + Thought class
+│   │   ├── google_provider.py        # Google Gemini
+│   │   ├── openai_provider.py        # OpenAI GPT-4.1
+│   │   ├── anthropic_provider.py     # Anthropic Claude
+│   │   ├── ollama_provider.py        # Local Ollama
+│   │   ├── huggingface_provider.py   # HuggingFace Hub
+│   │   ├── llamacpp_provider.py      # llama.cpp local inference
+│   │   └── mlx_provider.py           # Apple MLX acceleration
 │   │
-│   ├── drivers/                   # Hardware driver implementations
-│   │   ├── __init__.py            # get_driver() factory
-│   │   ├── base.py                # DriverBase ABC (move/stop/close)
-│   │   ├── pca9685.py             # I2C PWM motor driver (RC cars, Amazon kits)
-│   │   └── dynamixel.py           # Robotis servo controller (Protocol 2.0)
-│   │
-│   ├── channels/                  # Messaging channel integrations (5 platforms)
-│   │   ├── __init__.py            # create_channel() factory + session store
-│   │   ├── base.py                # BaseChannel ABC
-│   │   ├── session.py             # Multi-channel session routing (ChannelSessionStore)
-│   │   ├── whatsapp.py            # Re-export (default: neonize QR code)
-│   │   ├── whatsapp_neonize.py    # WhatsApp via neonize (QR code scan)
-│   │   ├── whatsapp_twilio.py     # WhatsApp via Twilio (legacy)
-│   │   ├── telegram_channel.py    # Telegram Bot (long-polling)
-│   │   ├── discord_channel.py     # Discord Bot
-│   │   └── slack_channel.py       # Slack Bot (Socket Mode)
-│   │
-│   ├── agents/                    # Agent-based orchestration
+│   ├── drivers/                      # Hardware driver implementations
 │   │   ├── __init__.py
-│   │   ├── base.py                # BaseAgent ABC
-│   │   ├── registry.py            # Agent registry
-│   │   ├── shared_state.py        # Shared agent state
-│   │   ├── observer.py            # Observation agent
-│   │   └── navigator.py           # Navigation agent
+│   │   ├── base.py                   # DriverBase ABC (move/stop/close/health_check)
+│   │   ├── pca9685.py                # I2C PWM motor driver (Amazon/Adafruit kits)
+│   │   └── dynamixel.py              # Robotis Dynamixel servo (Protocol 2.0)
 │   │
-│   ├── specialists/               # Task-specific specialist agents
-│   │   ├── base_specialist.py
-│   │   ├── scout.py               # Exploration/mapping
-│   │   ├── responder.py           # Reactive response
-│   │   ├── dock.py                # Docking/charging
-│   │   ├── manipulator.py         # Object manipulation
-│   │   └── task_planner.py        # Multi-step planning
+│   ├── channels/                     # Messaging channel integrations
+│   │   ├── __init__.py               # Channel registry + create_channel() factory
+│   │   ├── base.py                   # BaseChannel ABC
+│   │   ├── session.py                # Session management
+│   │   ├── whatsapp.py               # Re-export (defaults to neonize)
+│   │   ├── whatsapp_neonize.py       # WhatsApp via neonize (QR code scan)
+│   │   ├── whatsapp_twilio.py        # WhatsApp via Twilio (legacy)
+│   │   ├── telegram_channel.py       # Telegram Bot (long-polling)
+│   │   ├── discord_channel.py        # Discord Bot
+│   │   └── slack_channel.py          # Slack Bot (Socket Mode)
 │   │
-│   ├── learner/                   # Self-improving loop (Sisyphus pattern)
-│   │   ├── alma.py                # Cross-episode learning consolidation
-│   │   ├── sisyphus.py            # Main improvement orchestrator
-│   │   ├── episode.py             # Episode recording + replay
-│   │   ├── episode_store.py       # Episode persistence
-│   │   ├── patches.py             # Code patch generation
-│   │   ├── pm_stage.py            # Project Manager: analyze failures
-│   │   ├── dev_stage.py           # Developer: generate patches
-│   │   ├── qa_stage.py            # QA: verify patches
-│   │   └── apply_stage.py         # Apply: rollout with rollback
+│   ├── fs/                           # Virtual Filesystem (Unix-inspired)
+│   │   ├── __init__.py               # CastorFS facade class
+│   │   ├── namespace.py              # Hierarchical namespace (/dev, /etc, /proc, etc.)
+│   │   ├── permissions.py            # PermissionTable, ACL, Cap (capabilities)
+│   │   ├── safety.py                 # SafetyLayer (bounds, rate limiting, e-stop)
+│   │   ├── memory.py                 # MemoryStore (episodic, semantic, procedural)
+│   │   ├── context.py                # ContextWindow (multi-turn), Pipeline (Unix pipes)
+│   │   └── proc.py                   # ProcFS (read-only runtime introspection)
 │   │
-│   ├── swarm/                     # Multi-robot swarm coordination
-│   │   ├── peer.py                # Peer discovery + mesh networking
-│   │   ├── coordinator.py         # Swarm coordinator
-│   │   ├── events.py              # Swarm event bus
-│   │   ├── consensus.py           # Distributed consensus
-│   │   ├── patch_sync.py          # Synchronized patch rollout
-│   │   └── shared_memory.py       # Shared swarm memory
+│   ├── safety/                       # Safety & authorization subsystem
+│   │   ├── __init__.py
+│   │   ├── anti_subversion.py        # Input scanning (check_input_safety, ScanVerdict)
+│   │   ├── authorization.py          # WorkAuthority, WorkOrder, audit log
+│   │   ├── bounds.py                 # BoundsChecker (joint, force, workspace)
+│   │   ├── monitor.py                # Continuous safety monitoring
+│   │   ├── protocol.py               # Safety protocol definitions
+│   │   └── state.py                  # SafetyStateSnapshot, SafetyTelemetry
 │   │
-│   ├── safety/                    # Defense-in-depth safety system
-│   │   ├── base.py
-│   │   ├── protocol.py            # Safety command execution protocol
-│   │   ├── authorization.py       # Work approval/denial system
-│   │   ├── state.py               # Safety state machine
-│   │   ├── monitor.py             # Real-time safety monitor
-│   │   ├── anti_subversion.py     # Prompt injection defense
-│   │   └── bounds.py              # Physical bounds enforcement
+│   ├── rcan/                         # RCAN protocol implementation
+│   │   ├── __init__.py
+│   │   ├── ruri.py                   # RURI addressing (rcan://domain.name.id)
+│   │   ├── message.py                # RCANMessage envelope, MessageType, Priority
+│   │   ├── rbac.py                   # RCANRole (CREATOR→GUEST), Scope, RCANPrincipal
+│   │   ├── router.py                 # MessageRouter (dispatch RCAN messages)
+│   │   ├── capabilities.py           # Capability, CapabilityRegistry
+│   │   ├── jwt_auth.py               # RCANTokenManager (JWT sign/verify)
+│   │   └── mdns.py                   # mDNS robot discovery (optional)
 │   │
-│   ├── rcan/                      # RCAN spec core implementation
-│   │   ├── capabilities.py        # Capability declarations
-│   │   ├── jwt_auth.py            # JWT token auth
-│   │   ├── mdns.py                # mDNS peer discovery
-│   │   ├── message.py             # RCAN message types
-│   │   ├── rbac.py                # Role-based access control
-│   │   ├── router.py              # Message routing
-│   │   └── ruri.py                # RCAN URI handling
+│   ├── agents/                       # Multi-agent framework
+│   │   ├── __init__.py
+│   │   ├── base.py                   # BaseAgent ABC, AgentStatus
+│   │   ├── shared_state.py           # SharedState (pub/sub event bus)
+│   │   ├── registry.py               # AgentRegistry (lifecycle management)
+│   │   ├── observer.py               # ObserverAgent (scene understanding)
+│   │   ├── navigator.py              # NavigatorAgent (path planning)
+│   │   ├── manipulator_agent.py      # ManipulatorAgent (arm/gripper)
+│   │   ├── communicator.py           # CommunicatorAgent (NL intent routing)
+│   │   ├── guardian.py               # GuardianAgent (safety meta-agent, veto + e-stop)
+│   │   └── orchestrator.py           # OrchestratorAgent (master, single RCAN output)
 │   │
-│   ├── fs/                        # Virtual filesystem for state/memory
-│   │   ├── __init__.py            # CastorFS main class
-│   │   ├── context.py
-│   │   ├── memory.py
-│   │   ├── namespace.py
-│   │   ├── permissions.py
-│   │   ├── proc.py
-│   │   └── safety.py
+│   ├── specialists/                  # Task specialist agents
+│   │   ├── __init__.py
+│   │   ├── base_specialist.py        # BaseSpecialist ABC, Task, TaskResult
+│   │   ├── scout.py                  # ScoutSpecialist (visual exploration)
+│   │   ├── manipulator.py            # ManipulatorSpecialist (grasping)
+│   │   ├── dock.py                   # DockSpecialist (docking/charging)
+│   │   ├── responder.py              # ResponderSpecialist (alert responses)
+│   │   └── task_planner.py           # TaskPlanner (decompose → typed tasks)
 │   │
-│   ├── [Infrastructure modules]
-│   │   ├── daemon.py              # Systemd auto-start service
-│   │   ├── connectivity.py        # Internet/provider connectivity
-│   │   ├── offline_fallback.py    # Auto-fallback when offline
-│   │   ├── healthcheck.py         # Health check system
-│   │   ├── watchdog.py            # Process watchdog
-│   │   ├── battery.py             # Battery monitoring
-│   │   ├── hardware_detect.py     # Automatic peripheral detection
-│   │   ├── peripherals.py         # Peripheral API
-│   │   ├── telemetry.py           # Telemetry collection
-│   │   ├── logs.py                # Logging system
-│   │   ├── runtime_stats.py       # Runtime statistics
-│   │   ├── crash.py               # Crash handler
-│   │   └── backup.py              # Config backup/restore
+│   ├── learner/                      # Self-improving loop (Sisyphus pattern)
+│   │   ├── __init__.py
+│   │   ├── episode.py                # Episode (observation/action/outcome)
+│   │   ├── episode_store.py          # EpisodeStore (persistent JSON storage)
+│   │   ├── sisyphus.py               # SisyphusLoop + ImprovementResult + SisyphusStats
+│   │   ├── pm_stage.py               # PMStage (analyze episodes, find failures)
+│   │   ├── dev_stage.py              # DevStage (propose patches)
+│   │   ├── qa_stage.py               # QAStage (validate patches)
+│   │   ├── apply_stage.py            # ApplyStage (deploy approved patches)
+│   │   ├── patches.py                # Patch, ConfigPatch, PromptPatch, BehaviorPatch
+│   │   └── alma.py                   # ALMAConsolidation (swarm patch aggregation)
 │   │
-│   ├── [Specialized features]
-│   │   ├── tiered_brain.py        # Tiered brain (reactive→fast→planner)
-│   │   ├── claude_proxy.py        # Claude OAuth proxy integration
-│   │   ├── prompt_cache.py        # Prompt caching for cost reduction
-│   │   ├── hailo_vision.py        # Hailo-8 NPU support
-│   │   ├── geofence.py            # Geofencing controls
-│   │   ├── approvals.py           # Command approval system
-│   │   ├── audit.py               # Tamper-evident audit logging
-│   │   ├── conformance.py         # RCAN conformance checking
-│   │   ├── privacy.py             # Privacy controls
-│   │   ├── doctor.py              # System diagnostics
-│   │   ├── hub.py                 # Community recipe hub
-│   │   ├── fleet.py               # Multi-robot fleet management
-│   │   └── discover.py            # mDNS peer discovery
-│   │
-│   └── [CLI modules: doctor, demo, shell, repl, record, replay, watch,
-│         configure, install_service, calibrate, benchmark, export, lint,
-│         migrate, diff, profile, learn, update_check, ...]
+│   └── swarm/                        # Multi-robot coordination
+│       ├── __init__.py
+│       ├── peer.py                   # SwarmPeer (remote robot proxy)
+│       ├── coordinator.py            # SwarmCoordinator (task distribution)
+│       ├── consensus.py              # SwarmConsensus (majority-vote protocol)
+│       ├── events.py                 # SwarmEvent (pub/sub envelope)
+│       ├── shared_memory.py          # SharedMemory (distributed key-value)
+│       └── patch_sync.py             # PatchSync (incremental config sync)
 │
 ├── config/
-│   └── presets/                   # 16 hardware preset RCAN configs
-│       ├── rpi_rc_car.rcan.yaml           # Recommended starter
-│       ├── waveshare_alpha.rcan.yaml
-│       ├── adeept_generic.rcan.yaml
+│   └── presets/                      # 16 hardware preset RCAN configs
 │       ├── amazon_kit_generic.rcan.yaml
+│       ├── adeept_generic.rcan.yaml
+│       ├── waveshare_alpha.rcan.yaml
 │       ├── sunfounder_picar.rcan.yaml
 │       ├── dynamixel_arm.rcan.yaml
+│       ├── rpi_rc_car.rcan.yaml
 │       ├── arduino_l298n.rcan.yaml
 │       ├── esp32_generic.rcan.yaml
+│       ├── cytron_maker_pi.rcan.yaml
 │       ├── elegoo_tumbller.rcan.yaml
 │       ├── freenove_4wd.rcan.yaml
 │       ├── lego_mindstorms_ev3.rcan.yaml
 │       ├── lego_spike_prime.rcan.yaml
 │       ├── makeblock_mbot.rcan.yaml
-│       ├── yahboom_rosmaster.rcan.yaml
 │       ├── vex_iq.rcan.yaml
-│       ├── cytron_maker_pi.rcan.yaml
-│       └── rcan.schema.json               # RCAN validation schema
+│       └── yahboom_rosmaster.rcan.yaml
 │
-├── community-recipes/             # 7 community robot recipes
-│   ├── index.json
-│   ├── classroom-assistant-a1c3f7/
-│   ├── garden-monitor-f2a8c4/
-│   ├── llama-farm-scout-b4d2e8/
-│   ├── pet-companion-b7d1e6/
-│   ├── picar-home-patrol-e7f3a1/
-│   ├── research-data-collector-c9f4a3/
-│   └── warehouse-inventory-d5e9b2/
-│
-├── tests/                         # 2,233+ tests (60+ files)
-│   ├── test_*.py                  # Core, API, providers, channels, drivers
-│   ├── test_agents/               # Agent orchestration tests
-│   ├── test_integration/          # End-to-end tests
-│   ├── test_learner/              # Sisyphus loop stage tests
-│   ├── test_specialists/          # Specialist agent tests
-│   └── test_swarm/                # Multi-robot swarm tests
-│
-├── docs/
-│   ├── hardware-guide.md
-│   ├── peripherals.md
-│   ├── safety-audit-report.md
-│   └── community/
+├── tests/                            # 91 test files, 2521 tests (0 failures)
+│   ├── test_api_endpoints.py         # FastAPI gateway (133 tests)
+│   ├── test_config_validation.py     # Config validation
+│   ├── test_offline_fallback.py      # OfflineFallbackManager
+│   ├── test_learner/                 # Sisyphus loop (12 test files)
+│   ├── test_agents/                  # Agent framework (11 test files)
+│   ├── test_swarm/                   # Multi-robot swarm (6 test files)
+│   ├── test_fs/                      # Virtual filesystem
+│   ├── test_safety/                  # Safety subsystem
+│   ├── test_rcan/                    # RCAN protocol
+│   ├── test_channels/                # Messaging channels
+│   ├── test_providers/               # AI providers
+│   └── test_drivers/                 # Hardware drivers
 │
 ├── scripts/
-│   ├── install.sh                 # One-line installer for RPi/Linux
-│   └── sync-version.py
+│   ├── install.sh / install.ps1      # One-line installers (Linux/Windows)
+│   ├── install-check.sh / .ps1       # Install verification
+│   ├── uninstall.sh                  # Uninstaller
+│   ├── start_dashboard.sh            # Kiosk mode tmux launcher
+│   └── sync-version.py               # Keep version strings in sync
 │
-├── brand/                         # Logo variants (badge, flat-solid, geometric, neural-gradient)
-├── site/                          # Static landing page (Cloudflare Pages)
+├── site/                             # Static landing page (Cloudflare Pages)
+├── brand/                            # Brand assets (logos, badges)
 ├── .github/
 │   ├── workflows/
-│   │   ├── ci.yml                 # Full CI pipeline
-│   │   ├── validate_rcan.yml      # RCAN spec validation
-│   │   ├── release.yml
-│   │   └── deploy-pages.yml
+│   │   ├── ci.yml                    # Tests + lint + type check
+│   │   ├── validate_rcan.yml         # RCAN schema validation on *.rcan.yaml changes
+│   │   ├── install-test.yml          # Multi-platform install verification (scheduled)
+│   │   ├── release.yml               # PyPI release automation (on tag push)
+│   │   ├── deploy-pages.yml          # Cloudflare Pages deploy (on push to main)
+│   │   ├── auto-label.yml            # PR auto-labeling
+│   │   ├── create_backlog_issues.yml # Backlog maintenance (scheduled)
+│   │   └── stale.yml                 # Stale issue/PR management (scheduled)
 │   └── scripts/validate_rcan.py
-├── .env.example                   # Environment variable template
-├── .pre-commit-config.yaml        # Pre-commit hooks
-├── pyproject.toml                 # Python packaging (pip install -e .)
-├── requirements.txt               # Core dependencies
-├── Dockerfile                     # Container image
-├── docker-compose.yml             # 2 services: main + gateway profile
-├── CHANGELOG.md                   # Version history
-├── CONTRIBUTING.md                # How to add providers/drivers/channels
-├── CONTRIBUTING-RECIPES.md        # Recipe contribution guide
-├── SECURITY.md                    # Security policy
-├── wrangler.toml                  # Cloudflare Pages config
+├── .env.example                      # Environment variable template
+├── pyproject.toml                    # Python packaging (pip install -e .)
+├── requirements.txt                  # Core Python dependencies
+├── Dockerfile                        # Container with health check
+├── docker-compose.yml                # Gateway + runtime + dashboard services
+├── CONTRIBUTING.md                   # How to add providers/drivers/channels
+├── wrangler.toml                     # Cloudflare Pages config
 └── README.md
 ```
 
 ## Architecture
 
 ```
-[ WhatsApp / Telegram / Discord / Slack ]   <-- Messaging Channels (castor/channels/)
+[ WhatsApp / Telegram / Discord / Slack ]     <-- Messaging Channels
                     |
-            [ API Gateway ]                  <-- FastAPI (castor/api.py)
+            [ API Gateway ]                    <-- FastAPI (castor/api.py)
                     |
-         [ Safety Layer ]                   <-- castor/safety/ (anti-subversion, bounds)
+        ┌──────────────────────┐
+        │   Safety Layer       │               <-- Anti-subversion, BoundsChecker
+        └──────────────────────┘
                     |
-   [ Tiered Brain: Reactive→Fast→Planner ]  <-- castor/tiered_brain.py
+    [ Gemini / GPT-4.1 / Claude / Ollama ]    <-- Brain (Provider Layer)
                     |
-  [ Claude / Gemini / GPT / Ollama / ... ]  <-- Provider Layer (castor/providers/)
+     ┌─────────────────────────────────┐
+     │  Offline Fallback / Tiered Brain │      <-- Connectivity-aware routing
+     └─────────────────────────────────┘
                     |
-              [ RCAN Config ]               <-- Validation (config/presets/*.rcan.yaml)
+              [ RCAN Config ]                  <-- Spinal Cord (Validation)
                     |
-        [ Dynamixel / PCA9685 ]             <-- Driver Layer (castor/drivers/)
+    ┌───────────────────────────────┐
+    │  VFS  │  Agents  │  Learner  │          <-- Runtime Subsystems
+    └───────────────────────────────┘
                     |
-              [ Your Robot ]               <-- The Body
+        [ Dynamixel / PCA9685 ]               <-- Drivers (Nervous System)
+                    |
+              [ Your Robot ]                   <-- The Body
 ```
 
 ### Core Abstractions
 
 - **`Thought`** (`castor/providers/base.py`): Hardware-agnostic AI reasoning step. Contains `raw_text` and `action` (parsed JSON dict).
-- **`BaseProvider`** (`castor/providers/base.py`): ABC for LLM adapters. Key method: `think(image_bytes, instruction) -> Thought`.
-- **`DriverBase`** (`castor/drivers/base.py`): ABC for hardware drivers. Methods: `move()`, `stop()`, `close()`.
+- **`BaseProvider`** (`castor/providers/base.py`): ABC for LLM adapters. Key methods: `think(image_bytes, instruction) -> Thought`, `think_stream(image_bytes, instruction) -> Iterator[str]`, `health_check() -> dict`.
+- **`DriverBase`** (`castor/drivers/base.py`): ABC for hardware drivers. Methods: `move()`, `stop()`, `close()`, `health_check() -> dict`.
 - **`BaseChannel`** (`castor/channels/base.py`): ABC for messaging integrations. Methods: `start()`, `stop()`, `send_message()`.
-- **`BaseAgent`** (`castor/agents/base.py`): ABC for orchestration agents.
-- **`ComponentRegistry`** (`castor/registry.py`): Plugin system for providers, drivers, and channels.
-- **Factory functions**: `get_provider()` (providers), `get_driver()` (drivers), `create_channel()` (channels).
-
-### Plugin / Registry System (`castor/registry.py`)
-
-`ComponentRegistry` is the central plugin registry. All built-in providers, drivers, and channels are registered at startup. Third-party plugins can register new components without modifying core files. `castor/plugins.py` handles discovery and loading of external plugins.
+- **`CastorFS`** (`castor/fs/__init__.py`): Virtual filesystem with Unix-style paths, capability-based permissions, memory tiers, and e-stop.
+- **`SisyphusLoop`** (`castor/learner/sisyphus.py`): Orchestrates PM→Dev→QA→Apply continuous improvement. Tracks per-stage timing via `ImprovementResult.stage_durations` and `SisyphusStats`.
+- **Factory functions**: `get_provider()` (providers), `create_channel()` (channels).
 
 ### Authentication (`castor/auth.py`)
 
 Credentials are resolved in priority order:
-1. **Shell environment** (already exported vars win)
-2. **`~/.opencastor/env`** file
-3. **`.env` file** (loaded via python-dotenv)
-4. **RCAN config fallback** (e.g. `config["api_key"]`)
+1. **Environment variable** (e.g. `GOOGLE_API_KEY`)
+2. **`.env` file** (loaded via python-dotenv)
+3. **RCAN config fallback** (e.g. `config["api_key"]`)
 
 Key functions:
-- `resolve_provider_key(provider, config)` - Get API key for a provider
-- `resolve_channel_credentials(channel, config)` - Get all creds for a channel
-- `list_available_providers()` / `list_available_channels()` - Status maps
-- `check_provider_ready()` / `check_channel_ready()` - Readiness booleans
+- `resolve_provider_key(provider, config)` — Get API key for a provider
+- `resolve_channel_credentials(channel, config)` — Get all creds for a channel
+- `list_available_providers()` / `list_available_channels()` — Status maps
+- `check_provider_ready()` / `check_channel_ready()` — Readiness booleans
 
 ### API Gateway (`castor/api.py`)
 
-FastAPI server with multi-layer auth:
-- `OPENCASTOR_JWT_SECRET` → JWT verification (RCAN protocol)
-- `OPENCASTOR_API_TOKEN` → Static bearer token
-- Neither set → Open access
+FastAPI server providing:
 
-Endpoints:
-- `GET /health` - Health check + uptime
-- `GET /api/status` - Runtime status, active providers/channels
-- `POST /api/command` - Send instruction + base64 image, get action
-- `POST /api/action` - Direct motor command (bypass brain)
-- `POST /api/stop` - Emergency stop
-- `GET /api/whatsapp/status` - WhatsApp (neonize) connection status
-- `POST /webhooks/whatsapp` - Twilio WhatsApp incoming webhook (legacy)
-- `POST /webhooks/slack` - Slack Events API fallback
-- SSE endpoints for real-time telemetry streaming
+**Health & Status:**
+- `GET /health` — Health check (uptime, brain, driver, channels); used by Docker HEALTHCHECK
+- `GET /api/status` — Runtime status, active providers/channels
+
+**Command & Control:**
+- `POST /api/command` — Send instruction to brain, receive `{raw_text, action}` (rate-limited 5/s/IP)
+- `POST /api/command/stream` — NDJSON streaming of LLM tokens (uses `think_stream()`, falls back to `think()`)
+- `POST /api/action` — Direct motor command (bypasses brain)
+- `POST /api/stop` — Emergency stop
+- `POST /api/estop/clear` — Clear emergency stop
+
+**Driver:**
+- `GET /api/driver/health` — Driver health check (`{ok, mode, error, driver_type}`); 503 if no driver
+
+**Learner / Sisyphus:**
+- `GET /api/learner/stats` — Sisyphus stats (`episodes_analyzed`, `avg_duration_ms`, …); `{available: false}` when not running
+- `GET /api/learner/episodes` — Recent episodes from EpisodeStore (`?limit=N`, max 100)
+- `POST /api/learner/episode` — Submit episode, optionally run improvement loop (`?run_improvement=true`)
+
+**Command History:**
+- `GET /api/command/history` — Last N instruction→thought→action pairs (ring buffer, max 50; `?limit=N`)
+
+**Virtual Filesystem:**
+- `POST /api/fs/read` / `POST /api/fs/write` — Read/write VFS paths
+- `GET /api/fs/ls` / `GET /api/fs/tree` — Directory listing/tree view
+- `GET /api/fs/proc` — Runtime introspection (/proc snapshot)
+- `GET /api/fs/memory` — Query memory stores (episodic, semantic, procedural)
+- `GET /api/fs/permissions` — Permission table dump
+
+**Authentication & Security:**
+- `POST /api/auth/token` — Issue JWT token (RCAN RBAC)
+- `GET /api/auth/whoami` — Authenticated principal identity
+- `GET /api/audit` — Audit log (work orders, approvals, denials)
+- `GET /api/rbac` — RBAC roles and principals
+
+**Streaming:**
+- `GET /api/stream/mjpeg` — MJPEG live camera stream (max 3 concurrent)
+
+**Webhooks (messaging channels):**
+- `POST /webhooks/whatsapp` — Twilio WhatsApp (rate-limited 10/min/sender)
+- `POST /webhooks/slack` — Slack Events API (rate-limited 10/min/sender)
+
+Protected by optional `OPENCASTOR_API_TOKEN` (bearer) or `OPENCASTOR_JWT_SECRET` (JWT/RCAN). JWT is checked before the static token when both are configured.
 
 ### Channel System (`castor/channels/`)
 
-All channels follow the same pattern:
-- Constructor takes config dict + `on_message` callback
-- SDKs are lazily imported (graceful degradation if not installed)
-- `handle_message()` forwards to the brain and returns the reply
-- `ChannelSessionStore` (`session.py`) routes messages across active channels
-
 | Channel | SDK | Auth Env Vars |
 |---------|-----|---------------|
-| WhatsApp | `neonize` | None (QR code scan) |
+| WhatsApp (neonize) | `neonize>=0.3.10` | None (QR code scan) |
 | WhatsApp (Twilio) | `twilio` | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_NUMBER` |
-| Telegram | `python-telegram-bot` | `TELEGRAM_BOT_TOKEN` |
-| Discord | `discord.py` | `DISCORD_BOT_TOKEN` |
-| Slack | `slack-bolt` | `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_SIGNING_SECRET` |
+| Telegram | `python-telegram-bot>=21.0` | `TELEGRAM_BOT_TOKEN` |
+| Discord | `discord.py>=2.3.0` | `DISCORD_BOT_TOKEN` |
+| Slack | `slack-bolt>=1.18.0` | `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_SIGNING_SECRET` |
+
+All channel `handle_message()` dispatchers are async-safe: coroutine callbacks are awaited directly; sync callbacks are offloaded with `asyncio.to_thread()`.
 
 ### Perception-Action Loop (`castor/main.py`)
 
-Continuous OODA loop with auto hardware detection at startup:
-1. **OBSERVE** - Capture frame (OpenCV USB / picamera2 CSI / OAK-D stereo / Hailo NPU)
-2. **ORIENT & DECIDE** - Send frame + instruction to LLM provider via `brain.think()`
-3. **ACT** - Translate `Thought.action` into motor commands via driver
-4. **TELEMETRY** - Check latency against configurable budget, record episode
-
-Hardware auto-detection runs at startup (`apply_hardware_overrides()`): camera type (OAK-D > RealSense > USB > CSI), PCA9685 I2C address, Hailo-8 NPU.
-
-### Tiered Brain Architecture (`castor/tiered_brain.py`)
-
-Three-layer routing:
-- **Layer 1 (Reactive, <1ms)** — Rule-based reflexes (obstacle, e-stop)
-- **Layer 2 (Fast, ~500ms)** — Local/small model (Ollama, llama.cpp, MLX)
-- **Layer 3 (Planner, ~12s)** — Cloud LLM for complex reasoning (Claude, Gemini, GPT)
-
-### Self-Improving Loop (`castor/learner/`)
-
-Sisyphus pattern — 4 autonomous stages after each episode:
-1. **PM stage** (`pm_stage.py`) — Analyze failures, identify root cause
-2. **Dev stage** (`dev_stage.py`) — Generate code patches
-3. **QA stage** (`qa_stage.py`) — Verify patches pass tests
-4. **Apply stage** (`apply_stage.py`) — Roll out with automatic rollback on regression
-
-Episodes are stored via `episode_store.py`; `alma.py` consolidates learning across episodes.
-
-### Safety System (`castor/safety/`)
-
-Defense-in-depth with multiple independent layers:
-- **`anti_subversion.py`** — Prompt injection defense, blocks attempts to override safety rules
-- **`bounds.py`** — Physical bounds enforcement (speed limits, geofencing, tilt limits)
-- **`authorization.py`** — Work approval/denial; requires explicit operator sign-off for risky commands
-- **`state.py`** — Safety state machine (nominal → caution → e-stop)
-- **`monitor.py`** — Real-time safety monitoring with configurable thresholds
-- **`protocol.py`** — Safety command execution protocol (atomic, audited)
+Continuous OODA loop:
+1. **OBSERVE** — Capture camera frame via OpenCV
+2. **ORIENT & DECIDE** — Send frame + instruction to LLM provider (safety-checked first)
+3. **ACT** — Translate `Thought.action` into motor commands
+4. **TELEMETRY** — Check latency against configurable budget
 
 ### Provider Pattern
 
-- Constructor resolves API key from env first, then config
+- Constructor resolves API key from env → .env → config
 - `think()` encodes image as base64 (OpenAI/Anthropic) or raw bytes (Google)
+- Every `think()` call passes through `_check_instruction_safety()` first (prompt injection defense)
 - System prompt forces strict JSON output only
 - `_clean_json()` strips markdown fences from responses
-- Providers degrade gracefully if SDK not installed
+- `think_stream()` yields text chunks; all providers implement it (Anthropic CLI path yields single chunk)
+- `health_check()` returns `{ok: bool, latency_ms: float, error: str|None}`
 
 ### Driver Pattern
 
-- Hardware SDKs imported in try/except with module-level `HAS_<NAME>` boolean
+- Hardware SDKs imported in `try/except` with module-level `HAS_<NAME>` boolean
 - Drivers degrade to mock mode when SDK is missing (log actions, no physical output)
 - Values clamped to safe physical ranges
+- `health_check()` returns `{ok: bool, mode: "hardware"|"mock", error: str|None}`
 
-## CLI Commands
+### Safety Subsystem (`castor/safety/`)
+
+- **`check_input_safety(instruction, principal)`** — Scans every incoming instruction; returns `ScanVerdict.BLOCK` on prompt injection
+- **`BaseProvider._check_instruction_safety()`** — Called at the top of every `think()` and `think_stream()`; returns a blocking `Thought` on BLOCK verdict
+- **`BoundsChecker`** — Validates motor commands against joint/force/workspace limits
+- **`WorkAuthority`** — Approves/denies `WorkOrder` requests with full audit trail
+- **`GuardianAgent`** — Safety meta-agent that can veto actions and trigger e-stop
+
+### Virtual Filesystem (`castor/fs/`)
+
+Unix-inspired filesystem with:
+- **Namespaces**: `/dev/motor`, `/etc/config`, `/var/log`, `/tmp`, `/proc`, `/mnt`
+- **Capabilities**: `CAP_MOTOR_WRITE`, `CAP_ESTOP`, `CAP_SAFETY_OVERRIDE`
+- **Memory tiers**: episodic (recorded episodes), semantic (facts/KB), procedural (behaviors)
+- **ContextWindow**: sliding multi-turn context for agents
+- **Pipeline**: Unix-pipe-style operation chaining
+- **E-stop**: `fs.estop()` / `fs.clear_estop()` propagates to all drivers
+
+### Offline Fallback (`castor/offline_fallback.py`)
+
+- `OfflineFallbackManager` monitors connectivity via `ConnectivityMonitor`
+- On connectivity loss, auto-switches to local provider (Ollama, llama.cpp, MLX)
+- Probes fallback provider health at startup
+- Alerts via configured channel when switching
+- Config block: `offline_fallback.enabled`, `.provider`, `.model`, `.check_interval_s`, `.alert_channel`
+- Usage: `state.offline_fallback.get_active_provider().think(...)` instead of `state.brain.think(...)`
+
+### RCAN Protocol (`castor/rcan/`)
+
+- **RURI addressing**: `rcan://domain.robot-name.id` (e.g., `rcan://opencastor.my-bot.a1b2c3d4`)
+- **RBAC**: 5 roles: `CREATOR > OWNER > LEASEE > USER > GUEST`
+- **JWT auth**: `RCANTokenManager` (sign/verify; `POST /api/auth/token`)
+- **mDNS discovery**: Optional, auto-discovers local robots
+- **MessageRouter**: Dispatches `RCANMessage` envelopes by type and target RURI
+
+### Multi-Agent Framework (`castor/agents/`)
+
+- All agents inherit `BaseAgent` and communicate via `SharedState` pub/sub event bus
+- `OrchestratorAgent` — master agent; resolves multi-agent input to a single RCAN action
+- `GuardianAgent` — safety meta-agent; veto authority over all motor commands
+- `ObserverAgent` — parses vision output, publishes detections
+- `NavigatorAgent` — path planning (potential fields)
+- `CommunicatorAgent` — routes NL intent from messaging channels
+- `AgentRegistry` — spawns, monitors, and restarts agents
+
+### Self-Improving Loop (`castor/learner/`)
+
+4-stage Sisyphus cycle:
+1. **Record** (`episode.py`, `episode_store.py`) — Save observation→action→outcome tuples
+2. **PM** (`pm_stage.py`) — Analyze episodes, identify failure patterns
+3. **Dev** (`dev_stage.py`) — Generate `ConfigPatch` / `PromptPatch` / `BehaviorPatch`
+4. **QA** (`qa_stage.py`) — Validate patches; suggest retry or approve
+5. **Apply** (`apply_stage.py`) — Deploy approved patches live
+
+`SisyphusLoop.run_episode()` tracks per-stage timing in `ImprovementResult.stage_durations` (keys: `pm_ms`, `dev_ms_attempt0`, `qa_ms_attempt0`, `apply_ms`). `SisyphusStats.avg_duration_ms` averages across applied/rejected episodes.
+
+### Swarm Coordination (`castor/swarm/`)
+
+- `SwarmCoordinator` — distributes tasks across `SwarmPeer` robots
+- `SwarmConsensus` — majority-vote protocol for shared decisions
+- `SharedMemory` — distributed key-value store
+- `PatchSync` — incremental config synchronization across robots
+- `ALMAConsolidation` (`learner/alma.py`) — aggregates patches from multiple robots
+
+## CLI Commands (48+)
 
 ```bash
-# Core
+# Core operations
 castor run      --config robot.rcan.yaml             # Perception-action loop
 castor run      --config robot.rcan.yaml --simulate  # Without hardware
 castor gateway  --config robot.rcan.yaml             # API gateway + channels
-castor wizard                                         # Interactive terminal setup
-castor dashboard                                      # Streamlit web UI
+castor wizard                                         # Interactive setup
+castor wizard   --simple / --web                      # Minimal / browser wizard
+castor dashboard                                      # tmux terminal dashboard
+castor demo                                           # Cinematic demo (no hardware)
 castor status                                         # Provider/channel readiness
+castor doctor                                         # System health diagnostics
 
-# Diagnostics
-castor doctor                                         # Full system diagnostics + auto-fix hints
-castor test-hardware                                  # Motor/sensor tester
-castor calibrate                                      # Hardware calibration
+# Hardware
+castor test-hardware                                  # Test individual motors
+castor calibrate                                      # Interactive calibration
 castor benchmark                                      # Performance profiling
-castor logs                                           # View/filter runtime logs
+
+# Configuration
+castor configure                                      # Configuration CLI
+castor validate                                       # RCAN conformance check
+castor lint                                           # Deep config validation
+castor migrate                                        # RCAN config migration
+castor diff                                           # Config diff viewer
+castor backup / restore                               # Backup and restore configs
+castor export                                         # Export config bundle
+
+# Development & debugging
+castor shell                                          # Interactive command shell
+castor repl                                           # Python REPL with robot objects
 castor watch                                          # Live telemetry dashboard
-
-# Config management
-castor configure                                      # Interactive config editor
-castor lint     --config robot.rcan.yaml             # Deep config validation
-castor diff     a.rcan.yaml b.rcan.yaml              # Config diffing
-castor migrate  --config robot.rcan.yaml             # Version migration
-castor export   --config robot.rcan.yaml             # Bundle config for sharing
-castor backup                                         # Backup configs
-castor restore                                        # Restore from backup
-
-# Recording
-castor record   --config robot.rcan.yaml             # Record session to episode
-castor replay   --episode <id>                        # Replay a recorded episode
+castor logs                                           # View logs
+castor fix                                            # Auto-fix common issues
+castor test                                           # Run test suite
+castor learn                                          # Interactive tutorial
+castor quickstart                                     # Quick start guide
+castor record / replay                                # Session recording/replay
 
 # Advanced
-castor improve                                        # Trigger self-improvement loop
-castor agents                                         # List/manage active agents
-castor fleet                                          # Multi-robot fleet status
-castor hub      list/install/share                    # Community recipe hub
-castor shell                                          # Interactive command shell
-castor repl                                           # Python REPL with robot context
-castor learn                                          # Interactive tutorial
-castor install-service                                # Install systemd auto-start
-castor update-check                                   # Check for new versions
+castor improve  --enable/--disable/--episodes/--status  # Sisyphus self-improvement
+castor agents   list/status/spawn                     # Agent management
+castor fleet    status                                # Multi-robot status
+castor token    [--create/--verify]                   # JWT token management
+castor discover                                       # Auto-discover local robots
+castor safety                                         # Safety controls
+castor install-service                                # Generate systemd unit
+castor upgrade                                        # Self-update + doctor
+castor plugin(s)                                      # Plugin management
+castor hub                                            # Model hub integration
+castor login                                          # Authentication
+castor privacy                                        # Privacy/data deletion
+castor schedule / network / approvals / profile       # Misc utilities
+castor update-check                                   # Version updates
 ```
 
 Also available as Python modules:
@@ -426,98 +512,113 @@ Also available as Python modules:
 python -m castor.main --config robot.rcan.yaml
 python -m castor.api --config robot.rcan.yaml
 python -m castor.wizard
-streamlit run castor/dashboard.py
 ```
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and fill in what you need. Secrets also load from `~/.opencastor/env`.
+Copy `.env.example` to `.env` and fill in what you need.
 
 ### AI Providers
 | Variable | Provider |
 |---|---|
-| `ANTHROPIC_API_KEY` | Anthropic Claude (Opus 4.6 recommended) |
 | `GOOGLE_API_KEY` | Google Gemini |
 | `OPENAI_API_KEY` | OpenAI GPT-4.1 |
+| `ANTHROPIC_API_KEY` | Anthropic Claude |
 | `OPENROUTER_API_KEY` | OpenRouter (multi-model) |
-| `OLLAMA_BASE_URL` | Local Ollama (no key, default: http://localhost:11434) |
+| `OLLAMA_BASE_URL` | Local Ollama (no key needed) |
+| `GOOGLE_AUTH_MODE=adc` | Google Application Default Credentials |
+| `HF_AUTH_MODE=cli` | HuggingFace CLI auth |
 
 ### Messaging Channels
 | Variable | Channel |
 |---|---|
-| *(none -- QR code scan)* | WhatsApp (neonize) |
+| *(none — QR code scan)* | WhatsApp (neonize) |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_NUMBER` | WhatsApp (Twilio, legacy) |
 | `TELEGRAM_BOT_TOKEN` | Telegram |
 | `DISCORD_BOT_TOKEN` | Discord |
 | `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_SIGNING_SECRET` | Slack |
 
 ### Gateway & Runtime
-| Variable | Purpose |
-|---|---|
-| `OPENCASTOR_API_TOKEN` | Static bearer token (generate: `openssl rand -hex 32`) |
-| `OPENCASTOR_JWT_SECRET` | JWT secret for RCAN protocol auth |
-| `OPENCASTOR_API_HOST` | Bind address (default: 0.0.0.0) |
-| `OPENCASTOR_API_PORT` | Port (default: 8000) |
-| `OPENCASTOR_CONFIG` | Config file path (default: `config/presets/rpi_rc_car.rcan.yaml`) |
-| `OPENCASTOR_CORS_ORIGINS` | CORS allowed origins (default: `*`) |
-| `DYNAMIXEL_PORT` | Serial port override |
-| `CAMERA_INDEX` | Camera device (default: 0) |
-| `LOG_LEVEL` | Logging level |
+| Variable | Default | Purpose |
+|---|---|---|
+| `OPENCASTOR_API_TOKEN` | None | Bearer token for API auth (`openssl rand -hex 32`) |
+| `OPENCASTOR_JWT_SECRET` | None | JWT signing secret (RCAN auth; checked before API_TOKEN) |
+| `OPENCASTOR_CORS_ORIGINS` | `*` | Comma-separated allowed CORS origins (restrict in prod) |
+| `OPENCASTOR_API_HOST` | 127.0.0.1 | Bind address |
+| `OPENCASTOR_API_PORT` | 8000 | Port |
+| `OPENCASTOR_COMMAND_RATE` | 5 | Max `/api/command` calls/sec/IP |
+| `OPENCASTOR_WEBHOOK_RATE` | 10 | Max webhook calls/min/sender |
+| `OPENCASTOR_MAX_STREAMS` | 3 | Max concurrent MJPEG clients |
+| `OPENCASTOR_CONFIG` | robot.rcan.yaml | Config file path |
+| `OPENCASTOR_MEMORY_DIR` | — | Memory persistence directory |
+| `DYNAMIXEL_PORT` | — | Serial port override |
+| `CAMERA_INDEX` | 0 | Camera device index |
+| `LOG_LEVEL` | INFO | Logging level |
 
 ## Dependencies
 
 ### Core (always installed)
-- **Brain**: `anthropic`, `google-generativeai`, `openai`, `huggingface-hub`
-- **Body**: `pyserial`
+- **Brain**: `google-generativeai`, `openai`, `anthropic`
+- **Body**: `dynamixel-sdk`, `pyserial`
 - **Eyes**: `opencv-python-headless`
-- **Voice**: `gTTS`, `pygame`
 - **Config**: `pyyaml`, `jsonschema`, `requests`
-- **Gateway**: `fastapi`, `uvicorn[standard]`, `python-dotenv`, `httpx`, `python-multipart`
-- **Dashboard**: `streamlit`, `SpeechRecognition`
-- **CLI**: `rich`, `argcomplete`
+- **Gateway**: `fastapi`, `uvicorn`, `python-dotenv`, `httpx`
+- **Dashboard**: `streamlit`, `SpeechRecognition`, `gTTS`
+- **CLI**: `rich`
 
-### Optional extras (install via pyproject.toml)
+### Optional Extras (pyproject.toml)
+
 ```bash
-pip install opencastor[rpi]            # picamera2, adafruit PCA9685, neonize
-pip install opencastor[whatsapp]       # neonize (QR code scan)
+pip install opencastor[rpi]             # RPi: PCA9685 + picamera2 + neonize
+pip install opencastor[whatsapp]        # neonize==0.3.10 (QR code scan)
 pip install opencastor[whatsapp-twilio] # twilio (legacy)
-pip install opencastor[telegram]       # python-telegram-bot
-pip install opencastor[discord]        # discord.py
-pip install opencastor[slack]          # slack-bolt
-pip install opencastor[channels]       # All messaging channels
-pip install opencastor[rcan]           # PyJWT, zeroconf (mDNS)
-pip install opencastor[dynamixel]      # dynamixel-sdk
-pip install opencastor[all]            # Everything
-pip install opencastor[dev]            # pytest, pytest-asyncio, pytest-cov, ruff, qrcode
+pip install opencastor[telegram]        # python-telegram-bot>=21.0
+pip install opencastor[discord]         # discord.py>=2.3.0
+pip install opencastor[slack]           # slack-bolt>=1.18.0
+pip install opencastor[channels]        # All messaging channels
+pip install opencastor[rcan]            # PyJWT + zeroconf (RCAN protocol)
+pip install opencastor[dynamixel]       # dynamixel-sdk>=3.7.31
+pip install opencastor[all]             # Everything
+pip install opencastor[dev]             # pytest, pytest-asyncio, ruff, qrcode
 ```
+
+**Neonize version pin**: Always use `neonize==0.3.10`. Versions 0.3.14+ require `protobuf>=6.32.1` which conflicts with the system `protobuf 5.x`. Fix: `pip install "neonize==0.3.10" -q`.
+
+Hardware-specific (RPi only): `adafruit-circuitpython-pca9685`, `adafruit-circuitpython-motor`, `busio`, `board`, `picamera2`
 
 ## Configuration (RCAN)
 
 - All robot configs use the `.rcan.yaml` extension
 - Configs follow the [RCAN Spec schema](https://rcan.dev/spec/)
 - Required top-level keys: `rcan_version`, `metadata`, `agent`, `physics`, `drivers`, `network`, `rcan_protocol`
-- Presets live in `config/presets/` (16 presets covering RPi RC cars, LEGO, VEX, Arduino, ESP32, Dynamixel arms, etc.)
-- Schema: `config/presets/rcan.schema.json`
-- The wizard (`castor wizard`) generates new configs interactively and saves API keys to `.env`
+  - `metadata.robot_name` — required
+  - `agent.model` — required
+  - `drivers` — must be non-empty list
+- Validated by `castor/config_validation.py` on gateway startup (`log_validation_result()`)
+- 16 presets in `config/presets/`
+- The wizard (`castor wizard`) generates new configs and saves API keys to `.env`
 
 ## Docker
 
 ```bash
-# Default: main app (gateway + API)
-docker compose up
-
-# Optional gateway service
-docker compose --profile gateway up
+docker compose up                                    # Gateway only
+docker compose --profile hardware up                 # Gateway + hardware runtime
+docker compose --profile dashboard up                # Gateway + Streamlit
+docker compose --profile hardware --profile dashboard up  # Everything
 ```
 
-The `docker-compose.yml` uses `env_file: .env` so secrets stay out of the compose file. Two services defined: `opencastor` (default) and `gateway` (profile).
+The `docker-compose.yml` uses `env_file: .env` so secrets stay out of the compose file.
 
 ## CI/CD
 
-- **CI** (`.github/workflows/ci.yml`): Full test suite on push/PR, Python 3.10–3.12
-- **RCAN Validation** (`.github/workflows/validate_rcan.yml`): Validates all `*.rcan.yaml` against JSON schema
-- **Release** (`.github/workflows/release.yml`): PyPI publish on tag
-- **Pages** (`.github/workflows/deploy-pages.yml`): `site/` → Cloudflare Pages via `wrangler.toml`
+| Workflow | Trigger | Purpose |
+|---|---|---|
+| `ci.yml` | Push, PR | Tests + ruff lint + type check |
+| `validate_rcan.yml` | Push/PR on `*.rcan.yaml` | JSON schema validation |
+| `install-test.yml` | Scheduled | Multi-platform install test |
+| `release.yml` | Tag push | PyPI release automation |
+| `deploy-pages.yml` | Push to main | Cloudflare Pages deploy |
+| `stale.yml` | Scheduled | Stale issue/PR cleanup |
 
 ## Code Style
 
@@ -525,69 +626,65 @@ The `docker-compose.yml` uses `env_file: .env` so secrets stay out of the compos
 - **snake_case** for functions/variables
 - **Type hints** on public method signatures
 - **Docstrings** on classes and non-trivial methods
-- **Lazy imports** for optional SDKs with `HAS_<NAME>` boolean guards
+- **Lazy imports** for optional SDKs (hardware libs, channel SDKs)
 - **Structured logging**: `logging.getLogger("OpenCastor.<Module>")`
 - **Linting**: `ruff check castor/` / `ruff format castor/`
-- **Pre-commit**: `.pre-commit-config.yaml` enforces style on commit
 
 ## Testing
 
-Tests go in `tests/`, mirroring the `castor/` package structure. 2,233+ tests across 60+ files.
+Tests in `tests/`, mirroring `castor/` package structure.
 
 ```bash
 pip install -e ".[dev]"
 pytest tests/
-pytest tests/ --cov=castor --cov-report=html  # with coverage
 ```
 
-Key test areas: CLI (200+ tests), API endpoints, providers (mocked), channels, drivers, safety invariants, anti-subversion, swarm, learner stages, integration.
+Current: **2521 tests, 8 skipped, 0 failures**
+
+Key fixture: `_reset_state_and_env` (autouse in `test_api_endpoints.py`) — resets all `AppState` fields before every test, including `thought_history = deque(maxlen=50)`, `learner = None`, `offline_fallback = None`, and clears `_command_history`/`_webhook_history` rate-limiter dicts.
 
 ## Adding New Components
 
 ### New AI Provider
 1. Create `castor/providers/<name>_provider.py`, subclass `BaseProvider`
-2. Implement `__init__` (resolve key from env then config) and `think(image_bytes, instruction) -> Thought`
-3. Register in `castor/providers/__init__.py` (`_builtin_get_provider()` routing + `__all__`)
-4. Add env var mapping to `castor/auth.py` `PROVIDER_AUTH_MAP`
-5. Add SDK to `pyproject.toml` optional dependencies and `requirements.txt` (commented)
-6. Add env var to `.env.example`
+2. Implement `__init__` (resolve key), `think()`, `think_stream()`, `health_check()`
+3. Call `self._check_instruction_safety(instruction)` at the top of `think()` and `think_stream()`
+4. Register in `castor/providers/__init__.py` (`get_provider()`)
+5. Add env var mapping to `castor/auth.py` `PROVIDER_AUTH_MAP`
+6. Add SDK to `pyproject.toml` and `requirements.txt`, env var to `.env.example`
 
 ### New Hardware Driver
 1. Create `castor/drivers/<name>.py`, subclass `DriverBase`
-2. Implement `move()`, `stop()`, `close()` with mock fallback (try/except + `HAS_<NAME>`)
-3. Register in `get_driver()` in `castor/drivers/__init__.py`
-4. Add SDK to `pyproject.toml` optional dependencies
+2. Implement `move()`, `stop()`, `close()` with mock fallback (`HAS_<NAME>` pattern)
+3. Implement `health_check()` returning `{ok, mode, error}`
+4. Register in `get_driver()` in `castor/main.py`; add SDK to `pyproject.toml`
 
 ### New Messaging Channel
 1. Create `castor/channels/<name>.py`, subclass `BaseChannel`
 2. Implement `start()`, `stop()`, `send_message()`
-3. Register in `castor/channels/__init__.py` (`_register_builtin_channels()`)
-4. Add env vars to `castor/auth.py` `CHANNEL_AUTH_MAP` and `.env.example`
-5. Add SDK to `pyproject.toml` optional dependencies
-6. Add webhook endpoint to `castor/api.py` if needed
+3. Wrap all event handlers in `try/except`; log errors, don't propagate
+4. Register in `castor/channels/__init__.py`
+5. Add env vars to `castor/auth.py` `CHANNEL_AUTH_MAP` and `.env.example`
+6. Add SDK to `pyproject.toml` optional dependencies
+7. Add webhook endpoint to `castor/api.py` with `_check_webhook_rate()` applied
 
 ### New Hardware Preset
 1. Create `config/presets/<name>.rcan.yaml`
-2. Follow the RCAN schema (see `config/presets/rcan.schema.json`)
-3. CI validates automatically on push
+2. Follow RCAN schema (see existing presets); CI validates on push
 
-### New Community Recipe
-1. Use `castor hub share --submit` to package and submit
-2. See `CONTRIBUTING-RECIPES.md` for the full format
-3. Recipes live in `community-recipes/`
-
-See `CONTRIBUTING.md` for full examples and templates.
+See `CONTRIBUTING.md` for detailed examples and templates.
 
 ## Safety Considerations
 
-- **Anti-subversion** (`castor/safety/anti_subversion.py`): Detects and blocks prompt injection attempts
-- **Physical bounds** (`castor/safety/bounds.py`): Speed limits, tilt limits, geofencing
-- **Authorization** (`castor/safety/authorization.py`): Risky commands require explicit operator approval
-- **Audit chain** (`castor/audit.py`): Tamper-evident log of all commands and outcomes
-- **Emergency stop**: Dashboard button, `POST /api/stop`, any channel message, or safety monitor trigger
-- **Driver clamping**: Values clamped to safe physical ranges (e.g., Dynamixel: 0-4095 ticks)
-- **`safety_stop: true`** in RCAN config enables hardware-level emergency stop
-- **Latency budgets**: Configurable `latency_budget_ms` per RCAN config
-- **Bearer/JWT auth**: API protected by `OPENCASTOR_API_TOKEN` or `OPENCASTOR_JWT_SECRET`
-- **`.env` in `.gitignore`**: Secrets never committed
-- **Graceful shutdown**: All drivers call `close()` in finally blocks
+- **Prompt injection defense**: `_check_instruction_safety()` scans every LLM instruction; returns blocking `Thought` on BLOCK verdict
+- **Webhook rate limiting**: 10 req/min/sender on `/webhooks/whatsapp` and `/webhooks/slack`
+- **Command rate limiting**: 5 req/sec/IP on `/api/command` and `/api/command/stream`
+- **Driver bounds clamping**: Dynamixel 0–4095 ticks; PCA9685 duty cycle limits
+- **`safety_stop: true`** in RCAN config enables emergency stop
+- **`BoundsChecker`** validates motor commands against joint/force/workspace limits
+- **`GuardianAgent`** has veto authority over all motor commands in multi-agent mode
+- Configurable latency budgets (`latency_budget_ms`)
+- Emergency stop via dashboard, `POST /api/stop`, `fs.estop()`, or messaging channels
+- Optional bearer-token or JWT auth on the API gateway
+- `.env` in `.gitignore` — secrets never committed
+- Drivers gracefully shut down via `close()` in `finally` blocks
