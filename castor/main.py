@@ -15,6 +15,7 @@ import yaml
 
 from castor.fs import CastorFS
 from castor.providers import get_provider
+from castor.safety.bounds import BoundsChecker
 
 logging.basicConfig(
     level=logging.INFO,
@@ -683,6 +684,25 @@ def main():
             logger.error(f"Hardware Init Failed: {e}. Switching to Simulation.")
             args.simulate = True
 
+    # 3b. INITIALIZE BOUNDS CHECKER (safety limits from physics: block)
+    physics_cfg = config.get("physics", {})
+    robot_type = physics_cfg.get("type", "")
+    try:
+        from castor.safety.bounds import DEFAULT_CONFIGS
+
+        # Explicit workspace/joints/force keys in physics block take precedence;
+        # fall back to built-in defaults for known robot types, then unconstrained.
+        if any(k in physics_cfg for k in ("workspace", "joints", "force")):
+            bounds_checker = BoundsChecker.from_config(physics_cfg)
+        elif robot_type in DEFAULT_CONFIGS:
+            bounds_checker = BoundsChecker.from_robot_type(robot_type)
+        else:
+            bounds_checker = BoundsChecker()
+        logger.info(f"Bounds checker initialized (type={robot_type or 'unconfigured'})")
+    except Exception as e:
+        logger.warning(f"Bounds checker init failed ({e}), using unconstrained checker")
+        bounds_checker = BoundsChecker()
+
     # 4. INITIALIZE EYES (Camera -- CSI first, then USB, then blank)
     camera = Camera(config)
     set_shared_camera(camera)
@@ -1065,7 +1085,19 @@ def main():
                         if action_type == "move":
                             linear = safe_action.get("linear", 0.0)
                             angular = safe_action.get("angular", 0.0)
-                            driver.move(linear, angular)
+                            bounds_result = bounds_checker.check_action(safe_action)
+                            if bounds_result.violated:
+                                logger.error(
+                                    "Bounds violation — move blocked: %s",
+                                    bounds_result.details,
+                                )
+                                driver.stop()
+                            else:
+                                if bounds_result.status == "warning":
+                                    logger.warning(
+                                        "Bounds warning: %s", bounds_result.details
+                                    )
+                                driver.move(linear, angular)
                             if audit:
                                 audit.log_motor_command(safe_action)
                         elif action_type == "stop":
