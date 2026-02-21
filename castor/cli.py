@@ -479,6 +479,7 @@ def cmd_status(args) -> None:
         list_available_providers,
         load_dotenv_if_available,
     )
+    from castor.safety.authorization import DEFAULT_AUDIT_LOG_PATH
 
     load_dotenv_if_available()
 
@@ -496,6 +497,8 @@ def cmd_status(args) -> None:
         label = "ready" if ready else "not configured"
         print(f"    [{icon}] {name:12s} {label}")
 
+    audit_path = DEFAULT_AUDIT_LOG_PATH.expanduser()
+    print(f"\n  Audit Log: {audit_path}")
     print()
 
 
