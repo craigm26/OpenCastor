@@ -24,103 +24,103 @@ jobs:
                 labels: ["security", "critical", "plugins"],
                 body: `## Problem
 
-\`castor/plugins.py:95-103\` loads every \`.py\` file in \`~/.opencastor/plugins/\` with
-\`importlib.util.exec_module()\`. There is no:
+            \`castor/plugins.py:95-103\` loads every \`.py\` file in \`~/.opencastor/plugins/\` with
+            \`importlib.util.exec_module()\`. There is no:
 
-- Signature / hash verification
-- Sandboxing (plugins run in the same process with full OS access)
-- Manifest declaring which hooks/commands the plugin registers
-- Provenance record (where was this plugin downloaded from?)
+            - Signature / hash verification
+            - Sandboxing (plugins run in the same process with full OS access)
+            - Manifest declaring which hooks/commands the plugin registers
+            - Provenance record (where was this plugin downloaded from?)
 
-A compromised plugin silently bypasses the entire safety subsystem.
+            A compromised plugin silently bypasses the entire safety subsystem.
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] Add a \`plugin.json\` manifest schema alongside each plugin file (name, version, author, hooks[], commands[])
-- [ ] \`castor plugin install <url-or-path>\` command that records provenance to \`~/.opencastor/plugins.lock\`
-- [ ] \`load_plugins()\` validates manifest presence and optionally SHA-256 hash before exec
-- [ ] Documentation updated with manifest format and install instructions
+            - [ ] Add a \`plugin.json\` manifest schema alongside each plugin file (name, version, author, hooks[], commands[])
+            - [ ] \`castor plugin install <url-or-path>\` command that records provenance to \`~/.opencastor/plugins.lock\`
+            - [ ] \`load_plugins()\` validates manifest presence and optionally SHA-256 hash before exec
+            - [ ] Documentation updated with manifest format and install instructions
 
-## References
-- \`castor/plugins.py:79-112\` — \`load_plugins()\`
-- \`CONTRIBUTING.md\` — plugin authoring guide (needs updating)
-`
+            ## References
+            - \`castor/plugins.py:79-112\` — \`load_plugins()\`
+            - \`CONTRIBUTING.md\` — plugin authoring guide (needs updating)
+            `
               },
               {
                 title: "[Safety] BoundsChecker is never called from the perception-action loop — bounds enforcement is silently skipped",
                 labels: ["safety", "critical", "bug"],
                 body: `## Problem
 
-\`castor/safety/bounds.py\` implements \`BoundsChecker\`, \`WorkspaceBounds\`,
-\`JointBounds\`, and \`ForceBounds\` with a clean \`from_config()\` factory that can read
-from the RCAN \`physics:\` block. However, \`castor/main.py\`'s perception-action loop
-never instantiates or calls \`BoundsChecker\`. Physical safety limits are defined but
-never enforced at runtime.
+            \`castor/safety/bounds.py\` implements \`BoundsChecker\`, \`WorkspaceBounds\`,
+            \`JointBounds\`, and \`ForceBounds\` with a clean \`from_config()\` factory that can read
+            from the RCAN \`physics:\` block. However, \`castor/main.py\`'s perception-action loop
+            never instantiates or calls \`BoundsChecker\`. Physical safety limits are defined but
+            never enforced at runtime.
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] \`CastorRuntime.__init__\` (or equivalent) calls \`BoundsChecker.from_config()\` using the RCAN \`physics:\` block
-- [ ] Every \`driver.move()\` call is preceded by \`bounds_checker.check_action(action)\`
-- [ ] \`violation\` result → emergency stop + log; \`warning\` result → log only
-- [ ] Unit tests verify that out-of-bounds action dict raises/stops correctly
+            - [ ] \`CastorRuntime.__init__\` (or equivalent) calls \`BoundsChecker.from_config()\` using the RCAN \`physics:\` block
+            - [ ] Every \`driver.move()\` call is preceded by \`bounds_checker.check_action(action)\`
+            - [ ] \`violation\` result → emergency stop + log; \`warning\` result → log only
+            - [ ] Unit tests verify that out-of-bounds action dict raises/stops correctly
 
-## References
-- \`castor/safety/bounds.py:496-582\` — \`BoundsChecker\`
-- \`castor/main.py:233-255\` — \`get_driver()\` and action loop
-- \`castor/safety/__init__.py\` — public API
-`
+            ## References
+            - \`castor/safety/bounds.py:496-582\` — \`BoundsChecker\`
+            - \`castor/main.py:233-255\` — \`get_driver()\` and action loop
+            - \`castor/safety/__init__.py\` — public API
+            `
               },
               {
                 title: "[Safety] WorkAuthority audit log is in-memory only — lost on process restart",
                 labels: ["safety", "critical", "persistence"],
                 body: `## Problem
 
-\`castor/safety/authorization.py\` implements \`WorkAuthority\` which guards physical
-destructive actions (cutting, welding, GPIO). All work orders and the audit log live in
-\`self._orders: dict\` and \`self._audit_log: list\` — both in memory. A process restart
-clears all pending approvals and the full audit trail.
+            \`castor/safety/authorization.py\` implements \`WorkAuthority\` which guards physical
+            destructive actions (cutting, welding, GPIO). All work orders and the audit log live in
+            \`self._orders: dict\` and \`self._audit_log: list\` — both in memory. A process restart
+            clears all pending approvals and the full audit trail.
 
-For a system that can drive GPIO-connected cutting/heating tools, losing the audit log
-is both a safety and compliance problem.
+            For a system that can drive GPIO-connected cutting/heating tools, losing the audit log
+            is both a safety and compliance problem.
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] Audit log appended to a JSONL file on disk (configurable path, default \`~/.opencastor/audit.jsonl\`)
-- [ ] Work orders optionally persisted and reloaded across restarts (with expiry still enforced)
-- [ ] \`WorkAuthority.__init__\` accepts optional \`audit_log_path\` parameter
-- [ ] \`castor status\` and \`GET /api/status\` report the audit log path
+            - [ ] Audit log appended to a JSONL file on disk (configurable path, default \`~/.opencastor/audit.jsonl\`)
+            - [ ] Work orders optionally persisted and reloaded across restarts (with expiry still enforced)
+            - [ ] \`WorkAuthority.__init__\` accepts optional \`audit_log_path\` parameter
+            - [ ] \`castor status\` and \`GET /api/status\` report the audit log path
 
-## References
-- \`castor/safety/authorization.py:138-145\` — in-memory storage
-- \`castor/safety/authorization.py:142-145\` — \`_audit()\` method
-`
+            ## References
+            - \`castor/safety/authorization.py:138-145\` — in-memory storage
+            - \`castor/safety/authorization.py:142-145\` — \`_audit()\` method
+            `
               },
               {
                 title: "[Security] Anti-subversion base64 pattern false-positives on image bytes in messaging channels",
                 labels: ["security", "bug", "channels"],
                 body: `## Problem
 
-\`castor/safety/anti_subversion.py:88\` defines:
+            \`castor/safety/anti_subversion.py:88\` defines:
 
-\`\`\`python
-_p("base64_payload", r"[A-Za-z0-9+/]{80,}={0,2}")
-\`\`\`
+            \`\`\`python
+            _p("base64_payload", r"[A-Za-z0-9+/]{80,}={0,2}")
+            \`\`\`
 
-Every base64-encoded camera frame forwarded through a WhatsApp or Telegram message will
-match this pattern and be flagged/blocked. This makes vision-over-messaging unusable and
-produces noisy false-positive logs.
+            Every base64-encoded camera frame forwarded through a WhatsApp or Telegram message will
+            match this pattern and be flagged/blocked. This makes vision-over-messaging unusable and
+            produces noisy false-positive logs.
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] Pattern #9 is removed from the general \`scan_input()\` path
-- [ ] A separate \`scan_text_only()\` function (or a flag on \`scan_input()\`) applies the base64 check only to freeform text fields, not binary/image data
-- [ ] Regression test: a base64-encoded JPEG does not trigger \`BLOCK\` verdict
-- [ ] Existing tests for other patterns continue to pass
+            - [ ] Pattern #9 is removed from the general \`scan_input()\` path
+            - [ ] A separate \`scan_text_only()\` function (or a flag on \`scan_input()\`) applies the base64 check only to freeform text fields, not binary/image data
+            - [ ] Regression test: a base64-encoded JPEG does not trigger \`BLOCK\` verdict
+            - [ ] Existing tests for other patterns continue to pass
 
-## References
-- \`castor/safety/anti_subversion.py:88\` — pattern definition
-- \`castor/safety/anti_subversion.py:182-216\` — \`scan_input()\`
-`
+            ## References
+            - \`castor/safety/anti_subversion.py:88\` — pattern definition
+            - \`castor/safety/anti_subversion.py:182-216\` — \`scan_input()\`
+            `
               },
 
               // ─── ABSTRACTION DEBT ─────────────────────────────────────────────────
@@ -129,87 +129,87 @@ produces noisy false-positive logs.
                 labels: ["refactor", "architecture"],
                 body: `## Problem
 
-The three core factory functions live in three different places:
+            The three core factory functions live in three different places:
 
-| Factory | Location |
-|---------|----------|
-| \`get_provider(config)\` | \`castor/providers/__init__.py\` |
-| \`get_driver(config)\` | \`castor/main.py\` |
-| \`create_channel(name, …)\` | \`castor/channels/__init__.py\` |
+            | Factory | Location |
+            |---------|----------|
+            | \`get_provider(config)\` | \`castor/providers/__init__.py\` |
+            | \`get_driver(config)\` | \`castor/main.py\` |
+            | \`create_channel(name, …)\` | \`castor/channels/__init__.py\` |
 
-This means:
-- Plugins can only register CLI commands, not custom providers, drivers, or channels
-- There is no single place to audit what implementations are available
-- The pattern for extending each is different
+            This means:
+            - Plugins can only register CLI commands, not custom providers, drivers, or channels
+            - There is no single place to audit what implementations are available
+            - The pattern for extending each is different
 
-## Proposed solution
+            ## Proposed solution
 
-Create \`castor/registry.py\` with a \`ComponentRegistry\` class that holds all three.
-Each factory becomes \`registry.get_provider()\`, \`registry.get_driver()\`,
-\`registry.create_channel()\`. The plugin \`register(registry)\` callback gains access
-to all three registration methods.
+            Create \`castor/registry.py\` with a \`ComponentRegistry\` class that holds all three.
+            Each factory becomes \`registry.get_provider()\`, \`registry.get_driver()\`,
+            \`registry.create_channel()\`. The plugin \`register(registry)\` callback gains access
+            to all three registration methods.
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] \`castor/registry.py\` created with unified \`ComponentRegistry\`
-- [ ] Existing factory functions become thin wrappers calling the registry (no breaking change)
-- [ ] Plugin \`register(registry)\` can call \`registry.add_provider(name, cls)\`, \`registry.add_driver(name, cls)\`, \`registry.add_channel(name, cls)\`
-- [ ] \`castor status\` lists registry contents
-- [ ] All existing tests pass
-`
+            - [ ] \`castor/registry.py\` created with unified \`ComponentRegistry\`
+            - [ ] Existing factory functions become thin wrappers calling the registry (no breaking change)
+            - [ ] Plugin \`register(registry)\` can call \`registry.add_provider(name, cls)\`, \`registry.add_driver(name, cls)\`, \`registry.add_channel(name, cls)\`
+            - [ ] \`castor status\` lists registry contents
+            - [ ] All existing tests pass
+            `
               },
               {
                 title: "[Refactor] Move get_driver() out of main.py into castor/drivers/__init__.py",
                 labels: ["refactor", "architecture"],
                 body: `## Problem
 
-\`get_driver(config)\` is a factory function buried inside \`castor/main.py\` — a
-1,299-line file that also contains the perception-action loop, \`Camera\` class, and
-\`Speaker\` class. This makes it impossible to import the driver factory without
-importing the entire runtime (and its OpenCV dependency).
+            \`get_driver(config)\` is a factory function buried inside \`castor/main.py\` — a
+            1,299-line file that also contains the perception-action loop, \`Camera\` class, and
+            \`Speaker\` class. This makes it impossible to import the driver factory without
+            importing the entire runtime (and its OpenCV dependency).
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] \`get_driver(config)\` moved to \`castor/drivers/__init__.py\` alongside \`get_provider()\` and \`create_channel()\`
-- [ ] \`castor/main.py\` imports \`get_driver\` from \`castor.drivers\`
-- [ ] No change to public behaviour or driver selection logic
-- [ ] All existing tests pass after the move
+            - [ ] \`get_driver(config)\` moved to \`castor/drivers/__init__.py\` alongside \`get_provider()\` and \`create_channel()\`
+            - [ ] \`castor/main.py\` imports \`get_driver\` from \`castor.drivers\`
+            - [ ] No change to public behaviour or driver selection logic
+            - [ ] All existing tests pass after the move
 
-## References
-- \`castor/main.py:233-255\` — current location of \`get_driver()\`
-- \`castor/drivers/__init__.py\` — target location
-`
+            ## References
+            - \`castor/main.py:233-255\` — current location of \`get_driver()\`
+            - \`castor/drivers/__init__.py\` — target location
+            `
               },
               {
                 title: "[Refactor] BoundsStatus enum defined in bounds.py but never used — fix or remove",
                 labels: ["refactor", "cleanup"],
                 body: `## Problem
 
-\`castor/safety/bounds.py:24-28\` defines:
+            \`castor/safety/bounds.py:24-28\` defines:
 
-\`\`\`python
-class BoundsStatus(str, Enum):
-    OK = "ok"
-    WARNING = "warning"
-    VIOLATION = "violation"
-\`\`\`
+            \`\`\`python
+            class BoundsStatus(str, Enum):
+                OK = "ok"
+                WARNING = "warning"
+                VIOLATION = "violation"
+            \`\`\`
 
-But \`BoundsResult\` stores \`status\` as a plain string (\`"ok"\`, \`"warning"\`,
-\`"violation"\`) throughout the file. The enum is imported in \`__init__.py\` but never
-instantiated or compared against anywhere.
+            But \`BoundsResult\` stores \`status\` as a plain string (\`"ok"\`, \`"warning"\`,
+            \`"violation"\`) throughout the file. The enum is imported in \`__init__.py\` but never
+            instantiated or compared against anywhere.
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-**Option A (preferred):** Use \`BoundsStatus\` consistently in \`BoundsResult.status\`,
-comparisons, and return values.
+            **Option A (preferred):** Use \`BoundsStatus\` consistently in \`BoundsResult.status\`,
+            comparisons, and return values.
 
-**Option B:** Remove \`BoundsStatus\`, keep plain strings, remove the export from
-\`castor/safety/__init__.py\`.
+            **Option B:** Remove \`BoundsStatus\`, keep plain strings, remove the export from
+            \`castor/safety/__init__.py\`.
 
-Either option should result in zero references to the unused enum if Option B is chosen.
-- [ ] Tests updated to match chosen approach
-- [ ] No remaining inconsistency between enum and string literals
-`
+            Either option should result in zero references to the unused enum if Option B is chosen.
+            - [ ] Tests updated to match chosen approach
+            - [ ] No remaining inconsistency between enum and string literals
+            `
               },
 
               // ─── SECURITY HARDENING ───────────────────────────────────────────────
@@ -218,67 +218,67 @@ Either option should result in zero references to the unused enum if Option B is
                 labels: ["security", "api"],
                 body: `## Problem
 
-\`castor/api.py\` has two command endpoints:
+            \`castor/api.py\` has two command endpoints:
 
-- \`POST /api/command\` — routes through the LLM brain; protected by optional bearer token
-- \`POST /api/action\` — directly actuates motors, bypassing the brain entirely
+            - \`POST /api/command\` — routes through the LLM brain; protected by optional bearer token
+            - \`POST /api/action\` — directly actuates motors, bypassing the brain entirely
 
-If \`OPENCASTOR_API_TOKEN\` is not set, both endpoints are unprotected. But even when
-the token IS set, \`/api/action\` still bypasses all prompt-injection scanning and
-bounds checking that happens inside the provider.
+            If \`OPENCASTOR_API_TOKEN\` is not set, both endpoints are unprotected. But even when
+            the token IS set, \`/api/action\` still bypasses all prompt-injection scanning and
+            bounds checking that happens inside the provider.
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] \`POST /api/action\` requires bearer auth when \`OPENCASTOR_API_TOKEN\` is set (same guard as \`/api/command\`)
-- [ ] \`POST /api/action\` payload is run through \`BoundsChecker.check_action()\` before the driver is called
-- [ ] Added to API documentation / \`GET /api/status\` response
-- [ ] Integration test: unauthenticated \`/api/action\` returns 401 when token is configured
-`
+            - [ ] \`POST /api/action\` requires bearer auth when \`OPENCASTOR_API_TOKEN\` is set (same guard as \`/api/command\`)
+            - [ ] \`POST /api/action\` payload is run through \`BoundsChecker.check_action()\` before the driver is called
+            - [ ] Added to API documentation / \`GET /api/status\` response
+            - [ ] Integration test: unauthenticated \`/api/action\` returns 401 when token is configured
+            `
               },
               {
                 title: "[Security] Add per-chat_id rate limiting to messaging channel handle_message()",
                 labels: ["security", "channels"],
                 body: `## Problem
 
-\`BaseChannel.handle_message(chat_id, text)\` forwards every message to the LLM and
-then to the robot with no rate limiting. A single user (or a compromised account) can
-flood the robot with commands, exhausting LLM API quota and causing erratic physical
-behavior.
+            \`BaseChannel.handle_message(chat_id, text)\` forwards every message to the LLM and
+            then to the robot with no rate limiting. A single user (or a compromised account) can
+            flood the robot with commands, exhausting LLM API quota and causing erratic physical
+            behavior.
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] \`BaseChannel\` gains a configurable rate limiter (e.g., token bucket, default: 10 messages / 60 s per \`chat_id\`)
-- [ ] Rate limit parameters are configurable via RCAN config (\`channels.rate_limit.requests\`, \`channels.rate_limit.window_s\`)
-- [ ] Excess messages receive a friendly "too many commands" reply instead of being silently dropped
-- [ ] \`castor/safety/anti_subversion.py\` anomaly detector is integrated or superseded by this
+            - [ ] \`BaseChannel\` gains a configurable rate limiter (e.g., token bucket, default: 10 messages / 60 s per \`chat_id\`)
+            - [ ] Rate limit parameters are configurable via RCAN config (\`channels.rate_limit.requests\`, \`channels.rate_limit.window_s\`)
+            - [ ] Excess messages receive a friendly "too many commands" reply instead of being silently dropped
+            - [ ] \`castor/safety/anti_subversion.py\` anomaly detector is integrated or superseded by this
 
-## References
-- \`castor/channels/base.py\` — \`BaseChannel.handle_message()\`
-- \`castor/safety/anti_subversion.py:131-167\` — existing per-principal anomaly detection (consider unifying)
-`
+            ## References
+            - \`castor/channels/base.py\` — \`BaseChannel.handle_message()\`
+            - \`castor/safety/anti_subversion.py:131-167\` — existing per-principal anomaly detection (consider unifying)
+            `
               },
               {
                 title: "[Security] Slack and Twilio webhook endpoints lack HMAC signature verification",
                 labels: ["security", "channels", "webhooks"],
                 body: `## Problem
 
-\`castor/api.py\` exposes:
-- \`POST /webhooks/slack\` — Slack Events API fallback
-- \`POST /webhooks/whatsapp\` — Twilio WhatsApp incoming
+            \`castor/api.py\` exposes:
+            - \`POST /webhooks/slack\` — Slack Events API fallback
+            - \`POST /webhooks/whatsapp\` — Twilio WhatsApp incoming
 
-Neither endpoint verifies the request signature. Slack signs all requests with
-\`X-Slack-Signature\` (HMAC-SHA256 of timestamp + body). Twilio signs with
-\`X-Twilio-Signature\` (HMAC-SHA1 of URL + params). Without verification, anyone who
-knows the endpoint URL can inject arbitrary commands.
+            Neither endpoint verifies the request signature. Slack signs all requests with
+            \`X-Slack-Signature\` (HMAC-SHA256 of timestamp + body). Twilio signs with
+            \`X-Twilio-Signature\` (HMAC-SHA1 of URL + params). Without verification, anyone who
+            knows the endpoint URL can inject arbitrary commands.
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] Slack webhook: verify \`X-Slack-Signature\` using \`SLACK_SIGNING_SECRET\` env var
-- [ ] Twilio webhook: verify \`X-Twilio-Signature\` using \`TWILIO_AUTH_TOKEN\`
-- [ ] Verification failures return HTTP 403
-- [ ] Both secrets added to \`.env.example\` and \`castor/auth.py\` \`CHANNEL_AUTH_MAP\`
-- [ ] Unit tests for valid and invalid signatures
-`
+            - [ ] Slack webhook: verify \`X-Slack-Signature\` using \`SLACK_SIGNING_SECRET\` env var
+            - [ ] Twilio webhook: verify \`X-Twilio-Signature\` using \`TWILIO_AUTH_TOKEN\`
+            - [ ] Verification failures return HTTP 403
+            - [ ] Both secrets added to \`.env.example\` and \`castor/auth.py\` \`CHANNEL_AUTH_MAP\`
+            - [ ] Unit tests for valid and invalid signatures
+            `
               },
 
               // ─── FEATURE BACKLOG ──────────────────────────────────────────────────
@@ -287,253 +287,253 @@ knows the endpoint URL can inject arbitrary commands.
                 labels: ["feature", "plugins", "cli"],
                 body: `## Summary
 
-The plugin directory (\`~/.opencastor/plugins/\`) exists and \`load_plugins()\` auto-loads
-from it, but there is no installer. Users must manually copy \`.py\` files with no
-provenance record.
+            The plugin directory (\`~/.opencastor/plugins/\`) exists and \`load_plugins()\` auto-loads
+            from it, but there is no installer. Users must manually copy \`.py\` files with no
+            provenance record.
 
-## Proposed UX
+            ## Proposed UX
 
-\`\`\`bash
-castor plugin install https://github.com/user/my-plugin   # clone + record
-castor plugin install ./local/my_plugin.py                # copy + record
-castor plugin list                                        # show installed + status
-castor plugin remove my-plugin                            # delete + deregister
-\`\`\`
+            \`\`\`bash
+            castor plugin install https://github.com/user/my-plugin   # clone + record
+            castor plugin install ./local/my_plugin.py                # copy + record
+            castor plugin list                                        # show installed + status
+            castor plugin remove my-plugin                            # delete + deregister
+            \`\`\`
 
-\`~/.opencastor/plugins.lock\` tracks name, source URL, install timestamp, SHA-256 hash.
+            \`~/.opencastor/plugins.lock\` tracks name, source URL, install timestamp, SHA-256 hash.
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] \`castor plugin install\` downloads/copies plugin to plugins dir
-- [ ] \`plugins.lock\` created/updated with provenance
-- [ ] \`castor plugin list\` reads lock file + shows loaded status
-- [ ] \`castor plugin remove\` deletes file and updates lock
-- [ ] \`load_plugins()\` logs a warning for plugins not in lock file (opt-in strict mode: block them)
-`
+            - [ ] \`castor plugin install\` downloads/copies plugin to plugins dir
+            - [ ] \`plugins.lock\` created/updated with provenance
+            - [ ] \`castor plugin list\` reads lock file + shows loaded status
+            - [ ] \`castor plugin remove\` deletes file and updates lock
+            - [ ] \`load_plugins()\` logs a warning for plugins not in lock file (opt-in strict mode: block them)
+            `
               },
               {
                 title: "[Feature] GET /api/audit endpoint to expose WorkAuthority audit log",
                 labels: ["feature", "api", "safety"],
                 body: `## Summary
 
-\`WorkAuthority.get_audit_log()\` returns a full list of work-order events (requested,
-approved, denied, executed, revoked, expired). This is valuable for operators
-monitoring destructive action authorizations, but it's not exposed anywhere — not in
-the API, not in the dashboard.
+            \`WorkAuthority.get_audit_log()\` returns a full list of work-order events (requested,
+            approved, denied, executed, revoked, expired). This is valuable for operators
+            monitoring destructive action authorizations, but it's not exposed anywhere — not in
+            the API, not in the dashboard.
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] \`GET /api/audit\` returns the current audit log as JSON array
-- [ ] Endpoint is protected by bearer auth when \`OPENCASTOR_API_TOKEN\` is set
-- [ ] Optional query params: \`?limit=N\`, \`?since=<ISO8601>\`
-- [ ] Dashboard (\`castor/dashboard.py\`) has an "Audit Log" section showing recent entries
-- [ ] Once \`WorkAuthority\` gains disk persistence (see related issue), this endpoint reads from the log file
-`
+            - [ ] \`GET /api/audit\` returns the current audit log as JSON array
+            - [ ] Endpoint is protected by bearer auth when \`OPENCASTOR_API_TOKEN\` is set
+            - [ ] Optional query params: \`?limit=N\`, \`?since=<ISO8601>\`
+            - [ ] Dashboard (\`castor/dashboard.py\`) has an "Audit Log" section showing recent entries
+            - [ ] Once \`WorkAuthority\` gains disk persistence (see related issue), this endpoint reads from the log file
+            `
               },
               {
                 title: "[Feature] Persist SafetyTelemetry to rolling file for historical safety score trends",
                 labels: ["feature", "safety", "telemetry"],
                 body: `## Summary
 
-\`castor/safety/state.py\` defines \`SafetyTelemetry\` and \`compute_safety_score()\`.
-The computed scores are ephemeral — there's no history. Operators have no visibility
-into whether the safety score is trending up or down over a session or across restarts.
+            \`castor/safety/state.py\` defines \`SafetyTelemetry\` and \`compute_safety_score()\`.
+            The computed scores are ephemeral — there's no history. Operators have no visibility
+            into whether the safety score is trending up or down over a session or across restarts.
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] \`SafetyTelemetry\` snapshots appended to a rolling JSONL file (\`~/.opencastor/telemetry.jsonl\`, configurable)
-- [ ] File rotates at configurable max size (default: 10 MB)
-- [ ] \`castor status\` shows min/max/avg safety score from last N snapshots
-- [ ] Dashboard chart renders safety score over time
-- [ ] \`GET /api/status\` includes \`safety_score_history: []\` (last 60 data points)
-`
+            - [ ] \`SafetyTelemetry\` snapshots appended to a rolling JSONL file (\`~/.opencastor/telemetry.jsonl\`, configurable)
+            - [ ] File rotates at configurable max size (default: 10 MB)
+            - [ ] \`castor status\` shows min/max/avg safety score from last N snapshots
+            - [ ] Dashboard chart renders safety score over time
+            - [ ] \`GET /api/status\` includes \`safety_score_history: []\` (last 60 data points)
+            `
               },
               {
                 title: "[Feature] MJPEG / WebRTC live camera stream for dashboard and remote control",
                 labels: ["feature", "dashboard", "camera"],
                 body: `## Summary
 
-The Streamlit dashboard currently shows static camera frames. Remote robot control
-requires a live video stream. MJPEG is the lowest-friction option (works in browser
-without plugins); WebRTC enables lower latency and two-way audio for future voice control.
+            The Streamlit dashboard currently shows static camera frames. Remote robot control
+            requires a live video stream. MJPEG is the lowest-friction option (works in browser
+            without plugins); WebRTC enables lower latency and two-way audio for future voice control.
 
-## Proposed approach
+            ## Proposed approach
 
-- Phase 1: MJPEG stream at \`GET /stream/camera\` (FastAPI \`StreamingResponse\` with \`multipart/x-mixed-replace\`)
-- Phase 2: WebRTC via \`aiortc\` with an \`/api/webrtc/offer\` signaling endpoint
+            - Phase 1: MJPEG stream at \`GET /stream/camera\` (FastAPI \`StreamingResponse\` with \`multipart/x-mixed-replace\`)
+            - Phase 2: WebRTC via \`aiortc\` with an \`/api/webrtc/offer\` signaling endpoint
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] \`GET /stream/camera\` returns MJPEG stream from the active camera
-- [ ] Dashboard embeds the stream in an \`<img>\` tag (works without Streamlit reload)
-- [ ] Stream respects \`OPENCASTOR_API_TOKEN\` auth
-- [ ] Frame rate and resolution configurable via RCAN or env var
-- [ ] \`castor/main.py\` \`Camera\` class exposes a \`frame_generator()\` method for the endpoint to consume
-`
+            - [ ] \`GET /stream/camera\` returns MJPEG stream from the active camera
+            - [ ] Dashboard embeds the stream in an \`<img>\` tag (works without Streamlit reload)
+            - [ ] Stream respects \`OPENCASTOR_API_TOKEN\` auth
+            - [ ] Frame rate and resolution configurable via RCAN or env var
+            - [ ] \`castor/main.py\` \`Camera\` class exposes a \`frame_generator()\` method for the endpoint to consume
+            `
               },
               {
                 title: "[Feature] Fleet management UI in CastorDash — show all active robots with safety scores and emergency stop",
                 labels: ["feature", "dashboard", "fleet"],
                 body: `## Summary
 
-\`castor/fleet.py\` exists but is not surfaced in the Streamlit dashboard or the CLI
-beyond a stub. For multi-robot deployments, operators need a single pane showing:
+            \`castor/fleet.py\` exists but is not surfaced in the Streamlit dashboard or the CLI
+            beyond a stub. For multi-robot deployments, operators need a single pane showing:
 
-- All active robots (via mDNS discovery or static config)
-- Per-robot: status, active provider, safety score, latency
-- Global emergency stop button
-- Per-robot emergency stop button
+            - All active robots (via mDNS discovery or static config)
+            - Per-robot: status, active provider, safety score, latency
+            - Global emergency stop button
+            - Per-robot emergency stop button
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] \`castor dashboard\` (or \`castor hub\`) shows a fleet overview panel
-- [ ] Fleet discovery uses the existing RCAN mDNS mechanism
-- [ ] Each robot card shows: name, IP, provider, safety score, last action, latency
-- [ ] "Stop All" button sends \`POST /api/stop\` to all discovered robots
-- [ ] \`GET /api/fleet\` returns the fleet roster as JSON (for \`castor status --fleet\`)
-`
+            - [ ] \`castor dashboard\` (or \`castor hub\`) shows a fleet overview panel
+            - [ ] Fleet discovery uses the existing RCAN mDNS mechanism
+            - [ ] Each robot card shows: name, IP, provider, safety score, last action, latency
+            - [ ] "Stop All" button sends \`POST /api/stop\` to all discovered robots
+            - [ ] \`GET /api/fleet\` returns the fleet roster as JSON (for \`castor status --fleet\`)
+            `
               },
               {
                 title: "[Feature] Multi-channel message routing — share robot conversation context across Telegram/WhatsApp/Discord sessions",
                 labels: ["feature", "channels"],
                 body: `## Summary
 
-Each messaging channel currently maintains an independent session. If a user starts a
-conversation with the robot on Telegram, then switches to WhatsApp, the robot has no
-memory of the prior exchange. Multi-channel routing would allow operators to switch
-devices mid-session without losing context.
+            Each messaging channel currently maintains an independent session. If a user starts a
+            conversation with the robot on Telegram, then switches to WhatsApp, the robot has no
+            memory of the prior exchange. Multi-channel routing would allow operators to switch
+            devices mid-session without losing context.
 
-## Proposed approach
+            ## Proposed approach
 
-Introduce a \`SessionBus\` that channels publish to and subscribe from. Each message
-gets tagged with \`principal_id\` (resolved from channel-specific user ID). The LLM
-provider receives conversation history across channels for the same principal.
+            Introduce a \`SessionBus\` that channels publish to and subscribe from. Each message
+            gets tagged with \`principal_id\` (resolved from channel-specific user ID). The LLM
+            provider receives conversation history across channels for the same principal.
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] \`SessionBus\` class in \`castor/channels/__init__.py\` (or \`castor/session.py\`)
-- [ ] Each channel's \`handle_message()\` looks up or creates a \`principal_id → session\` mapping
-- [ ] LLM prompt includes recent cross-channel history (configurable window, default: last 10 turns)
-- [ ] Sessions expire after configurable idle timeout (default: 30 min)
-- [ ] \`castor status\` shows active sessions count
-`
+            - [ ] \`SessionBus\` class in \`castor/channels/__init__.py\` (or \`castor/session.py\`)
+            - [ ] Each channel's \`handle_message()\` looks up or creates a \`principal_id → session\` mapping
+            - [ ] LLM prompt includes recent cross-channel history (configurable window, default: last 10 turns)
+            - [ ] Sessions expire after configurable idle timeout (default: 30 min)
+            - [ ] \`castor status\` shows active sessions count
+            `
               },
               {
                 title: "[Feature] Wire safety module to actually block the perception-action loop (unified enforcement path)",
                 labels: ["feature", "safety", "architecture"],
                 body: `## Summary
 
-This is the most impactful single gap in the codebase. The safety infrastructure is
-excellent in isolation:
+            This is the most impactful single gap in the codebase. The safety infrastructure is
+            excellent in isolation:
 
-- \`scan_input()\` / \`check_input_safety()\` — prompt injection
-- \`BoundsChecker.check_action()\` — workspace, joint, force limits
-- \`WorkAuthority.check_authorization()\` — destructive action gate
-- \`SafetyTelemetry\` / \`compute_safety_score()\` — aggregate health
+            - \`scan_input()\` / \`check_input_safety()\` — prompt injection
+            - \`BoundsChecker.check_action()\` — workspace, joint, force limits
+            - \`WorkAuthority.check_authorization()\` — destructive action gate
+            - \`SafetyTelemetry\` / \`compute_safety_score()\` — aggregate health
 
-But none of them are wired into the main perception-action loop. The
-\`BaseProvider.check_output_safety()\` only scans raw text, not the parsed
-\`Thought.action\` dict. The gap between the safety module and execution is the single
-most important thing to close.
+            But none of them are wired into the main perception-action loop. The
+            \`BaseProvider.check_output_safety()\` only scans raw text, not the parsed
+            \`Thought.action\` dict. The gap between the safety module and execution is the single
+            most important thing to close.
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] \`CastorRuntime\` (or equivalent in \`main.py\`) instantiates all safety components at startup
-- [ ] Every \`provider.think()\` call: input is scanned with \`scan_input()\`; output \`Thought.action\` dict is validated with \`BoundsChecker.check_action()\`
-- [ ] Destructive action types trigger \`WorkAuthority.check_authorization()\` before \`driver.move()\`
-- [ ] \`SafetyTelemetry\` is updated each loop iteration
-- [ ] \`BLOCK\` verdict → emergency stop + structured log entry; \`FLAG\` → log + continue
-- [ ] Integration test with a mock driver verifying that an out-of-bounds action stops the loop
+            - [ ] \`CastorRuntime\` (or equivalent in \`main.py\`) instantiates all safety components at startup
+            - [ ] Every \`provider.think()\` call: input is scanned with \`scan_input()\`; output \`Thought.action\` dict is validated with \`BoundsChecker.check_action()\`
+            - [ ] Destructive action types trigger \`WorkAuthority.check_authorization()\` before \`driver.move()\`
+            - [ ] \`SafetyTelemetry\` is updated each loop iteration
+            - [ ] \`BLOCK\` verdict → emergency stop + structured log entry; \`FLAG\` → log + continue
+            - [ ] Integration test with a mock driver verifying that an out-of-bounds action stops the loop
 
-## Related issues
-- BoundsChecker not wired to action loop
-- WorkAuthority audit log persistence
-- Anti-subversion base64 false positives
-`
+            ## Related issues
+            - BoundsChecker not wired to action loop
+            - WorkAuthority audit log persistence
+            - Anti-subversion base64 false positives
+            `
               },
               {
                 title: "[Feature] OpenTelemetry export for latency, safety scores, and action counts",
                 labels: ["feature", "telemetry", "observability"],
                 body: `## Summary
 
-OpenCastor already tracks latency budgets (\`latency_budget_ms\`), safety scores, and
-action counts internally. Exporting these as OpenTelemetry metrics/traces would let
-operators use standard observability stacks (Grafana, Datadog, Honeycomb) without
-custom integrations.
+            OpenCastor already tracks latency budgets (\`latency_budget_ms\`), safety scores, and
+            action counts internally. Exporting these as OpenTelemetry metrics/traces would let
+            operators use standard observability stacks (Grafana, Datadog, Honeycomb) without
+            custom integrations.
 
-## Proposed approach
+            ## Proposed approach
 
-- Use \`opentelemetry-sdk\` + \`opentelemetry-exporter-otlp\` (optional dep)
-- Emit metrics: \`castor.loop.latency_ms\`, \`castor.safety.score\`, \`castor.actions.total\`, \`castor.provider.tokens_used\`
-- Emit traces: one span per perception-action loop iteration with provider + driver attributes
-- \`OTEL_EXPORTER_OTLP_ENDPOINT\` env var controls export target (default: disabled)
+            - Use \`opentelemetry-sdk\` + \`opentelemetry-exporter-otlp\` (optional dep)
+            - Emit metrics: \`castor.loop.latency_ms\`, \`castor.safety.score\`, \`castor.actions.total\`, \`castor.provider.tokens_used\`
+            - Emit traces: one span per perception-action loop iteration with provider + driver attributes
+            - \`OTEL_EXPORTER_OTLP_ENDPOINT\` env var controls export target (default: disabled)
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] \`pip install opencastor[otel]\` installs the SDK + OTLP exporter
-- [ ] Metrics emitted each loop iteration when \`OTEL_EXPORTER_OTLP_ENDPOINT\` is set
-- [ ] Traces include \`provider\`, \`driver\`, \`action_type\`, \`safety_verdict\` attributes
-- [ ] Docker Compose example includes a Prometheus/OTLP collector sidecar
-- [ ] \`castor status\` shows whether OTEL export is active
-`
+            - [ ] \`pip install opencastor[otel]\` installs the SDK + OTLP exporter
+            - [ ] Metrics emitted each loop iteration when \`OTEL_EXPORTER_OTLP_ENDPOINT\` is set
+            - [ ] Traces include \`provider\`, \`driver\`, \`action_type\`, \`safety_verdict\` attributes
+            - [ ] Docker Compose example includes a Prometheus/OTLP collector sidecar
+            - [ ] \`castor status\` shows whether OTEL export is active
+            `
               },
               {
                 title: "[Feature] Driver preset declaration in RCAN config — add hardware without code changes",
                 labels: ["feature", "architecture", "rcan"],
                 body: `## Summary
 
-Adding a new hardware driver currently requires:
-1. Creating \`castor/drivers/<name>.py\`
-2. Registering in \`get_driver()\` in \`castor/main.py\`
-3. Updating \`pyproject.toml\` and \`requirements.txt\`
+            Adding a new hardware driver currently requires:
+            1. Creating \`castor/drivers/<name>.py\`
+            2. Registering in \`get_driver()\` in \`castor/main.py\`
+            3. Updating \`pyproject.toml\` and \`requirements.txt\`
 
-Steps 1 and 3 are unavoidable, but step 2 should be unnecessary. The RCAN
-\`drivers[].protocol\` field should be sufficient to select the driver class. New
-hardware presets in \`config/presets/\` should work without any code change.
+            Steps 1 and 3 are unavoidable, but step 2 should be unnecessary. The RCAN
+            \`drivers[].protocol\` field should be sufficient to select the driver class. New
+            hardware presets in \`config/presets/\` should work without any code change.
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] \`get_driver()\` (after moving to \`castor/drivers/__init__.py\`) checks a class registry first, then falls back to built-in if/elif
-- [ ] \`registry.add_driver(protocol_name, cls)\` allows plugins and third-party packages to register drivers
-- [ ] Entry point (\`pyproject.toml\` \`[project.entry-points."opencastor.drivers"]\`) enables pip-installed driver packages to auto-register
-- [ ] Existing presets continue to work without modification
-- [ ] \`castor status\` lists registered driver protocols
-`
+            - [ ] \`get_driver()\` (after moving to \`castor/drivers/__init__.py\`) checks a class registry first, then falls back to built-in if/elif
+            - [ ] \`registry.add_driver(protocol_name, cls)\` allows plugins and third-party packages to register drivers
+            - [ ] Entry point (\`pyproject.toml\` \`[project.entry-points."opencastor.drivers"]\`) enables pip-installed driver packages to auto-register
+            - [ ] Existing presets continue to work without modification
+            - [ ] \`castor status\` lists registered driver protocols
+            `
               },
               {
                 title: "[Docs] Document all undocumented modules — swarm, specialists, learner, agents, fs, rcan, fleet, daemon, watchdog, hub",
                 labels: ["documentation", "architecture"],
                 body: `## Summary
 
-CLAUDE.md documents the modules listed in the \`Repository Structure\` section, but
-30+ production modules are undocumented:
+            CLAUDE.md documents the modules listed in the \`Repository Structure\` section, but
+            30+ production modules are undocumented:
 
-| Module | Purpose |
-|--------|---------|
-| \`castor/swarm/\` | Distributed robot coordination |
-| \`castor/specialists/\` | Custom task specialists |
-| \`castor/learner/\` | ALMA learning stages, episode recording |
-| \`castor/agents/\` | Multi-agent coordination |
-| \`castor/fs/\` | Virtual filesystem (memory, permissions, namespaces) |
-| \`castor/rcan/\` | RCAN protocol (JWT, mDNS, routing, RBAC) |
-| \`castor/fleet.py\` | Fleet management |
-| \`castor/daemon.py\` | Background daemon |
-| \`castor/watchdog.py\` | Process watchdog |
-| \`castor/hub.py\` | Multi-robot hub |
-| \`castor/tiered_brain.py\` | Local/cloud LLM tiering |
-| \`castor/offline_fallback.py\` | Offline decision cache |
-| \`castor/prompt_cache.py\` | Prompt caching |
-| \`castor/geofence.py\` | Geofencing |
-| \`castor/benchmark.py\` | Performance benchmarking |
-| \`castor/conformance.py\` | RCAN conformance testing |
+            | Module | Purpose |
+            |--------|---------|
+            | \`castor/swarm/\` | Distributed robot coordination |
+            | \`castor/specialists/\` | Custom task specialists |
+            | \`castor/learner/\` | ALMA learning stages, episode recording |
+            | \`castor/agents/\` | Multi-agent coordination |
+            | \`castor/fs/\` | Virtual filesystem (memory, permissions, namespaces) |
+            | \`castor/rcan/\` | RCAN protocol (JWT, mDNS, routing, RBAC) |
+            | \`castor/fleet.py\` | Fleet management |
+            | \`castor/daemon.py\` | Background daemon |
+            | \`castor/watchdog.py\` | Process watchdog |
+            | \`castor/hub.py\` | Multi-robot hub |
+            | \`castor/tiered_brain.py\` | Local/cloud LLM tiering |
+            | \`castor/offline_fallback.py\` | Offline decision cache |
+            | \`castor/prompt_cache.py\` | Prompt caching |
+            | \`castor/geofence.py\` | Geofencing |
+            | \`castor/benchmark.py\` | Performance benchmarking |
+            | \`castor/conformance.py\` | RCAN conformance testing |
 
-## Acceptance criteria
+            ## Acceptance criteria
 
-- [ ] CLAUDE.md \`Repository Structure\` updated with all modules and one-line descriptions
-- [ ] Each undocumented module gains a module-level docstring if missing
-- [ ] \`CONTRIBUTING.md\` updated with patterns for extending swarm, learner, specialists
-- [ ] Architecture diagram updated to show fs, rcan, swarm, learner layers
-`
+            - [ ] CLAUDE.md \`Repository Structure\` updated with all modules and one-line descriptions
+            - [ ] Each undocumented module gains a module-level docstring if missing
+            - [ ] \`CONTRIBUTING.md\` updated with patterns for extending swarm, learner, specialists
+            - [ ] Architecture diagram updated to show fs, rcan, swarm, learner layers
+            `
               },
             ];
 
