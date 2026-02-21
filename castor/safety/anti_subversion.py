@@ -5,7 +5,13 @@ Detects prompt injection attacks in AI model inputs and outputs,
 blocks access to forbidden filesystem scopes, and performs basic
 anomaly detection on request rates per principal.
 
-Main entry point: :func:`scan_input`.
+Main entry points:
+- :func:`scan_input` — scans any input (binary, JSON, motor commands).
+  Does **not** apply the base64-payload pattern so that legitimate
+  camera frames forwarded through messaging channels are not blocked.
+- :func:`scan_text_only` — additionally applies the ``base64_payload``
+  pattern; use this for freeform human-typed text fields where a long
+  base64 blob is genuinely suspicious.
 """
 
 from __future__ import annotations
@@ -84,23 +90,39 @@ _p(
 _p("prompt_leak", r"\bwhat\s+(?:is|are)\s+your\s+(?:system\s+)?(?:prompt|instructions|rules)\b")
 # 8 — Markdown/delimiter injection (triple backtick break-out)
 _p("delimiter_injection", r"```\s*(?:system|assistant|user)\b")
-# 9 — Base64 encoded payload (long b64 blocks that could hide injections)
-_p("base64_payload", r"[A-Za-z0-9+/]{80,}={0,2}")
-# 10 — Token repetition attack (same word repeated 10+ times)
+# 9 — Token repetition attack (same word repeated 10+ times)
 _p("token_repetition", r"\b(\w{3,})\s+(?:\1\s+){9,}")
-# 11 — New system message injection
+# 10 — New system message injection
 _p("system_msg_inject", r"\[?\s*(?:SYSTEM|ADMIN|ROOT)\s*(?:\]|:)\s*", ScanVerdict.FLAG)
-# 12 — Instruction override phrases
+# 11 — Instruction override phrases
 _p(
     "instruction_override",
     r"\b(?:disregard|forget|override)\s+(?:all\s+)?(?:previous|prior|above|earlier)?\s*(?:instructions|rules|constraints)\b",
 )
-# 13 — Encoding evasion (hex escape sequences)
+# 12 — Encoding evasion (hex escape sequences)
 _p("hex_escape", r"(?:\\x[0-9a-fA-F]{2}){6,}")
-# 14 — Unicode smuggling (excessive zero-width chars)
+# 13 — Unicode smuggling (excessive zero-width chars)
 _p("unicode_smuggle", r"[\u200b\u200c\u200d\ufeff]{3,}")
-# 15 — Multi-line separator attacks
+# 14 — Multi-line separator attacks
 _p("separator_attack", r"[-=]{20,}\s*(?:system|instructions|new\s+prompt)", ScanVerdict.FLAG)
+
+
+# =====================================================================
+# Text-only patterns (applied by scan_text_only, NOT by scan_input)
+# These patterns produce false positives on binary/image data and must
+# only be used when scanning freeform human-typed text.
+# =====================================================================
+_TEXT_ONLY_PATTERNS: List[tuple] = []
+
+
+def _tp(name: str, pattern: str, verdict: ScanVerdict = ScanVerdict.BLOCK):
+    _TEXT_ONLY_PATTERNS.append((name, re.compile(pattern, re.IGNORECASE | re.DOTALL), verdict))
+
+
+# 9 — Base64 encoded payload (long b64 blocks that could hide injections).
+#     NOT included in _INJECTION_PATTERNS to avoid false positives on
+#     legitimate camera frames forwarded through messaging channels.
+_tp("base64_payload", r"[A-Za-z0-9+/]{80,}={0,2}")
 
 
 # =====================================================================
@@ -212,6 +234,38 @@ def scan_input(text: str, principal: str = "unknown") -> ScanResult:
         reasons.append(anomaly)
         if _verdict_ord(ScanVerdict.FLAG) > _verdict_ord(worst):
             worst = ScanVerdict.FLAG
+
+    return ScanResult(verdict=worst, reasons=reasons, matched_patterns=matched)
+
+
+def scan_text_only(text: str, principal: str = "unknown") -> ScanResult:
+    """Scan freeform human-typed *text*, including the base64-payload check.
+
+    Use this instead of :func:`scan_input` when the input is a plain-text
+    field (e.g. a chat message typed by a user) and binary/image data will
+    never appear.  The additional ``base64_payload`` pattern detects injections
+    that try to hide instructions inside a long base64-encoded string, but
+    would produce false positives if applied to binary image data.
+
+    Returns a :class:`ScanResult` with verdict ``pass``, ``flag``, or ``block``.
+    """
+    # Start with the general scan (records anomaly for this principal).
+    result = scan_input(text, principal)
+
+    if not text:
+        return result
+
+    reasons = list(result.reasons)
+    matched = list(result.matched_patterns)
+    worst = result.verdict
+
+    # --- Text-only patterns (e.g. base64_payload) ---
+    for name, pattern, verdict in _TEXT_ONLY_PATTERNS:
+        if pattern.search(text):
+            matched.append(name)
+            reasons.append(f"injection:{name}")
+            if _verdict_ord(verdict) > _verdict_ord(worst):
+                worst = verdict
 
     return ScanResult(verdict=worst, reasons=reasons, matched_patterns=matched)
 
