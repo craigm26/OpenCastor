@@ -5,6 +5,42 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.21.2] - 2026-02-21 📚 Documentation Refresh + 11 New Issues
+
+### Highlights
+Full documentation refresh bringing `CLAUDE.md` in sync with the actual codebase state
+(v2026.2.21.1 shipped 131 modules, 8 providers, 16 presets, and 7 major subsystems that
+were not yet reflected in the developer guide). A structured sprint backlog of 11 GitHub
+issues has been created covering test fixes, local-provider improvements, fleet discovery,
+Hailo-8 safety integration, and three new operator manuals.
+
+### Changed
+- **`CLAUDE.md`** — complete rewrite to match current repo state:
+  - Version corrected to 2026.2.21.1 (was 2026.2.17.3)
+  - 8 AI providers documented (Anthropic, Google, OpenAI, HuggingFace, Ollama, llama.cpp, MLX, OpenRouter)
+  - 16 hardware presets documented (was 5)
+  - All 7 new subsystems documented: `agents/`, `specialists/`, `learner/`, `swarm/`, `safety/`, `rcan/`, `fs/`
+  - Plugin/registry system (`castor/registry.py`) documented
+  - Tiered brain architecture documented
+  - 40+ CLI commands listed (was 6)
+  - New env vars: `OPENCASTOR_JWT_SECRET`, `OPENCASTOR_CORS_ORIGINS`, `SLACK_SIGNING_SECRET`
+  - New package extras: `[rpi]`, `[rcan]`, `[dynamixel]`, `[all]`
+  - Docker compose services corrected (2 services, not 4 profiles)
+  - Full `castor/safety/` subsystem documented
+
+### Issues Opened (Sprint Backlog)
+- **#40** `fix` — Resolve 5 failing tests (channels, providers, safety state)
+- **#41** `fix` — README.md version reference stale (v2026.2.20.10 vs v2026.2.21.1)
+- **#42** `feat` — Implement mDNS peer discovery for fleet management
+- **#43** `feat` — llama.cpp provider: streaming + robust error handling + vision
+- **#44** `feat` — MLX provider: MLX-VL vision CI tests + streaming support
+- **#45** `feat` — Wire Hailo-8 NPU detections into reactive safety layer
+- **#46** `docs` — Agent orchestration operator manual
+- **#47** `docs` — Swarm deployment guide
+- **#48** `docs` — Learner/Sisyphus operator manual (tuning, patches, rollback)
+- **#49** `docs` — Advanced CLI recipes (fleet, swarm, improve, record/replay)
+- **#50** `feat` — Community hub: publish, browse, and rate recipes from CLI
+
 ## [2026.2.20.12] - 2026-02-20 🔄 Auto-Start Daemon + Offline Fallback
 
 ### Highlights
