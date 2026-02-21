@@ -1871,8 +1871,17 @@ def cmd_hub(args) -> None:
         _interactive_share(args)
         return
 
+    if action == "rate":
+        recipe_id = args.query
+        rating = getattr(args, "rating", None)
+        if not recipe_id or rating is None:
+            print("  Usage: castor hub rate <recipe-id> --rating <1-5>")
+            return
+        _submit_rating(recipe_id, rating)
+        return
+
     # Fallback
-    print("  Usage: castor hub {browse|search|show|install|share|categories}")
+    print("  Usage: castor hub {browse|search|show|install|share|rate|categories}")
     print("  Run: castor hub --help for details")
 
 
@@ -1969,8 +1978,60 @@ def _interactive_share(args) -> None:
         print("  Next steps:")
         print(f"    1. Review the scrubbed files in {recipe_dir}/")
         print("    2. Edit README.md with tips, photos, and lessons learned")
-        print("    3. Submit a PR: castor hub share --config {args.config} --submit")
+        print(f"    3. Submit a PR: castor hub share --config {args.config} --submit")
         print("       Or manually at https://github.com/craigm26/OpenCastor")
+    print()
+
+
+def _submit_rating(recipe_id: str, rating: int) -> None:
+    """Submit a star rating for a recipe via GitHub issue."""
+    import shutil
+
+    stars = "⭐" * rating
+    print(f"\n  {stars} Rating {rating}/5 for recipe: {recipe_id}")
+
+    if not shutil.which("gh"):
+        print("\n  GitHub CLI (gh) not found.")
+        print("  Install: https://cli.github.com — then re-run this command.")
+        print(
+            f"\n  Or open an issue manually: https://github.com/craigm26/OpenCastor/issues/new"
+            f"?title=Recipe+Rating:+{recipe_id}&body=Rating:+{rating}/5"
+        )
+        return
+
+    try:
+        import subprocess
+
+        body = (
+            f"**Recipe ID:** `{recipe_id}`\n"
+            f"**Rating:** {rating}/5 {stars}\n\n"
+            "_Submitted via `castor hub rate`_"
+        )
+        result = subprocess.run(
+            [
+                "gh",
+                "issue",
+                "create",
+                "--repo",
+                "craigm26/OpenCastor",
+                "--title",
+                f"[Rating] {recipe_id}: {rating}/5 stars",
+                "--label",
+                "recipe-rating",
+                "--body",
+                body,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            print(f"\n  ✅ Rating submitted: {result.stdout.strip()}")
+        else:
+            print(f"\n  ⚠️  Could not submit via gh: {result.stderr.strip()}")
+            print(f"  Your rating ({rating}/5) was NOT recorded remotely.")
+    except Exception as exc:
+        print(f"\n  ❌ Error: {exc}")
     print()
 
 
@@ -2739,9 +2800,10 @@ def main() -> None:
         "action",
         nargs="?",
         default="browse",
-        choices=["browse", "search", "show", "install", "share", "categories"],
+        choices=["browse", "search", "show", "install", "share", "rate", "categories"],
         help="Action to perform (default: browse)",
     )
+    p_hub.add_argument("--rating", type=int, choices=[1, 2, 3, 4, 5], help="Star rating (1-5) for hub rate")
     p_hub.add_argument("query", nargs="?", default=None, help="Search query or recipe ID")
     p_hub.add_argument("--config", default=None, help="RCAN config to share")
     p_hub.add_argument(

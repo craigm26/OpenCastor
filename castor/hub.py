@@ -20,6 +20,15 @@ from typing import Any
 
 logger = logging.getLogger("OpenCastor.Hub")
 
+
+def _opencastor_version() -> str:
+    """Return the installed OpenCastor version string."""
+    try:
+        from castor import __version__
+        return __version__
+    except Exception:
+        return "unknown"
+
 # Where community recipes live in the repo
 RECIPES_DIR = Path(__file__).parent.parent / "community-recipes"
 
@@ -137,7 +146,7 @@ def create_recipe_manifest(
         "use_case": use_case,
         "created": datetime.now(timezone.utc).isoformat(),
         "version": "1.0.0",
-        "opencastor_version": "2026.2.17.7",
+        "opencastor_version": _opencastor_version(),
         "files": {
             "config": "config.rcan.yaml",
             "readme": "README.md",

@@ -91,3 +91,157 @@ class TestMLXProvider:
             }
         )
         assert p.is_vision is False
+
+
+class TestMLXProviderStreaming:
+    """Tests for think_stream() in server mode."""
+
+    def _make_provider(self):
+        from castor.providers.mlx_provider import MLXProvider
+
+        return MLXProvider({"model": "test", "base_url": "http://localhost:8000/v1"})
+
+    def _sse_lines(self, tokens):
+        """Build fake SSE bytes from token list."""
+        import json as _json
+
+        lines = []
+        for tok in tokens:
+            chunk = {"choices": [{"delta": {"content": tok}}]}
+            lines.append(f"data: {_json.dumps(chunk)}\n".encode())
+        lines.append(b"data: [DONE]\n")
+        return lines
+
+    def test_stream_yields_tokens(self):
+        p = self._make_provider()
+        mock_resp = MagicMock()
+        mock_resp.__iter__ = lambda s: iter(self._sse_lines(["move", " forward"]))
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            tokens = list(p.think_stream(b"", "go"))
+
+        assert "move" in tokens
+        assert " forward" in tokens
+
+    def test_stream_returns_thought_via_stopiteration(self):
+        p = self._make_provider()
+        mock_resp = MagicMock()
+        mock_resp.__iter__ = lambda s: iter(
+            self._sse_lines(['{"type":"stop"}'])
+        )
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            gen = p.think_stream(b"", "stop now")
+            collected = []
+            try:
+                while True:
+                    collected.append(next(gen))
+            except StopIteration as exc:
+                thought = exc.value
+
+        assert thought is not None
+        assert thought.action == {"type": "stop"}
+
+    def test_stream_empty_response(self):
+        p = self._make_provider()
+        mock_resp = MagicMock()
+        mock_resp.__iter__ = lambda s: iter([b"data: [DONE]\n"])
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            tokens = list(p.think_stream(b"", "test"))
+
+        assert tokens == []
+
+    def test_stream_error_yields_error_token(self):
+        p = self._make_provider()
+        with patch("urllib.request.urlopen", side_effect=Exception("conn refused")):
+            tokens = list(p.think_stream(b"", "test"))
+        assert any("Error" in t for t in tokens)
+
+
+class TestMLXProviderVisionCI:
+    """Mocked vision tests — no Apple Silicon required."""
+
+    def test_vision_sends_image_url_content(self):
+        """Server-mode vision: large image bytes trigger image_url content."""
+        from castor.providers.mlx_provider import MLXProvider
+
+        p = MLXProvider(
+            {
+                "model": "mlx-community/Qwen2.5-VL-7B-Instruct-4bit",
+                "base_url": "http://localhost:8000/v1",
+                "vision_enabled": True,
+            }
+        )
+
+        captured_payload = {}
+
+        def fake_urlopen(req, timeout=30):
+            import json as _json
+
+            captured_payload["body"] = _json.loads(req.data.decode())
+            mock = MagicMock()
+            mock.read.return_value = _json.dumps(
+                {"choices": [{"message": {"content": '{"type":"stop"}'}}]}
+            ).encode()
+            mock.__enter__ = lambda s: s
+            mock.__exit__ = MagicMock(return_value=False)
+            return mock
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            p.think(b"\xff" * 2000, "what do you see?")
+
+        user_msg = captured_payload["body"]["messages"][1]
+        content = user_msg["content"]
+        assert isinstance(content, list)
+        types = [c["type"] for c in content]
+        assert "image_url" in types
+
+    def test_vision_small_image_sends_text_only(self):
+        """Images <= 1024 bytes are sent as text-only (no base64)."""
+        from castor.providers.mlx_provider import MLXProvider
+
+        p = MLXProvider(
+            {
+                "model": "mlx-community/Qwen2.5-VL-7B-Instruct-4bit",
+                "base_url": "http://localhost:8000/v1",
+                "vision_enabled": True,
+            }
+        )
+
+        captured_payload = {}
+
+        def fake_urlopen(req, timeout=30):
+            import json as _json
+
+            captured_payload["body"] = _json.loads(req.data.decode())
+            mock = MagicMock()
+            mock.read.return_value = _json.dumps(
+                {"choices": [{"message": {"content": "ok"}}]}
+            ).encode()
+            mock.__enter__ = lambda s: s
+            mock.__exit__ = MagicMock(return_value=False)
+            return mock
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            p.think(b"\xff" * 100, "test")  # < 1024 bytes
+
+        user_msg = captured_payload["body"]["messages"][1]
+        assert isinstance(user_msg["content"], str)
+
+    def test_del_clears_model_references(self):
+        """__del__ should clear _mlx_model and _mlx_tokenizer."""
+        from castor.providers.mlx_provider import MLXProvider
+
+        p = MLXProvider({"model": "test", "base_url": "http://localhost:8000/v1"})
+        p._mlx_model = MagicMock()
+        p._mlx_tokenizer = MagicMock()
+        p.__del__()
+        assert p._mlx_model is None
+        assert p._mlx_tokenizer is None

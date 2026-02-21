@@ -36,9 +36,16 @@ class ReactiveLayer:
     """
 
     def __init__(self, config: dict):
-        self.min_obstacle_m = config.get("reactive", {}).get("min_obstacle_m", 0.3)
-        self.blank_threshold = config.get("reactive", {}).get("blank_threshold", 100)
-        self.hailo_enabled = config.get("reactive", {}).get("hailo_vision", False)
+        reactive = config.get("reactive", {})
+        self.min_obstacle_m = reactive.get("min_obstacle_m", 0.3)
+        self.blank_threshold = reactive.get("blank_threshold", 100)
+        self.hailo_enabled = reactive.get("hailo_vision", False)
+        # Distance thresholds for Hailo-8 NPU detections.
+        # hailo_stop_distance_m: e-stop when nearest obstacle is closer than this.
+        # hailo_warn_distance_m: slow down / avoid when closer than this.
+        self.hailo_stop_distance_m = reactive.get("hailo_stop_distance_m", 0.5)
+        self.hailo_warn_distance_m = reactive.get("hailo_warn_distance_m", 1.0)
+        self.hailo_calibration = reactive.get("hailo_calibration", 0.25)
         # If camera_required=False, blank/missing frames are NOT a blocking condition.
         # The brain will run text-only (messaging, sensor data) without a live frame.
         self.camera_required = config.get("camera", {}).get("camera_required", True)
@@ -99,18 +106,33 @@ class ReactiveLayer:
                     self.last_detections = result.get("all_detections", [])
 
                     nearest = result.get("nearest_obstacle")
-                    if nearest and nearest.area() > 0.25:
-                        # Large obstacle taking >25% of frame = too close
-                        logger.warning(
-                            f"Reactive: {nearest} filling {nearest.area():.0%} of frame — stopping!"
-                        )
-                        return {
-                            "type": "stop",
-                            "reason": f"hailo_{nearest.class_name}_{nearest.area():.0%}",
-                        }
+                    if nearest:
+                        dist_m = nearest.estimate_distance_m(self.hailo_calibration)
+                        if dist_m <= self.hailo_stop_distance_m:
+                            logger.warning(
+                                "Reactive: %s at ~%.2fm — e-stop!",
+                                nearest.class_name,
+                                dist_m,
+                            )
+                            return {
+                                "type": "stop",
+                                "reason": f"hailo_{nearest.class_name}_{dist_m:.2f}m",
+                            }
+                        if dist_m <= self.hailo_warn_distance_m:
+                            logger.info(
+                                "Reactive: %s at ~%.2fm — slowing",
+                                nearest.class_name,
+                                dist_m,
+                            )
+                            return {
+                                "type": "move",
+                                "linear": 0.0,
+                                "angular": 0.3,
+                                "reason": f"hailo_warn_{nearest.class_name}_{dist_m:.2f}m",
+                            }
 
                     if not result["clear_path"] and result["obstacles"]:
-                        # Obstacles in center path — slow down
+                        # Obstacles in center path but beyond warn distance — nudge
                         names = [d.class_name for d in result["obstacles"][:3]]
                         return {
                             "type": "move",

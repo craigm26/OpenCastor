@@ -8,6 +8,8 @@ Uses per-call context managers to avoid segfaults from persistent VDevice.
 """
 
 import logging
+import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -42,6 +44,26 @@ COCO_NAMES = {
 
 OBSTACLE_CLASSES = {0, 1, 2, 3, 5, 7, 13, 15, 16, 56, 57, 59, 60}
 
+# Default distance-estimation calibration constant.
+# distance_m ≈ AREA_CALIBRATION / area_fraction
+# Tuned so area=0.25 → ~1.0m, area=0.50 → ~0.5m.
+DEFAULT_AREA_CALIBRATION = 0.25
+
+
+@dataclass
+class ObstacleEvent:
+    """Structured obstacle event for the safety monitor.
+
+    Produced by HailoDetection.to_obstacle_event() and consumed by
+    the reactive safety layer to trigger speed reduction or e-stop.
+    """
+
+    distance_m: float
+    confidence: float
+    label: str
+    area: float
+    bbox: List[float]
+
 
 class HailoDetection:
     """A single detection result."""
@@ -62,6 +84,30 @@ class HailoDetection:
 
     def area(self) -> float:
         return (self.bbox[2] - self.bbox[0]) * (self.bbox[3] - self.bbox[1])
+
+    def estimate_distance_m(self, calibration: float = DEFAULT_AREA_CALIBRATION) -> float:
+        """Estimate distance in metres from bounding-box area.
+
+        Uses a simple inverse-area model: ``distance ≈ calibration / area``.
+        The calibration constant can be tuned per-camera via
+        ``reactive.hailo_calibration`` in the RCAN config.
+
+        Returns ``inf`` for zero-area detections.
+        """
+        a = self.area()
+        if a <= 0:
+            return math.inf
+        return calibration / a
+
+    def to_obstacle_event(self, calibration: float = DEFAULT_AREA_CALIBRATION) -> ObstacleEvent:
+        """Convert to an ObstacleEvent for the safety monitor."""
+        return ObstacleEvent(
+            distance_m=self.estimate_distance_m(calibration),
+            confidence=self.score,
+            label=self.class_name,
+            area=self.area(),
+            bbox=list(self.bbox),
+        )
 
     def __repr__(self):
         return f"{self.class_name}({self.score:.2f})"

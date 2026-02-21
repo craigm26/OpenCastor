@@ -205,6 +205,21 @@
           "type": "string",
           "description": "Path to the .hef model file for Hailo-8."
         },
+        "hailo_stop_distance_m": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Hailo-8: trigger e-stop when nearest obstacle is estimated closer than this distance (metres). Default: 0.5"
+        },
+        "hailo_warn_distance_m": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Hailo-8: trigger slow-down when nearest obstacle is estimated closer than this distance (metres). Default: 1.0"
+        },
+        "hailo_calibration": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Hailo-8 distance-estimation calibration constant. distance_m ≈ calibration / bbox_area. Default: 0.25"
+        },
         "min_obstacle_m": {
           "type": "number",
           "minimum": 0,

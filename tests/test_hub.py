@@ -184,6 +184,26 @@ class TestRecipeListing:
         assert get_recipe("nonexistent-abc123") is None
 
 
+class TestRecipeVersion:
+    def test_manifest_uses_current_version(self):
+        """opencastor_version in manifest should match installed version."""
+        from castor import __version__
+        from castor.hub import create_recipe_manifest
+
+        m = create_recipe_manifest(
+            name="v",
+            description="d",
+            author="a",
+            category="custom",
+            difficulty="beginner",
+            hardware=[],
+            ai_provider="google",
+            ai_model="gemini",
+        )
+        assert m["opencastor_version"] == __version__
+        assert m["opencastor_version"] != "2026.2.17.7"
+
+
 class TestSubmitRecipePR:
     """Tests for the auto-PR submission feature."""
 

@@ -28,7 +28,7 @@ import base64
 import json
 import logging
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Generator, Optional
 
 from .base import BaseProvider, Thought
 
@@ -108,6 +108,131 @@ class MLXProvider(BaseProvider):
         action = self._clean_json(text)
         return Thought(text, action)
 
+    def think_stream(
+        self,
+        image_bytes: bytes,
+        instruction: str,
+    ) -> Generator[str, None, Optional[Thought]]:
+        """Yield response tokens one at a time, return final Thought.
+
+        Works in both server mode (SSE streaming) and direct mode
+        (mlx_lm.stream_generate()).
+
+        Usage::
+            gen = provider.think_stream(img, "move forward")
+            for token in gen:
+                print(token, end="", flush=True)
+        """
+        try:
+            if self._use_server:
+                return (yield from self._stream_server(image_bytes, instruction))
+            else:
+                return (yield from self._stream_direct(instruction))
+        except Exception as e:
+            logger.error(f"MLX stream error: {e}")
+            yield f"Error: {e}"
+            return Thought(f"Error: {e}", None)
+
+    def _stream_server(
+        self, image_bytes: bytes, instruction: str
+    ) -> Generator[str, None, Thought]:
+        """Stream tokens from an OpenAI-compatible server via SSE."""
+        import urllib.request
+
+        messages = [{"role": "system", "content": self.system_prompt}]
+        if self.is_vision and image_bytes and len(image_bytes) > 1024:
+            b64 = base64.b64encode(image_bytes).decode()
+            messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": instruction},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+                        },
+                    ],
+                }
+            )
+        else:
+            messages.append({"role": "user", "content": instruction})
+
+        payload = {
+            "model": self.model_name,
+            "messages": messages,
+            "max_tokens": 150,
+            "temperature": 0.1,
+            "stream": True,
+        }
+        req = urllib.request.Request(
+            f"{self._base_url}/chat/completions",
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        full_text = ""
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                for raw_line in resp:
+                    line = raw_line.decode("utf-8").strip()
+                    if not line or line == "data: [DONE]":
+                        continue
+                    if line.startswith("data: "):
+                        line = line[6:]
+                    try:
+                        chunk = json.loads(line)
+                        token = (
+                            chunk.get("choices", [{}])[0]
+                            .get("delta", {})
+                            .get("content", "")
+                        )
+                        if token:
+                            full_text += token
+                            yield token
+                    except json.JSONDecodeError:
+                        continue
+        except Exception as e:
+            logger.error(f"MLX server stream error: {e}")
+            raise
+
+        action = self._clean_json(full_text)
+        return Thought(full_text, action)
+
+    def _stream_direct(self, instruction: str) -> Generator[str, None, Thought]:
+        """Stream tokens from direct mlx-lm using stream_generate."""
+        prompt = (
+            f"<|system|>\n{self.system_prompt}<|end|>\n"
+            f"<|user|>\n{instruction}<|end|>\n<|assistant|>\n"
+        )
+        full_text = ""
+        try:
+            from mlx_lm import stream_generate
+
+            for token in stream_generate(
+                self._mlx_model,
+                self._mlx_tokenizer,
+                prompt=prompt,
+                max_tokens=150,
+            ):
+                full_text += token
+                yield token
+        except ImportError:
+            # Fallback: emit entire response as single token
+            from mlx_lm import generate
+
+            text = generate(
+                self._mlx_model,
+                self._mlx_tokenizer,
+                prompt=prompt,
+                max_tokens=150,
+            )
+            full_text = text
+            yield text
+
+        action = self._clean_json(full_text)
+        return Thought(full_text, action)
+
     def _think_server(self, image_bytes: bytes, instruction: str) -> Thought:
         """OpenAI-compatible server (vLLM-MLX, MLX-OpenAI-Server)."""
         import urllib.request
@@ -151,3 +276,18 @@ class MLXProvider(BaseProvider):
         text = data["choices"][0]["message"]["content"].strip()
         action = self._clean_json(text)
         return Thought(text, action)
+
+    def __del__(self):
+        """Release MLX model memory on garbage collection."""
+        if self._mlx_model is not None:
+            try:
+                del self._mlx_model
+                self._mlx_model = None
+            except Exception:
+                pass
+        if self._mlx_tokenizer is not None:
+            try:
+                del self._mlx_tokenizer
+                self._mlx_tokenizer = None
+            except Exception:
+                pass

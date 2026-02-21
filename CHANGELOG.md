@@ -5,6 +5,46 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.21.5] - 2026-02-21 ✨ MLX Streaming, Hailo-8 Distance Safety, Hub Rate Command
+
+### Added
+- **`castor/providers/mlx_provider.py`** — streaming + vision improvements (#44):
+  - `think_stream()` generator: yields tokens from both server-mode SSE and direct
+    `mlx_lm.stream_generate()` (falls back to `generate()` when not available)
+  - `_stream_server()` SSE parser: re-raises on error so `think_stream` emits error token
+  - `__del__` clears `_mlx_model` and `_mlx_tokenizer` on garbage collection
+- **`castor/hailo_vision.py`** — distance-based obstacle safety (#45):
+  - `ObstacleEvent` dataclass: `distance_m`, `confidence`, `label`, `area`, `bbox`
+  - `HailoDetection.estimate_distance_m(calibration)` — inverse-area distance estimate
+  - `HailoDetection.to_obstacle_event(calibration)` — converts detection to safety event
+  - `DEFAULT_AREA_CALIBRATION = 0.25` constant (area 0.25 ≈ 1.0m, area 0.5 ≈ 0.5m)
+- **`castor/tiered_brain.py`** — configurable Hailo distance thresholds (#45):
+  - `hailo_stop_distance_m` (default 0.5m): triggers e-stop
+  - `hailo_warn_distance_m` (default 1.0m): triggers slow-down/avoid
+  - `hailo_calibration` (default 0.25): per-camera distance calibration
+  - `ReactiveLayer.evaluate()` now uses estimated distance instead of raw bbox area
+- **`config/rcan.schema.json`** — three new `reactive.*` keys: `hailo_stop_distance_m`,
+  `hailo_warn_distance_m`, `hailo_calibration` (#45)
+- **`castor/hub.py`** — version fix + helper (#50):
+  - `_opencastor_version()` helper reads live version from `castor.__version__`
+  - `create_recipe_manifest()` now stamps current version instead of stale `2026.2.17.7`
+- **`castor/cli.py`** — community hub `rate` command (#50):
+  - `castor hub rate <recipe-id> --rating <1-5>` submits a GitHub issue with star rating
+  - `_submit_rating()` helper; gracefully falls back with manual URL when `gh` not installed
+  - Fixed f-string bug in `_interactive_share()` (config path was not interpolated)
+
+### Tests Added
+- `tests/test_mlx_provider.py` — `TestMLXProviderStreaming` (4 tests: token yield, final
+  Thought via StopIteration, empty response, error token) + `TestMLXProviderVisionCI`
+  (3 tests: image_url payload shape, small-image text-only path, `__del__` cleanup)
+- `tests/test_hailo_vision.py` — `TestObstacleEvent` (4 tests: distance calc, zero-area,
+  to_obstacle_event) + 5 new `TestReactiveLayerHailo` tests (config defaults, e-stop
+  at stop_distance, slow-down at warn_distance)
+- `tests/test_hub.py` — `TestRecipeVersion` (1 test: manifest version matches installed)
+
+### Test Results
+- **2348 passed, 8 skipped, 0 failed** (was 2332 before this release)
+
 ## [2026.2.21.4] - 2026-02-21 ✨ mDNS Fleet API, llama.cpp Streaming + Vision, 4 Operator Docs
 
 ### Added
