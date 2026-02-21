@@ -5,6 +5,58 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.20.12] - 2026-02-20 🔄 Auto-Start Daemon + Offline Fallback
+
+### Highlights
+OpenCastor can now survive reboots and internet outages. A one-command install
+puts the gateway in systemd so it auto-starts on boot and auto-restarts on
+crashes. When the internet goes down, `OfflineFallbackManager` transparently
+switches the brain to a locally-running model (Ollama, LlamaCpp, or MLX) and
+notifies the user via their configured channel.
+
+### Added
+- **`castor daemon` CLI** — manage the systemd auto-start service:
+  - `castor daemon enable --config bob.rcan.yaml` — install, enable, start
+  - `castor daemon status` — installed / enabled / running / PID / uptime
+  - `castor daemon logs [--lines N]` — stream journal output
+  - `castor daemon restart` / `castor daemon disable`
+- **`castor/daemon.py`** — systemd service management module:
+  - `generate_service_file()` — produces a well-formed `.service` file with
+    `After=network-online.target`, `Restart=on-failure`, `RestartSec=5s`,
+    `MemoryMax=1G`, `StandardOutput=journal`
+  - `enable_daemon()` / `disable_daemon()` — write service file + systemctl
+  - `daemon_status()` / `daemon_logs()` — introspect running state
+- **`castor/connectivity.py`** — lightweight internet and provider probes:
+  - `is_online(timeout)` — TCP probe to 1.1.1.1 + 8.8.8.8 port 53; no HTTP deps
+  - `check_provider_reachable(name)` — per-provider hostname check (local
+    providers always return True)
+  - `ConnectivityMonitor` — background thread polling every N seconds with
+    `on_change(online: bool)` callback; safe to crash in callback
+- **`castor/offline_fallback.py`** — automatic provider switching:
+  - `OfflineFallbackManager` — monitors connectivity, swaps brain to fallback
+    provider when offline, swaps back when restored
+  - Notifies via configured channel on switch (e.g. WhatsApp)
+  - `get_active_provider()` — transparent API; callers need no change
+- **`offline_fallback` RCAN config block**:
+  ```yaml
+  offline_fallback:
+    enabled: true
+    provider: ollama          # ollama | llamacpp | mlx
+    model: llama3.2:3b
+    check_interval_s: 30
+    alert_channel: whatsapp   # optional notify-on-switch
+  ```
+- **`api.py` integration**: all `think()` call sites route through
+  `offline_fallback.get_active_provider()` when manager is active
+- **Tests**: `tests/test_daemon.py` (8 tests), `tests/test_connectivity.py`
+  (10 tests) covering service file generation, status parsing, TCP probes,
+  monitor change callbacks
+
+### Changed
+- `AppState` gains `offline_fallback` field
+- `/command`, `/cap/chat`, `_handle_channel_message` all use
+  `offline_fallback.get_active_provider()` when configured
+
 ## [2026.2.20.11] - 2026-02-20 💬 Messaging Prompt System
 
 ### Highlights

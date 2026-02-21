@@ -1559,6 +1559,79 @@ def _list_hf_models(api, task: str, limit: int = 15) -> None:
         print(f"  Error listing models: {e}")
 
 
+def cmd_daemon(args) -> None:
+    """Manage the OpenCastor systemd auto-start service."""
+    from castor.daemon import (
+        daemon_logs,
+        daemon_status,
+        disable_daemon,
+        enable_daemon,
+    )
+    import subprocess
+
+    action = getattr(args, "action", "status") or "status"
+
+    if action == "enable":
+        config = getattr(args, "config", "robot.rcan.yaml")
+        user = getattr(args, "user", None)
+        print(f"\n  Installing OpenCastor daemon service for: {config}")
+        result = enable_daemon(config, user=user)
+        if result["ok"]:
+            print(f"  ✓ Service installed: {result['service_path']}")
+            print("  ✓ Enabled and started — robot will auto-start on boot")
+            print("\n  Run `castor daemon status` to check.")
+        else:
+            print(f"  ✗ Failed: {result['message']}")
+            print("  Hint: Try running with sudo or check your systemd setup.")
+        print()
+
+    elif action == "disable":
+        print("\n  Disabling OpenCastor daemon service...")
+        result = disable_daemon()
+        print("  ✓ Service stopped and disabled")
+        print("  The robot will no longer auto-start on boot.")
+        print()
+
+    elif action == "status":
+        status = daemon_status()
+        if not status.get("available"):
+            print(f"\n  ⚠  {status.get('message', 'systemd not available')}\n")
+            return
+        installed = status.get("installed")
+        enabled = status.get("enabled")
+        running = status.get("running")
+        pid = status.get("pid")
+        started = status.get("started", "")
+
+        print("\n  OpenCastor Daemon Status")
+        print("  " + "─" * 30)
+        print(f"  Installed : {'yes — ' + status.get('service_path','') if installed else 'no'}")
+        print(f"  Enabled   : {'yes (starts on boot)' if enabled else 'no'}")
+        print(f"  Running   : {'yes (PID ' + pid + ')' if (running and pid) else ('yes' if running else 'no')}")
+        if started:
+            print(f"  Started   : {started}")
+        if not installed:
+            print("\n  Run `castor daemon enable --config <file>` to install.")
+        print()
+
+    elif action == "logs":
+        lines = getattr(args, "lines", 50)
+        print(f"\n  Last {lines} lines of daemon journal:\n")
+        print(daemon_logs(lines))
+
+    elif action == "restart":
+        print("\n  Restarting OpenCastor daemon service...")
+        result = subprocess.run(
+            ["sudo", "systemctl", "restart", "castor-gateway"],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            print("  ✓ Service restarted")
+        else:
+            print(f"  ✗ Restart failed: {result.stderr}")
+        print()
+
+
 def cmd_scan(args) -> None:
     """Auto-detect connected hardware peripherals."""
     import json as _json
@@ -2466,6 +2539,44 @@ def main() -> None:
         help="Print suggested RCAN config snippets (default: true)",
     )
 
+    # castor daemon — systemd auto-start service management
+    p_daemon = sub.add_parser(
+        "daemon",
+        help="Manage the auto-start system service (systemd)",
+        epilog=(
+            "Examples:\n"
+            "  castor daemon enable --config bob.rcan.yaml   # Install + start on boot\n"
+            "  castor daemon status                           # Is it running?\n"
+            "  castor daemon logs                             # Recent journal output\n"
+            "  castor daemon restart                          # Restart the service\n"
+            "  castor daemon disable                          # Remove auto-start\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_daemon.add_argument(
+        "action",
+        nargs="?",
+        default="status",
+        choices=["enable", "disable", "status", "logs", "restart"],
+        help="Action to perform (default: status)",
+    )
+    p_daemon.add_argument(
+        "--config",
+        default="robot.rcan.yaml",
+        help="RCAN config file the daemon should start with (enable only)",
+    )
+    p_daemon.add_argument(
+        "--user",
+        default=None,
+        help="System user to run the service as (default: current user)",
+    )
+    p_daemon.add_argument(
+        "--lines",
+        type=int,
+        default=50,
+        help="Number of log lines to show (logs action)",
+    )
+
     # castor hub
     p_hub = sub.add_parser(
         "hub",
@@ -2675,6 +2786,7 @@ def main() -> None:
         "login": cmd_login,
         "hub": cmd_hub,
         "scan": cmd_scan,
+        "daemon": cmd_daemon,
     }
 
     # Load plugins and merge any plugin-provided commands

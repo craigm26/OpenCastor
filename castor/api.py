@@ -70,6 +70,7 @@ class AppState:
     mdns_browser = None
     rcan_router = None  # RCAN message router
     capability_registry = None  # Capability registry
+    offline_fallback = None   # OfflineFallbackManager (optional)
 
 
 state = AppState()
@@ -191,7 +192,8 @@ async def send_command(cmd: CommandRequest):
     else:
         image_bytes = _capture_live_frame()
 
-    thought = state.brain.think(image_bytes, cmd.instruction)
+    active = state.offline_fallback.get_active_provider() if state.offline_fallback else state.brain
+    thought = active.think(image_bytes, cmd.instruction)
     state.last_thought = {
         "raw_text": thought.raw_text,
         "action": thought.action,
@@ -425,7 +427,8 @@ async def cap_chat(cmd: CommandRequest):
         import base64
 
         image_bytes = base64.b64decode(cmd.image_base64)
-    thought = state.brain.think(image_bytes, cmd.instruction)
+    active = state.offline_fallback.get_active_provider() if state.offline_fallback else state.brain
+    thought = active.think(image_bytes, cmd.instruction)
     return {"raw_text": thought.raw_text, "action": thought.action}
 
 
@@ -626,7 +629,14 @@ def _handle_channel_message(channel_name: str, chat_id: str, text: str) -> str:
 
     # Use live camera frame so the brain can see what's in front of it
     image_bytes = _capture_live_frame()
-    thought = state.brain.think(image_bytes, instruction, surface=surface)
+
+    # Route through offline fallback manager if active, else use brain directly
+    active_provider = (
+        state.offline_fallback.get_active_provider()
+        if state.offline_fallback
+        else state.brain
+    )
+    thought = active_provider.think(image_bytes, instruction, surface=surface)
     state.last_thought = {
         "raw_text": thought.raw_text,
         "action": thought.action,
@@ -784,6 +794,20 @@ async def on_startup():
 
             state.brain = get_provider(state.config["agent"])
             logger.info(f"Brain online: {state.config['agent'].get('model')}")
+
+            # Initialize offline fallback manager (if configured)
+            if state.config.get("offline_fallback", {}).get("enabled"):
+                try:
+                    from castor.offline_fallback import OfflineFallbackManager
+
+                    state.offline_fallback = OfflineFallbackManager(
+                        config=state.config,
+                        primary_provider=state.brain,
+                    )
+                    state.offline_fallback.start()
+                    logger.info("Offline fallback manager started")
+                except Exception as _of_exc:
+                    logger.warning("Offline fallback init failed: %s", _of_exc)
 
             # Initialize driver (simulation-safe)
             from castor.main import Camera, Speaker, get_driver
