@@ -556,16 +556,22 @@ def _execute_action(action: dict):
 
 
 def _capture_live_frame() -> bytes:
-    """Grab a frame from the shared camera if available, else blank."""
+    """Grab a frame from the shared camera if available, else return b''.
+    Returns b'' when no camera is ready or the frame is blank/null padding.
+    Callers should treat b'' as "no frame" and skip vision inference.
+    """
     try:
         from castor.main import get_shared_camera
 
         camera = get_shared_camera()
-        if camera is not None:
-            return camera.capture_jpeg()
+        if camera is not None and camera.is_available():
+            frame = camera.capture_jpeg()
+            # Reject null-padding placeholders (b"\x00" * N) returned on capture failure
+            if frame and any(b != 0 for b in frame[:16]):
+                return frame
     except Exception:
         pass
-    return b"\x00" * 1024
+    return b""
 
 
 def _speak_reply(text: str):
@@ -643,7 +649,8 @@ async def _start_channels():
 
     for name in get_ready_channels():
         try:
-            channel = create_channel(name, on_message=_handle_channel_message)
+            channel_cfg = (state.config or {}).get("channels", {}).get(name, {})
+            channel = create_channel(name, config=channel_cfg, on_message=_handle_channel_message)
             await channel.start()
             state.channels[name] = channel
             logger.info(f"Channel started: {name}")

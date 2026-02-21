@@ -211,19 +211,7 @@ class WhatsAppChannel(BaseChannel):
             chat_user = str(chat.User)
             is_group = self._is_group_jid(chat_server)
 
-            # ── Self-chat handling ──────────────────────────────────────
-            # When the owner messages their own number (WhatsApp "Saved Messages"),
-            # IsFromMe is True. Allow through if self_chat_mode is on.
-            if is_from_me:
-                if not self._self_chat_mode:
-                    return
-                # Only process if it's the owner chatting with themselves
-                # (chat JID == owner's own number)
-                if self._owner_number and chat_user != self._owner_number:
-                    return  # Message they sent to someone else — skip
-                # Fall through: owner talking to themselves → process
-
-            # ── Group policy ─────────────────────────────────────────────
+            # ── Group policy (evaluated before self-chat so owner can message groups) ──
             if is_group:
                 if self._group_policy == "disabled":
                     return
@@ -232,6 +220,19 @@ class WhatsAppChannel(BaseChannel):
                     if not self._is_allowed(sender_user):
                         return
                 # open: fall through
+
+            # ── Self-chat handling (DMs only) ────────────────────────────
+            # When the owner messages their own number (WhatsApp "Saved Messages"),
+            # IsFromMe is True. Allow through if self_chat_mode is on.
+            # Group messages already handled above — skip this block for groups.
+            if is_from_me and not is_group:
+                if not self._self_chat_mode:
+                    return
+                # Only process if it's the owner chatting with themselves
+                # (chat JID == owner's own number)
+                if self._owner_number and chat_user != self._owner_number:
+                    return  # Message they sent to someone else — skip
+                # Fall through: owner talking to themselves → process
 
             # ── DM access control ─────────────────────────────────────────
             if not is_group and not is_from_me:

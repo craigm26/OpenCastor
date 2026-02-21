@@ -28,6 +28,10 @@ try:
     HAS_TELEGRAM = True
 except ImportError:
     HAS_TELEGRAM = False
+    # Stub types so class-body annotations don't raise NameError at import time
+    Update = object  # type: ignore[assignment,misc]
+    class ContextTypes:  # type: ignore[no-redef]
+        DEFAULT_TYPE = object
 
 
 class TelegramChannel(BaseChannel):

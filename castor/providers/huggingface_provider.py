@@ -88,7 +88,7 @@ class HuggingFaceProvider(BaseProvider):
 
     def think(self, image_bytes: bytes, instruction: str) -> Thought:
         try:
-            if self.is_vision:
+            if self.is_vision and image_bytes:
                 return self._think_vision(image_bytes, instruction)
             else:
                 return self._think_text(instruction)
@@ -134,11 +134,59 @@ class HuggingFaceProvider(BaseProvider):
             pass
         return Thought(text, action)
 
-    def _think_text(self, instruction: str) -> Thought:
-        """Text-only inference for non-vision models."""
+    def _get_messaging_prompt(self, surface: str = "whatsapp") -> str:
+        """Build the conversational system prompt with live hardware context."""
+        try:
+            from castor.api import state
+
+            hw = {}
+            caps = []
+            sensor = None
+            robot_name = "Bob"
+
+            if state.config:
+                robot_name = state.config.get("metadata", {}).get("robot_name", "Bob")
+                caps = list(state.channels.keys()) or []
+
+            if state.camera is not None:
+                hw["camera"] = "online" if state.camera.is_available() else "offline"
+            if state.driver is not None:
+                hw["motors"] = "online"
+            elif state.config:
+                hw["motors"] = "mock"  # driver failed to init
+            if state.speaker is not None:
+                hw["speaker"] = "online" if state.speaker.enabled else "offline"
+
+            try:
+                if state.fs:
+                    sensor = state.fs.proc.snapshot()
+            except Exception:
+                pass
+
+            # Pull capabilities from capability registry if available
+            try:
+                if state.capability_registry:
+                    caps = state.capability_registry.names
+            except Exception:
+                pass
+
+            return self.build_messaging_prompt(
+                robot_name=robot_name,
+                surface=surface,
+                hardware=hw,
+                capabilities=caps,
+                sensor_snapshot=sensor,
+            )
+        except Exception:
+            # Fallback — no API state available (e.g. running from REPL/tests)
+            return self.build_messaging_prompt(surface=surface)
+
+    def _think_text(self, instruction: str, surface: str = "whatsapp") -> Thought:
+        """Text-only inference — uses the conversational messaging prompt."""
+        prompt = self._get_messaging_prompt(surface=surface)
         response = self.client.chat_completion(
             messages=[
-                {"role": "system", "content": self.system_prompt},
+                {"role": "system", "content": prompt},
                 {"role": "user", "content": instruction},
             ],
             max_tokens=300,
