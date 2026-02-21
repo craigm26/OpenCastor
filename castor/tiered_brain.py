@@ -175,11 +175,28 @@ class TieredBrain:
         self.last_plan = None
         self.last_plan_time = 0
 
+        # Layer 3: Agent Swarm (optional — enabled via agents.enabled: true in RCAN config)
+        self.orchestrator = None
+        if config.get("agents", {}).get("enabled", False):
+            try:
+                from .agents.orchestrator import OrchestratorAgent
+                from .agents.shared_state import SharedState
+
+                agent_cfg = config.get("agents", {})
+                self.orchestrator = OrchestratorAgent(
+                    config=agent_cfg,
+                    shared_state=SharedState(),
+                )
+                logger.info("Layer 3 (Agent Swarm) enabled")
+            except Exception as exc:
+                logger.debug("Layer 3 not available: %s", exc)
+
         # Stats
         self.stats = {
             "reactive_count": 0,
             "fast_count": 0,
             "planner_count": 0,
+            "swarm_count": 0,
             "total_ticks": 0,
         }
 
@@ -249,6 +266,22 @@ class TieredBrain:
             except Exception as e:
                 logger.warning(f"Planner error (non-fatal): {e}")
 
+        # Layer 3: Agent Swarm (async orchestration — only if enabled)
+        if self.orchestrator is not None:
+            try:
+                swarm_action = self.orchestrator.sync_think(sensor_data or {})
+                if swarm_action.get("type") not in (None, "idle"):
+                    self.stats["swarm_count"] += 1
+                    logger.debug(
+                        "Layer 3 swarm action: %s", swarm_action.get("type")
+                    )
+                    return Thought(
+                        f"Swarm: {swarm_action.get('type', '?')}",
+                        swarm_action,
+                    )
+            except Exception as exc:
+                logger.debug("Layer 3 error (non-fatal): %s", exc)
+
         return thought
 
     def get_stats(self) -> dict:
@@ -259,6 +292,7 @@ class TieredBrain:
             "reactive_pct": round(self.stats["reactive_count"] / total * 100, 1),
             "fast_pct": round(self.stats["fast_count"] / total * 100, 1),
             "planner_pct": round(self.stats["planner_count"] / total * 100, 1),
+            "swarm_pct": round(self.stats["swarm_count"] / total * 100, 1),
         }
         # Include prompt cache stats from planner if available
         if self.planner and hasattr(self.planner, "cache_stats"):

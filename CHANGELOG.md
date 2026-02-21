@@ -5,6 +5,27 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.21.6] - 2026-02-21 🤖 Layer 3 Agent Swarm (closes #12)
+
+### Added
+- **`castor/agents/manipulator_agent.py`** — `ManipulatorAgent`: wraps `ManipulatorSpecialist`
+  for async swarm use; reads `swarm.manipulation_task`, publishes `swarm.manipulation_result`
+- **`castor/agents/communicator.py`** — `CommunicatorAgent`: keyword-based NL intent parser
+  + router; routes intents to navigator/manipulator/guardian via SharedState
+- **`castor/agents/guardian.py`** — `GuardianAgent`: safety meta-agent with `SafetyVeto`
+  dataclass; enforces forbidden action types, speed limit, and e-stop rules;
+  publishes `swarm.guardian_report`
+- **`castor/agents/orchestrator.py`** — `OrchestratorAgent`: master agent resolving all
+  swarm outputs (estop → guardian veto → manipulation → nav plan → idle) into one RCAN
+  action; exposes `sync_think()` for `TieredBrain` integration
+- **`castor/tiered_brain.py`** — Layer 3 (Agent Swarm) hook: opt-in via
+  `agents.enabled: true`; `swarm_count` / `swarm_pct` stats; graceful fallback on error
+- **`tests/test_agents/`** — 90 tests covering all four new agents and Layer 3 integration
+
+### Changed
+- `castor/agents/__init__.py` — exports `CommunicatorAgent`, `GuardianAgent`,
+  `ManipulatorAgent`, `OrchestratorAgent`, `SafetyVeto`
+
 ## [2026.2.21.5] - 2026-02-21 ✨ MLX Streaming, Hailo-8 Distance Safety, Hub Rate Command
 
 ### Added
