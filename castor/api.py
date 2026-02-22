@@ -20,7 +20,8 @@ import posixpath
 import signal
 import threading
 import time
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import yaml
 from fastapi import (
@@ -2341,8 +2342,253 @@ async def on_startup():
     _print_gateway_qr(host, port)
 
 
+# ---------------------------------------------------------------------------
+# Fleet management (issue #113)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/fleet", dependencies=[Depends(verify_token)])
+async def fleet_list():
+    """Return all robots discovered via mDNS on the local network."""
+    peers = {}
+    if state.mdns_browser:
+        peers = state.mdns_browser.peers
+
+    robots = []
+    for name, peer in peers.items():
+        robots.append(
+            {
+                "ruri": peer.get("ruri", ""),
+                "name": peer.get("robot_name", name),
+                "ip": peer.get("addresses", [""])[0] if peer.get("addresses") else "",
+                "port": peer.get("port", 8000),
+                "status": peer.get("status", "unknown"),
+                "last_seen": peer.get("discovered_at"),
+                "brain": peer.get("model", ""),
+                "capabilities": peer.get("capabilities", []),
+            }
+        )
+    return {"robots": robots, "count": len(robots)}
+
+
+class _FleetCommandRequest(BaseModel):
+    instruction: str
+    token: Optional[str] = None
+
+
+@app.post("/api/fleet/{ruri}/command", dependencies=[Depends(verify_token)])
+async def fleet_command(ruri: str, body: _FleetCommandRequest, request: Request):
+    """Proxy a command to a remote robot identified by RURI."""
+    import httpx
+
+    peer = _find_fleet_peer(ruri)
+    if not peer:
+        from castor.api_errors import not_found_error
+
+        raise HTTPException(status_code=404, detail=not_found_error(f"robot/{ruri}"))
+
+    url = f"http://{peer['ip']}:{peer['port']}/api/command"
+    headers = {}
+    if body.token:
+        headers["Authorization"] = f"Bearer {body.token}"
+    elif API_TOKEN:
+        headers["Authorization"] = f"Bearer {API_TOKEN}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, json={"instruction": body.instruction}, headers=headers)
+            return resp.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail={"error": "Fleet robot timeout"})
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail={"error": str(exc)})
+
+
+@app.get("/api/fleet/{ruri}/status", dependencies=[Depends(verify_token)])
+async def fleet_status(ruri: str):
+    """Proxy a status request to a remote robot identified by RURI."""
+    import httpx
+
+    peer = _find_fleet_peer(ruri)
+    if not peer:
+        from castor.api_errors import not_found_error
+
+        raise HTTPException(status_code=404, detail=not_found_error(f"robot/{ruri}"))
+
+    url = f"http://{peer['ip']}:{peer['port']}/api/status"
+    headers = {"Authorization": f"Bearer {API_TOKEN}"} if API_TOKEN else {}
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(url, headers=headers)
+            return resp.json()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail={"error": str(exc)})
+
+
+def _find_fleet_peer(ruri: str) -> Optional[dict]:
+    """Find a fleet peer by its RURI (exact or partial match)."""
+    if not state.mdns_browser:
+        return None
+    for _, peer in state.mdns_browser.peers.items():
+        if peer.get("ruri", "") == ruri:
+            addrs = peer.get("addresses", [])
+            if addrs:
+                return {"ip": addrs[0], "port": peer.get("port", 8000)}
+    return None
+
+
+# ---------------------------------------------------------------------------
+# WebRTC stream (issue #108)
+# ---------------------------------------------------------------------------
+
+
+class _WebRTCOfferRequest(BaseModel):
+    sdp: str
+    type: str = "offer"
+
+
+@app.post("/api/stream/webrtc/offer")
+async def webrtc_offer(body: _WebRTCOfferRequest):
+    """Accept a WebRTC SDP offer and return an answer for P2P camera streaming.
+
+    Requires: ``pip install opencastor[webrtc]``
+    Falls back with 501 if aiortc is not installed.
+    """
+    try:
+        from castor.stream import handle_webrtc_offer, webrtc_available
+
+        if not webrtc_available():
+            raise HTTPException(
+                status_code=501,
+                detail={
+                    "error": "WebRTC not available",
+                    "hint": "pip install opencastor[webrtc]",
+                },
+            )
+
+        camera_index = int(os.getenv("CAMERA_INDEX", "0"))
+        ice_servers = None
+        if state.config and "network" in state.config:
+            ice_servers = state.config["network"].get("ice_servers")
+
+        answer = await handle_webrtc_offer(
+            offer_sdp=body.sdp,
+            offer_type=body.type,
+            camera_index=camera_index,
+            ice_servers=ice_servers,
+        )
+        return answer
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("WebRTC offer error: %s", exc)
+        raise HTTPException(status_code=500, detail={"error": str(exc)})
+
+
+# ---------------------------------------------------------------------------
+# Web Wizard /setup endpoint (issue #111)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/setup")
+async def setup_wizard():
+    """Serve the web-based setup wizard UI."""
+    from fastapi.responses import HTMLResponse
+
+    try:
+        from castor.web_wizard import _HTML_TEMPLATE
+
+        return HTMLResponse(content=_HTML_TEMPLATE)
+    except Exception as exc:
+        return HTMLResponse(
+            content=f"<html><body><h1>Setup Wizard Error</h1><pre>{exc}</pre></body></html>",
+            status_code=500,
+        )
+
+
+class _SetupTestProviderRequest(BaseModel):
+    provider: str
+    api_key: str
+    model: Optional[str] = None
+
+
+@app.post("/setup/api/test-provider")
+async def setup_test_provider(body: _SetupTestProviderRequest):
+    """Test an API key without saving it (used by the web wizard)."""
+    try:
+        # Temporarily set the key in env for testing
+        env_map = {
+            "google": "GOOGLE_API_KEY",
+            "openai": "OPENAI_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+            "ollama": "OLLAMA_BASE_URL",
+        }
+        env_var = env_map.get(body.provider.lower())
+        if not env_var:
+            raise HTTPException(status_code=400, detail={"error": f"Unknown provider: {body.provider}"})
+
+        # Test by importing the provider and calling health_check
+        import os as _os
+
+        _os.environ[env_var] = body.api_key
+        try:
+            from castor.providers import get_provider
+
+            cfg = {"provider": body.provider, env_var.lower(): body.api_key}
+            provider = get_provider(cfg)
+            health = provider.health_check()
+            return {"ok": health.get("ok", False), "latency_ms": health.get("latency_ms"), "error": health.get("error")}
+        finally:
+            # Do not persist the key in env — caller must save it
+            pass
+    except HTTPException:
+        raise
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+class _SetupSaveConfigRequest(BaseModel):
+    rcan_yaml: str
+    env_vars: Optional[dict] = None
+
+
+@app.post("/setup/api/save-config")
+async def setup_save_config(body: _SetupSaveConfigRequest):
+    """Save a generated RCAN config and optional .env vars (web wizard step 4)."""
+    try:
+        config_path = os.getenv("OPENCASTOR_CONFIG", "robot.rcan.yaml")
+        Path(config_path).write_text(body.rcan_yaml)
+
+        if body.env_vars:
+            env_path = Path(".env")
+            existing = env_path.read_text() if env_path.exists() else ""
+            lines = existing.splitlines()
+            for key, val in body.env_vars.items():
+                updated = False
+                for i, line in enumerate(lines):
+                    if line.startswith(f"{key}="):
+                        lines[i] = f"{key}={val}"
+                        updated = True
+                        break
+                if not updated:
+                    lines.append(f"{key}={val}")
+            env_path.write_text("\n".join(lines) + "\n")
+
+        return {"ok": True, "config_path": config_path}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail={"error": str(exc)})
+
+
 @app.on_event("shutdown")
 async def on_shutdown():
+    # Close WebRTC peers
+    try:
+        from castor.stream import close_all_peers
+
+        await close_all_peers()
+    except Exception:
+        pass
+
     await _stop_channels()
 
     # Stop mDNS

@@ -67,6 +67,13 @@ def _register_builtin_channels():
     except ImportError:
         logger.debug("MQTT channel unavailable (paho-mqtt not installed)")
 
+    try:
+        from castor.channels.homeassistant_channel import HomeAssistantChannel
+
+        _CHANNEL_CLASSES["homeassistant"] = HomeAssistantChannel
+    except ImportError:
+        logger.debug("HomeAssistant channel unavailable (aiohttp not installed)")
+
 
 def get_available_channels() -> List[str]:
     """Return names of channels whose SDKs are installed."""

@@ -1044,9 +1044,45 @@ def cmd_update(args) -> None:
 
 def cmd_fleet(args) -> None:
     """Multi-robot fleet management."""
-    from castor.fleet import fleet_status
+    fleet_subcmd = getattr(args, "fleet_subcmd", None)
 
-    fleet_status(timeout=float(args.timeout))
+    if fleet_subcmd == "status":
+        # Proxy to gateway fleet API
+        import urllib.request, json as _json
+        gateway = getattr(args, "gateway", "http://127.0.0.1:8000")
+        ruri = args.ruri
+        try:
+            with urllib.request.urlopen(f"{gateway}/api/fleet/{ruri}/status", timeout=5) as r:
+                print(_json.dumps(_json.loads(r.read()), indent=2))
+        except Exception as exc:
+            print(f"  Error: {exc}")
+        return
+
+    if fleet_subcmd == "command":
+        import json as _json, urllib.request
+        gateway = getattr(args, "gateway", "http://127.0.0.1:8000")
+        ruri = args.ruri
+        payload = _json.dumps({"instruction": args.instruction}).encode()
+        req = urllib.request.Request(
+            f"{gateway}/api/fleet/{ruri}/command",
+            data=payload, headers={"Content-Type": "application/json"}, method="POST"
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                print(_json.dumps(_json.loads(r.read()), indent=2))
+        except Exception as exc:
+            print(f"  Error: {exc}")
+        return
+
+    from castor.fleet import fleet_status
+    fleet_status(timeout=float(getattr(args, "timeout", 5)))
+
+
+def cmd_deploy(args) -> None:
+    """Deploy config to a remote Pi via SSH."""
+    from castor.commands.deploy import cmd_deploy as _deploy
+
+    _deploy(args)
 
 
 def cmd_agents(args) -> None:
@@ -2700,12 +2736,47 @@ def main() -> None:
     p_fleet = sub.add_parser(
         "fleet",
         help="Multi-robot fleet management",
-        epilog="Example: castor fleet --timeout 10",
+        epilog=(
+            "Examples:\n"
+            "  castor fleet                         # list discovered robots\n"
+            "  castor fleet --watch                 # live table (refresh every 2s)\n"
+            "  castor fleet status <ruri>           # status of specific robot\n"
+            "  castor fleet command <ruri> 'go'     # send command to specific robot\n"
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_fleet.add_argument(
         "--timeout", default="5", help="mDNS scan duration in seconds (default: 5)"
     )
+    p_fleet.add_argument("--watch", action="store_true", help="Live table, refresh every 2s")
+    p_fleet.add_argument("--gateway", default="http://127.0.0.1:8000", help="Gateway URL")
+    p_fleet_sub = p_fleet.add_subparsers(dest="fleet_subcmd")
+    p_fleet_status = p_fleet_sub.add_parser("status", help="Status of a specific robot")
+    p_fleet_status.add_argument("ruri", help="Robot RURI")
+    p_fleet_cmd = p_fleet_sub.add_parser("command", help="Send command to a specific robot")
+    p_fleet_cmd.add_argument("ruri", help="Robot RURI")
+    p_fleet_cmd.add_argument("instruction", help="Instruction text")
+
+    # castor deploy (issue #103)
+    p_deploy = sub.add_parser(
+        "deploy",
+        help="SSH-push RCAN config and restart service on remote Pi",
+        epilog=(
+            "Examples:\n"
+            "  castor deploy pi@192.168.1.10 --config robot.rcan.yaml\n"
+            "  castor deploy pi@192.168.1.10 --full\n"
+            "  castor deploy pi@192.168.1.10 --status\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_deploy.add_argument("host", help="Remote host (user@hostname or hostname)")
+    p_deploy.add_argument("--config", default="robot.rcan.yaml", help="RCAN config to push")
+    p_deploy.add_argument("--full", action="store_true", help="Also run pip install on remote")
+    p_deploy.add_argument("--status", action="store_true", dest="status", help="Show remote service status only")
+    p_deploy.add_argument("--dry-run", action="store_true", dest="dry_run", help="Preview without executing")
+    p_deploy.add_argument("--port", type=int, default=22, help="SSH port (default: 22)")
+    p_deploy.add_argument("--key", default=None, help="SSH private key file path")
+    p_deploy.add_argument("--no-restart", action="store_true", dest="no_restart", help="Push config only, skip restart")
 
     # castor agents
     p_agents = sub.add_parser("agents", help="Manage robot agents")
@@ -3224,6 +3295,7 @@ def main() -> None:
         "hub": cmd_hub,
         "scan": cmd_scan,
         "daemon": cmd_daemon,
+        "deploy": cmd_deploy,
     }
 
     # Load plugins and merge any plugin-provided commands

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opencastor"
-version = "2026.2.21.16"
+version = "2026.2.22.0"
 description = "The Universal Runtime for Embodied AI"
 readme = "README.md"
 license = "Apache-2.0"
@@ -91,8 +91,11 @@ rcan = [
 ]
 dynamixel = ["dynamixel-sdk>=3.7.31"]
 vertex = ["google-genai>=1.0.0"]
+homeassistant = ["aiohttp>=3.9.0"]
+webrtc = ["aiortc>=1.6.0", "av>=11.0.0"]
+ros2 = []  # rclpy is installed via ROS2 distro, not pip
 all = [
-    "opencastor[rpi,whatsapp,telegram,discord,slack,rcan,dynamixel,vertex,dev]",
+    "opencastor[rpi,whatsapp,telegram,discord,slack,rcan,dynamixel,vertex,homeassistant,webrtc,dev]",
 ]
 dev = [
     "pytest>=8.0.0",
