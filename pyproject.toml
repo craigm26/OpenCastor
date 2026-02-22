@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opencastor"
-version = "2026.2.21.15"
+version = "2026.2.21.16"
 description = "The Universal Runtime for Embodied AI"
 readme = "README.md"
 license = "Apache-2.0"
@@ -57,6 +57,8 @@ dependencies = [
     # The Dashboard
     "streamlit>=1.30.0",
     "SpeechRecognition>=3.10.0",
+    # Auth
+    "PyJWT>=2.8.0",
     # CLI & Demo
     "rich>=13.0.0",
     "argcomplete>=3.0.0",
@@ -85,7 +87,6 @@ channels = [
     "paho-mqtt>=2.0.0",
 ]
 rcan = [
-    "PyJWT>=2.8.0",
     "zeroconf>=0.131.0",
 ]
 dynamixel = ["dynamixel-sdk>=3.7.31"]

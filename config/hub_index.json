@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "presets": [
+    {
+      "name": "adeept_generic",
+      "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/adeept_generic.rcan.yaml",
+      "tags": ["mobile", "rover", "adeept", "rasptank"],
+      "author": "OpenCastor Default",
+      "description": "Adeept_RaspTank preset"
+    },
+    {
+      "name": "amazon_kit_generic",
+      "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/amazon_kit_generic.rcan.yaml",
+      "tags": ["mobile", "rover", "amazon_kit", "4wd"],
+      "author": "OpenCastor Default",
+      "description": "Castor_Rover_One preset"
+    },
+    {
+      "name": "arduino_l298n",
+      "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/arduino_l298n.rcan.yaml",
+      "tags": ["mobile", "diy", "arduino", "l298n", "makerspace", "stem", "second-hand", "generic"],
+      "author": "OpenCastor Default",
+      "description": "Arduino_L298N_Generic preset"
+    },
+    {
+      "name": "cytron_maker_pi",
+      "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/cytron_maker_pi.rcan.yaml",
+      "tags": ["mobile", "rp2040", "micropython", "cytron", "makerspace", "stem", "second-hand"],
+      "author": "OpenCastor Default",
+      "description": "Cytron_Maker_Pi_RP2040 preset"
+    },
+    {
+      "name": "dynamixel_arm",
+      "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/dynamixel_arm.rcan.yaml",
+      "tags": ["arm", "manipulator", "dynamixel", "6dof"],
+      "author": "OpenCastor Default",
+      "description": "Dynamixel_6DOF_Arm preset"
+    },
+    {
+      "name": "elegoo_tumbller",
+      "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/elegoo_tumbller.rcan.yaml",
+      "tags": ["mobile", "self-balancing", "arduino", "elegoo", "stem", "amazon", "second-hand"],
+      "author": "OpenCastor Default",
+      "description": "Elegoo_Tumbller_Smart_Car preset"
+    },
+    {
+      "name": "esp32_generic",
+      "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/esp32_generic.rcan.yaml",
+      "tags": ["mobile", "diy", "esp32", "wifi", "websocket", "makerspace", "stem", "generic"],
+      "author": "OpenCastor Default",
+      "description": "ESP32_Generic_WiFi_Bot preset"
+    },
+    {
+      "name": "freenove_4wd",
+      "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/freenove_4wd.rcan.yaml",
+      "tags": ["mobile", "4wd", "raspberry-pi", "freenove", "stem", "amazon", "second-hand"],
+      "author": "OpenCastor Default",
+      "description": "Freenove_4WD_Smart_Car preset"
+    },
+    {
+      "name": "lego_mindstorms_ev3",
+      "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/lego_mindstorms_ev3.rcan.yaml",
+      "tags": ["mobile", "educational", "lego", "mindstorms", "ev3", "stem", "second-hand"],
+      "author": "OpenCastor Default",
+      "description": "LEGO_Mindstorms_EV3 preset"
+    },
+    {
+      "name": "lego_spike_prime",
+      "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/lego_spike_prime.rcan.yaml",
+      "tags": ["mobile", "educational", "lego", "spike", "micropython", "ble", "stem", "second-hand"],
+      "author": "OpenCastor Default",
+      "description": "LEGO_SPIKE_Prime preset"
+    },
+    {
+      "name": "makeblock_mbot",
+      "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/makeblock_mbot.rcan.yaml",
+      "tags": ["mobile", "educational", "makeblock", "mbot", "arduino", "stem", "second-hand"],
+      "author": "OpenCastor Default",
+      "description": "Makeblock_mBot preset"
+    },
+    {
+      "name": "rpi_rc_car",
+      "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/rpi_rc_car.rcan.yaml",
+      "tags": ["mobile", "rc_car", "raspberry_pi", "pca9685", "csi_camera", "whatsapp", "claude"],
+      "author": "OpenCastor",
+      "description": "Castor_RC_Car preset"
+    },
+    {
+      "name": "sunfounder_picar",
+      "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/sunfounder_picar.rcan.yaml",
+      "tags": ["mobile", "rover", "sunfounder", "picar"],
+      "author": "OpenCastor Default",
+      "description": "SunFounder_PiCar_X preset"
+    },
+    {
+      "name": "vex_iq",
+      "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/vex_iq.rcan.yaml",
+      "tags": ["mobile", "educational", "vex", "vex-iq", "stem", "second-hand"],
+      "author": "OpenCastor Default",
+      "description": "VEX_IQ preset"
+    },
+    {
+      "name": "waveshare_alpha",
+      "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/waveshare_alpha.rcan.yaml",
+      "tags": ["mobile", "rover", "waveshare", "alphabot"],
+      "author": "OpenCastor Default",
+      "description": "Waveshare_AlphaBot preset"
+    },
+    {
+      "name": "yahboom_rosmaster",
+      "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/yahboom_rosmaster.rcan.yaml",
+      "tags": ["mobile", "mecanum", "ros2", "yahboom", "raspberry-pi", "stem", "amazon"],
+      "author": "OpenCastor Default",
+      "description": "Yahboom_ROSMASTER_X3 preset"
+    }
+  ],
+  "behaviors": []
+}

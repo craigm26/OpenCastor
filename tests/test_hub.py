@@ -328,3 +328,203 @@ class TestSubmitRecipePR:
         with patch("castor.hub._run_gh", return_value=fork_result):
             with pytest.raises(SubmitError, match="Failed to fork"):
                 _ensure_fork()
+
+
+# ===========================================================================
+# Hub Index tests (Issue #123)
+# ===========================================================================
+
+SAMPLE_INDEX = {
+    "version": 1,
+    "presets": [
+        {
+            "name": "waveshare_alpha",
+            "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/waveshare_alpha.rcan.yaml",
+            "tags": ["mobile", "rover", "waveshare"],
+            "author": "OpenCastor Default",
+            "description": "Waveshare AlphaBot preset",
+        },
+        {
+            "name": "dynamixel_arm",
+            "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/dynamixel_arm.rcan.yaml",
+            "tags": ["arm", "manipulator", "dynamixel"],
+            "author": "OpenCastor Default",
+            "description": "Dynamixel 6DOF arm preset",
+        },
+    ],
+    "behaviors": [
+        {
+            "name": "patrol",
+            "url": "https://example.com/patrol.behavior.yaml",
+            "tags": ["navigation", "patrol"],
+            "author": "community",
+            "description": "Simple patrol loop",
+        }
+    ],
+}
+
+
+class TestFetchIndex:
+    def test_fetch_index_returns_dict(self):
+        """fetch_index should return a dict with presets and behaviors keys."""
+        from castor.commands.hub import fetch_index
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = SAMPLE_INDEX
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("castor.commands.hub.requests.get", return_value=mock_response):
+            index = fetch_index("https://example.com/hub.json")
+
+        assert isinstance(index, dict)
+        assert "presets" in index
+        assert "behaviors" in index
+        assert index["version"] == 1
+
+    def test_fetch_index_network_error(self):
+        """fetch_index should raise RuntimeError with a clear message on network errors."""
+        import requests as req_lib
+
+        from castor.commands.hub import fetch_index
+
+        with patch(
+            "castor.commands.hub.requests.get",
+            side_effect=req_lib.exceptions.ConnectionError("unreachable"),
+        ):
+            with pytest.raises(RuntimeError, match="Network error"):
+                fetch_index("https://example.com/hub.json")
+
+
+class TestHubList:
+    def test_hub_list_prints_table(self, capsys):
+        """cmd_hub_list should print a table containing preset names."""
+        from castor.commands.hub import cmd_hub_list
+
+        args = MagicMock()
+        args.hub_url = None
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = SAMPLE_INDEX
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("castor.commands.hub.requests.get", return_value=mock_response):
+            cmd_hub_list(args)
+
+        captured = capsys.readouterr()
+        assert "waveshare_alpha" in captured.out or "waveshare_alpha" in captured.err
+
+
+class TestHubSearch:
+    def test_hub_search_filters_by_name(self, capsys):
+        """Searching for 'waveshare' should return only matching rows."""
+        from castor.commands.hub import cmd_hub_search
+
+        args = MagicMock()
+        args.hub_url = None
+        args.query = "waveshare"
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = SAMPLE_INDEX
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("castor.commands.hub.requests.get", return_value=mock_response):
+            cmd_hub_search(args)
+
+        captured = capsys.readouterr()
+        output = captured.out + captured.err
+        assert "waveshare_alpha" in output
+        assert "dynamixel_arm" not in output
+
+    def test_hub_search_case_insensitive(self, capsys):
+        """Searching 'WAVESHARE' should match 'waveshare'."""
+        from castor.commands.hub import cmd_hub_search
+
+        args = MagicMock()
+        args.hub_url = None
+        args.query = "WAVESHARE"
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = SAMPLE_INDEX
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("castor.commands.hub.requests.get", return_value=mock_response):
+            cmd_hub_search(args)
+
+        captured = capsys.readouterr()
+        output = captured.out + captured.err
+        assert "waveshare_alpha" in output
+
+
+class TestHubInstall:
+    def test_hub_install_downloads_file(self, tmp_path, monkeypatch):
+        """cmd_hub_install should download and save the preset file."""
+        from castor.commands.hub import cmd_hub_install
+        import castor.commands.hub as hub_mod
+
+        monkeypatch.setattr(hub_mod, "_REPO_ROOT", tmp_path)
+
+        args = MagicMock()
+        args.hub_url = None
+        args.name = "waveshare_alpha"
+
+        index_response = MagicMock()
+        index_response.json.return_value = SAMPLE_INDEX
+        index_response.raise_for_status = MagicMock()
+
+        preset_content = "rcan_version: '1.1.0'\nmetadata:\n  robot_name: Test\n"
+        file_response = MagicMock()
+        file_response.text = preset_content
+        file_response.raise_for_status = MagicMock()
+
+        with patch("castor.commands.hub.requests.get", side_effect=[index_response, file_response]):
+            cmd_hub_install(args)
+
+        output_file = tmp_path / "config" / "presets" / "waveshare_alpha.rcan.yaml"
+        assert output_file.exists()
+        assert output_file.read_text() == preset_content
+
+    def test_hub_install_unknown_name(self, capsys):
+        """Installing an unknown preset should print a clear error."""
+        from castor.commands.hub import cmd_hub_install
+
+        args = MagicMock()
+        args.hub_url = None
+        args.name = "nonexistent_preset"
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = SAMPLE_INDEX
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("castor.commands.hub.requests.get", return_value=mock_response):
+            cmd_hub_install(args)
+
+        captured = capsys.readouterr()
+        output = captured.out + captured.err
+        assert "not found" in output.lower()
+
+
+class TestHubIndexJson:
+    def test_hub_index_json_valid(self):
+        """The real config/hub_index.json should have valid structure."""
+        import json
+        from pathlib import Path
+
+        index_path = Path(__file__).parent.parent / "config" / "hub_index.json"
+        assert index_path.exists(), f"hub_index.json not found at {index_path}"
+
+        with open(index_path) as f:
+            index = json.load(f)
+
+        assert isinstance(index, dict)
+        assert "version" in index
+        assert "presets" in index
+        assert "behaviors" in index
+        assert isinstance(index["presets"], list)
+        assert isinstance(index["behaviors"], list)
+        assert len(index["presets"]) > 0
+
+        # Validate each preset has required fields
+        required_fields = {"name", "url", "tags", "author", "description"}
+        for preset in index["presets"]:
+            missing = required_fields - set(preset.keys())
+            assert not missing, f"Preset {preset.get('name')} missing fields: {missing}"

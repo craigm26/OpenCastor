@@ -533,6 +533,63 @@ class Speaker:
             pass
 
 
+
+# ---------------------------------------------------------------------------
+# STT (speech-to-text via microphone)
+# ---------------------------------------------------------------------------
+try:
+    import speech_recognition as _sr_module  # noqa: F401
+    HAS_SR = True
+except ImportError:
+    HAS_SR = False
+
+
+class Listener:
+    """Listens for voice input using the system microphone and SpeechRecognition."""
+
+    def __init__(self, config: dict):
+        audio_cfg = config.get("audio", {})
+        self.enabled = audio_cfg.get("stt_enabled", False)
+        self.language = audio_cfg.get("language", "en-US")
+        self.energy_threshold = audio_cfg.get("energy_threshold", 300)
+        self.pause_threshold = audio_cfg.get("pause_threshold", 0.8)
+        self._log = logging.getLogger("OpenCastor.Listener")
+
+        if not HAS_SR:
+            self._log.warning("STT disabled -- speech_recognition not installed")
+            self.enabled = False
+
+    def listen_once(self):
+        """Capture one phrase from the microphone and return the transcript.
+
+        Returns:
+            str: The recognised transcript, or None on error/unavailability.
+        """
+        if not self.enabled or not HAS_SR:
+            return None
+        try:
+            import speech_recognition as sr
+
+            recognizer = sr.Recognizer()
+            recognizer.energy_threshold = self.energy_threshold
+            recognizer.pause_threshold = self.pause_threshold
+            with sr.Microphone() as source:
+                self._log.debug("Listener: calibrating ambient noise…")
+                recognizer.adjust_for_ambient_noise(source, duration=0.3)
+                self._log.debug("Listener: recording phrase…")
+                audio = recognizer.listen(source, timeout=10, phrase_time_limit=30)
+            transcript = recognizer.recognize_google(audio, language=self.language)
+            self._log.info(f"Transcript: {transcript!r}")
+            return transcript
+        except Exception as exc:
+            import speech_recognition as sr
+            if isinstance(exc, sr.UnknownValueError):
+                self._log.debug("STT: speech not understood")
+            else:
+                self._log.debug(f"STT error: {exc}")
+            return None
+
+
 # ---------------------------------------------------------------------------
 # Shared globals for gateway access (thread-safe)
 # ---------------------------------------------------------------------------

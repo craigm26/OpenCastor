@@ -269,12 +269,21 @@ with left_col:
         height=440,
     )
 
+    # ── Depth obstacle badges (Issue #117) ──────────────────────
+    _depth_obs = _get("/api/depth/obstacles")
+    if _depth_obs.get("available"):
+        st.markdown('<p class="panel-title">📏 Obstacle Distances</p>', unsafe_allow_html=True)
+        _do_l, _do_c, _do_r = st.columns(3)
+        _do_l.metric("Left",   f"{_depth_obs['left_cm']:.0f} cm" if _depth_obs.get('left_cm') else "—")
+        _do_c.metric("Center", f"{_depth_obs['center_cm']:.0f} cm" if _depth_obs.get('center_cm') else "—")
+        _do_r.metric("Right",  f"{_depth_obs['right_cm']:.0f} cm" if _depth_obs.get('right_cm') else "—")
+
     st.divider()
 
     # ── Command input ─────────────────────────────────────────────
     st.markdown('<p class="panel-title">💬 Command</p>', unsafe_allow_html=True)
 
-    # Voice button (server-side mic)
+    # Voice button (server-side mic via local STT)
     if st.button("🎤 Speak"):
         try:
             import speech_recognition as sr
@@ -288,6 +297,30 @@ with left_col:
                     st.toast(f"Heard: {text[:60]}", icon="✅")
         except Exception as e:
             st.toast(f"Voice: {e}", icon="❌")
+
+    # Push-to-Talk button — delegates mic capture to the gateway STT endpoint
+    if st.button("🎙️ Push to Talk", help="Uses gateway /api/voice/listen (STT via server mic)"):
+        try:
+            with st.spinner("Listening…"):
+                resp = _req.post(
+                    f"{GW}/api/voice/listen",
+                    headers=_hdr(),
+                    timeout=20,
+                )
+            if resp.ok:
+                data = resp.json()
+                transcript = data.get("transcript", "")
+                thought = data.get("thought") or {}
+                st.toast(f"Heard: {transcript[:80]}", icon="🎙️")
+                if thought.get("raw_text"):
+                    st.toast(f"Reply: {thought['raw_text'][:80]}", icon="🤖")
+                if transcript:
+                    st.session_state["voice_input"] = transcript
+            else:
+                err = resp.json().get("detail", resp.text)
+                st.toast(f"PTT error: {err}", icon="❌")
+        except Exception as _ptt_exc:
+            st.toast(f"PTT: {_ptt_exc}", icon="❌")
 
     prompt = st.chat_input("Type a command…")
     user_text = prompt or st.session_state.pop("voice_input", None)
@@ -497,6 +530,224 @@ with st.expander(
                     st.toast(f"Replay error: {_replay_err}", icon="❌")
     else:
         st.caption("No episodes recorded yet — start the runtime loop to capture them")
+
+
+# ── FLEET (Swarm) PANEL ───────────────────────────────────────────────────────
+st.divider()
+st.markdown("### 🤖 Fleet")
+
+def _load_fleet_nodes():
+    """Load nodes from config/swarm.yaml, gracefully returning [] on any error."""
+    import concurrent.futures
+    from pathlib import Path
+    try:
+        import yaml
+    except ImportError:
+        return []
+    # Locate swarm.yaml relative to OPENCASTOR_CONFIG or project root
+    env_cfg = os.getenv("OPENCASTOR_CONFIG")
+    candidates = []
+    if env_cfg:
+        candidates.append(Path(env_cfg).parent / "swarm.yaml")
+    # Walk up from this file to find the project root config/swarm.yaml
+    _here = Path(__file__).resolve().parent.parent
+    candidates.append(_here / "config" / "swarm.yaml")
+    candidates.append(Path("config/swarm.yaml"))
+
+    for c in candidates:
+        if c.exists():
+            try:
+                with open(c) as fh:
+                    data = yaml.safe_load(fh) or {}
+                return data.get("nodes", [])
+            except Exception:
+                pass
+    return []
+
+
+def _query_fleet_node(node):
+    """GET /health for one fleet node; return status dict (never raises)."""
+    import time as _time
+    host = node.get("ip") or node.get("host", "localhost")
+    port = node.get("port", 8000)
+    base = f"http://{host}:{port}"
+    token = node.get("token", "")
+    hdrs = {"Authorization": f"Bearer {token}"} if token else {}
+    start = _time.monotonic()
+    result = {
+        "Robot": node.get("name", "?"),
+        "IP": str(host),
+        "Brain": False,
+        "Driver": False,
+        "Uptime": "—",
+        "Ping (ms)": None,
+        "Status": "offline",
+        "_base": base,
+        "_headers": hdrs,
+        "_online": False,
+    }
+    try:
+        r = _req.get(f"{base}/health", headers=hdrs, timeout=2.5)
+        elapsed = (_time.monotonic() - start) * 1000.0
+        result["Ping (ms)"] = round(elapsed, 1)
+        if r.status_code == 200:
+            d = r.json()
+            result["_online"] = True
+            result["Brain"] = bool(d.get("brain"))
+            result["Driver"] = bool(d.get("driver"))
+            # Uptime
+            try:
+                s = int(float(d.get("uptime_s", 0)))
+                h, rem = divmod(s, 3600)
+                m, sc = divmod(rem, 60)
+                result["Uptime"] = f"{h:02d}:{m:02d}:{sc:02d}" if h else f"{m:02d}:{sc:02d}"
+            except Exception:
+                pass
+            if result["Brain"] and result["Driver"]:
+                result["Status"] = "🟢 healthy"
+            else:
+                result["Status"] = "🟡 degraded"
+    except Exception:
+        elapsed = (_time.monotonic() - start) * 1000.0
+        result["Ping (ms)"] = round(elapsed, 1)
+        result["Status"] = "⚫ offline"
+    return result
+
+
+_fleet_nodes = _load_fleet_nodes()
+
+if not _fleet_nodes:
+    st.caption("No fleet nodes configured — add nodes to config/swarm.yaml")
+else:
+    import concurrent.futures as _cf
+    with _cf.ThreadPoolExecutor(max_workers=len(_fleet_nodes)) as _ex:
+        _fleet_results = list(_ex.map(_query_fleet_node, _fleet_nodes))
+
+    # Build display DataFrame (exclude internal keys)
+    import pandas as pd
+    _display_cols = ["Robot", "IP", "Brain", "Driver", "Uptime", "Ping (ms)", "Status"]
+    _fleet_df = pd.DataFrame(
+        [{k: r[k] for k in _display_cols} for r in _fleet_results]
+    )
+    # Render booleans as checkmarks for readability
+    _fleet_df["Brain"]  = _fleet_df["Brain"].map(lambda v: "✅" if v else "❌")
+    _fleet_df["Driver"] = _fleet_df["Driver"].map(lambda v: "✅" if v else "❌")
+
+    st.dataframe(
+        _fleet_df,
+        hide_index=True,
+        use_container_width=True,
+        height=min(300, 36 + 36 * len(_fleet_results)),
+    )
+
+    # Send to fleet
+    _fleet_col1, _fleet_col2 = st.columns([4, 1])
+    with _fleet_col1:
+        _fleet_instruction = st.text_input(
+            "Send to fleet",
+            placeholder="e.g. move forward 1 meter",
+            key="fleet_instruction",
+            label_visibility="collapsed",
+        )
+    with _fleet_col2:
+        _fleet_send = st.button("Send to fleet", use_container_width=True)
+
+    if _fleet_send and _fleet_instruction:
+        _active_nodes = [r for r in _fleet_results if r["_online"]]
+        if not _active_nodes:
+            st.warning("No nodes online — cannot send command")
+        else:
+            _fleet_errors = []
+            for _fr in _active_nodes:
+                try:
+                    _resp = _req.post(
+                        f"{_fr['_base']}/api/command",
+                        json={"instruction": _fleet_instruction},
+                        headers=_fr["_headers"],
+                        timeout=10,
+                    )
+                    if not _resp.ok:
+                        _fleet_errors.append(f"{_fr['Robot']}: HTTP {_resp.status_code}")
+                except Exception as _fe:
+                    _fleet_errors.append(f"{_fr['Robot']}: {_fe}")
+            if _fleet_errors:
+                st.error("Some nodes failed: " + "; ".join(_fleet_errors))
+            else:
+                st.success(f"Command sent to {len(_active_nodes)} node(s)")
+
+    # Per-node stop buttons
+    if _fleet_results:
+        st.markdown('<p class="panel-title">Per-node emergency stop</p>', unsafe_allow_html=True)
+        _stop_cols = st.columns(min(len(_fleet_results), 6))
+        for _i, _fr in enumerate(_fleet_results):
+            _name = _fr["Robot"]
+            with _stop_cols[_i % len(_stop_cols)]:
+                if st.button("⏹", key=f"stop_{_name}", help=f"Stop {_name}"):
+                    try:
+                        _req.post(
+                            f"{_fr['_base']}/api/stop",
+                            headers=_fr["_headers"],
+                            timeout=3,
+                        )
+                        st.toast(f"{_name} stopped", icon="⏹")
+                    except Exception as _se:
+                        st.toast(f"Stop failed: {_se}", icon="❌")
+
+
+
+# ── BEHAVIORS PANEL ───────────────────────────────────────────────────────────
+st.divider()
+with st.expander("🎬 Behaviors", expanded=False):
+    _beh_status = _get("/api/behavior/status")
+    _beh_running = _beh_status.get("running", False)
+    _beh_name = _beh_status.get("name") or "—"
+    _beh_job_id = _beh_status.get("job_id") or "—"
+
+    if _beh_running:
+        st.success(f"Running: **{_beh_name}**  (job {_beh_job_id[:8]})")
+    else:
+        st.info("No behavior running")
+
+    _beh_path = st.text_input(
+        "Behavior file path",
+        value="",
+        placeholder="patrol.behavior.yaml",
+        key="behavior_path_input",
+    )
+    _bcol1, _bcol2 = st.columns(2)
+    with _bcol1:
+        if st.button("Run", key="behavior_run_btn", use_container_width=True):
+            if _beh_path.strip():
+                try:
+                    _br = _req.post(
+                        f"{GW}/api/behavior/run",
+                        json={"path": _beh_path.strip()},
+                        headers=_hdr(),
+                        timeout=5,
+                    )
+                    if _br.ok:
+                        _bd = _br.json()
+                        st.toast(f"Started: {_bd.get('name', '?')} (job {_bd.get('job_id', '?')[:8]})", icon="▶")
+                    else:
+                        st.toast(f"Error {_br.status_code}: {_br.text[:80]}", icon="❌")
+                except Exception as _be:
+                    st.toast(f"Request failed: {_be}", icon="❌")
+            else:
+                st.toast("Enter a behavior file path first", icon="⚠")
+    with _bcol2:
+        if st.button("Stop", key="behavior_stop_btn", use_container_width=True):
+            try:
+                _bs = _req.post(
+                    f"{GW}/api/behavior/stop",
+                    headers=_hdr(),
+                    timeout=5,
+                )
+                if _bs.ok:
+                    st.toast("Behavior stopped", icon="⏹")
+                else:
+                    st.toast(f"Stop error {_bs.status_code}", icon="❌")
+            except Exception as _bse:
+                st.toast(f"Stop failed: {_bse}", icon="❌")
 
 # ── AUTO-REFRESH ──────────────────────────────────────────────────────────────
 time.sleep(refresh_s)

@@ -1,0 +1,21 @@
+# OpenCastor Swarm — node registry
+# Each entry is a Castor gateway node reachable on the local network.
+# Use `castor status --swarm` to query all nodes at once.
+#
+# Fields:
+#   name:     Human-readable robot name
+#   host:     Hostname or IP
+#   port:     Gateway port (default 8000)
+#   token:    OPENCASTOR_API_TOKEN for that node
+#   rcan:     Path to the node's .rcan.yaml (if local clone is available)
+#   tags:     Free-form labels for filtering (e.g. camera, arm, rover)
+
+nodes:
+  - name: alex
+    host: alex.local
+    ip: 192.168.68.91
+    port: 8000
+    token: ea3c155db3cdc1a3221a7ebfe683954d85924784a5e87a45accbd848c3497b4f
+    rcan: ~/OpenCastor/alex.rcan.yaml
+    tags: [rpi5, camera, i2c, rover]
+    added: "2026-02-21"

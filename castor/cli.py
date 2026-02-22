@@ -118,6 +118,17 @@ def cmd_run(args) -> None:
                 print("  Exiting. Create a config with: castor wizard\n")
                 return
 
+    # --behavior: load and run a behavior script, skip the perception loop
+    behavior_path = getattr(args, "behavior", None)
+    if behavior_path:
+        from castor.behaviors import BehaviorRunner
+        import yaml
+
+        runner = BehaviorRunner(config={})
+        behavior = runner.load(behavior_path)
+        runner.run(behavior)
+        return
+
     from castor.main import main as run_main
 
     sys.argv = ["castor.main", "--config", config_path]
@@ -979,6 +990,57 @@ def cmd_learn(args) -> None:
 
     run_learn(lesson=args.lesson)
 
+
+
+def cmd_swarm(args) -> None:
+    """Multi-robot swarm management sub-commands."""
+    from castor.commands.swarm import (
+        cmd_swarm_command,
+        cmd_swarm_status,
+        cmd_swarm_stop,
+        cmd_swarm_sync,
+    )
+
+    subcmd = getattr(args, "swarm_subcmd", None) or "status"
+    output_json = getattr(args, "json", False)
+    swarm_cfg = getattr(args, "swarm_config", None)
+    timeout = float(getattr(args, "timeout", 3.0))
+
+    if subcmd == "status":
+        cmd_swarm_status(config_path=swarm_cfg, output_json=output_json, timeout=timeout)
+    elif subcmd == "command":
+        instruction = getattr(args, "instruction", "")
+        node = getattr(args, "node", None)
+        cmd_swarm_command(
+            instruction,
+            node=node,
+            config_path=swarm_cfg,
+            output_json=output_json,
+            timeout=timeout,
+        )
+    elif subcmd == "stop":
+        cmd_swarm_stop(config_path=swarm_cfg, output_json=output_json, timeout=timeout)
+    elif subcmd == "sync":
+        config_path_arg = getattr(args, "config_path", None) or "config/swarm.yaml"
+        cmd_swarm_sync(
+            config_path_arg,
+            swarm_config_path=swarm_cfg,
+            output_json=output_json,
+            timeout=timeout,
+        )
+    elif subcmd == "update":
+        from castor.commands.update import cmd_swarm_update
+        cmd_swarm_update(args)
+    else:
+        print(f"  Unknown swarm sub-command: {subcmd}")
+        print("  Available: status, command, stop, sync, update")
+
+
+
+def cmd_update(args) -> None:
+    """Update OpenCastor (delegates to castor/commands/update.py)."""
+    from castor.commands.update import cmd_update as _cmd_update
+    _cmd_update(args)
 
 def cmd_fleet(args) -> None:
     """Multi-robot fleet management."""
@@ -1895,8 +1957,19 @@ def cmd_hub(args) -> None:
         _submit_rating(recipe_id, rating)
         return
 
+    # --- Hub Index commands (Issue #123) ---
+    if action == "list":
+        from castor.commands.hub import cmd_hub_list
+        cmd_hub_list(args)
+        return
+
+    if action == "publish":
+        from castor.commands.hub import cmd_hub_publish
+        cmd_hub_publish(args)
+        return
+
     # Fallback
-    print("  Usage: castor hub {browse|search|show|install|share|rate|categories}")
+    print("  Usage: castor hub {browse|search|show|install|share|rate|categories|list|publish}")
     print("  Run: castor hub --help for details")
 
 
@@ -2149,6 +2222,12 @@ def main() -> None:
     )
     p_run.add_argument("--config", default="robot.rcan.yaml", help="RCAN config file")
     p_run.add_argument("--simulate", action="store_true", help="Run without hardware")
+    p_run.add_argument(
+        "--behavior",
+        default=None,
+        metavar="BEHAVIOR_FILE",
+        help="Run a behavior script instead of the perception loop (e.g. patrol.behavior.yaml)",
+    )
     p_run.add_argument(
         "--dashboard",
         action="store_true",
@@ -2472,6 +2551,90 @@ def main() -> None:
     p_validate.add_argument("--json", action="store_true", help="Output results as JSON")
     p_validate.add_argument("--strict", action="store_true", help="Exit with non-zero if any WARN")
     p_validate.set_defaults(func=cmd_validate)
+
+    # castor swarm
+    p_swarm = sub.add_parser(
+        "swarm",
+        help="Multi-robot swarm management",
+        epilog=(
+            "Examples:\n"
+            "  castor swarm status\n"
+            "  castor swarm status --json\n"
+            "  castor swarm command \"move forward\"\n"
+            "  castor swarm command \"turn\" --node alex\n"
+            "  castor swarm stop\n"
+            "  castor swarm sync config/robot.rcan.yaml\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_swarm.add_argument(
+        "--swarm-config",
+        dest="swarm_config",
+        default=None,
+        help="Path to swarm.yaml (default: config/swarm.yaml)",
+    )
+    p_swarm.add_argument(
+        "--json",
+        action="store_true",
+        help="Output raw JSON instead of formatted table",
+    )
+    p_swarm.add_argument(
+        "--timeout",
+        type=float,
+        default=3.0,
+        help="Per-node HTTP timeout in seconds (default: 3.0)",
+    )
+    p_swarm_sub = p_swarm.add_subparsers(dest="swarm_subcmd")
+
+    # castor swarm status
+    p_swarm_status = p_swarm_sub.add_parser("status", help="Show health table for all nodes")
+    p_swarm_status.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_swarm_status.add_argument("--swarm-config", dest="swarm_config", default=None)
+    p_swarm_status.add_argument("--timeout", type=float, default=3.0)
+
+    # castor swarm command
+    p_swarm_cmd = p_swarm_sub.add_parser("command", help="Send instruction to all or one node")
+    p_swarm_cmd.add_argument("instruction", help="Natural-language instruction to send")
+    p_swarm_cmd.add_argument("--node", default=None, help="Target a specific node by name")
+    p_swarm_cmd.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_swarm_cmd.add_argument("--swarm-config", dest="swarm_config", default=None)
+    p_swarm_cmd.add_argument("--timeout", type=float, default=10.0)
+
+    # castor swarm stop
+    p_swarm_stop = p_swarm_sub.add_parser("stop", help="Emergency stop all nodes")
+    p_swarm_stop.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_swarm_stop.add_argument("--swarm-config", dest="swarm_config", default=None)
+    p_swarm_stop.add_argument("--timeout", type=float, default=5.0)
+
+    # castor swarm sync
+    p_swarm_sync = p_swarm_sub.add_parser("sync", help="Push RCAN config reload to all nodes")
+    p_swarm_sync.add_argument("config_path", help="Path to RCAN config file to push")
+    p_swarm_sync.add_argument("--json", action="store_true", help="Output raw JSON")
+    p_swarm_sync.add_argument("--swarm-config", dest="swarm_config", default=None)
+    p_swarm_sync.add_argument("--timeout", type=float, default=10.0)
+
+    # castor swarm update
+    p_swarm_update = p_swarm_sub.add_parser("update", help="Update OpenCastor on all swarm nodes via SSH")
+    p_swarm_update.add_argument("--dry-run", dest="dry_run", action="store_true", help="Print commands without executing")
+    p_swarm_update.add_argument("--swarm-config", dest="swarm_config", default=None)
+
+    p_swarm.set_defaults(func=cmd_swarm)
+
+
+    # castor update
+    p_update = sub.add_parser(
+        "update",
+        help="Update OpenCastor to the latest version",
+        epilog=(
+            "Examples:\n"
+            "  castor update                     # Update to latest\n"
+            "  castor update --dry-run           # Preview without changing\n"
+            "  castor update --version 2026.2.0  # Pin to a specific version\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_update.add_argument("--dry-run", dest="dry_run", action="store_true", help="Print commands without executing")
+    p_update.add_argument("--version", default=None, metavar="X.Y.Z", help="Pin to a specific version tag or pip specifier")
 
     # castor learn
     p_learn = sub.add_parser(
@@ -2837,8 +3000,9 @@ def main() -> None:
         "action",
         nargs="?",
         default="browse",
-        choices=["browse", "search", "show", "install", "share", "rate", "categories"],
-        help="Action to perform (default: browse)",
+        choices=["browse", "search", "show", "install", "share", "rate", "categories",
+                 "list", "publish"],
+        help="Action to perform (default: browse). Use 'list'/'search'/'install'/'publish' for hub index.",
     )
     p_hub.add_argument("--rating", type=int, choices=[1, 2, 3, 4, 5], help="Star rating (1-5) for hub rate")
     p_hub.add_argument("query", nargs="?", default=None, help="Search query or recipe ID")
@@ -3001,6 +3165,8 @@ def main() -> None:
         "benchmark": cmd_benchmark,
         "lint": cmd_lint,
         "validate": cmd_validate,
+        "swarm": cmd_swarm,
+        "update": cmd_update,
         "learn": cmd_learn,
         "improve": cmd_improve,
         "fleet": cmd_fleet,

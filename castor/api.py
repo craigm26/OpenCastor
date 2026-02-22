@@ -23,7 +23,7 @@ import time
 from typing import Any, Dict, Optional
 
 import yaml
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -148,6 +148,10 @@ class AppState:
     _health_cache_time: float = 0.0   # last time health_check() was called
     _health_cache_result: dict = {}   # cached result (TTL: 30s)
     usage_tracker = None               # UsageTracker singleton (lazy-init)
+    listener = None                    # Listener instance for STT (issue #119)
+    nav_job = None                     # Current nav job dict or None (issue #120)
+    behavior_runner = None             # BehaviorRunner instance (issue #121)
+    behavior_job = None                # Current behavior job dict or None (issue #121)
 
 
 state = AppState()
@@ -158,12 +162,41 @@ state = AppState()
 API_TOKEN = os.getenv("OPENCASTOR_API_TOKEN")
 
 
+def _check_min_role(request: Request, min_role: str) -> None:
+    """Raise HTTP 403 if the authenticated user has insufficient role level.
+
+    Works with both multi-user JWT tokens (jwt_role on request.state) and the
+    static bearer token path (treated as admin-level).  Skips the check when
+    no auth is configured (open access mode).
+
+    Args:
+        request:  The incoming FastAPI request.
+        min_role: Minimum required role name (admin / operator / viewer).
+    """
+    from castor.auth_jwt import ROLES
+
+    role = getattr(request.state, "jwt_role", None)
+    if role is None:
+        # Static token path sets jwt_role in verify_token;
+        # if still None, this is open access — allow.
+        return
+
+    level = ROLES.get(role, 0)
+    min_level = ROLES.get(min_role, 0)
+    if level < min_level:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Insufficient role: '{role}' requires at least '{min_role}'",
+        )
+
+
 async def verify_token(request: Request):
     """Multi-layer auth: JWT first, then bearer token, then anonymous/GUEST.
 
-    When JWT is configured (OPENCASTOR_JWT_SECRET), Bearer tokens are
-    checked as JWT first.  Falls back to the static API token.
-    If no auth is configured at all, access is open.
+    Layer 1: Multi-user JWT (castor.auth_jwt) — checked when OPENCASTOR_USERS is set.
+    Layer 2: RCAN JWT (castor.rcan.jwt_auth) — checked when OPENCASTOR_JWT_SECRET is set.
+    Layer 3: Static bearer token (OPENCASTOR_API_TOKEN) — backwards-compatible.
+    Layer 4: Open access when no auth is configured.
 
     Also accepts the token via ``?token=`` query parameter for streaming
     clients (browsers, VLC) that cannot set Authorization headers.
@@ -174,27 +207,49 @@ async def verify_token(request: Request):
         f"Bearer {query_token}" if query_token else ""
     )
 
-    # Try JWT first (if configured)
+    raw_token = auth[7:] if auth.startswith("Bearer ") else ""
+
+    # --- Layer 1: Multi-user JWT (Issue #124) ---
+    if raw_token:
+        try:
+            from castor.auth_jwt import HAS_JWT, ROLES, decode_token
+
+            if HAS_JWT:
+                payload = decode_token(raw_token)
+                role = payload.get("role", "viewer")
+                request.state.jwt_username = payload.get("sub", "unknown")
+                request.state.jwt_role = role
+                request.state.auth_type = "jwt"
+                return
+        except Exception:
+            pass  # Not a multi-user JWT; fall through
+
+    # --- Layer 2: RCAN JWT (legacy JWT path) ---
     jwt_secret = os.getenv("OPENCASTOR_JWT_SECRET")
-    if jwt_secret and auth.startswith("Bearer "):
-        token = auth[7:]
+    if jwt_secret and raw_token:
         try:
             from castor.rcan.jwt_auth import RCANTokenManager
 
             mgr = RCANTokenManager(secret=jwt_secret, issuer=state.ruri or "")
-            principal = mgr.verify(token)
+            principal = mgr.verify(raw_token)
             request.state.principal = principal
+            request.state.jwt_username = getattr(principal, "name", "unknown")
+            request.state.jwt_role = "admin"
+            request.state.auth_type = "jwt"
             return
         except Exception:
             pass  # Fall through to static token check
 
-    # Try static API token
+    # --- Layer 3: Static API token ---
     if API_TOKEN:
         if auth != f"Bearer {API_TOKEN}":
             raise HTTPException(status_code=401, detail="Invalid or missing API token")
+        request.state.jwt_username = "api"
+        request.state.jwt_role = "admin"
+        request.state.auth_type = "static"
         return
 
-    # No auth configured -- open access
+    # --- Layer 4: No auth configured -- open access ---
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +268,12 @@ class ActionRequest(BaseModel):
     duration_ms: Optional[int] = None  # for wait
 
 
+class WaypointRequest(BaseModel):
+    distance_m: float
+    heading_deg: float
+    speed: float = 0.6
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -226,6 +287,72 @@ async def health():
         "driver": state.driver is not None,
         "channels": list(state.channels.keys()),
     }
+
+
+
+# ---------------------------------------------------------------------------
+# Multi-user JWT auth endpoints  (Issue #124)
+# ---------------------------------------------------------------------------
+
+
+class UserLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/auth/token")
+async def auth_token(req: UserLoginRequest):
+    """Issue a JWT access token using username + password (multi-user auth).
+
+    Reads user credentials from OPENCASTOR_USERS env var.
+    Falls back gracefully when multi-user auth is not configured.
+    """
+    from castor.auth_jwt import authenticate_user, create_token
+
+    result = authenticate_user(req.username, req.password)
+    if result is None:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    username, role = result
+    try:
+        token = create_token(username, role, expires_h=24)
+    except ImportError as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "role": role,
+        "expires_in": 86400,
+    }
+
+
+@app.get("/auth/me", dependencies=[Depends(verify_token)])
+async def auth_me(request: Request):
+    """Return the authenticated user's identity and auth type.
+
+    Works with both JWT tokens (multi-user) and the static bearer token.
+    """
+    # Populated by verify_token when a valid JWT was used
+    jwt_username = getattr(request.state, "jwt_username", None)
+    jwt_role = getattr(request.state, "jwt_role", None)
+    auth_type = getattr(request.state, "auth_type", None)
+
+    if jwt_username:
+        return {"username": jwt_username, "role": jwt_role, "auth_type": auth_type or "jwt"}
+
+    # Populated by the RCAN JWT path
+    principal = getattr(request.state, "principal", None)
+    if principal:
+        return {
+            "username": getattr(principal, "name", "unknown"),
+            "role": str(getattr(principal, "role", "unknown")),
+            "auth_type": "jwt",
+        }
+
+    # Static bearer token (backwards-compat)
+    if API_TOKEN and request.headers.get("Authorization") == f"Bearer {API_TOKEN}":
+        return {"username": "api", "role": "admin", "auth_type": "static"}
+
+    return {"username": "anonymous", "role": "viewer", "auth_type": "none"}
 
 
 def _maybe_wrap_rcan(payload: dict, request: Request) -> dict:
@@ -308,6 +435,7 @@ async def get_status(request: Request):
 @app.post("/api/command", dependencies=[Depends(verify_token)])
 async def send_command(cmd: CommandRequest, request: Request):
     """Send an instruction to the robot's brain and receive the action."""
+    _check_min_role(request, "operator")  # viewer role blocked
     _check_command_rate(request.client.host if request.client else "unknown")
     if state.brain is None:
         raise HTTPException(status_code=503, detail="Brain not initialized")
@@ -351,12 +479,13 @@ async def send_command(cmd: CommandRequest, request: Request):
 
 
 @app.post("/api/action", dependencies=[Depends(verify_token)])
-async def direct_action(action: ActionRequest):
+async def direct_action(action: ActionRequest, request: Request):
     """Send a direct motor command, bypassing the brain.
 
     Requires bearer auth (enforced via verify_token dependency).
     Bounds are checked against the safety layer before executing.
     """
+    _check_min_role(request, "operator")  # viewer role blocked
     if state.driver is None:
         raise HTTPException(status_code=503, detail="No hardware driver active")
 
@@ -492,8 +621,9 @@ async def get_usage():
 # ---------------------------------------------------------------------------
 
 @app.post("/api/config/reload", dependencies=[Depends(verify_token)])
-async def reload_config():
+async def reload_config(request: Request):
     """Reload the RCAN config file in-place without restarting the gateway."""
+    _check_min_role(request, "admin")  # operator and viewer roles blocked
     config_path = os.getenv("OPENCASTOR_CONFIG", "robot.rcan.yaml")
     try:
         with open(config_path) as _f:
@@ -1222,6 +1352,398 @@ async def command_history(limit: int = 20):
 
 
 # ---------------------------------------------------------------------------
+# Depth camera endpoints (Issue #117)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/depth/frame", dependencies=[Depends(verify_token)])
+async def depth_frame():
+    """Return a JPEG of the latest RGB frame with JET-colormap depth overlay.
+
+    Requires an OAK-D (or compatible depth camera) to be active.
+    Returns 503 when no camera is available or no depth frame has been captured.
+    """
+    from castor.depth import get_depth_overlay
+    from castor.main import get_shared_camera
+
+    camera = get_shared_camera()
+    if camera is None or not camera.is_available():
+        raise HTTPException(status_code=503, detail="No camera available")
+
+    depth = getattr(camera, "last_depth", None)
+    rgb_bytes = await asyncio.to_thread(_capture_live_frame)
+
+    from fastapi.responses import Response as _Resp
+    try:
+        jpeg = await asyncio.to_thread(get_depth_overlay, rgb_bytes or b"", depth)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Depth overlay failed: {exc}") from exc
+
+    return _Resp(content=jpeg, media_type="image/jpeg")
+
+
+@app.get("/api/depth/obstacles", dependencies=[Depends(verify_token)])
+async def depth_obstacles():
+    """Return nearest obstacle distances (cm) per sector: left / center / right.
+
+    Divides the latest depth frame into horizontal thirds and reports the
+    minimum depth in each sector.  Returns {"available": false} when no
+    depth camera is active.
+    """
+    from castor.depth import get_obstacle_zones
+    from castor.main import get_shared_camera
+
+    camera = get_shared_camera()
+    depth = getattr(camera, "last_depth", None) if camera is not None else None
+    return await asyncio.to_thread(get_obstacle_zones, depth)
+
+
+# ---------------------------------------------------------------------------
+# WebSocket telemetry stream (Issue #118)
+# ---------------------------------------------------------------------------
+
+@app.websocket("/ws/telemetry")
+async def ws_telemetry(websocket: WebSocket, token: str = ""):
+    """WebSocket endpoint that pushes telemetry JSON every 200 ms.
+
+    Auth: when OPENCASTOR_API_TOKEN is set, the client must pass a matching
+    ?token=<value> query parameter (or the connection is closed with
+    code 1008 - Policy Violation).
+
+    Pushed frame schema::
+
+        {
+            "ts":            float,   # Unix timestamp
+            "robot":         str,     # robot_name from config
+            "loop_count":    int,     # perception-action loop iterations
+            "avg_latency_ms": float,  # last loop latency (ms)
+            "camera":        str,     # "online" or "offline"
+            "driver":        str,     # "hardware" or "mock" or "none"
+            "depth":         dict,    # get_obstacle_zones() result
+            "provider":      str,     # active provider name
+            "using_fallback": bool,   # True when a fallback provider is active
+        }
+
+    The client may send a JSON command:
+
+        {"cmd": "stop"}  — triggers driver.stop() if a driver is active.
+    """
+    # --- Auth check ---
+    if API_TOKEN and token != API_TOKEN:
+        await websocket.close(code=1008)
+        return
+
+    await websocket.accept()
+    logger.debug("WebSocket telemetry client connected")
+
+    async def _push_loop():
+        from castor.depth import get_obstacle_zones
+        from castor.main import get_shared_camera
+
+        while True:
+            try:
+                # Collect telemetry
+                robot_name = (state.config or {}).get("metadata", {}).get("robot_name", "robot")
+
+                # Loop count + latency from ProcFS if available
+                loop_count = 0
+                avg_latency_ms = 0.0
+                if state.fs is not None:
+                    try:
+                        snap = state.fs.proc.snapshot()
+                        loop_count = snap.get("loop", {}).get("iteration") or 0
+                        avg_latency_ms = snap.get("loop", {}).get("latency_ms") or 0.0
+                    except Exception:
+                        pass
+
+                # Camera status
+                camera_status = "offline"
+                if state.fs is not None:
+                    try:
+                        hw = state.fs.proc.snapshot().get("hw", {})
+                        camera_status = hw.get("camera", "offline") or "offline"
+                    except Exception:
+                        pass
+                elif hasattr(state, "camera") and state.camera is not None:
+                    camera_status = "online" if state.camera.is_available() else "offline"
+
+                # Driver type
+                driver_type = "none"
+                if state.driver is not None:
+                    dt = type(state.driver).__name__.lower()
+                    driver_type = "mock" if "mock" in dt or "sim" in dt else "hardware"
+
+                # Depth obstacles
+                camera = get_shared_camera()
+                depth = getattr(camera, "last_depth", None) if camera is not None else None
+                depth_data = await asyncio.to_thread(get_obstacle_zones, depth)
+
+                # Provider name + fallback flag
+                provider_name = (state.config or {}).get("agent", {}).get("provider", "none")
+                using_fallback = False
+                if state.provider_fallback is not None:
+                    using_fallback = getattr(state.provider_fallback, "is_using_fallback", False)
+                elif state.offline_fallback is not None:
+                    using_fallback = getattr(state.offline_fallback, "is_using_fallback", False)
+
+                frame = {
+                    "ts": time.time(),
+                    "robot": robot_name,
+                    "loop_count": loop_count,
+                    "avg_latency_ms": avg_latency_ms,
+                    "camera": camera_status,
+                    "driver": driver_type,
+                    "depth": depth_data,
+                    "provider": provider_name,
+                    "using_fallback": using_fallback,
+                }
+                await websocket.send_json(frame)
+            except WebSocketDisconnect:
+                logger.debug("WebSocket telemetry client disconnected (push loop)")
+                return
+            except Exception as exc:
+                logger.debug("WebSocket telemetry push error: %s", exc)
+                return
+            await asyncio.sleep(0.2)
+
+    async def _recv_loop():
+        """Listen for commands from the client (e.g. stop)."""
+        try:
+            while True:
+                data = await websocket.receive_json()
+                cmd = data.get("cmd", "") if isinstance(data, dict) else ""
+                if cmd == "stop" and state.driver is not None:
+                    try:
+                        state.driver.stop()
+                        logger.info("WebSocket stop command executed")
+                    except Exception as exc:
+                        logger.warning("WebSocket stop failed: %s", exc)
+        except WebSocketDisconnect:
+            logger.debug("WebSocket telemetry client disconnected (recv loop)")
+        except Exception as exc:
+            logger.debug("WebSocket receive error: %s", exc)
+
+    push_task = asyncio.create_task(_push_loop())
+    recv_task = asyncio.create_task(_recv_loop())
+    try:
+        done, pending = await asyncio.wait(
+            [push_task, recv_task],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for t in pending:
+            t.cancel()
+            try:
+                await t
+            except (asyncio.CancelledError, Exception):
+                pass
+    except Exception:
+        pass
+    finally:
+        for t in (push_task, recv_task):
+            if not t.done():
+                t.cancel()
+                try:
+                    await t
+                except (asyncio.CancelledError, Exception):
+                    pass
+    logger.debug("WebSocket telemetry handler exiting")
+
+
+
+# ---------------------------------------------------------------------------
+# Voice / STT endpoints (issue #119)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/voice/listen", dependencies=[Depends(verify_token)])
+async def voice_listen():
+    """Capture one microphone phrase and return transcript + brain thought.
+
+    Returns:
+        200: {"transcript": "...", "thought": {...}}
+        503: {"error": "..."} if listener is not available
+    """
+    if state.listener is None:
+        raise HTTPException(status_code=503, detail="Listener not available")
+    if not state.listener.enabled:
+        raise HTTPException(status_code=503, detail="STT not enabled (set audio.stt_enabled: true in config)")
+
+    transcript = await asyncio.to_thread(state.listener.listen_once)
+    if transcript is None:
+        raise HTTPException(status_code=503, detail="Could not capture audio or recognise speech")
+
+    thought_dict: Optional[dict] = None
+    if state.brain and transcript:
+        try:
+            image_bytes = _capture_live_frame()
+            thought = await asyncio.to_thread(state.brain.think, image_bytes, transcript)
+            thought_dict = {"raw_text": thought.raw_text, "action": thought.action}
+            _speak_reply(thought.raw_text)
+        except Exception as exc:
+            logger.warning(f"Brain error during voice listen: {exc}")
+
+    return {"transcript": transcript, "thought": thought_dict}
+
+
+# ---------------------------------------------------------------------------
+# Waypoint navigation endpoints (issue #120)
+# ---------------------------------------------------------------------------
+
+import uuid as _uuid
+
+
+@app.post("/api/nav/waypoint", dependencies=[Depends(verify_token)])
+async def nav_waypoint(body: WaypointRequest):
+    """Start a non-blocking waypoint navigation job.
+
+    Returns a job_id immediately; poll GET /api/nav/status for completion.
+
+    Returns:
+        200: {"job_id": "...", "running": true}
+        503: if no driver is loaded
+    """
+    if state.driver is None:
+        raise HTTPException(status_code=503, detail="No driver loaded")
+
+    job_id = str(_uuid.uuid4())
+    state.nav_job = {"job_id": job_id, "running": True, "result": None}
+
+    async def _run():
+        try:
+            from castor.nav import WaypointNav
+
+            nav = WaypointNav(state.driver, state.config or {})
+            result = await asyncio.to_thread(
+                nav.execute,
+                body.distance_m,
+                body.heading_deg,
+                body.speed,
+            )
+            state.nav_job = {"job_id": job_id, "running": False, "result": result}
+        except Exception as exc:
+            logger.warning(f"Nav job {job_id} failed: {exc}")
+            state.nav_job = {
+                "job_id": job_id,
+                "running": False,
+                "result": {"ok": False, "error": str(exc)},
+            }
+
+    asyncio.ensure_future(_run())
+    return {"job_id": job_id, "running": True}
+
+
+@app.get("/api/nav/status", dependencies=[Depends(verify_token)])
+async def nav_status():
+    """Return the current (or last) navigation job status.
+
+    Returns:
+        200: {"running": bool, "job_id": str|None, "result": dict|None}
+    """
+    if state.nav_job is None:
+        return {"running": False, "job_id": None, "result": None}
+    return {
+        "running": state.nav_job.get("running", False),
+        "job_id": state.nav_job.get("job_id"),
+        "result": state.nav_job.get("result"),
+    }
+
+
+
+# ---------------------------------------------------------------------------
+# Behavior script endpoints (issue #121)
+# ---------------------------------------------------------------------------
+
+class _BehaviorRunRequest(BaseModel):
+    path: Optional[str] = None
+    behavior: Optional[dict] = None
+
+
+@app.post("/api/behavior/run", dependencies=[Depends(verify_token)])
+async def behavior_run(req: _BehaviorRunRequest):
+    """Load and run a behavior script in a background asyncio task.
+
+    Body (JSON):
+        ``{"path": "patrol.behavior.yaml"}``  — load from file system
+        ``{"behavior": {...}}``                — inline behavior dict
+
+    Returns:
+        200: ``{"job_id": str, "name": str}``
+    """
+    import uuid
+
+    if state.behavior_runner is None:
+        from castor.behaviors import BehaviorRunner
+        state.behavior_runner = BehaviorRunner(
+            driver=state.driver,
+            brain=state.brain,
+            speaker=getattr(state, "speaker", None),
+            config=state.config or {},
+        )
+
+    runner = state.behavior_runner
+
+    # Load behavior
+    if req.path:
+        try:
+            behavior = runner.load(req.path)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Cannot load behavior: {exc}")
+    elif req.behavior:
+        behavior = req.behavior
+        missing = {"name", "steps"} - set(behavior.keys())
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Behavior missing keys: {missing}")
+    else:
+        raise HTTPException(status_code=400, detail="Provide 'path' or 'behavior' in request body")
+
+    job_id = str(uuid.uuid4())
+    name = behavior.get("name", "<unnamed>")
+
+    state.behavior_job = {"job_id": job_id, "name": name, "running": True}
+
+    async def _run_bg():
+        try:
+            await asyncio.to_thread(runner.run, behavior)
+        except Exception as exc:
+            logger.error("Behavior '%s' failed: %s", name, exc)
+        finally:
+            if state.behavior_job and state.behavior_job.get("job_id") == job_id:
+                state.behavior_job["running"] = False
+
+    asyncio.create_task(_run_bg())
+    logger.info("Behavior '%s' started (job_id=%s)", name, job_id)
+    return {"job_id": job_id, "name": name}
+
+
+@app.post("/api/behavior/stop", dependencies=[Depends(verify_token)])
+async def behavior_stop():
+    """Stop the currently-running behavior.
+
+    Returns:
+        200: ``{"stopped": true}``
+    """
+    if state.behavior_runner is not None:
+        await asyncio.to_thread(state.behavior_runner.stop)
+    if state.behavior_job:
+        state.behavior_job["running"] = False
+    return {"stopped": True}
+
+
+@app.get("/api/behavior/status")
+async def behavior_status():
+    """Return the current behavior job status (no auth required for status polling).
+
+    Returns:
+        200: ``{"running": bool, "name": str|None, "job_id": str|None}``
+    """
+    if state.behavior_job is None:
+        return {"running": False, "name": None, "job_id": None}
+    return {
+        "running": state.behavior_job.get("running", False),
+        "name": state.behavior_job.get("name"),
+        "job_id": state.behavior_job.get("job_id"),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Webhook endpoints for messaging channels
 # ---------------------------------------------------------------------------
 def _verify_twilio_signature(request_url: str, form_params: dict, signature: str) -> bool:
@@ -1715,6 +2237,13 @@ async def on_startup():
             if state.fs:
                 state.fs.proc.set_speaker("online" if state.speaker.enabled else "offline")
 
+            # Initialize STT listener (issue #119)
+            from castor.main import Listener
+            state.listener = Listener(state.config)
+            logger.info(
+                "Listener %s", "online" if state.listener.enabled else "offline (stt_enabled not set)"
+            )
+
             # Initialize Sisyphus learner loop (provider-wired for LLM augmentation)
             try:
                 from castor.learner.sisyphus import SisyphusLoop
@@ -1723,6 +2252,20 @@ async def on_startup():
                 logger.info("Learner loop initialized")
             except Exception as _learner_exc:
                 logger.debug("Learner init skipped: %s", _learner_exc)
+
+            # Initialize BehaviorRunner (issue #121)
+            try:
+                from castor.behaviors import BehaviorRunner
+
+                state.behavior_runner = BehaviorRunner(
+                    driver=state.driver,
+                    brain=state.brain,
+                    speaker=getattr(state, "speaker", None),
+                    config=state.config,
+                )
+                logger.info("BehaviorRunner initialized")
+            except Exception as _beh_exc:
+                logger.debug("BehaviorRunner init skipped: %s", _beh_exc)
 
         except Exception as e:
             logger.warning(f"Config load error (gateway still operational): {e}")
