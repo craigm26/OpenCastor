@@ -27,7 +27,7 @@ import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import Dict, Deque, List, Optional
+from typing import Deque, Dict, Optional
 
 logger = logging.getLogger("OpenCastor.Channels.Session")
 

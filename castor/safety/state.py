@@ -125,7 +125,7 @@ class SafetyTelemetry:
     def _rotate_if_needed(self) -> None:
         """Trim the log file to MAX_LOG_LINES by discarding oldest entries."""
         try:
-            with open(self._log_path, "r") as f:
+            with open(self._log_path) as f:
                 lines = f.readlines()
             if len(lines) > self.MAX_LOG_LINES:
                 with open(self._log_path, "w") as f:
@@ -138,7 +138,7 @@ class SafetyTelemetry:
         if not os.path.exists(self._log_path):
             return []
         try:
-            with open(self._log_path, "r") as f:
+            with open(self._log_path) as f:
                 lines = f.readlines()
             result = []
             for line in lines[-limit:]:

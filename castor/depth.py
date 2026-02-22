@@ -199,7 +199,7 @@ def get_obstacle_zones(
     rows, cols = arr.shape
     third = cols // 3
 
-    def _min_cm(sector: "np.ndarray") -> float:
+    def _min_cm(sector: np.ndarray) -> float:
         """Return minimum positive depth in centimetres."""
         valid = sector[sector > 0]
         if valid.size == 0:

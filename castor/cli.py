@@ -121,8 +121,8 @@ def cmd_run(args) -> None:
     # --behavior: load and run a behavior script, skip the perception loop
     behavior_path = getattr(args, "behavior", None)
     if behavior_path:
+
         from castor.behaviors import BehaviorRunner
-        import yaml
 
         runner = BehaviorRunner(config={})
         behavior = runner.load(behavior_path)
@@ -1442,7 +1442,7 @@ def cmd_plugin(args) -> None:
         success = install_plugin(source)
         if success:
             print(f"  Plugin installed from: {source}")
-            print(f"  Provenance recorded in ~/.opencastor/plugins.lock")
+            print("  Provenance recorded in ~/.opencastor/plugins.lock")
         else:
             print(f"  Failed to install plugin from: {source}")
             raise SystemExit(1)
@@ -1749,13 +1749,14 @@ def _list_hf_models(api, task: str, limit: int = 15) -> None:
 
 def cmd_daemon(args) -> None:
     """Manage the OpenCastor systemd auto-start service."""
+    import subprocess
+
     from castor.daemon import (
         daemon_logs,
         daemon_status,
         disable_daemon,
         enable_daemon,
     )
-    import subprocess
 
     action = getattr(args, "action", "status") or "status"
 

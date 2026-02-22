@@ -418,7 +418,7 @@ def print_plugins(plugins: list):
         print(f"  Directory: {_PLUGINS_DIR}\n")
 
     if not plugins:
-        msg = f"  No plugins found.\n  Install a plugin: castor plugin install <url-or-path>\n"
+        msg = "  No plugins found.\n  Install a plugin: castor plugin install <url-or-path>\n"
         if has_rich:
             console.print(f"  [dim]{msg}[/]")
         else:

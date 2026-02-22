@@ -57,8 +57,8 @@ _DEFAULT_MODELS: Dict[str, str] = {
 
 # ── Cost estimate helper (per-1k tokens, mirroring castor/usage.py) ───────────
 
-from castor.usage import _COST_TABLE  # noqa: E402  (import after stdlib)
 from castor.providers import get_provider  # noqa: E402  (patchable module-level name)
+from castor.usage import _COST_TABLE  # noqa: E402  (import after stdlib)
 
 
 def _est_cost_per_1k(provider: str, model: str) -> float:

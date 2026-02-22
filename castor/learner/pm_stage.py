@@ -161,7 +161,6 @@ class PMStage:
         _log = logging.getLogger("OpenCastor.Learner.PMStage")
 
         try:
-            from castor.prompt_cache import build_cached_system_prompt
 
             episode_summary = {
                 "id": episode.id,

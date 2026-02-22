@@ -7,7 +7,6 @@ specified distance.  Works with any DriverBase implementation.
 
 import logging
 import time
-from typing import Optional
 
 logger = logging.getLogger("OpenCastor.Nav")
 

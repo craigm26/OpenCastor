@@ -10,7 +10,7 @@ Setup:
 """
 
 import logging
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import Callable, Optional
 
 from castor.channels.base import BaseChannel
 

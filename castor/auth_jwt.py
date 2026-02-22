@@ -248,7 +248,7 @@ def require_role(min_role: str):
         @app.post("/api/command", dependencies=[Depends(require_role("operator"))])
         async def command(...): ...
     """
-    from fastapi import Depends, HTTPException, Request
+    from fastapi import HTTPException, Request
 
     async def _dependency(request: Request):
         auth = request.headers.get("Authorization", "")
