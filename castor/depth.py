@@ -30,6 +30,7 @@ logger = logging.getLogger("OpenCastor.Depth")
 try:
     import cv2
     import numpy as np
+
     _HAS_CV2 = True
 except ImportError:  # pragma: no cover
     _HAS_CV2 = False
@@ -115,9 +116,9 @@ def get_depth_overlay(
     d_range = max(d_max - d_min, 1.0)
 
     norm = np.zeros_like(depth_arr, dtype=np.uint8)
-    norm[valid_mask] = np.clip(
-        255.0 * (depth_arr[valid_mask] - d_min) / d_range, 0, 255
-    ).astype(np.uint8)
+    norm[valid_mask] = np.clip(255.0 * (depth_arr[valid_mask] - d_min) / d_range, 0, 255).astype(
+        np.uint8
+    )
     # Invert so *near* = warm colour (red/yellow), *far* = cool (blue)
     norm[valid_mask] = 255 - norm[valid_mask]
 
@@ -128,9 +129,7 @@ def get_depth_overlay(
         colored = cv2.resize(colored, (w, h), interpolation=cv2.INTER_NEAREST)
 
     # Zero out invalid pixels so they blend to black (transparent-ish)
-    mask_resized = cv2.resize(
-        valid_mask.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST
-    )
+    mask_resized = cv2.resize(valid_mask.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST)
     colored[mask_resized == 0] = 0
 
     # Alpha blend
@@ -206,9 +205,9 @@ def get_obstacle_zones(
             return 0.0
         return round(float(valid.min()) * _MM_TO_CM, 1)
 
-    left_cm   = _min_cm(arr[:, :third])
-    center_cm = _min_cm(arr[:, third: 2 * third])
-    right_cm  = _min_cm(arr[:, 2 * third:])
+    left_cm = _min_cm(arr[:, :third])
+    center_cm = _min_cm(arr[:, third : 2 * third])
+    right_cm = _min_cm(arr[:, 2 * third :])
 
     # nearest_cm is the overall minimum across all three sectors
     candidates = [v for v in (left_cm, center_cm, right_cm) if v > 0]
@@ -216,8 +215,8 @@ def get_obstacle_zones(
 
     return {
         "available": True,
-        "left_cm":   left_cm,
+        "left_cm": left_cm,
         "center_cm": center_cm,
-        "right_cm":  right_cm,
+        "right_cm": right_cm,
         "nearest_cm": nearest_cm,
     }

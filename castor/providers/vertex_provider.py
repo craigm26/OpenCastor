@@ -40,8 +40,7 @@ class VertexAIProvider(BaseProvider):
     def __init__(self, config: dict):
         if not HAS_VERTEX:
             raise ValueError(
-                "google-genai SDK not installed. "
-                "Install it with: pip install opencastor[vertex]"
+                "google-genai SDK not installed. Install it with: pip install opencastor[vertex]"
             )
 
         # Resolve model before calling super().__init__ so self.model_name is
@@ -59,9 +58,7 @@ class VertexAIProvider(BaseProvider):
             )
 
         self.location = (
-            os.getenv("VERTEX_LOCATION")
-            or config.get("vertex_location")
-            or self.DEFAULT_LOCATION
+            os.getenv("VERTEX_LOCATION") or config.get("vertex_location") or self.DEFAULT_LOCATION
         )
 
         # google-genai uses GOOGLE_APPLICATION_CREDENTIALS automatically (ADC chain).
@@ -207,9 +204,7 @@ class VertexAIProvider(BaseProvider):
         # Walk candidates/parts manually as a fallback.
         try:
             parts = response.candidates[0].content.parts
-            text_parts = [
-                part.text for part in parts if hasattr(part, "text") and part.text
-            ]
+            text_parts = [part.text for part in parts if hasattr(part, "text") and part.text]
             return "\n".join(text_parts) if text_parts else ""
         except Exception as exc:
             logger.warning("Could not extract text from Vertex AI response parts: %s", exc)

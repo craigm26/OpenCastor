@@ -36,6 +36,7 @@ _VISION_MODEL_HINTS = ("llava", "bakllava", "moondream", "minicpm-v", "qwen-vl",
 # Typed exceptions
 # ---------------------------------------------------------------------------
 
+
 class LlamaCppError(Exception):
     """Base exception for llama.cpp provider errors."""
 
@@ -81,8 +82,7 @@ class LlamaCppProvider(BaseProvider):
             from llama_cpp import Llama
         except ImportError as exc:
             raise ImportError(
-                "llama-cpp-python required for GGUF models. "
-                "Install: pip install llama-cpp-python"
+                "llama-cpp-python required for GGUF models. Install: pip install llama-cpp-python"
             ) from exc
 
         n_ctx = config.get("n_ctx", 2048)
@@ -137,8 +137,7 @@ class LlamaCppProvider(BaseProvider):
             logger.info(f"Ollama model loaded: {model} at {base_url}")
         except urllib.error.URLError as exc:
             raise LlamaCppConnectionError(
-                f"Cannot reach Ollama at {base_url}. "
-                "Is Ollama running? Start it with: ollama serve"
+                f"Cannot reach Ollama at {base_url}. Is Ollama running? Start it with: ollama serve"
             ) from exc
         except Exception as exc:
             logger.warning(f"Ollama pre-load failed ({exc}), will load on first call")
@@ -161,9 +160,7 @@ class LlamaCppProvider(BaseProvider):
         except LlamaCppError:
             raise
         except urllib.error.URLError as exc:
-            raise LlamaCppConnectionError(
-                f"Lost connection to Ollama: {exc}"
-            ) from exc
+            raise LlamaCppConnectionError(f"Lost connection to Ollama: {exc}") from exc
         except Exception as exc:
             logger.error(f"llama.cpp error: {exc}")
             return Thought(f"Error: {exc}", None)
@@ -221,9 +218,7 @@ class LlamaCppProvider(BaseProvider):
             with urllib.request.urlopen(req, timeout=60) as resp:
                 data = json.loads(resp.read())
         except urllib.error.URLError as exc:
-            raise LlamaCppConnectionError(
-                f"Ollama unreachable at {self._base_url}: {exc}"
-            ) from exc
+            raise LlamaCppConnectionError(f"Ollama unreachable at {self._base_url}: {exc}") from exc
 
         text = data["choices"][0]["message"]["content"].strip()
         action = self._clean_json(text)
@@ -256,9 +251,7 @@ class LlamaCppProvider(BaseProvider):
         else:
             return (yield from self._stream_ollama(image_bytes, instruction))
 
-    def _stream_direct(
-        self, image_bytes: bytes, instruction: str
-    ) -> Generator[str, None, Thought]:
+    def _stream_direct(self, image_bytes: bytes, instruction: str) -> Generator[str, None, Thought]:
         """Stream tokens from direct llama-cpp-python model."""
         if self._is_vision_model and image_bytes:
             img_b64 = base64.b64encode(image_bytes).decode()
@@ -288,9 +281,7 @@ class LlamaCppProvider(BaseProvider):
         action = self._clean_json(full_text)
         return Thought(full_text, action)
 
-    def _stream_ollama(
-        self, image_bytes: bytes, instruction: str
-    ) -> Generator[str, None, Thought]:
+    def _stream_ollama(self, image_bytes: bytes, instruction: str) -> Generator[str, None, Thought]:
         """Stream tokens from the Ollama API using SSE chunked responses."""
         user_content: Any
         if self._is_vision_model and image_bytes:
@@ -331,20 +322,14 @@ class LlamaCppProvider(BaseProvider):
                         line = line[6:]
                     try:
                         chunk = json.loads(line)
-                        token = (
-                            chunk.get("choices", [{}])[0]
-                            .get("delta", {})
-                            .get("content", "")
-                        )
+                        token = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
                         if token:
                             full_text += token
                             yield token
                     except json.JSONDecodeError:
                         continue
         except urllib.error.URLError as exc:
-            raise LlamaCppConnectionError(
-                f"Ollama unreachable at {self._base_url}: {exc}"
-            ) from exc
+            raise LlamaCppConnectionError(f"Ollama unreachable at {self._base_url}: {exc}") from exc
 
         action = self._clean_json(full_text)
         return Thought(full_text, action)

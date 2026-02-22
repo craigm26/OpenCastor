@@ -25,9 +25,11 @@ def _opencastor_version() -> str:
     """Return the installed OpenCastor version string."""
     try:
         from castor import __version__
+
         return __version__
     except Exception:
         return "unknown"
+
 
 # Where community recipes live in the repo
 RECIPES_DIR = Path(__file__).parent.parent / "community-recipes"

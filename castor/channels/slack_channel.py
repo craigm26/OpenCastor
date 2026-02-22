@@ -26,7 +26,17 @@ except ImportError:
 
 
 _SLACK_AUDIO_MIME_PREFIXES = ("audio/",)
-_SLACK_AUDIO_EXTENSIONS = (".ogg", ".oga", ".mp3", ".mp4", ".m4a", ".wav", ".flac", ".webm", ".opus")
+_SLACK_AUDIO_EXTENSIONS = (
+    ".ogg",
+    ".oga",
+    ".mp3",
+    ".mp4",
+    ".m4a",
+    ".wav",
+    ".flac",
+    ".webm",
+    ".opus",
+)
 
 
 def _find_slack_audio_file(files: list) -> Optional[dict]:
@@ -140,9 +150,7 @@ class SlackChannel(BaseChannel):
             files = event.get("files", [])
             audio_file = _find_slack_audio_file(files)
             if audio_file is not None:
-                text = await _download_and_transcribe_slack(
-                    self, audio_file, self.bot_token
-                )
+                text = await _download_and_transcribe_slack(self, audio_file, self.bot_token)
                 if text:
                     reply = await self.handle_message(chat_id, text)
                     if reply:

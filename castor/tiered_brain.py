@@ -272,9 +272,7 @@ class TieredBrain:
                 swarm_action = self.orchestrator.sync_think(sensor_data or {})
                 if swarm_action.get("type") not in (None, "idle"):
                     self.stats["swarm_count"] += 1
-                    logger.debug(
-                        "Layer 3 swarm action: %s", swarm_action.get("type")
-                    )
+                    logger.debug("Layer 3 swarm action: %s", swarm_action.get("type"))
                     return Thought(
                         f"Swarm: {swarm_action.get('type', '?')}",
                         swarm_action,

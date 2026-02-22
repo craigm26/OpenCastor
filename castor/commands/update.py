@@ -219,7 +219,7 @@ def _update_node(
         print(
             f"\n  Node '{name}' has a password configured but sshpass is not installed.\n"
             f"  Run manually:\n"
-            f"    ssh {user}@{host} -p {port} \"{remote_cmd}\"\n"
+            f'    ssh {user}@{host} -p {port} "{remote_cmd}"\n'
         )
         return {"name": name, "success": False, "error": "sshpass not available"}
 

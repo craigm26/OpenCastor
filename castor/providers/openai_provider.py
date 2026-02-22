@@ -61,11 +61,7 @@ class OpenAIProvider(BaseProvider):
             return safety_block
 
         is_blank = not image_bytes or image_bytes == b"\x00" * len(image_bytes)
-        system = (
-            self.build_messaging_prompt(surface=surface)
-            if is_blank
-            else self.system_prompt
-        )
+        system = self.build_messaging_prompt(surface=surface) if is_blank else self.system_prompt
 
         try:
             if is_blank:
@@ -123,6 +119,7 @@ class OpenAIProvider(BaseProvider):
         """Return session-level token usage from runtime_stats."""
         try:
             from castor.runtime_stats import get_stats
+
             rs = get_stats()
             return {
                 "prompt_tokens": rs.get("tokens_in", 0),
@@ -148,11 +145,7 @@ class OpenAIProvider(BaseProvider):
             return
 
         is_blank = not image_bytes or image_bytes == b"\x00" * len(image_bytes)
-        system = (
-            self.build_messaging_prompt(surface=surface)
-            if is_blank
-            else self.system_prompt
-        )
+        system = self.build_messaging_prompt(surface=surface) if is_blank else self.system_prompt
 
         try:
             if is_blank:

@@ -38,6 +38,7 @@ _HEADERS = {"Authorization": f"Bearer {_TOKEN}"} if _TOKEN else {}
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def _fmt_uptime(s: float) -> str:
     s = int(s)
     h, rem = divmod(s, 3600)
@@ -48,6 +49,7 @@ def _fmt_uptime(s: float) -> str:
 def _get(url: str, timeout: float = 2.0) -> dict:
     try:
         import httpx
+
         r = httpx.get(url, headers=_HEADERS, timeout=timeout)
         return r.json() if r.status_code == 200 else {}
     except Exception:
@@ -65,6 +67,7 @@ def _dot(ok: Optional[bool], true_color="green", false_color="red") -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 # Panel builders — each returns a Rich renderable
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def _header(health: dict, status: dict, robot_name: str, elapsed: float) -> Text:
     brain_ok = health.get("brain")
@@ -101,13 +104,21 @@ def _camera_panel(status: dict, proc: dict, gateway_url: str) -> Panel:
     # ASCII viewfinder
     cam_line = "[bold green]● LIVE[/]" if is_live else "[bold red]● NO SIGNAL[/]"
     t.add_row("")
-    t.add_row(Text.from_markup(f"[{cam_color}]╔{'═'*28}╗[/]"))
-    t.add_row(Text.from_markup(f"[{cam_color}]║[/]  OAK-D USB3  · 640×480 @ 30fps  [{cam_color}]║[/]"))
-    t.add_row(Text.from_markup(f"[{cam_color}]║[/]                                  [{cam_color}]║[/]"))
+    t.add_row(Text.from_markup(f"[{cam_color}]╔{'═' * 28}╗[/]"))
+    t.add_row(
+        Text.from_markup(f"[{cam_color}]║[/]  OAK-D USB3  · 640×480 @ 30fps  [{cam_color}]║[/]")
+    )
+    t.add_row(
+        Text.from_markup(f"[{cam_color}]║[/]                                  [{cam_color}]║[/]")
+    )
     t.add_row(Text.from_markup(f"[{cam_color}]║[/]        {cam_line}          [{cam_color}]║[/]"))
-    t.add_row(Text.from_markup(f"[{cam_color}]║[/]      ~35 KB/frame  ≈ 30fps        [{cam_color}]║[/]"))
-    t.add_row(Text.from_markup(f"[{cam_color}]║[/]                                  [{cam_color}]║[/]"))
-    t.add_row(Text.from_markup(f"[{cam_color}]╚{'═'*28}╝[/]"))
+    t.add_row(
+        Text.from_markup(f"[{cam_color}]║[/]      ~35 KB/frame  ≈ 30fps        [{cam_color}]║[/]")
+    )
+    t.add_row(
+        Text.from_markup(f"[{cam_color}]║[/]                                  [{cam_color}]║[/]")
+    )
+    t.add_row(Text.from_markup(f"[{cam_color}]╚{'═' * 28}╝[/]"))
     t.add_row("")
     t.add_row(Text.from_markup(f"[dim]Web stream →[/] [cyan]{stream_url[:48]}[/]"))
     t.add_row(Text.from_markup("[dim]Open in browser → Vision tab[/]"))
@@ -134,7 +145,10 @@ def _status_panel(health: dict, proc: dict) -> Panel:
 
     t.add_row("Uptime", f"[white]{_fmt_uptime(uptime)}[/]")
     t.add_row("Brain", f"{_dot(brain_ok)} [white]{'online' if brain_ok else 'offline'}[/]")
-    t.add_row("Driver", f"{_dot(driver_ok, 'green', 'yellow')} [white]{'online' if driver_ok else 'mock'}[/]")
+    t.add_row(
+        "Driver",
+        f"{_dot(driver_ok, 'green', 'yellow')} [white]{'online' if driver_ok else 'mock'}[/]",
+    )
     t.add_row("Loops", f"[white]{loop_count}[/]")
     t.add_row("Latency", f"[{lat_color}]{avg_latency:.0f} ms[/]" if avg_latency else "[dim]—[/]")
     t.add_row("Thought", f"[dim]{last_thought}[/]" if last_thought else "[dim]none[/]")
@@ -238,6 +252,7 @@ def _history_panel(history: dict) -> Panel:
 # Layout assembly
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def _build_layout(
     health: dict,
     status: dict,
@@ -279,11 +294,13 @@ def _build_layout(
     )
 
     # Footer
-    root["footer"].update(Text.from_markup(
-        "  [dim]Ctrl+C[/] quit   [dim]e[/] emergency stop   "
-        f"[dim]gateway:[/] {gateway_url}   "
-        "[dim]web:[/] :8501"
-    ))
+    root["footer"].update(
+        Text.from_markup(
+            "  [dim]Ctrl+C[/] quit   [dim]e[/] emergency stop   "
+            f"[dim]gateway:[/] {gateway_url}   "
+            "[dim]web:[/] :8501"
+        )
+    )
 
     return root
 
@@ -291,6 +308,7 @@ def _build_layout(
 # ──────────────────────────────────────────────────────────────────────────────
 # Main entry point
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def launch_watch(
     config_path: str = None,
@@ -310,6 +328,7 @@ def launch_watch(
     if config_path:
         try:
             import yaml
+
             with open(config_path) as f:
                 cfg = yaml.safe_load(f)
             robot_name = cfg.get("metadata", {}).get("robot_name", "Robot")
@@ -340,8 +359,16 @@ def launch_watch(
                 elapsed = time.time() - start
 
                 layout = _build_layout(
-                    health, status, proc, driver, learner, history, episodes,
-                    robot_name, gateway_url, elapsed,
+                    health,
+                    status,
+                    proc,
+                    driver,
+                    learner,
+                    history,
+                    episodes,
+                    robot_name,
+                    gateway_url,
+                    elapsed,
                 )
                 live.update(layout)
                 time.sleep(refresh)

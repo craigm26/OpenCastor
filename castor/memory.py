@@ -133,8 +133,17 @@ class EpisodeMemory:
                      latency_ms, image_hash, outcome, source)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (ep_id, ts, instruction[:512], raw_thought[:2048],
-                 action_json, latency_ms, image_hash, outcome, source),
+                (
+                    ep_id,
+                    ts,
+                    instruction[:512],
+                    raw_thought[:2048],
+                    action_json,
+                    latency_ms,
+                    image_hash,
+                    outcome,
+                    source,
+                ),
             )
         self._evict_if_needed()
         return ep_id
@@ -198,9 +207,7 @@ class EpisodeMemory:
     def get_episode(self, ep_id: str) -> Optional[Dict]:
         """Return a single episode by ID, or None if not found."""
         with self._conn() as con:
-            row = con.execute(
-                "SELECT * FROM episodes WHERE id = ?", (ep_id,)
-            ).fetchone()
+            row = con.execute("SELECT * FROM episodes WHERE id = ?", (ep_id,)).fetchone()
         return self._row_to_dict(row) if row else None
 
     def count(self) -> int:

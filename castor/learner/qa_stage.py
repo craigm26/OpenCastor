@@ -124,7 +124,7 @@ class QAStage:
                 f"Patch: {json.dumps(patch_summary)}. "
                 f"Episode goal: '{episode.goal}', success: {episode.success}. "
                 f"Return ONLY valid JSON: "
-                f'{{\"approved\": true|false, \"reason\": \"<brief>\"}}'
+                f'{{"approved": true|false, "reason": "<brief>"}}'
             )
             thought = self._provider.think(b"", instruction)
             if thought.action and isinstance(thought.action, dict):

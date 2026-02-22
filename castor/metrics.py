@@ -24,7 +24,7 @@ from typing import Dict, Optional, Tuple
 
 __all__ = ["MetricsRegistry", "get_registry"]
 
-_LabelKey = Tuple[str, ...]   # sorted label kv pairs as tuple
+_LabelKey = Tuple[str, ...]  # sorted label kv pairs as tuple
 
 
 class Counter:

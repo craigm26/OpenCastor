@@ -42,7 +42,7 @@ _COST_TABLE: Dict[str, Dict[str, tuple]] = {
     "google": {
         "gemini-2.0-flash": (0.0, 0.0),
         "gemini-2.5-flash-lite": (0.0, 0.0),
-        "default": (0.075, 0.30),      # gemini-1.5-pro-level fallback / 1M → /1k
+        "default": (0.075, 0.30),  # gemini-1.5-pro-level fallback / 1M → /1k
     },
     "openai": {
         "gpt-4.1-mini": (0.0004, 0.0016),

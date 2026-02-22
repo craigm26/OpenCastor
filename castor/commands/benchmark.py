@@ -33,10 +33,7 @@ _PROMPT_SUITE: List[str] = [
         "You are a robot. Move forward 1 meter. "
         'Reply with JSON: {"type": "move", "linear": 1.0, "angular": 0}'
     ),
-    (
-        "Describe what you see and decide an action. "
-        'Reply with JSON: {"type": "stop"}'
-    ),
+    ('Describe what you see and decide an action. Reply with JSON: {"type": "stop"}'),
 ]
 
 # Blank JPEG-like bytes — signals providers to skip image encoding.
@@ -234,13 +231,13 @@ def print_benchmark_table(results: List[dict]) -> None:
         show_header=True,
         header_style="bold cyan",
     )
-    table.add_column("Provider",       style="bold",   min_width=12)
-    table.add_column("Model",          min_width=20)
-    table.add_column("Latency p50",    justify="right", min_width=12)
-    table.add_column("Latency p95",    justify="right", min_width=12)
-    table.add_column("Tokens/s",       justify="right", min_width=10)
-    table.add_column("Est. $/1k tok",  justify="right", min_width=12)
-    table.add_column("Status",         min_width=10)
+    table.add_column("Provider", style="bold", min_width=12)
+    table.add_column("Model", min_width=20)
+    table.add_column("Latency p50", justify="right", min_width=12)
+    table.add_column("Latency p95", justify="right", min_width=12)
+    table.add_column("Tokens/s", justify="right", min_width=10)
+    table.add_column("Est. $/1k tok", justify="right", min_width=12)
+    table.add_column("Status", min_width=10)
 
     for r in results:
         provider = r["provider"]
@@ -341,7 +338,9 @@ def cmd_provider_benchmark(
             logger.warning("Could not load config %s: %s", config_path, exc)
 
     # Run
-    print(f"\n  Running benchmark: {', '.join(providers_to_test)} | {rounds} round(s) per provider\n")
+    print(
+        f"\n  Running benchmark: {', '.join(providers_to_test)} | {rounds} round(s) per provider\n"
+    )
     results = run_provider_benchmark(providers_to_test, rounds=rounds, config=base_config)
 
     # Attach rounds count to results for display

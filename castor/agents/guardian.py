@@ -80,9 +80,7 @@ class GuardianAgent(BaseAgent):
         cfg = config or {}
         self._state = shared_state or SharedState()
         self.max_speed: float = cfg.get("max_speed", _DEFAULT_MAX_SPEED)
-        self.monitored_keys: List[str] = cfg.get(
-            "monitored_keys", list(_DEFAULT_MONITORED_KEYS)
-        )
+        self.monitored_keys: List[str] = cfg.get("monitored_keys", list(_DEFAULT_MONITORED_KEYS))
         self.estop_active: bool = False
         self.vetoes: List[SafetyVeto] = []
 
@@ -120,9 +118,7 @@ class GuardianAgent(BaseAgent):
 
         speed = action.get("speed", 0.0)
         if isinstance(speed, (int, float)) and speed > self.max_speed:
-            return SafetyVeto(
-                key, action, f"speed_limit:{speed:.2f}>{self.max_speed:.2f}"
-            )
+            return SafetyVeto(key, action, f"speed_limit:{speed:.2f}>{self.max_speed:.2f}")
 
         return None
 

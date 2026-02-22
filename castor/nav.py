@@ -28,12 +28,8 @@ class WaypointNav:
         """
         self.driver = driver
         physics = config.get("physics", {})
-        self.wheel_circumference_m: float = float(
-            physics.get("wheel_circumference_m", 0.21)
-        )
-        self.turn_time_per_deg_s: float = float(
-            physics.get("turn_time_per_deg_s", 0.011)
-        )
+        self.wheel_circumference_m: float = float(physics.get("wheel_circumference_m", 0.21))
+        self.turn_time_per_deg_s: float = float(physics.get("turn_time_per_deg_s", 0.011))
         self._safety_stop: bool = bool(config.get("safety_stop", False))
         self._log = logger
 
@@ -66,8 +62,7 @@ class WaypointNav:
             if heading_deg != 0 and turn_duration > 0:
                 angular = speed if heading_deg > 0 else -speed
                 self._log.debug(
-                    f"Turning {heading_deg}° (angular={angular:.2f}, "
-                    f"duration={turn_duration:.3f}s)"
+                    f"Turning {heading_deg}° (angular={angular:.2f}, duration={turn_duration:.3f}s)"
                 )
                 self.driver.move(linear=0.0, angular=angular)
                 time.sleep(turn_duration)
@@ -85,8 +80,7 @@ class WaypointNav:
                 drive_duration = abs(distance_m) / (self.wheel_circumference_m * max(speed, 0.01))
                 linear = speed if distance_m > 0 else -speed
                 self._log.debug(
-                    f"Driving {distance_m}m (linear={linear:.2f}, "
-                    f"duration={drive_duration:.3f}s)"
+                    f"Driving {distance_m}m (linear={linear:.2f}, duration={drive_duration:.3f}s)"
                 )
                 self.driver.move(linear=linear, angular=0.0)
                 time.sleep(drive_duration)

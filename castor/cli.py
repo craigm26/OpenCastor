@@ -121,7 +121,6 @@ def cmd_run(args) -> None:
     # --behavior: load and run a behavior script, skip the perception loop
     behavior_path = getattr(args, "behavior", None)
     if behavior_path:
-
         from castor.behaviors import BehaviorRunner
 
         runner = BehaviorRunner(config={})
@@ -991,7 +990,6 @@ def cmd_learn(args) -> None:
     run_learn(lesson=args.lesson)
 
 
-
 def cmd_swarm(args) -> None:
     """Multi-robot swarm management sub-commands."""
     from castor.commands.swarm import (
@@ -1030,17 +1028,19 @@ def cmd_swarm(args) -> None:
         )
     elif subcmd == "update":
         from castor.commands.update import cmd_swarm_update
+
         cmd_swarm_update(args)
     else:
         print(f"  Unknown swarm sub-command: {subcmd}")
         print("  Available: status, command, stop, sync, update")
 
 
-
 def cmd_update(args) -> None:
     """Update OpenCastor (delegates to castor/commands/update.py)."""
     from castor.commands.update import cmd_update as _cmd_update
+
     _cmd_update(args)
+
 
 def cmd_fleet(args) -> None:
     """Multi-robot fleet management."""
@@ -1385,7 +1385,9 @@ def _cmd_plugin_install(args) -> None:
             pass
 
     # Determine install type
-    is_url = source.startswith("http://") or source.startswith("https://") or source.startswith("git@")
+    is_url = (
+        source.startswith("http://") or source.startswith("https://") or source.startswith("git@")
+    )
 
     if is_url:
         # Clone the repository into plugins_dir/<repo-name>/
@@ -1400,7 +1402,8 @@ def _cmd_plugin_install(args) -> None:
             print(f"  Cloning plugin '{repo_name}' from {source}...")
             result = subprocess.run(
                 ["git", "clone", "--depth=1", source, dest],
-                capture_output=True, text=True,
+                capture_output=True,
+                text=True,
             )
 
         if result.returncode != 0:
@@ -1794,9 +1797,11 @@ def cmd_daemon(args) -> None:
 
         print("\n  OpenCastor Daemon Status")
         print("  " + "─" * 30)
-        print(f"  Installed : {'yes — ' + status.get('service_path','') if installed else 'no'}")
+        print(f"  Installed : {'yes — ' + status.get('service_path', '') if installed else 'no'}")
         print(f"  Enabled   : {'yes (starts on boot)' if enabled else 'no'}")
-        print(f"  Running   : {'yes (PID ' + pid + ')' if (running and pid) else ('yes' if running else 'no')}")
+        print(
+            f"  Running   : {'yes (PID ' + pid + ')' if (running and pid) else ('yes' if running else 'no')}"
+        )
         if started:
             print(f"  Started   : {started}")
         if not installed:
@@ -1812,7 +1817,8 @@ def cmd_daemon(args) -> None:
         print("\n  Restarting OpenCastor daemon service...")
         result = subprocess.run(
             ["sudo", "systemctl", "restart", "castor-gateway"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if result.returncode == 0:
             print("  ✓ Service restarted")
@@ -1961,11 +1967,13 @@ def cmd_hub(args) -> None:
     # --- Hub Index commands (Issue #123) ---
     if action == "list":
         from castor.commands.hub import cmd_hub_list
+
         cmd_hub_list(args)
         return
 
     if action == "publish":
         from castor.commands.hub import cmd_hub_publish
+
         cmd_hub_publish(args)
         return
 
@@ -2507,7 +2515,7 @@ def main() -> None:
         "--providers",
         default=None,
         help="Comma-separated provider names to benchmark (e.g. google,openai,anthropic). "
-             "Omit to use the single-config hardware benchmark.",
+        "Omit to use the single-config hardware benchmark.",
     )
     p_bench.add_argument(
         "--rounds",
@@ -2561,8 +2569,8 @@ def main() -> None:
             "Examples:\n"
             "  castor swarm status\n"
             "  castor swarm status --json\n"
-            "  castor swarm command \"move forward\"\n"
-            "  castor swarm command \"turn\" --node alex\n"
+            '  castor swarm command "move forward"\n'
+            '  castor swarm command "turn" --node alex\n'
             "  castor swarm stop\n"
             "  castor swarm sync config/robot.rcan.yaml\n"
         ),
@@ -2615,12 +2623,15 @@ def main() -> None:
     p_swarm_sync.add_argument("--timeout", type=float, default=10.0)
 
     # castor swarm update
-    p_swarm_update = p_swarm_sub.add_parser("update", help="Update OpenCastor on all swarm nodes via SSH")
-    p_swarm_update.add_argument("--dry-run", dest="dry_run", action="store_true", help="Print commands without executing")
+    p_swarm_update = p_swarm_sub.add_parser(
+        "update", help="Update OpenCastor on all swarm nodes via SSH"
+    )
+    p_swarm_update.add_argument(
+        "--dry-run", dest="dry_run", action="store_true", help="Print commands without executing"
+    )
     p_swarm_update.add_argument("--swarm-config", dest="swarm_config", default=None)
 
     p_swarm.set_defaults(func=cmd_swarm)
-
 
     # castor update
     p_update = sub.add_parser(
@@ -2634,8 +2645,15 @@ def main() -> None:
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p_update.add_argument("--dry-run", dest="dry_run", action="store_true", help="Print commands without executing")
-    p_update.add_argument("--version", default=None, metavar="X.Y.Z", help="Pin to a specific version tag or pip specifier")
+    p_update.add_argument(
+        "--dry-run", dest="dry_run", action="store_true", help="Print commands without executing"
+    )
+    p_update.add_argument(
+        "--version",
+        default=None,
+        metavar="X.Y.Z",
+        help="Pin to a specific version tag or pip specifier",
+    )
 
     # castor learn
     p_learn = sub.add_parser(
@@ -3001,11 +3019,22 @@ def main() -> None:
         "action",
         nargs="?",
         default="browse",
-        choices=["browse", "search", "show", "install", "share", "rate", "categories",
-                 "list", "publish"],
+        choices=[
+            "browse",
+            "search",
+            "show",
+            "install",
+            "share",
+            "rate",
+            "categories",
+            "list",
+            "publish",
+        ],
         help="Action to perform (default: browse). Use 'list'/'search'/'install'/'publish' for hub index.",
     )
-    p_hub.add_argument("--rating", type=int, choices=[1, 2, 3, 4, 5], help="Star rating (1-5) for hub rate")
+    p_hub.add_argument(
+        "--rating", type=int, choices=[1, 2, 3, 4, 5], help="Star rating (1-5) for hub rate"
+    )
     p_hub.add_argument("query", nargs="?", default=None, help="Search query or recipe ID")
     p_hub.add_argument("--config", default=None, help="RCAN config to share")
     p_hub.add_argument(

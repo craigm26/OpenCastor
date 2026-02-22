@@ -59,9 +59,7 @@ class CompositeDriver:
 
         # Find the composite driver entry
         driver_entries: List[dict] = config.get("drivers", [])
-        comp_entry = next(
-            (d for d in driver_entries if d.get("protocol") == "composite"), {}
-        )
+        comp_entry = next((d for d in driver_entries if d.get("protocol") == "composite"), {})
 
         subsystems: List[dict] = comp_entry.get("subsystems", [])
         routing_cfg: Dict[str, str] = comp_entry.get("routing", {})
@@ -89,7 +87,9 @@ class CompositeDriver:
             except Exception as exc:
                 logger.warning(
                     "CompositeDriver: sub-driver '%s' (%s) failed to load: %s",
-                    sub_id, protocol, exc,
+                    sub_id,
+                    protocol,
+                    exc,
                 )
                 # Install a no-op mock so routing still works
                 self._sub_drivers[sub_id] = _NullDriver(sub_id)
@@ -97,9 +97,7 @@ class CompositeDriver:
     # ── Sub-driver factory ────────────────────────────────────────────────────
 
     @staticmethod
-    def _make_sub_driver(
-        sub_id: str, protocol: str, sub_cfg: dict, full_config: dict
-    ):
+    def _make_sub_driver(sub_id: str, protocol: str, sub_cfg: dict, full_config: dict):
         """Instantiate a sub-driver from its protocol name."""
         # Wrap the sub-entry as a mini-config so get_driver() can parse it
         mini_config = {**full_config, "drivers": [sub_cfg]}
@@ -217,7 +215,9 @@ class CompositeDriver:
                 except Exception as exc:
                     logger.debug(
                         "CompositeDriver: dispatch key '%s' to '%s' error: %s",
-                        key, target_id, exc,
+                        key,
+                        target_id,
+                        exc,
                     )
 
 

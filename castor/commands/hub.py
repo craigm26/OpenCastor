@@ -42,9 +42,7 @@ import requests
 
 logger = logging.getLogger("OpenCastor.Hub.Index")
 
-DEFAULT_HUB_URL = (
-    "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/hub_index.json"
-)
+DEFAULT_HUB_URL = "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/hub_index.json"
 
 # Repo root relative to this file: castor/commands/hub.py -> repo root is two levels up
 _REPO_ROOT = Path(__file__).parent.parent.parent
@@ -217,7 +215,9 @@ def cmd_hub_install(args) -> None:
                 break
 
     if entry is None:
-        print(f"Error: '{name}' not found in hub index. Run 'castor hub list' to see available items.")
+        print(
+            f"Error: '{name}' not found in hub index. Run 'castor hub list' to see available items."
+        )
         return
 
     url = entry.get("url", "")

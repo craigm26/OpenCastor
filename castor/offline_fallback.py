@@ -167,7 +167,8 @@ class OfflineFallbackManager:
                 if initial:
                     logger.warning(
                         "Starting offline — using fallback: %s/%s",
-                        fallback_name, fallback_model,
+                        fallback_name,
+                        fallback_model,
                     )
 
     def _notify(self, channel: str, text: str) -> None:
@@ -183,7 +184,7 @@ class OfflineFallbackManager:
 
         fallback_config = {
             "provider": self._config.get("provider", "ollama"),
-            "model":    self._config.get("model", "llama3.2:3b"),
+            "model": self._config.get("model", "llama3.2:3b"),
         }
         try:
             provider = get_provider(fallback_config)

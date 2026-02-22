@@ -107,9 +107,7 @@ class GoogleProvider(BaseProvider):
                 # Text-only: prepend messaging prompt (Gemini system_instruction is
                 # set at model init, so we inject it as a leading text part here)
                 messaging_ctx = self.build_messaging_prompt(surface=surface)
-                response = self.model.generate_content(
-                    [f"{messaging_ctx}\n\nUser: {instruction}"]
-                )
+                response = self.model.generate_content([f"{messaging_ctx}\n\nUser: {instruction}"])
             else:
                 image_part = {"mime_type": "image/jpeg", "data": image_bytes}
                 response = self.model.generate_content([instruction, image_part])

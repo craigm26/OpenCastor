@@ -533,12 +533,12 @@ class Speaker:
             pass
 
 
-
 # ---------------------------------------------------------------------------
 # STT (speech-to-text via microphone)
 # ---------------------------------------------------------------------------
 try:
     import speech_recognition as _sr_module  # noqa: F401
+
     HAS_SR = True
 except ImportError:
     HAS_SR = False
@@ -583,6 +583,7 @@ class Listener:
             return transcript
         except Exception as exc:
             import speech_recognition as sr
+
             if isinstance(exc, sr.UnknownValueError):
                 self._log.debug("STT: speech not understood")
             else:
@@ -1127,7 +1128,9 @@ def main():
                         "SAFETY: Prompt injection detected in instruction "
                         f"(verdict={safety_result.verdict}): {instruction[:80]!r}. Skipping tick."
                     )
-                    fs.proc.record_thought("SAFETY_BLOCKED", {"type": "blocked", "reason": "prompt_injection"})
+                    fs.proc.record_thought(
+                        "SAFETY_BLOCKED", {"type": "blocked", "reason": "prompt_injection"}
+                    )
                     time.sleep(0.5)
                     continue
             except Exception as _sf_exc:
@@ -1261,9 +1264,7 @@ def main():
                                 driver.stop()
                             else:
                                 if bounds_result.status == "warning":
-                                    logger.warning(
-                                        "Bounds warning: %s", bounds_result.details
-                                    )
+                                    logger.warning("Bounds warning: %s", bounds_result.details)
                                 driver.move(linear, angular)
                             if audit:
                                 audit.log_motor_command(safe_action)
@@ -1330,6 +1331,7 @@ def main():
             # Prometheus metrics (issue #99)
             try:
                 from castor.metrics import get_registry as _get_metrics_registry
+
                 _metrics_robot = config.get("metadata", {}).get("robot_name", "robot")
                 _get_metrics_registry().record_loop(latency, robot=_metrics_robot)
             except Exception:
@@ -1339,6 +1341,7 @@ def main():
             try:
                 if thought is not None:
                     from castor.memory import EpisodeMemory as _EpisodeMemory
+
                     _ep_mem = _EpisodeMemory()
                     _img_hash = _EpisodeMemory.hash_image(frame_bytes) if frame_bytes else ""
                     _ep_mem.log_episode(
@@ -1360,10 +1363,14 @@ def main():
                 _tel = get_telemetry()
                 _action_type = (thought.action or {}).get("type", "none") if thought else "none"
                 _provider_name = config.get("agent", {}).get("provider", "unknown")
-                _tel.record_action(latency_ms=latency, action_type=_action_type, provider=_provider_name)
+                _tel.record_action(
+                    latency_ms=latency, action_type=_action_type, provider=_provider_name
+                )
                 # Safety score
                 _safety_snap = fs.proc.snapshot() if hasattr(fs.proc, "snapshot") else {}
-                _sscore = _safety_snap.get("safety_score", 1.0) if isinstance(_safety_snap, dict) else 1.0
+                _sscore = (
+                    _safety_snap.get("safety_score", 1.0) if isinstance(_safety_snap, dict) else 1.0
+                )
                 _robot_name = config.get("metadata", {}).get("robot_name", "opencastor")
                 _tel.record_safety_score(_sscore, robot_name=_robot_name)
             except Exception:

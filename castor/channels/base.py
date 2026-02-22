@@ -40,9 +40,15 @@ class BaseChannel(ABC):
         self.logger = logging.getLogger(f"OpenCastor.Channel.{self.name}")
 
         # Per-chat_id rate limiting
-        rate_cfg = config.get("rate_limit", {}) if isinstance(config.get("rate_limit"), dict) else {}
-        self._rate_limit: int = rate_cfg.get("max_messages", config.get("rate_limit_max", _DEFAULT_RATE_LIMIT))
-        self._rate_window: float = rate_cfg.get("window_seconds", config.get("rate_limit_window", _DEFAULT_RATE_WINDOW))
+        rate_cfg = (
+            config.get("rate_limit", {}) if isinstance(config.get("rate_limit"), dict) else {}
+        )
+        self._rate_limit: int = rate_cfg.get(
+            "max_messages", config.get("rate_limit_max", _DEFAULT_RATE_LIMIT)
+        )
+        self._rate_window: float = rate_cfg.get(
+            "window_seconds", config.get("rate_limit_window", _DEFAULT_RATE_WINDOW)
+        )
         self._rate_timestamps: Dict[str, Deque[float]] = defaultdict(deque)
 
     def _check_rate_limit(self, chat_id: str) -> bool:
@@ -106,7 +112,13 @@ class BaseChannel(ABC):
                 # Record brain reply in session store
                 try:
                     if reply:
-                        store.push(user_id, role="brain", text=str(reply)[:300], channel=self.name, chat_id=chat_id)
+                        store.push(
+                            user_id,
+                            role="brain",
+                            text=str(reply)[:300],
+                            channel=self.name,
+                            chat_id=chat_id,
+                        )
                 except Exception:
                     pass
 

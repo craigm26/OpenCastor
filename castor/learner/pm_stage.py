@@ -161,7 +161,6 @@ class PMStage:
         _log = logging.getLogger("OpenCastor.Learner.PMStage")
 
         try:
-
             episode_summary = {
                 "id": episode.id,
                 "goal": episode.goal,
@@ -178,7 +177,7 @@ class PMStage:
             }
             instruction = (
                 f"Analyze this robot episode and return ONLY valid JSON with this shape: "
-                f'{{\"additional_improvements\": [...], \"refined_root_cause\": \"\"}}. '
+                f'{{"additional_improvements": [...], "refined_root_cause": ""}}. '
                 f"Episode: {json.dumps(episode_summary)}. "
                 f"Heuristic report: {json.dumps(heuristic_summary)}. "
                 f"Each improvement in additional_improvements must have: "

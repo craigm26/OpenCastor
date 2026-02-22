@@ -58,7 +58,11 @@ class DevStage:
         patch = self._suggestion_to_patch(suggestion)
 
         # If the heuristic produced a patch with no concrete value, ask the LLM
-        if self._provider is not None and isinstance(patch, ConfigPatch) and patch.new_value is None:
+        if (
+            self._provider is not None
+            and isinstance(patch, ConfigPatch)
+            and patch.new_value is None
+        ):
             self._llm_fill_value(patch, suggestion, report)
 
         return patch
@@ -144,7 +148,7 @@ class DevStage:
                 f"Rationale: {patch.rationale}. "
                 f"Efficiency score: {report.efficiency_score:.2f}. "
                 f"Return ONLY valid JSON: "
-                f'{{\"new_value\": <value>, \"rationale\": \"<brief explanation>\"}}'
+                f'{{"new_value": <value>, "rationale": "<brief explanation>"}}'
             )
             thought = self._provider.think(b"", instruction)
             if thought.action and isinstance(thought.action, dict):

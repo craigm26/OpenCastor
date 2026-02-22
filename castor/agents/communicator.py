@@ -111,9 +111,7 @@ class CommunicatorAgent(BaseAgent):
 
         Returns the target agent name, or ``None`` if intent is unknown.
         """
-        target = next(
-            (agent for kw, agent in _INTENT_ROUTING if kw == intent), None
-        )
+        target = next((agent for kw, agent in _INTENT_ROUTING if kw == intent), None)
         if target and target != "communicator":
             self._state.set(
                 f"swarm.routed_task.{target}",
@@ -142,9 +140,7 @@ class CommunicatorAgent(BaseAgent):
 
     async def observe(self, sensor_data: Dict[str, Any]) -> Dict[str, Any]:
         """Pull latest incoming message from SharedState or sensor_data."""
-        msg = sensor_data.get("incoming_message") or self._state.get(
-            "swarm.incoming_message"
-        )
+        msg = sensor_data.get("incoming_message") or self._state.get("swarm.incoming_message")
         return {"message": msg}
 
     async def act(self, context: Dict[str, Any]) -> Dict[str, Any]:

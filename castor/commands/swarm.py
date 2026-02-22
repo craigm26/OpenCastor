@@ -202,6 +202,7 @@ def cmd_swarm_status(
         if not output_json:
             try:
                 from rich.console import Console
+
                 Console().print("[yellow]No nodes found in swarm.yaml[/yellow]")
             except ImportError:
                 print("No nodes found in swarm.yaml")
@@ -262,7 +263,8 @@ def cmd_swarm_status(
         print("-" * len(header))
         for r in results:
             status_str = (
-                "offline" if not r["online"]
+                "offline"
+                if not r["online"]
                 else ("healthy" if r["brain"] and r["driver"] else "degraded")
             )
             lat = f"{r['latency_ms']:.0f}" if r["latency_ms"] is not None else "—"
@@ -347,19 +349,20 @@ def cmd_swarm_command(
     results: List[Dict[str, Any]] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(targets))) as executor:
         futures = {
-            executor.submit(_post_command_to_node, n, instruction, timeout): n
-            for n in targets
+            executor.submit(_post_command_to_node, n, instruction, timeout): n for n in targets
         }
         for fut in concurrent.futures.as_completed(futures):
             try:
                 results.append(fut.result())
             except Exception as exc:  # noqa: BLE001
                 n = futures[fut]
-                results.append({
-                    "_node": n.get("name"),
-                    "_status": "error",
-                    "error": str(exc),
-                })
+                results.append(
+                    {
+                        "_node": n.get("name"),
+                        "_status": "error",
+                        "error": str(exc),
+                    }
+                )
 
     if output_json:
         print(json.dumps(results, indent=2))
@@ -367,6 +370,7 @@ def cmd_swarm_command(
 
     try:
         from rich.console import Console
+
         console = Console()
         for r in results:
             status = r.get("_status", "?")
@@ -437,11 +441,13 @@ def cmd_swarm_stop(
                 results.append(fut.result())
             except Exception as exc:  # noqa: BLE001
                 n = futures[fut]
-                results.append({
-                    "_node": n.get("name"),
-                    "_status": "error",
-                    "error": str(exc),
-                })
+                results.append(
+                    {
+                        "_node": n.get("name"),
+                        "_status": "error",
+                        "error": str(exc),
+                    }
+                )
 
     if output_json:
         print(json.dumps(results, indent=2))
@@ -449,6 +455,7 @@ def cmd_swarm_stop(
 
     try:
         from rich.console import Console
+
         console = Console()
         for r in results:
             name_str = r.get("_node", "?")
@@ -544,19 +551,19 @@ def cmd_swarm_sync(
 
     results: List[Dict[str, Any]] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(nodes))) as executor:
-        futures = {
-            executor.submit(_post_reload_to_node, n, config_data, timeout): n for n in nodes
-        }
+        futures = {executor.submit(_post_reload_to_node, n, config_data, timeout): n for n in nodes}
         for fut in concurrent.futures.as_completed(futures):
             try:
                 results.append(fut.result())
             except Exception as exc:  # noqa: BLE001
                 n = futures[fut]
-                results.append({
-                    "_node": n.get("name"),
-                    "_status": "error",
-                    "error": str(exc),
-                })
+                results.append(
+                    {
+                        "_node": n.get("name"),
+                        "_status": "error",
+                        "error": str(exc),
+                    }
+                )
 
     if output_json:
         print(json.dumps(results, indent=2))
@@ -564,6 +571,7 @@ def cmd_swarm_sync(
 
     try:
         from rich.console import Console
+
         console = Console()
         for r in results:
             name_str = r.get("_node", "?")

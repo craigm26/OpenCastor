@@ -116,8 +116,9 @@ class ToolDefinition:
 class ToolResult:
     """Result of a tool invocation."""
 
-    def __init__(self, tool_name: str, result: Any, error: Optional[str] = None,
-                 duration_ms: float = 0.0):
+    def __init__(
+        self, tool_name: str, result: Any, error: Optional[str] = None, duration_ms: float = 0.0
+    ):
         self.tool_name = tool_name
         self.result = result
         self.error = error
@@ -177,7 +178,9 @@ class ToolRegistry:
             name="announce_text",
             fn=self._builtin_announce_text,
             description="Speaks text aloud via TTS.",
-            parameters={"text": {"type": "string", "description": "Text to speak", "required": True}},
+            parameters={
+                "text": {"type": "string", "description": "Text to speak", "required": True}
+            },
         )
         self.register(
             name="get_distance",
@@ -190,6 +193,7 @@ class ToolRegistry:
     def _builtin_get_status() -> dict:
         try:
             from castor.main import get_shared_fs
+
             fs = get_shared_fs()
             if fs:
                 snap = fs.proc.snapshot()
@@ -202,6 +206,7 @@ class ToolRegistry:
     def _builtin_take_snapshot() -> str:
         try:
             from castor.main import get_shared_camera
+
             cam = get_shared_camera()
             if cam and cam.is_available():
                 frame = cam.capture_jpeg()
@@ -214,6 +219,7 @@ class ToolRegistry:
     def _builtin_announce_text(text: str = "") -> str:
         try:
             from castor.main import get_shared_speaker
+
             speaker = get_shared_speaker()
             if speaker:
                 speaker.say(text)
@@ -226,12 +232,14 @@ class ToolRegistry:
     def _builtin_get_distance() -> float:
         try:
             from castor.main import get_shared_camera
+
             cam = get_shared_camera()
             if cam and hasattr(cam, "last_depth") and cam.last_depth is not None:
                 import numpy as np
+
                 depth = cam.last_depth
                 h, w = depth.shape
-                center = depth[h // 3: 2 * h // 3, w // 4: 3 * w // 4]
+                center = depth[h // 3 : 2 * h // 3, w // 4 : 3 * w // 4]
                 valid = center[center > 0]
                 if len(valid) > 0:
                     return round(float(np.percentile(valid, 5)) / 1000.0, 3)
@@ -292,14 +300,10 @@ class ToolRegistry:
         t0 = time.time()
         try:
             result = tool.fn(**kwargs)
-            return ToolResult(
-                name, result, duration_ms=(time.time() - t0) * 1000
-            )
+            return ToolResult(name, result, duration_ms=(time.time() - t0) * 1000)
         except Exception as exc:
             logger.warning("ToolRegistry: '%s' raised: %s", name, exc)
-            return ToolResult(
-                name, None, error=str(exc), duration_ms=(time.time() - t0) * 1000
-            )
+            return ToolResult(name, None, error=str(exc), duration_ms=(time.time() - t0) * 1000)
 
     def call_from_dict(self, tool_call: dict) -> ToolResult:
         """Invoke a tool from an LLM tool_call dict.

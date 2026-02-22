@@ -200,6 +200,7 @@ class AnthropicProvider(BaseProvider):
         stats: dict = {}
         try:
             from castor.runtime_stats import get_stats
+
             rs = get_stats()
             stats["prompt_tokens"] = rs.get("tokens_in", 0)
             stats["completion_tokens"] = rs.get("tokens_out", 0)
@@ -271,9 +272,7 @@ class AnthropicProvider(BaseProvider):
 
         is_blank = not image_bytes or image_bytes == b"\x00" * len(image_bytes)
         system_arg = (
-            self.build_messaging_prompt(surface=surface)
-            if is_blank
-            else self._cached_system_blocks
+            self.build_messaging_prompt(surface=surface) if is_blank else self._cached_system_blocks
         )
         b64_image = base64.b64encode(image_bytes).decode("utf-8") if not is_blank else ""
 

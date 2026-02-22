@@ -125,7 +125,11 @@ class DynamixelDriver(DriverBase):
         Returns ok=False with mode="mock" when running without the SDK.
         """
         if self.portHandler is None or self.packetHandler is None:
-            return {"ok": False, "mode": "mock", "error": "Dynamixel SDK unavailable or port not open"}
+            return {
+                "ok": False,
+                "mode": "mock",
+                "error": "Dynamixel SDK unavailable or port not open",
+            }
 
         motor_id = self.connected_motors[0] if self.connected_motors else 1
         try:

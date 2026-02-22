@@ -19,13 +19,13 @@ _DNS_PROBES = ["1.1.1.1", "8.8.8.8"]
 
 # Per-provider API hostnames
 _PROVIDER_HOSTS: dict[str, str] = {
-    "anthropic":   "api.anthropic.com",
-    "openai":      "api.openai.com",
+    "anthropic": "api.anthropic.com",
+    "openai": "api.openai.com",
     "huggingface": "router.huggingface.co",
-    "google":      "generativelanguage.googleapis.com",
-    "ollama":      "localhost",   # local — always "reachable" by definition
-    "llamacpp":    "localhost",
-    "mlx":         "localhost",
+    "google": "generativelanguage.googleapis.com",
+    "ollama": "localhost",  # local — always "reachable" by definition
+    "llamacpp": "localhost",
+    "mlx": "localhost",
 }
 
 
@@ -97,9 +97,7 @@ class ConnectivityMonitor:
     def start(self) -> None:
         """Start the background monitoring thread."""
         self._stop_event.clear()
-        self._thread = threading.Thread(
-            target=self._run, name="connectivity-monitor", daemon=True
-        )
+        self._thread = threading.Thread(target=self._run, name="connectivity-monitor", daemon=True)
         self._thread.start()
         logger.debug("ConnectivityMonitor started (interval=%.0fs)", self._interval)
 

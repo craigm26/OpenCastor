@@ -78,7 +78,9 @@ register_error_handlers(app)
 # ---------------------------------------------------------------------------
 _COMMAND_RATE_LIMIT = int(os.getenv("OPENCASTOR_COMMAND_RATE", "5"))  # max calls/second/IP
 _MAX_STREAMS = int(os.getenv("OPENCASTOR_MAX_STREAMS", "3"))  # max concurrent MJPEG clients
-_WEBHOOK_RATE_LIMIT = int(os.getenv("OPENCASTOR_WEBHOOK_RATE", "10"))  # max webhook calls/minute/sender
+_WEBHOOK_RATE_LIMIT = int(
+    os.getenv("OPENCASTOR_WEBHOOK_RATE", "10")
+)  # max webhook calls/minute/sender
 _rate_lock = threading.Lock()
 _command_history: Dict[str, list] = collections.defaultdict(list)  # ip -> [timestamps]
 _webhook_history: Dict[str, list] = collections.defaultdict(list)  # sender_id -> [timestamps]
@@ -122,6 +124,7 @@ def _check_webhook_rate(sender_id: str) -> None:
 # VFS path validation
 # ---------------------------------------------------------------------------
 
+
 def _validate_vfs_path(path: str) -> str:
     """Normalise and validate a VFS path. Rejects traversal attempts."""
     if "\x00" in path:
@@ -149,18 +152,18 @@ class AppState:
     mdns_browser = None
     rcan_router = None  # RCAN message router
     capability_registry = None  # Capability registry
-    offline_fallback = None    # OfflineFallbackManager (optional)
-    provider_fallback = None   # ProviderFallbackManager (optional, for quota errors)
-    thought_history = None     # deque(maxlen=50) — ring buffer of recent thoughts
-    learner = None            # SisyphusLoop instance (optional)
-    paused: bool = False      # Runtime pause flag (issue #93)
-    _health_cache_time: float = 0.0   # last time health_check() was called
-    _health_cache_result: dict = {}   # cached result (TTL: 30s)
-    usage_tracker = None               # UsageTracker singleton (lazy-init)
-    listener = None                    # Listener instance for STT (issue #119)
-    nav_job = None                     # Current nav job dict or None (issue #120)
-    behavior_runner = None             # BehaviorRunner instance (issue #121)
-    behavior_job = None                # Current behavior job dict or None (issue #121)
+    offline_fallback = None  # OfflineFallbackManager (optional)
+    provider_fallback = None  # ProviderFallbackManager (optional, for quota errors)
+    thought_history = None  # deque(maxlen=50) — ring buffer of recent thoughts
+    learner = None  # SisyphusLoop instance (optional)
+    paused: bool = False  # Runtime pause flag (issue #93)
+    _health_cache_time: float = 0.0  # last time health_check() was called
+    _health_cache_result: dict = {}  # cached result (TTL: 30s)
+    usage_tracker = None  # UsageTracker singleton (lazy-init)
+    listener = None  # Listener instance for STT (issue #119)
+    nav_job = None  # Current nav job dict or None (issue #120)
+    behavior_runner = None  # BehaviorRunner instance (issue #121)
+    behavior_job = None  # Current behavior job dict or None (issue #121)
 
 
 state = AppState()
@@ -296,7 +299,6 @@ async def health():
         "driver": state.driver is not None,
         "channels": list(state.channels.keys()),
     }
-
 
 
 # ---------------------------------------------------------------------------
@@ -541,6 +543,7 @@ async def clear_estop():
 # Runtime lifecycle endpoints  (issue #93)
 # ---------------------------------------------------------------------------
 
+
 @app.post("/api/runtime/pause", dependencies=[Depends(verify_token)])
 async def runtime_pause():
     """Pause the perception-action loop without stopping the gateway."""
@@ -579,6 +582,7 @@ async def runtime_status():
 # Prometheus metrics endpoint  (issue #99)
 # ---------------------------------------------------------------------------
 
+
 @app.get("/api/metrics")
 async def get_metrics():
     """Prometheus text exposition format metrics (no auth — safe for scrapers)."""
@@ -610,11 +614,13 @@ async def get_metrics():
 # Token usage endpoint  (issue #104)
 # ---------------------------------------------------------------------------
 
+
 @app.get("/api/usage", dependencies=[Depends(verify_token)])
 async def get_usage():
     """Return token usage and estimated cost for this session and past 7 days."""
     try:
         from castor.usage import get_tracker
+
         tracker = get_tracker()
         return {
             "session": tracker.get_session_totals(),
@@ -628,6 +634,7 @@ async def get_usage():
 # ---------------------------------------------------------------------------
 # Config hot-reload endpoint  (issue #94)
 # ---------------------------------------------------------------------------
+
 
 @app.post("/api/config/reload", dependencies=[Depends(verify_token)])
 async def reload_config(request: Request):
@@ -646,7 +653,9 @@ async def reload_config(request: Request):
         logger.info("Config reloaded from %s", config_path)
         return {"status": "reloaded", "config_path": config_path}
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail=f"Config file not found: {config_path}") from None
+        raise HTTPException(
+            status_code=404, detail=f"Config file not found: {config_path}"
+        ) from None
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Config reload failed: {exc}") from exc
 
@@ -654,6 +663,7 @@ async def reload_config(request: Request):
 # ---------------------------------------------------------------------------
 # Provider health detail endpoint  (issue #95)
 # ---------------------------------------------------------------------------
+
 
 @app.get("/api/provider/health", dependencies=[Depends(verify_token)])
 async def provider_health():
@@ -685,6 +695,7 @@ async def provider_health():
 # ---------------------------------------------------------------------------
 # Episode memory endpoints  (issue #92)
 # ---------------------------------------------------------------------------
+
 
 @app.get("/api/memory/episodes", dependencies=[Depends(verify_token)])
 async def list_episodes(limit: int = 50, source: Optional[str] = None):
@@ -1058,6 +1069,7 @@ async def fs_permissions():
 # Thought history helper
 # ---------------------------------------------------------------------------
 
+
 def _record_thought(instruction: str, raw_text: str, action: Optional[dict]) -> None:
     """Append a thought to the ring buffer and update last_thought."""
     entry = {
@@ -1074,6 +1086,7 @@ def _record_thought(instruction: str, raw_text: str, action: Optional[dict]) -> 
 # ---------------------------------------------------------------------------
 # Streaming command endpoint (#68)
 # ---------------------------------------------------------------------------
+
 
 @app.post("/api/command/stream", dependencies=[Depends(verify_token)])
 async def stream_command(cmd: CommandRequest, request: Request):
@@ -1128,6 +1141,7 @@ async def stream_command(cmd: CommandRequest, request: Request):
 # Driver health endpoint (#69)
 # ---------------------------------------------------------------------------
 
+
 @app.get("/api/driver/health", dependencies=[Depends(verify_token)])
 async def driver_health():
     """Check hardware driver health.
@@ -1146,6 +1160,7 @@ async def driver_health():
 # ---------------------------------------------------------------------------
 # Learner endpoints (#70, #74)
 # ---------------------------------------------------------------------------
+
 
 @app.get("/api/learner/stats", dependencies=[Depends(verify_token)])
 async def learner_stats():
@@ -1245,6 +1260,7 @@ async def submit_episode(body: EpisodeSubmitRequest, run_improvement: bool = Fal
 # Guardian report endpoint (#81)
 # ---------------------------------------------------------------------------
 
+
 @app.get("/api/guardian/report", dependencies=[Depends(verify_token)])
 async def guardian_report():
     """Return the current safety veto report from GuardianAgent.
@@ -1257,7 +1273,6 @@ async def guardian_report():
     # Guardian report lives in the AppState's shared agent state (if any)
     # Try the orchestrator's guardian first, then fall through gracefully.
     try:
-
         # Look for a guardian attached to the fs or a module-level shared state
         if state.fs is not None and hasattr(state.fs, "_shared_state"):
             report = state.fs._shared_state.get("swarm.guardian_report", None)
@@ -1267,9 +1282,7 @@ async def guardian_report():
         # No guardian state found — return a graceful unavailable response
         return {"available": False, "reason": "Guardian not initialized"}
     except Exception as exc:
-        raise HTTPException(
-            status_code=500, detail=f"Guardian report unavailable: {exc}"
-        ) from exc
+        raise HTTPException(status_code=500, detail=f"Guardian report unavailable: {exc}") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -1343,6 +1356,7 @@ async def audio_transcribe(
 # Command history endpoint (#75)
 # ---------------------------------------------------------------------------
 
+
 @app.get("/api/command/history", dependencies=[Depends(verify_token)])
 async def command_history(limit: int = 20):
     """Return recent brain thought/action pairs.
@@ -1362,6 +1376,7 @@ async def command_history(limit: int = 20):
 # Depth camera endpoints (Issue #117)
 # ---------------------------------------------------------------------------
 
+
 @app.get("/api/depth/frame", dependencies=[Depends(verify_token)])
 async def depth_frame():
     """Return a JPEG of the latest RGB frame with JET-colormap depth overlay.
@@ -1380,6 +1395,7 @@ async def depth_frame():
     rgb_bytes = await asyncio.to_thread(_capture_live_frame)
 
     from fastapi.responses import Response as _Resp
+
     try:
         jpeg = await asyncio.to_thread(get_depth_overlay, rgb_bytes or b"", depth)
     except Exception as exc:
@@ -1407,6 +1423,7 @@ async def depth_obstacles():
 # ---------------------------------------------------------------------------
 # WebSocket telemetry stream (Issue #118)
 # ---------------------------------------------------------------------------
+
 
 @app.websocket("/ws/telemetry")
 async def ws_telemetry(websocket: WebSocket, token: str = ""):
@@ -1555,10 +1572,10 @@ async def ws_telemetry(websocket: WebSocket, token: str = ""):
     logger.debug("WebSocket telemetry handler exiting")
 
 
-
 # ---------------------------------------------------------------------------
 # Voice / STT endpoints (issue #119)
 # ---------------------------------------------------------------------------
+
 
 @app.post("/api/voice/listen", dependencies=[Depends(verify_token)])
 async def voice_listen():
@@ -1571,7 +1588,9 @@ async def voice_listen():
     if state.listener is None:
         raise HTTPException(status_code=503, detail="Listener not available")
     if not state.listener.enabled:
-        raise HTTPException(status_code=503, detail="STT not enabled (set audio.stt_enabled: true in config)")
+        raise HTTPException(
+            status_code=503, detail="STT not enabled (set audio.stt_enabled: true in config)"
+        )
 
     transcript = await asyncio.to_thread(state.listener.listen_once)
     if transcript is None:
@@ -1653,10 +1672,10 @@ async def nav_status():
     }
 
 
-
 # ---------------------------------------------------------------------------
 # Behavior script endpoints (issue #121)
 # ---------------------------------------------------------------------------
+
 
 class _BehaviorRunRequest(BaseModel):
     path: Optional[str] = None
@@ -1678,6 +1697,7 @@ async def behavior_run(req: _BehaviorRunRequest):
 
     if state.behavior_runner is None:
         from castor.behaviors import BehaviorRunner
+
         state.behavior_runner = BehaviorRunner(
             driver=state.driver,
             brain=state.brain,
@@ -1767,9 +1787,7 @@ def _verify_twilio_signature(request_url: str, form_params: dict, signature: str
     for key in sorted(form_params.keys()):
         s += key + (form_params[key] or "")
 
-    expected = hmac.new(
-        auth_token.encode("utf-8"), s.encode("utf-8"), hashlib.sha1
-    ).digest()
+    expected = hmac.new(auth_token.encode("utf-8"), s.encode("utf-8"), hashlib.sha1).digest()
     import base64
 
     expected_b64 = base64.b64encode(expected).decode("utf-8")
@@ -1837,9 +1855,10 @@ def _verify_slack_signature(body: bytes, timestamp: str, signature: str) -> bool
         return False
 
     base = f"v0:{timestamp}:{body.decode('utf-8')}"
-    expected = "v0=" + hmac.new(
-        signing_secret.encode("utf-8"), base.encode("utf-8"), hashlib.sha256
-    ).hexdigest()
+    expected = (
+        "v0="
+        + hmac.new(signing_secret.encode("utf-8"), base.encode("utf-8"), hashlib.sha256).hexdigest()
+    )
     return hmac.compare_digest(expected, signature)
 
 
@@ -1979,16 +1998,16 @@ def _speak_reply(text: str):
 # Map channel names to prompt surface types.
 # Governs tone/format injected into build_messaging_prompt().
 _CHANNEL_SURFACE: dict[str, str] = {
-    "whatsapp": "whatsapp",   # no markdown, short, phone-friendly
-    "telegram": "whatsapp",   # same constraints
-    "signal":   "whatsapp",
-    "sms":      "whatsapp",
-    "discord":  "dashboard",  # supports markdown, richer context
-    "slack":    "dashboard",
-    "irc":      "terminal",   # plain text only
+    "whatsapp": "whatsapp",  # no markdown, short, phone-friendly
+    "telegram": "whatsapp",  # same constraints
+    "signal": "whatsapp",
+    "sms": "whatsapp",
+    "discord": "dashboard",  # supports markdown, richer context
+    "slack": "dashboard",
+    "irc": "terminal",  # plain text only
     "terminal": "terminal",
     "dashboard": "dashboard",
-    "voice":    "voice",      # TTS path — no symbols, spoken phrasing
+    "voice": "voice",  # TTS path — no symbols, spoken phrasing
 }
 
 
@@ -2246,9 +2265,11 @@ async def on_startup():
 
             # Initialize STT listener (issue #119)
             from castor.main import Listener
+
             state.listener = Listener(state.config)
             logger.info(
-                "Listener %s", "online" if state.listener.enabled else "offline (stt_enabled not set)"
+                "Listener %s",
+                "online" if state.listener.enabled else "offline (stt_enabled not set)",
             )
 
             # Initialize Sisyphus learner loop (provider-wired for LLM augmentation)

@@ -47,9 +47,7 @@ class ManipulatorAgent(BaseAgent):
 
     async def observe(self, sensor_data: Dict[str, Any]) -> Dict[str, Any]:
         """Read pending manipulation task from SharedState or sensor_data."""
-        task = self._state.get("swarm.manipulation_task") or sensor_data.get(
-            "manipulation_task"
-        )
+        task = self._state.get("swarm.manipulation_task") or sensor_data.get("manipulation_task")
         return {"pending_task": task}
 
     async def act(self, context: Dict[str, Any]) -> Dict[str, Any]:

@@ -70,11 +70,11 @@ class BehaviorRunner:
         # Dispatch table: step type -> handler method
         self._step_handlers: Dict[str, Any] = {
             "waypoint": self._step_waypoint,
-            "wait":     self._step_wait,
-            "think":    self._step_think,
-            "speak":    self._step_speak,
-            "stop":     self._step_stop,
-            "command":  self._step_think,   # alias for think
+            "wait": self._step_wait,
+            "think": self._step_think,
+            "speak": self._step_speak,
+            "stop": self._step_stop,
+            "command": self._step_think,  # alias for think
         }
 
     # ------------------------------------------------------------------
@@ -166,9 +166,7 @@ class BehaviorRunner:
                 step_type = step.get("type", "")
                 handler = self._step_handlers.get(step_type)
                 if handler is None:
-                    logger.warning(
-                        "Unknown step type '%s' at index %d — skipping", step_type, i
-                    )
+                    logger.warning("Unknown step type '%s' at index %d — skipping", step_type, i)
                     continue
 
                 logger.debug("Step %d: %s %r", i, step_type, step)
@@ -212,7 +210,9 @@ class BehaviorRunner:
             speed = float(step.get("speed", 0.5))
             logger.debug(
                 "Waypoint fallback: move %s for %.1fs at speed %.2f",
-                direction, duration, speed,
+                direction,
+                duration,
+                speed,
             )
             if self.driver is not None:
                 self.driver.move(direction=direction, speed=speed)

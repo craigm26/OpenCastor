@@ -41,10 +41,10 @@ _SESSION_TTL = 3600.0
 class SessionMessage:
     """A single message in the shared session context."""
 
-    role: str          # "user" | "brain"
+    role: str  # "user" | "brain"
     text: str
-    channel: str       # originating channel name
-    chat_id: str       # channel-specific chat/sender ID
+    channel: str  # originating channel name
+    chat_id: str  # channel-specific chat/sender ID
     timestamp: float = field(default_factory=time.time)
 
 
@@ -57,7 +57,9 @@ class UserSession:
         self._last_activity: float = time.time()
 
     def push(self, role: str, text: str, channel: str, chat_id: str) -> None:
-        self._messages.append(SessionMessage(role=role, text=text, channel=channel, chat_id=chat_id))
+        self._messages.append(
+            SessionMessage(role=role, text=text, channel=channel, chat_id=chat_id)
+        )
         self._last_activity = time.time()
 
     def build_context(self, max_messages: int = 10) -> str:
@@ -111,7 +113,9 @@ class ChannelSessionStore:
             self._reap_expired()
             return user_id
 
-    def link_identities(self, channel_a: str, chat_id_a: str, channel_b: str, chat_id_b: str) -> str:
+    def link_identities(
+        self, channel_a: str, chat_id_a: str, channel_b: str, chat_id_b: str
+    ) -> str:
         """Merge two (channel, chat_id) identities under a shared user_id.
 
         After linking, both identities share the same conversation history.

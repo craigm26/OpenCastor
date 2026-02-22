@@ -63,12 +63,8 @@ class MQTTChannel(BaseChannel):
 
     def __init__(self, config: dict, on_message: Optional[Callable] = None):
         super().__init__(config, on_message)
-        self._broker_host = config.get(
-            "broker_host", os.getenv("MQTT_BROKER_HOST", "localhost")
-        )
-        self._broker_port = int(
-            config.get("broker_port", os.getenv("MQTT_BROKER_PORT", "1883"))
-        )
+        self._broker_host = config.get("broker_host", os.getenv("MQTT_BROKER_HOST", "localhost"))
+        self._broker_port = int(config.get("broker_port", os.getenv("MQTT_BROKER_PORT", "1883")))
         self._subscribe_topic = config.get("subscribe_topic", "opencastor/input")
         self._publish_topic = config.get("publish_topic", "opencastor/output")
         self._username = config.get("username", os.getenv("MQTT_USERNAME", ""))
@@ -87,9 +83,7 @@ class MQTTChannel(BaseChannel):
     async def start(self):
         """Connect to the MQTT broker and begin receiving messages."""
         if not HAS_PAHO:
-            raise ImportError(
-                "paho-mqtt is not installed. Install with: pip install paho-mqtt"
-            )
+            raise ImportError("paho-mqtt is not installed. Install with: pip install paho-mqtt")
 
         self._loop = asyncio.get_event_loop()
         self._running = True
@@ -113,13 +107,11 @@ class MQTTChannel(BaseChannel):
         await asyncio.to_thread(self._connected.wait, 10.0)
         if not self._connected.is_set():
             raise ConnectionError(
-                f"MQTT: Could not connect to {self._broker_host}:{self._broker_port} "
-                "within 10 s"
+                f"MQTT: Could not connect to {self._broker_host}:{self._broker_port} within 10 s"
             )
 
         logger.info(
-            "MQTT channel connected to %s:%d "
-            "(sub=%r, pub=%r)",
+            "MQTT channel connected to %s:%d (sub=%r, pub=%r)",
             self._broker_host,
             self._broker_port,
             self._subscribe_topic,
@@ -147,9 +139,7 @@ class MQTTChannel(BaseChannel):
         if rc == 0:
             client.subscribe(self._subscribe_topic, qos=self._qos)
             self._connected.set()
-            logger.debug(
-                "MQTT connected (rc=%d), subscribed to %r", rc, self._subscribe_topic
-            )
+            logger.debug("MQTT connected (rc=%d), subscribed to %r", rc, self._subscribe_topic)
         else:
             logger.error("MQTT connect failed: rc=%d", rc)
 
@@ -178,8 +168,6 @@ class MQTTChannel(BaseChannel):
             try:
                 reply = future.result(timeout=30.0)
                 if reply and self._client:
-                    self._client.publish(
-                        self._publish_topic, reply.encode(), qos=self._qos
-                    )
+                    self._client.publish(self._publish_topic, reply.encode(), qos=self._qos)
             except Exception as exc:
                 logger.warning("MQTT message handling error: %s", exc)

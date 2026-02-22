@@ -89,9 +89,9 @@ st.markdown(
 # ── session state ──────────────────────────────────────────────────────────────
 _DEFAULTS = {
     "gateway_url": os.getenv("OPENCASTOR_GATEWAY_URL", "http://127.0.0.1:8000"),
-    "api_token":   os.getenv("OPENCASTOR_API_TOKEN", ""),
-    "messages":    [],
-    "voice_mode":  False,
+    "api_token": os.getenv("OPENCASTOR_API_TOKEN", ""),
+    "messages": [],
+    "voice_mode": False,
     "voice_speak_replies": True,
     "last_refresh": 0.0,
 }
@@ -99,14 +99,17 @@ for k, v in _DEFAULTS.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-GW  = st.session_state.gateway_url
+GW = st.session_state.gateway_url
+
 
 def _hdr() -> dict:
     """Build auth header from current session state (evaluated on every rerun)."""
     tok = st.session_state.api_token
     return {"Authorization": f"Bearer {tok}"} if tok else {}
 
+
 # ── API helpers ────────────────────────────────────────────────────────────────
+
 
 def _get(path: str, timeout: float = 2.0) -> dict:
     try:
@@ -122,7 +125,7 @@ def _fmt_uptime(s) -> str:
     except Exception:
         return "—"
     h, rem = divmod(s, 3600)
-    m, sc  = divmod(rem, 60)
+    m, sc = divmod(rem, 60)
     return f"{h:02d}:{m:02d}:{sc:02d}" if h else f"{m:02d}:{sc:02d}"
 
 
@@ -130,30 +133,33 @@ def _dot_html(ok, true_col="#3fb950", false_col="#f85149", none_col="#6e7681") -
     color = true_col if ok is True else (false_col if ok is False else none_col)
     return f'<span style="color:{color};font-size:0.9em;">●</span>'
 
-# ── fetch all data once per render ────────────────────────────────────────────
-health   = _get("/health")
-status   = _get("/api/status")
-proc     = _get("/api/fs/proc")
-driver   = _get("/api/driver/health")
-learner  = _get("/api/learner/stats")
-hist     = _get("/api/command/history?limit=8")
-episodes = _get("/api/memory/episodes?limit=20")
-usage    = _get("/api/usage")
 
-robot_name  = status.get("robot_name", health.get("robot_name", "Bob"))
-uptime      = health.get("uptime_s", 0)
-brain_ok    = health.get("brain")
-driver_ok   = health.get("driver")
+# ── fetch all data once per render ────────────────────────────────────────────
+health = _get("/health")
+status = _get("/api/status")
+proc = _get("/api/fs/proc")
+driver = _get("/api/driver/health")
+learner = _get("/api/learner/stats")
+hist = _get("/api/command/history?limit=8")
+episodes = _get("/api/memory/episodes?limit=20")
+usage = _get("/api/usage")
+
+robot_name = status.get("robot_name", health.get("robot_name", "Bob"))
+uptime = health.get("uptime_s", 0)
+brain_ok = health.get("brain")
+driver_ok = health.get("driver")
 channels_active = status.get("channels_active", health.get("channels", []))
-cam_ok      = str(proc.get("camera", "")).lower() in ("online", "true", "ok")
-loop_count  = proc.get("loop_count", 0)
-avg_lat     = proc.get("avg_latency_ms", 0)
-lat_color   = "#3fb950" if avg_lat < 300 else "#d29922" if avg_lat < 1000 else "#f85149"
+cam_ok = str(proc.get("camera", "")).lower() in ("online", "true", "ok")
+loop_count = proc.get("loop_count", 0)
+avg_lat = proc.get("avg_latency_ms", 0)
+lat_color = "#3fb950" if avg_lat < 300 else "#d29922" if avg_lat < 1000 else "#f85149"
 
 # ── HEADER STATUS BAR ─────────────────────────────────────────────────────────
-ch_html = " &nbsp;·&nbsp; ".join(
-    f'<span style="color:#58a6ff">{c}</span>' for c in channels_active
-) if channels_active else '<span style="color:#6e7681">no channels</span>'
+ch_html = (
+    " &nbsp;·&nbsp; ".join(f'<span style="color:#58a6ff">{c}</span>' for c in channels_active)
+    if channels_active
+    else '<span style="color:#6e7681">no channels</span>'
+)
 
 st.markdown(
     f"""
@@ -177,9 +183,7 @@ st.markdown(
 # ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### ⚙️ Settings")
-    st.session_state.gateway_url = st.text_input(
-        "Gateway URL", value=st.session_state.gateway_url
-    )
+    st.session_state.gateway_url = st.text_input("Gateway URL", value=st.session_state.gateway_url)
     st.session_state.api_token = st.text_input(
         "API Token", value=st.session_state.api_token, type="password"
     )
@@ -233,14 +237,15 @@ left_col, right_col = st.columns([3, 2], gap="medium")
 # LEFT COLUMN — camera feed + command input
 # ═══════════════════════════════════════════════════════════════════
 with left_col:
-
     # ── Live camera ──────────────────────────────────────────────
-    st.markdown('<p class="panel-title">📷 Live Camera — OAK-D USB3 · 640×480 @ 30fps</p>',
-                unsafe_allow_html=True)
+    st.markdown(
+        '<p class="panel-title">📷 Live Camera — OAK-D USB3 · 640×480 @ 30fps</p>',
+        unsafe_allow_html=True,
+    )
 
     _mjpeg_base = f"{GW}/api/stream/mjpeg"
     _tok = st.session_state.api_token
-    _mjpeg_url  = f"{_mjpeg_base}?token={_tok}" if _tok else _mjpeg_base
+    _mjpeg_url = f"{_mjpeg_base}?token={_tok}" if _tok else _mjpeg_base
 
     # Embed MJPEG via HTML img tag (token in URL so browser can load it)
     cam_border = "#3fb950" if cam_ok else "#f85149"
@@ -274,9 +279,15 @@ with left_col:
     if _depth_obs.get("available"):
         st.markdown('<p class="panel-title">📏 Obstacle Distances</p>', unsafe_allow_html=True)
         _do_l, _do_c, _do_r = st.columns(3)
-        _do_l.metric("Left",   f"{_depth_obs['left_cm']:.0f} cm" if _depth_obs.get('left_cm') else "—")
-        _do_c.metric("Center", f"{_depth_obs['center_cm']:.0f} cm" if _depth_obs.get('center_cm') else "—")
-        _do_r.metric("Right",  f"{_depth_obs['right_cm']:.0f} cm" if _depth_obs.get('right_cm') else "—")
+        _do_l.metric(
+            "Left", f"{_depth_obs['left_cm']:.0f} cm" if _depth_obs.get("left_cm") else "—"
+        )
+        _do_c.metric(
+            "Center", f"{_depth_obs['center_cm']:.0f} cm" if _depth_obs.get("center_cm") else "—"
+        )
+        _do_r.metric(
+            "Right", f"{_depth_obs['right_cm']:.0f} cm" if _depth_obs.get("right_cm") else "—"
+        )
 
     st.divider()
 
@@ -287,6 +298,7 @@ with left_col:
     if st.button("🎤 Speak"):
         try:
             import speech_recognition as sr
+
             recognizer = sr.Recognizer()
             with sr.Microphone() as source:
                 st.toast("Listening…", icon="🎤")
@@ -362,17 +374,16 @@ with left_col:
 # RIGHT COLUMN — status panels (mirrors terminal watch)
 # ═══════════════════════════════════════════════════════════════════
 with right_col:
-
     # ── Status & Telemetry ────────────────────────────────────────
     st.markdown('<p class="panel-title">⚡ Status & Telemetry</p>', unsafe_allow_html=True)
 
     c1, c2 = st.columns(2)
-    c1.metric("Uptime",   _fmt_uptime(uptime))
-    c2.metric("Loops",    str(loop_count))
-    c1.metric("Latency",  f"{avg_lat:.0f} ms" if avg_lat else "—")
-    c2.metric("Camera",   "live ●" if cam_ok else "offline ○")
+    c1.metric("Uptime", _fmt_uptime(uptime))
+    c2.metric("Loops", str(loop_count))
+    c1.metric("Latency", f"{avg_lat:.0f} ms" if avg_lat else "—")
+    c2.metric("Camera", "live ●" if cam_ok else "offline ○")
     speaker_ok = str(proc.get("speaker", "")).lower() in ("online", "true", "ok")
-    c1.metric("Speaker",  "online" if speaker_ok else "offline")
+    c1.metric("Speaker", "online" if speaker_ok else "offline")
 
     last_thought = str(proc.get("last_thought") or "")
     if last_thought:
@@ -381,7 +392,7 @@ with right_col:
     # ── Token usage (today) ───────────────────────────────────────
     _today = (usage.get("daily") or [{}])[-1] if usage.get("daily") else {}
     _today_tokens = _today.get("total_tokens", 0)
-    _today_cost   = _today.get("cost_usd", 0.0)
+    _today_cost = _today.get("cost_usd", 0.0)
     c2.metric("Tokens Today", f"{_today_tokens:,}" if _today_tokens else "0")
     c1.metric("Cost Today ($)", f"${_today_cost:.4f}" if _today_cost else "$0.0000")
 
@@ -389,14 +400,14 @@ with right_col:
 
     # ── Driver ───────────────────────────────────────────────────
     st.markdown('<p class="panel-title">🦾 Driver</p>', unsafe_allow_html=True)
-    drv_ok   = driver.get("ok")
+    drv_ok = driver.get("ok")
     drv_mode = driver.get("mode", "?")
     drv_type = driver.get("driver_type", "PCA9685")
-    drv_err  = driver.get("error", "")
+    drv_err = driver.get("error", "")
 
     dc1, dc2 = st.columns(2)
-    dc1.metric("Mode",  drv_mode.capitalize() if drv_mode else "—")
-    dc2.metric("Type",  drv_type or "—")
+    dc1.metric("Mode", drv_mode.capitalize() if drv_mode else "—")
+    dc2.metric("Type", drv_type or "—")
     if drv_err:
         st.caption(f"ℹ️ {drv_err[:64]}")
 
@@ -404,7 +415,7 @@ with right_col:
 
     # ── Channels ─────────────────────────────────────────────────
     st.markdown('<p class="panel-title">📡 Channels</p>', unsafe_allow_html=True)
-    ch_avail  = status.get("channels_available", {})
+    ch_avail = status.get("channels_available", {})
     ch_active = set(channels_active)
 
     if ch_avail:
@@ -415,11 +426,14 @@ with right_col:
             is_active = ch_name in ch_active
             dot = "🟢" if is_active else ("🟡" if avail else "⚫")
             ch_status = "active" if is_active else ("ready" if avail else "unavail")
-            ch_rows.append({"Channel": ch_name, "Status": ch_status, "": dot, "_ord": _order[ch_status]})
+            ch_rows.append(
+                {"Channel": ch_name, "Status": ch_status, "": dot, "_ord": _order[ch_status]}
+            )
         ch_rows.sort(key=lambda r: (r["_ord"], r["Channel"]))
         for r in ch_rows:
             del r["_ord"]
         import pandas as pd
+
         st.dataframe(
             pd.DataFrame(ch_rows),
             hide_index=True,
@@ -435,9 +449,9 @@ with right_col:
     st.markdown('<p class="panel-title">🧠 Learner (Sisyphus)</p>', unsafe_allow_html=True)
     if learner.get("available"):
         lc1, lc2 = st.columns(2)
-        lc1.metric("Episodes",  learner.get("episodes_analyzed", 0))
-        lc2.metric("Applied",   learner.get("improvements_applied", 0))
-        lc1.metric("Rejected",  learner.get("improvements_rejected", 0))
+        lc1.metric("Episodes", learner.get("episodes_analyzed", 0))
+        lc2.metric("Applied", learner.get("improvements_applied", 0))
+        lc1.metric("Rejected", learner.get("improvements_rejected", 0))
         avg_dur = learner.get("avg_duration_ms")
         lc2.metric("Avg cycle", f"{avg_dur:.0f} ms" if avg_dur else "—")
     else:
@@ -460,6 +474,7 @@ st.markdown('<p class="panel-title">🕒 Recent Commands</p>', unsafe_allow_html
 history_entries = hist.get("history", [])
 if history_entries:
     import pandas as pd
+
     rows = []
     for e in reversed(history_entries):
         ts = e.get("ts", "")
@@ -536,9 +551,11 @@ with st.expander(
 st.divider()
 st.markdown("### 🤖 Fleet")
 
+
 def _load_fleet_nodes():
     """Load nodes from config/swarm.yaml, gracefully returning [] on any error."""
     from pathlib import Path
+
     try:
         import yaml
     except ImportError:
@@ -567,6 +584,7 @@ def _load_fleet_nodes():
 def _query_fleet_node(node):
     """GET /health for one fleet node; return status dict (never raises)."""
     import time as _time
+
     host = node.get("ip") or node.get("host", "localhost")
     port = node.get("port", 8000)
     base = f"http://{host}:{port}"
@@ -619,17 +637,17 @@ if not _fleet_nodes:
     st.caption("No fleet nodes configured — add nodes to config/swarm.yaml")
 else:
     import concurrent.futures as _cf
+
     with _cf.ThreadPoolExecutor(max_workers=len(_fleet_nodes)) as _ex:
         _fleet_results = list(_ex.map(_query_fleet_node, _fleet_nodes))
 
     # Build display DataFrame (exclude internal keys)
     import pandas as pd
+
     _display_cols = ["Robot", "IP", "Brain", "Driver", "Uptime", "Ping (ms)", "Status"]
-    _fleet_df = pd.DataFrame(
-        [{k: r[k] for k in _display_cols} for r in _fleet_results]
-    )
+    _fleet_df = pd.DataFrame([{k: r[k] for k in _display_cols} for r in _fleet_results])
     # Render booleans as checkmarks for readability
-    _fleet_df["Brain"]  = _fleet_df["Brain"].map(lambda v: "✅" if v else "❌")
+    _fleet_df["Brain"] = _fleet_df["Brain"].map(lambda v: "✅" if v else "❌")
     _fleet_df["Driver"] = _fleet_df["Driver"].map(lambda v: "✅" if v else "❌")
 
     st.dataframe(
@@ -693,7 +711,6 @@ else:
                         st.toast(f"Stop failed: {_se}", icon="❌")
 
 
-
 # ── BEHAVIORS PANEL ───────────────────────────────────────────────────────────
 st.divider()
 with st.expander("🎬 Behaviors", expanded=False):
@@ -726,7 +743,10 @@ with st.expander("🎬 Behaviors", expanded=False):
                     )
                     if _br.ok:
                         _bd = _br.json()
-                        st.toast(f"Started: {_bd.get('name', '?')} (job {_bd.get('job_id', '?')[:8]})", icon="▶")
+                        st.toast(
+                            f"Started: {_bd.get('name', '?')} (job {_bd.get('job_id', '?')[:8]})",
+                            icon="▶",
+                        )
                     else:
                         st.toast(f"Error {_br.status_code}: {_br.text[:80]}", icon="❌")
                 except Exception as _be:

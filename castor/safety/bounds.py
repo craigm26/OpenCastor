@@ -150,7 +150,9 @@ class WorkspaceBounds:
             d = _distance_to_sphere_surface(x, y, z, self.sphere)
             if d > 0:
                 results.append(
-                    BoundsResult(BoundsStatus.VIOLATION, f"outside workspace sphere by {d:.4f}m", -d)
+                    BoundsResult(
+                        BoundsStatus.VIOLATION, f"outside workspace sphere by {d:.4f}m", -d
+                    )
                 )
             elif -d < self.warning_margin:
                 results.append(
@@ -165,10 +167,14 @@ class WorkspaceBounds:
         if self.box is not None:
             d = _distance_to_box_surface(x, y, z, self.box)
             if d > 0:
-                results.append(BoundsResult(BoundsStatus.VIOLATION, f"outside workspace box by {d:.4f}m", -d))
+                results.append(
+                    BoundsResult(BoundsStatus.VIOLATION, f"outside workspace box by {d:.4f}m", -d)
+                )
             elif -d < self.warning_margin:
                 results.append(
-                    BoundsResult(BoundsStatus.WARNING, f"near workspace box boundary ({-d:.4f}m margin)", -d)
+                    BoundsResult(
+                        BoundsStatus.WARNING, f"near workspace box boundary ({-d:.4f}m margin)", -d
+                    )
                 )
             else:
                 results.append(BoundsResult(BoundsStatus.OK, "inside workspace box", -d))
@@ -177,16 +183,22 @@ class WorkspaceBounds:
         for i, fs in enumerate(self.forbidden_spheres):
             d = _distance_to_sphere_surface(x, y, z, fs)
             if d <= 0:
-                results.append(BoundsResult(BoundsStatus.VIOLATION, f"inside forbidden sphere zone {i}", d))
+                results.append(
+                    BoundsResult(BoundsStatus.VIOLATION, f"inside forbidden sphere zone {i}", d)
+                )
             elif d < self.warning_margin:
                 results.append(
-                    BoundsResult(BoundsStatus.WARNING, f"near forbidden sphere zone {i} ({d:.4f}m)", d)
+                    BoundsResult(
+                        BoundsStatus.WARNING, f"near forbidden sphere zone {i} ({d:.4f}m)", d
+                    )
                 )
 
         for i, fb in enumerate(self.forbidden_boxes):
             d = _distance_to_box_surface(x, y, z, fb)
             if d <= 0:
-                results.append(BoundsResult(BoundsStatus.VIOLATION, f"inside forbidden box zone {i}", d))
+                results.append(
+                    BoundsResult(BoundsStatus.VIOLATION, f"inside forbidden box zone {i}", d)
+                )
             elif d < self.warning_margin:
                 results.append(
                     BoundsResult(BoundsStatus.WARNING, f"near forbidden box zone {i} ({d:.4f}m)", d)
@@ -266,7 +278,9 @@ class JointBounds:
                         )
                     )
                 else:
-                    results.append(BoundsResult(BoundsStatus.OK, f"joint {joint_id} position ok", margin))
+                    results.append(
+                        BoundsResult(BoundsStatus.OK, f"joint {joint_id} position ok", margin)
+                    )
 
         if velocity is not None:
             abs_vel = abs(velocity)
@@ -288,7 +302,9 @@ class JointBounds:
                     )
                 )
             else:
-                results.append(BoundsResult(BoundsStatus.OK, f"joint {joint_id} velocity ok", margin))
+                results.append(
+                    BoundsResult(BoundsStatus.OK, f"joint {joint_id} velocity ok", margin)
+                )
 
         if torque is not None:
             abs_t = abs(torque)

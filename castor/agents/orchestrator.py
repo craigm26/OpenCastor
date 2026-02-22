@@ -67,12 +67,12 @@ class OrchestratorAgent(BaseAgent):
     def _collect(self) -> Dict[str, Any]:
         """Read latest outputs from all swarm agents via SharedState."""
         return {
-            "guardian_report":      self._state.get("swarm.guardian_report"),
-            "estop_active":         self._state.get("swarm.estop_active", False),
-            "nav_plan":             self._state.get("swarm.nav_plan"),
-            "scene_graph":          self._state.get("swarm.scene_graph"),
-            "manipulation_result":  self._state.get("swarm.manipulation_result"),
-            "incoming_message":     self._state.get("swarm.incoming_message"),
+            "guardian_report": self._state.get("swarm.guardian_report"),
+            "estop_active": self._state.get("swarm.estop_active", False),
+            "nav_plan": self._state.get("swarm.nav_plan"),
+            "scene_graph": self._state.get("swarm.scene_graph"),
+            "manipulation_result": self._state.get("swarm.manipulation_result"),
+            "incoming_message": self._state.get("swarm.incoming_message"),
         }
 
     def _resolve(self, outputs: Dict[str, Any]) -> Dict[str, Any]:
@@ -130,9 +130,7 @@ class OrchestratorAgent(BaseAgent):
         action = self._resolve(context)
         self._last_action = action
 
-        self._log.append(
-            {"tick": self._tick, "ts": time.time(), "action": action}
-        )
+        self._log.append({"tick": self._tick, "ts": time.time(), "action": action})
         if len(self._log) > 100:
             self._log = self._log[-100:]
 
@@ -162,9 +160,7 @@ class OrchestratorAgent(BaseAgent):
             import concurrent.futures
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                return pool.submit(
-                    asyncio.run, self._async_think(sensor_data)
-                ).result(timeout=5.0)
+                return pool.submit(asyncio.run, self._async_think(sensor_data)).result(timeout=5.0)
         except RuntimeError:
             # No running loop — safe to call asyncio.run()
             return asyncio.run(self._async_think(sensor_data))

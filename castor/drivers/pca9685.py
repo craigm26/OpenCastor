@@ -266,7 +266,11 @@ class PCA9685Driver(DriverBase):
         Returns ok=True when real I2C hardware is connected, ok=False in mock mode.
         """
         if self.pca is None:
-            return {"ok": False, "mode": "mock", "error": "PCA9685/motor libs unavailable (mock mode)"}
+            return {
+                "ok": False,
+                "mode": "mock",
+                "error": "PCA9685/motor libs unavailable (mock mode)",
+            }
         return {"ok": True, "mode": "hardware", "error": None}
 
     def stop(self):

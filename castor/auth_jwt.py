@@ -127,9 +127,7 @@ def parse_users_env() -> Dict[str, Dict[str, str]]:
             logger.warning("Skipping empty username/password in OPENCASTOR_USERS: %r", entry)
             continue
         if role not in ROLES:
-            logger.warning(
-                "Unknown role %r for user %r; defaulting to 'viewer'", role, username
-            )
+            logger.warning("Unknown role %r for user %r; defaulting to 'viewer'", role, username)
             role = "viewer"
         users[username] = {
             "password_hash": _sha256(password),
@@ -290,7 +288,11 @@ def require_role(min_role: str):
 
         # --- No auth configured: open access ---
         static_token = os.getenv("OPENCASTOR_API_TOKEN")
-        if not static_token and not os.getenv("JWT_SECRET") and not os.getenv("OPENCASTOR_JWT_SECRET"):
+        if (
+            not static_token
+            and not os.getenv("JWT_SECRET")
+            and not os.getenv("OPENCASTOR_JWT_SECRET")
+        ):
             request.state.jwt_username = "anonymous"
             request.state.jwt_role = "viewer"
             request.state.auth_type = "none"

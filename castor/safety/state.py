@@ -93,7 +93,9 @@ class SafetyTelemetry:
         self._log_interval = 5.0  # seconds between persisted snapshots
         self._last_persisted: float = 0.0
 
-    def enable_persistence(self, log_path: Optional[str] = None, interval_seconds: float = 5.0) -> None:
+    def enable_persistence(
+        self, log_path: Optional[str] = None, interval_seconds: float = 5.0
+    ) -> None:
         """Enable rolling-file persistence for snapshot history.
 
         Args:
@@ -218,4 +220,3 @@ class SafetyTelemetry:
         )
         snap.safety_score = compute_safety_score(snap)
         return snap
-

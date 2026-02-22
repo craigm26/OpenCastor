@@ -284,8 +284,7 @@ def install_plugin(source: str) -> bool:
     sha256 = hashlib.sha256(plugin_code).hexdigest()
     if "sha256" in manifest and manifest["sha256"] != sha256:
         logger.error(
-            "Plugin SHA-256 mismatch (manifest says %s, downloaded file is %s). "
-            "Aborting install.",
+            "Plugin SHA-256 mismatch (manifest says %s, downloaded file is %s). Aborting install.",
             manifest["sha256"],
             sha256,
         )

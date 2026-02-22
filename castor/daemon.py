@@ -105,7 +105,9 @@ def enable_daemon(
 
     return {
         "ok": result.returncode == 0,
-        "message": "Service enabled and started" if result.returncode == 0 else result.stderr.decode(),
+        "message": "Service enabled and started"
+        if result.returncode == 0
+        else result.stderr.decode(),
         "service_path": str(SERVICE_PATH),
     }
 
@@ -139,8 +141,13 @@ def daemon_status() -> dict:
     installed = SERVICE_PATH.exists()
 
     result = _run(
-        ["systemctl", "show", SERVICE_NAME, "--no-pager",
-         "--property=ActiveState,SubState,MainPID,ExecMainStartTimestamp"],
+        [
+            "systemctl",
+            "show",
+            SERVICE_NAME,
+            "--no-pager",
+            "--property=ActiveState,SubState,MainPID,ExecMainStartTimestamp",
+        ],
         check=False,
     )
 
@@ -150,9 +157,7 @@ def daemon_status() -> dict:
             k, _, v = line.partition("=")
             props[k.strip()] = v.strip()
 
-    enabled_result = _run(
-        ["systemctl", "is-enabled", SERVICE_NAME], check=False
-    )
+    enabled_result = _run(["systemctl", "is-enabled", SERVICE_NAME], check=False)
     enabled = enabled_result.stdout.decode().strip() == "enabled"
 
     return {

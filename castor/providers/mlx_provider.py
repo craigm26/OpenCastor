@@ -133,9 +133,7 @@ class MLXProvider(BaseProvider):
             yield f"Error: {e}"
             return Thought(f"Error: {e}", None)
 
-    def _stream_server(
-        self, image_bytes: bytes, instruction: str
-    ) -> Generator[str, None, Thought]:
+    def _stream_server(self, image_bytes: bytes, instruction: str) -> Generator[str, None, Thought]:
         """Stream tokens from an OpenAI-compatible server via SSE."""
         import urllib.request
 
@@ -182,11 +180,7 @@ class MLXProvider(BaseProvider):
                         line = line[6:]
                     try:
                         chunk = json.loads(line)
-                        token = (
-                            chunk.get("choices", [{}])[0]
-                            .get("delta", {})
-                            .get("content", "")
-                        )
+                        token = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
                         if token:
                             full_text += token
                             yield token
