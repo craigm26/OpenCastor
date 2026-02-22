@@ -4,7 +4,7 @@
 
 OpenCastor is a universal runtime for embodied AI. It connects LLM "brains" (Gemini, GPT-4.1, Claude, Ollama, HuggingFace, llama.cpp, MLX) to robot "bodies" (Raspberry Pi, Jetson, Arduino, ESP32, LEGO) through a plug-and-play architecture, and exposes them to messaging platforms (WhatsApp, Telegram, Discord, Slack) for remote control. Configuration is driven by YAML files compliant with the [RCAN Standard](https://rcan.dev/spec/).
 
-**Version**: 2026.2.21.9
+**Version**: 2026.2.21.13
 **License**: Apache 2.0
 **Python**: 3.10+
 
@@ -39,11 +39,12 @@ OpenCastor/
 │   ├── auth.py                       # Unified auth manager (providers + channels)
 │   ├── wizard.py                     # Interactive setup wizard
 │   ├── web_wizard.py                 # Web-based configuration wizard
-│   ├── dashboard.py                  # Streamlit web UI (legacy)
+│   ├── dashboard.py                  # Streamlit web UI (single-page: status + episode history)
 │   ├── dashboard_tui.py              # Terminal UI dashboard (tmux-based, preferred)
 │   ├── config_validation.py          # RCAN config validation (fail-fast on startup)
 │   ├── connectivity.py               # Internet & provider reachability checks
 │   ├── offline_fallback.py           # Auto-switch to local provider on connectivity loss
+│   ├── provider_fallback.py          # Auto-switch on quota/credit errors (ProviderFallbackManager)
 │   ├── tiered_brain.py               # Multi-model switching by latency budget
 │   ├── prompt_cache.py               # LLM response caching (reduces API cost)
 │   ├── healthcheck.py                # Component health checks
@@ -82,11 +83,14 @@ OpenCastor/
 │   ├── demo.py                       # Cinematic terminal demo
 │   ├── repl.py                       # Python REPL with robot objects
 │   ├── shell.py                      # Interactive command shell
-│   ├── watch.py                      # Live telemetry dashboard
+│   ├── watch.py                      # Live Rich TUI telemetry (episode memory panel)
 │   ├── logs.py                       # Log viewing utilities
 │   ├── benchmark.py                  # Performance profiling
 │   ├── calibrate.py                  # Interactive hardware calibration
 │   ├── test_hardware.py              # Hardware testing CLI
+│   ├── memory.py                     # SQLite episode store (EpisodeMemory; CASTOR_MEMORY_DB)
+│   ├── metrics.py                    # Prometheus-compatible metrics (MetricsRegistry; stdlib only)
+│   ├── tools.py                      # LLM tool calling registry (ToolRegistry, ToolDefinition)
 │   ├── memory_search.py              # Memory search utilities
 │   ├── claude_proxy.py               # Claude API proxy
 │   │
@@ -105,7 +109,8 @@ OpenCastor/
 │   │   ├── __init__.py
 │   │   ├── base.py                   # DriverBase ABC (move/stop/close/health_check)
 │   │   ├── pca9685.py                # I2C PWM motor driver (Amazon/Adafruit kits)
-│   │   └── dynamixel.py              # Robotis Dynamixel servo (Protocol 2.0)
+│   │   ├── dynamixel.py              # Robotis Dynamixel servo (Protocol 2.0)
+│   │   └── composite.py              # CompositeDriver: routes action keys to sub-drivers
 │   │
 │   ├── channels/                     # Messaging channel integrations
 │   │   ├── __init__.py               # Channel registry + create_channel() factory
@@ -116,7 +121,8 @@ OpenCastor/
 │   │   ├── whatsapp_twilio.py        # WhatsApp via Twilio (legacy)
 │   │   ├── telegram_channel.py       # Telegram Bot (long-polling)
 │   │   ├── discord_channel.py        # Discord Bot
-│   │   └── slack_channel.py          # Slack Bot (Socket Mode)
+│   │   ├── slack_channel.py          # Slack Bot (Socket Mode)
+│   │   └── mqtt_channel.py           # MQTT (paho-mqtt; subscribe/publish topics)
 │   │
 │   ├── fs/                           # Virtual Filesystem (Unix-inspired)
 │   │   ├── __init__.py               # CastorFS facade class
@@ -207,7 +213,7 @@ OpenCastor/
 │       ├── vex_iq.rcan.yaml
 │       └── yahboom_rosmaster.rcan.yaml
 │
-├── tests/                            # 91 test files, 2521 tests (0 failures)
+├── tests/                            # 96 test files, 2578 tests (0 failures)
 │   ├── test_api_endpoints.py         # FastAPI gateway (133 tests)
 │   ├── test_config_validation.py     # Config validation
 │   ├── test_offline_fallback.py      # OfflineFallbackManager
@@ -287,6 +293,10 @@ OpenCastor/
 - **`BaseChannel`** (`castor/channels/base.py`): ABC for messaging integrations. Methods: `start()`, `stop()`, `send_message()`.
 - **`CastorFS`** (`castor/fs/__init__.py`): Virtual filesystem with Unix-style paths, capability-based permissions, memory tiers, and e-stop.
 - **`SisyphusLoop`** (`castor/learner/sisyphus.py`): Orchestrates PM→Dev→QA→Apply continuous improvement. Tracks per-stage timing via `ImprovementResult.stage_durations` and `SisyphusStats`.
+- **`EpisodeMemory`** (`castor/memory.py`): SQLite episode store; persists every brain decision. Max 10k episodes, FIFO eviction.
+- **`MetricsRegistry`** (`castor/metrics.py`): Stdlib-only Prometheus metrics; `get_registry()` singleton; exposed at `GET /api/metrics`.
+- **`ToolRegistry`** (`castor/tools.py`): Named LLM-callable tools; 4 built-ins; `call(name, /, **kwargs)`.
+- **`CompositeDriver`** (`castor/drivers/composite.py`): Routes action keys to sub-drivers via RCAN `routing:` config.
 - **Factory functions**: `get_provider()` (providers), `create_channel()` (channels).
 
 ### Authentication (`castor/auth.py`)
@@ -344,6 +354,19 @@ FastAPI server providing:
 **Streaming:**
 - `GET /api/stream/mjpeg` — MJPEG live camera stream (max 3 concurrent)
 
+**Metrics & Runtime Control:**
+- `GET /api/metrics` — Prometheus-format text metrics (counters, gauges, histograms via `MetricsRegistry`)
+- `POST /api/runtime/pause` — Pause the perception-action loop (sets VFS `/proc/paused` flag)
+- `POST /api/runtime/resume` — Resume the perception-action loop
+- `GET /api/runtime/status` — Loop running/paused state + loop count
+- `POST /api/config/reload` — Hot-reload `robot.rcan.yaml` without restart
+- `GET /api/provider/health` — Brain provider health check ({ok, latency_ms, error, usage_stats})
+
+**Episode Memory:**
+- `GET /api/memory/episodes` — Recent episodes from SQLite store (`?limit=N`, max 100)
+- `GET /api/memory/export` — Export all episodes as JSONL download
+- `DELETE /api/memory/episodes` — Clear all episode memory
+
 **Webhooks (messaging channels):**
 - `POST /webhooks/whatsapp` — Twilio WhatsApp (rate-limited 10/min/sender)
 - `POST /webhooks/slack` — Slack Events API (rate-limited 10/min/sender)
@@ -359,6 +382,7 @@ Protected by optional `OPENCASTOR_API_TOKEN` (bearer) or `OPENCASTOR_JWT_SECRET`
 | Telegram | `python-telegram-bot>=21.0` | `TELEGRAM_BOT_TOKEN` |
 | Discord | `discord.py>=2.3.0` | `DISCORD_BOT_TOKEN` |
 | Slack | `slack-bolt>=1.18.0` | `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_SIGNING_SECRET` |
+| MQTT | `paho-mqtt>=2.0.0` | `MQTT_BROKER_HOST`, `MQTT_USERNAME`, `MQTT_PASSWORD` |
 
 All channel `handle_message()` dispatchers are async-safe: coroutine callbacks are awaited directly; sync callbacks are offloaded with `asyncio.to_thread()`.
 
@@ -368,7 +392,10 @@ Continuous OODA loop:
 1. **OBSERVE** — Capture camera frame via OpenCV
 2. **ORIENT & DECIDE** — Send frame + instruction to LLM provider (safety-checked first)
 3. **ACT** — Translate `Thought.action` into motor commands
-4. **TELEMETRY** — Check latency against configurable budget
+4. **TELEMETRY** — Check latency vs budget; call `get_registry().record_loop(latency)` (Prometheus)
+5. **MEMORY** — Call `EpisodeMemory().log_episode(...)` to persist observation→action in SQLite
+
+Pause/resume: after e-stop check the loop reads a VFS `/proc/paused` flag; `POST /api/runtime/pause` sets it.
 
 ### Provider Pattern
 
@@ -379,6 +406,37 @@ Continuous OODA loop:
 - `_clean_json()` strips markdown fences from responses
 - `think_stream()` yields text chunks; all providers implement it (Anthropic CLI path yields single chunk)
 - `health_check()` returns `{ok: bool, latency_ms: float, error: str|None}`
+- `get_usage_stats()` returns provider-specific token/cost stats (Anthropic and OpenAI implement it; base returns `{}`)
+
+### Episode Memory (`castor/memory.py`)
+
+- `EpisodeMemory` — SQLite-backed store; default DB at `~/.castor/memory.db`; override with `CASTOR_MEMORY_DB`
+- Max 10,000 episodes; FIFO eviction when full
+- Key methods: `log_episode(instruction, image_hash, thought, latency_ms)`, `query_recent(limit)`, `get_episode(id)`, `export_jsonl()`, `clear()`, `hash_image(bytes)`, `count()`
+- Called in the perception-action loop after every brain decision
+
+### Prometheus Metrics (`castor/metrics.py`)
+
+- `MetricsRegistry` — stdlib-only Prometheus counter/gauge/histogram implementation (no external deps)
+- `get_registry()` singleton; 13 pre-registered metrics including `loop_latency_ms`, `brain_calls_total`, `motor_commands_total`, `errors_total`
+- Helper functions: `record_loop(latency_ms, robot)`, `record_command(action_type)`, `record_error(source)`, `update_status(running, paused)`
+- Exposed at `GET /api/metrics` as Prometheus text format
+
+### LLM Tool Calling (`castor/tools.py`)
+
+- `ToolRegistry` — named callable tools the LLM brain can invoke
+- 4 built-ins: `get_status`, `take_snapshot`, `announce_text`, `get_distance`
+- `call(name, /, **kwargs)` — `name` is positional-only (Python 3.10+) to avoid keyword conflicts with tool parameters named `name`
+- `call_from_dict(tool_call)` — handles OpenAI-style (JSON string `arguments`) and Anthropic-style (`input` dict)
+- `to_openai_tools()` / `to_anthropic_tools()` — schema export for LLM function calling
+- Register custom tools from RCAN `agent.tools` list via `_register_from_config()`
+
+### Composite Driver (`castor/drivers/composite.py`)
+
+- `CompositeDriver` — routes action dict keys to sub-drivers via RCAN `routing:` config
+- Each sub-driver handles a specific action namespace (e.g., `wheels` → PCA9685, `arm` → Dynamixel)
+- `_NullDriver` fallback for unknown protocols (logs + no-ops)
+- `health_check()` aggregates sub-driver health; reports `"degraded"` if any sub-driver fails
 
 ### Driver Pattern
 
@@ -404,6 +462,26 @@ Unix-inspired filesystem with:
 - **ContextWindow**: sliding multi-turn context for agents
 - **Pipeline**: Unix-pipe-style operation chaining
 - **E-stop**: `fs.estop()` / `fs.clear_estop()` propagates to all drivers
+
+### Provider Quota Fallback (`castor/provider_fallback.py`)
+
+- `ProviderFallbackManager` — detects `ProviderQuotaError` from the primary provider and transparently switches to a backup
+- Triggered by HuggingFace HTTP 402/429 or keywords (`credits`, `quota`, `rate limit`, etc.)
+- `think()` wraps the primary and auto-retries with the fallback on quota error
+- After `quota_cooldown_s` (default 3600s), the next request retries the primary automatically
+- `probe_fallback()` health-checks the backup at startup so issues surface before a live outage
+- `state.provider_fallback` takes priority over `state.offline_fallback` in `_get_active_brain()`
+
+RCAN config::
+
+    provider_fallback:
+      enabled: true
+      provider: ollama        # or: google | openai | anthropic | llamacpp | mlx
+      model: llama3.2:3b
+      quota_cooldown_s: 3600
+      alert_channel: telegram
+
+- `ProviderQuotaError` defined in `castor/providers/base.py`; has `provider_name` and `http_status` attrs
 
 ### Offline Fallback (`castor/offline_fallback.py`)
 
@@ -537,6 +615,7 @@ Copy `.env.example` to `.env` and fill in what you need.
 | `TELEGRAM_BOT_TOKEN` | Telegram |
 | `DISCORD_BOT_TOKEN` | Discord |
 | `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_SIGNING_SECRET` | Slack |
+| `MQTT_BROKER_HOST`, `MQTT_USERNAME`, `MQTT_PASSWORD` | MQTT |
 
 ### Gateway & Runtime
 | Variable | Default | Purpose |
@@ -551,6 +630,7 @@ Copy `.env.example` to `.env` and fill in what you need.
 | `OPENCASTOR_MAX_STREAMS` | 3 | Max concurrent MJPEG clients |
 | `OPENCASTOR_CONFIG` | robot.rcan.yaml | Config file path |
 | `OPENCASTOR_MEMORY_DIR` | — | Memory persistence directory |
+| `CASTOR_MEMORY_DB` | `~/.castor/memory.db` | SQLite episode memory database path |
 | `DYNAMIXEL_PORT` | — | Serial port override |
 | `CAMERA_INDEX` | 0 | Camera device index |
 | `LOG_LEVEL` | INFO | Logging level |
@@ -575,7 +655,8 @@ pip install opencastor[whatsapp-twilio] # twilio (legacy)
 pip install opencastor[telegram]        # python-telegram-bot>=21.0
 pip install opencastor[discord]         # discord.py>=2.3.0
 pip install opencastor[slack]           # slack-bolt>=1.18.0
-pip install opencastor[channels]        # All messaging channels
+pip install opencastor[mqtt]            # paho-mqtt>=2.0.0
+pip install opencastor[channels]        # All messaging channels (including mqtt)
 pip install opencastor[rcan]            # PyJWT + zeroconf (RCAN protocol)
 pip install opencastor[dynamixel]       # dynamixel-sdk>=3.7.31
 pip install opencastor[all]             # Everything
@@ -639,7 +720,7 @@ pip install -e ".[dev]"
 pytest tests/
 ```
 
-Current: **2521 tests, 8 skipped, 0 failures**
+Current: **2578 tests, 8 skipped, 0 failures**
 
 Key fixture: `_reset_state_and_env` (autouse in `test_api_endpoints.py`) — resets all `AppState` fields before every test, including `thought_history = deque(maxlen=50)`, `learner = None`, `offline_fallback = None`, and clears `_command_history`/`_webhook_history` rate-limiter dicts.
 

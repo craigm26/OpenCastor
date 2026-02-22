@@ -100,14 +100,17 @@ for k, v in _DEFAULTS.items():
         st.session_state[k] = v
 
 GW  = st.session_state.gateway_url
-TOK = st.session_state.api_token
-HDR = {"Authorization": f"Bearer {TOK}"} if TOK else {}
+
+def _hdr() -> dict:
+    """Build auth header from current session state (evaluated on every rerun)."""
+    tok = st.session_state.api_token
+    return {"Authorization": f"Bearer {tok}"} if tok else {}
 
 # ── API helpers ────────────────────────────────────────────────────────────────
 
 def _get(path: str, timeout: float = 2.0) -> dict:
     try:
-        r = _req.get(f"{GW}{path}", headers=HDR, timeout=timeout)
+        r = _req.get(f"{GW}{path}", headers=_hdr(), timeout=timeout)
         return r.json() if r.ok else {}
     except Exception:
         return {}
@@ -186,7 +189,7 @@ with st.sidebar:
     st.markdown("### 🛑 Emergency Stop")
     if st.button("EMERGENCY STOP", type="primary", use_container_width=True):
         try:
-            _req.post(f"{GW}/api/stop", headers=HDR, timeout=3)
+            _req.post(f"{GW}/api/stop", headers=_hdr(), timeout=3)
             st.warning("⚠️ Motors disengaged!")
         except Exception as e:
             st.error(f"E-stop failed: {e}")
@@ -235,7 +238,8 @@ with left_col:
                 unsafe_allow_html=True)
 
     _mjpeg_base = f"{GW}/api/stream/mjpeg"
-    _mjpeg_url  = f"{_mjpeg_base}?token={TOK}" if TOK else _mjpeg_base
+    _tok = st.session_state.api_token
+    _mjpeg_url  = f"{_mjpeg_base}?token={_tok}" if _tok else _mjpeg_base
 
     # Embed MJPEG via HTML img tag (token in URL so browser can load it)
     cam_border = "#3fb950" if cam_ok else "#f85149"
@@ -301,7 +305,7 @@ with left_col:
                 r = _req.post(
                     f"{GW}/api/command",
                     json={"instruction": user_text},
-                    headers=HDR,
+                    headers=_hdr(),
                     timeout=30,
                 )
                 reply = r.json().get("raw_text", str(r.json())) if r.ok else f"[{r.status_code}]"
@@ -364,17 +368,22 @@ with right_col:
 
     if ch_avail:
         ch_rows = []
+        # Sort: active first (🟢), then ready (🟡), then unavail (⚫); alpha within group
+        _order = {"active": 0, "ready": 1, "unavail": 2}
         for ch_name, avail in sorted(ch_avail.items()):
             is_active = ch_name in ch_active
             dot = "🟢" if is_active else ("🟡" if avail else "⚫")
-            state = "active" if is_active else ("ready" if avail else "unavail")
-            ch_rows.append({"Channel": ch_name, "Status": state, "": dot})
+            ch_status = "active" if is_active else ("ready" if avail else "unavail")
+            ch_rows.append({"Channel": ch_name, "Status": ch_status, "": dot, "_ord": _order[ch_status]})
+        ch_rows.sort(key=lambda r: (r["_ord"], r["Channel"]))
+        for r in ch_rows:
+            del r["_ord"]
         import pandas as pd
         st.dataframe(
             pd.DataFrame(ch_rows),
             hide_index=True,
             use_container_width=True,
-            height=min(150, 36 + 36 * len(ch_rows)),
+            height=min(250, 36 + 36 * len(ch_rows)),
         )
     else:
         st.caption("No channel data")

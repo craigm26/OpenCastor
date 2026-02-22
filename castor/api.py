@@ -140,10 +140,13 @@ class AppState:
     mdns_browser = None
     rcan_router = None  # RCAN message router
     capability_registry = None  # Capability registry
-    offline_fallback = None   # OfflineFallbackManager (optional)
-    thought_history = None    # deque(maxlen=50) — ring buffer of recent thoughts
+    offline_fallback = None    # OfflineFallbackManager (optional)
+    provider_fallback = None   # ProviderFallbackManager (optional, for quota errors)
+    thought_history = None     # deque(maxlen=50) — ring buffer of recent thoughts
     learner = None            # SisyphusLoop instance (optional)
     paused: bool = False      # Runtime pause flag (issue #93)
+    _health_cache_time: float = 0.0   # last time health_check() was called
+    _health_cache_result: dict = {}   # cached result (TTL: 30s)
 
 
 state = AppState()
@@ -259,12 +262,18 @@ async def get_status(request: Request):
         "audit_log_path": str(DEFAULT_AUDIT_LOG_PATH.expanduser()),
     }
 
-    # Provider health check (non-blocking — skip if brain not ready)
-    if state.brain is not None:
-        try:
-            payload["provider_health"] = state.brain.health_check()
-        except Exception as exc:
-            payload["provider_health"] = {"ok": False, "error": str(exc)}
+    # Provider health check — routed through active brain (respects fallback),
+    # cached for 30 s to avoid flooding a quota-exhausted primary provider.
+    active_brain = _get_active_brain()
+    if active_brain is not None:
+        _now = time.time()
+        if _now - state._health_cache_time >= 30:
+            try:
+                state._health_cache_result = active_brain.health_check()
+            except Exception as exc:
+                state._health_cache_result = {"ok": False, "error": str(exc)}
+            state._health_cache_time = _now
+        payload["provider_health"] = state._health_cache_result
 
     # Offline fallback status — structured dict so clients can query state
     if state.offline_fallback is not None:
@@ -278,6 +287,19 @@ async def get_status(request: Request):
         }
     else:
         payload["offline_fallback"] = {"enabled": False}
+
+    # Provider fallback status (quota/credit error switching)
+    if state.provider_fallback is not None:
+        pf = state.provider_fallback
+        payload["provider_fallback"] = {
+            "enabled": True,
+            "using_fallback": pf.is_using_fallback,
+            "fallback_ready": pf.fallback_ready,
+            "fallback_provider": pf._fb_cfg.get("provider", "unknown"),
+            "fallback_model": pf._fb_cfg.get("model", "unknown"),
+        }
+    else:
+        payload["provider_fallback"] = {"enabled": False}
 
     return _maybe_wrap_rcan(payload, request)
 
@@ -297,8 +319,24 @@ async def send_command(cmd: CommandRequest, request: Request):
     else:
         image_bytes = _capture_live_frame()
 
-    active = state.offline_fallback.get_active_provider() if state.offline_fallback else state.brain
-    thought = active.think(image_bytes, cmd.instruction)
+    active = _get_active_brain()
+    try:
+        thought = active.think(image_bytes, cmd.instruction)
+    except Exception as _think_exc:
+        from castor.providers.base import ProviderQuotaError
+
+        if isinstance(_think_exc, ProviderQuotaError):
+            raise HTTPException(
+                status_code=402,
+                detail=(
+                    "AI provider credits exhausted. "
+                    "Add 'provider_fallback' to your RCAN config to automatically "
+                    "switch to a backup provider (e.g. Ollama or Google Gemini). "
+                    f"Provider: {_think_exc.provider_name or 'unknown'}"
+                ),
+            ) from _think_exc
+        raise
+
     _record_thought(cmd.instruction, thought.raw_text, thought.action)
 
     # Execute action on hardware if available
@@ -788,8 +826,15 @@ async def cap_chat(cmd: CommandRequest):
         import base64
 
         image_bytes = base64.b64decode(cmd.image_base64)
-    active = state.offline_fallback.get_active_provider() if state.offline_fallback else state.brain
-    thought = active.think(image_bytes, cmd.instruction)
+    active = _get_active_brain()
+    try:
+        thought = active.think(image_bytes, cmd.instruction)
+    except Exception as _exc:
+        from castor.providers.base import ProviderQuotaError
+
+        if isinstance(_exc, ProviderQuotaError):
+            raise HTTPException(status_code=402, detail=str(_exc)) from _exc
+        raise
     return {"raw_text": thought.raw_text, "action": thought.action}
 
 
@@ -871,7 +916,7 @@ async def stream_command(cmd: CommandRequest, request: Request):
     else:
         image_bytes = _capture_live_frame()
 
-    active = state.offline_fallback.get_active_provider() if state.offline_fallback else state.brain
+    active = _get_active_brain()
 
     async def _generate():
         chunks = []
@@ -1313,6 +1358,20 @@ def _execute_action(action: dict):
         logger.info(f"Wait: {action.get('duration_ms', 0)}ms")
 
 
+def _get_active_brain():
+    """Return the active brain provider, respecting fallback priority.
+
+    Priority: provider_fallback (quota-aware) > offline_fallback (connectivity-aware) > brain.
+    ``ProviderFallbackManager.think()`` wraps the provider and auto-switches internally,
+    so callers should use it directly when available.
+    """
+    if state.provider_fallback is not None:
+        return state.provider_fallback
+    if state.offline_fallback is not None:
+        return state.offline_fallback.get_active_provider()
+    return state.brain
+
+
 def _capture_live_frame() -> bytes:
     """Grab a frame from the shared camera if available, else return b''.
     Returns b'' when no camera is ready or the frame is blank/null padding.
@@ -1385,13 +1444,20 @@ def _handle_channel_message(channel_name: str, chat_id: str, text: str) -> str:
     # Use live camera frame so the brain can see what's in front of it
     image_bytes = _capture_live_frame()
 
-    # Route through offline fallback manager if active, else use brain directly
-    active_provider = (
-        state.offline_fallback.get_active_provider()
-        if state.offline_fallback
-        else state.brain
-    )
-    thought = active_provider.think(image_bytes, instruction, surface=surface)
+    active_provider = _get_active_brain()
+    try:
+        thought = active_provider.think(image_bytes, instruction, surface=surface)
+    except Exception as _exc:
+        from castor.providers.base import ProviderQuotaError
+
+        if isinstance(_exc, ProviderQuotaError):
+            return (
+                f"⚠️ AI provider credits exhausted (HTTP {_exc.http_status}). "
+                "Add `provider_fallback` to your RCAN config to auto-switch. "
+                "Run `castor wizard` or see CLAUDE.md for instructions."
+            )
+        raise
+
     state.last_thought = {
         "raw_text": thought.raw_text,
         "action": thought.action,
@@ -1571,6 +1637,20 @@ async def on_startup():
                     logger.info("Offline fallback manager started")
                 except Exception as _of_exc:
                     logger.warning("Offline fallback init failed: %s", _of_exc)
+
+            # Initialize provider fallback manager (for quota/credit errors)
+            if state.config.get("provider_fallback", {}).get("enabled"):
+                try:
+                    from castor.provider_fallback import ProviderFallbackManager
+
+                    state.provider_fallback = ProviderFallbackManager(
+                        config=state.config,
+                        primary_provider=state.brain,
+                    )
+                    state.provider_fallback.probe_fallback()
+                    logger.info("Provider fallback manager ready")
+                except Exception as _pf_exc:
+                    logger.warning("Provider fallback init failed: %s", _pf_exc)
 
             # Initialize driver (simulation-safe)
             from castor.drivers import get_driver

@@ -6,6 +6,23 @@ from typing import Any, Dict, Iterator, List, Optional
 logger = logging.getLogger("OpenCastor.BaseProvider")
 
 
+class ProviderQuotaError(Exception):
+    """Raised when a provider rejects a request due to exhausted credits or quota.
+
+    Catching this allows the runtime to automatically switch to a fallback
+    provider rather than returning an error to the caller.
+
+    Attributes:
+        provider_name: Name of the provider that raised the error (e.g. 'huggingface').
+        http_status:   HTTP status code if available (commonly 402 or 429).
+    """
+
+    def __init__(self, message: str, provider_name: str = "", http_status: int = 0):
+        super().__init__(message)
+        self.provider_name = provider_name
+        self.http_status = http_status
+
+
 class Thought:
     """Hardware-agnostic representation of a single AI reasoning step."""
 

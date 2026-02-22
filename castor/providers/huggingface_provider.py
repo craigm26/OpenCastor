@@ -13,7 +13,7 @@ import logging
 import os
 from typing import Any, Dict
 
-from .base import BaseProvider, Thought
+from .base import BaseProvider, ProviderQuotaError, Thought
 
 logger = logging.getLogger("OpenCastor.HuggingFace")
 
@@ -35,6 +35,39 @@ VISION_MODELS = {
 def _get_hf_token(config: Dict[str, Any]) -> str | None:
     """Resolve HF token from env or config."""
     return os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN") or config.get("api_key")
+
+
+# ── Quota / credit error detection ────────────────────────────────────────────
+
+_QUOTA_HTTP_CODES = {402, 429}
+_QUOTA_KEYWORDS = (
+    "credits",
+    "quota",
+    "payment required",
+    "exceeded",
+    "billing",
+    "subscription",
+    "rate limit",
+    "too many requests",
+)
+
+
+def _http_status(exc: Exception) -> int:
+    """Extract HTTP status code from a HfHubHTTPError, if available."""
+    # huggingface_hub attaches the response on the exception
+    resp = getattr(exc, "response", None)
+    if resp is not None:
+        return getattr(resp, "status_code", 0)
+    return 0
+
+
+def _is_quota_error(exc: Exception) -> bool:
+    """Return True if *exc* indicates exhausted HuggingFace credits or a quota limit."""
+    status = _http_status(exc)
+    if status in _QUOTA_HTTP_CODES:
+        return True
+    msg = str(exc).lower()
+    return any(kw in msg for kw in _QUOTA_KEYWORDS)
 
 
 class HuggingFaceProvider(BaseProvider):
@@ -98,6 +131,10 @@ class HuggingFaceProvider(BaseProvider):
             else:
                 return self._think_text(instruction, surface=surface)
         except Exception as e:
+            if _is_quota_error(e):
+                raise ProviderQuotaError(
+                    str(e), provider_name="huggingface", http_status=_http_status(e)
+                ) from e
             logger.error("HuggingFace inference error: %s", e)
             return Thought(f"Error: {e}", None)
 

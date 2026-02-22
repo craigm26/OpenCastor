@@ -398,7 +398,7 @@ code, pre { font-family: var(--font-mono); }
   .site-nav { background: rgba(10, 10, 15, 0.95); }
   .nav-links {
     display: none; position: fixed; top: 64px; left: 0; right: 0; z-index: 999;
-    background: var(--bg); flex-direction: column; padding: 32px var(--gutter) 32px; gap: 4px;
+    background: var(--bg); flex-direction: column; padding: 32px var(--gutter) 96px; gap: 4px;
     overflow-y: auto; max-height: calc(100vh - 64px); max-height: calc(100dvh - 64px);
     -webkit-overflow-scrolling: touch;
     border-bottom: 1px solid var(--border);
