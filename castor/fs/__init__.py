@@ -171,6 +171,13 @@ class CastorFS:
             }
             for name, (role, scopes) in defaults.items():
                 self.perms.register_principal(name, role=int(role), scopes=scopes)
+            # The "api" principal (gateway bearer token) acts as a trusted operator
+            # and needs SAFETY_OVERRIDE to clear e-stop via the REST API.
+            # LEASEE scopes don't include Scope.ADMIN (which maps to SAFETY_OVERRIDE),
+            # so we grant it explicitly here to match Cap.api_default() intent.
+            from castor.fs.permissions import Cap
+
+            self.perms.grant_cap("api", Cap.SAFETY_OVERRIDE)
         except Exception:
             pass  # RCAN module not available -- legacy caps remain
 
