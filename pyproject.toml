@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opencastor"
-version = "2026.2.21.14"
+version = "2026.2.21.15"
 description = "The Universal Runtime for Embodied AI"
 readme = "README.md"
 license = "Apache-2.0"
@@ -89,8 +89,9 @@ rcan = [
     "zeroconf>=0.131.0",
 ]
 dynamixel = ["dynamixel-sdk>=3.7.31"]
+vertex = ["google-genai>=1.0.0"]
 all = [
-    "opencastor[rpi,whatsapp,telegram,discord,slack,rcan,dynamixel,dev]",
+    "opencastor[rpi,whatsapp,telegram,discord,slack,rcan,dynamixel,vertex,dev]",
 ]
 dev = [
     "pytest>=8.0.0",

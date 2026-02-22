@@ -138,6 +138,7 @@ driver   = _get("/api/driver/health")
 learner  = _get("/api/learner/stats")
 hist     = _get("/api/command/history?limit=8")
 episodes = _get("/api/memory/episodes?limit=20")
+usage    = _get("/api/usage")
 
 robot_name  = status.get("robot_name", health.get("robot_name", "Bob"))
 uptime      = health.get("uptime_s", 0)
@@ -344,6 +345,13 @@ with right_col:
     if last_thought:
         st.caption(f"💭 {last_thought[:80]}{'…' if len(last_thought) > 80 else ''}")
 
+    # ── Token usage (today) ───────────────────────────────────────
+    _today = (usage.get("daily") or [{}])[-1] if usage.get("daily") else {}
+    _today_tokens = _today.get("total_tokens", 0)
+    _today_cost   = _today.get("cost_usd", 0.0)
+    c2.metric("Tokens Today", f"{_today_tokens:,}" if _today_tokens else "0")
+    c1.metric("Cost Today ($)", f"${_today_cost:.4f}" if _today_cost else "$0.0000")
+
     st.divider()
 
     # ── Driver ───────────────────────────────────────────────────
@@ -459,12 +467,34 @@ with st.expander(
                     "Outcome": ep.get("outcome", "—")[:24],
                 }
             )
+        # Summary table
         st.dataframe(
             pd.DataFrame(ep_rows),
             hide_index=True,
             use_container_width=True,
             height=min(300, 36 + 36 * len(ep_rows)),
         )
+        # Per-episode replay buttons
+        st.markdown('<p class="panel-title">Replay an episode</p>', unsafe_allow_html=True)
+        for ep in ep_list:
+            ep_id = ep.get("id", "")
+            action_type = (ep.get("action") or {}).get("type", "—")
+            ts = ep.get("ts", "")
+            hhmm = ts[11:19] if len(ts) > 18 else ts
+            label = f"{hhmm}  {str(ep.get('instruction', ''))[:32]}  [{action_type}]"
+            if st.button("▶", key=f"replay_{ep_id}", help=f"Replay: {label}"):
+                try:
+                    r = _req.post(
+                        f"{GW}/api/memory/replay/{ep_id}",
+                        headers=_hdr(),
+                        timeout=5,
+                    )
+                    if r.ok:
+                        st.toast("Replayed ✓", icon="▶")
+                    else:
+                        st.toast(f"Replay failed: {r.status_code} {r.text[:80]}", icon="❌")
+                except Exception as _replay_err:
+                    st.toast(f"Replay error: {_replay_err}", icon="❌")
     else:
         st.caption("No episodes recorded yet — start the runtime loop to capture them")
 

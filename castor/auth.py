@@ -21,6 +21,7 @@ PROVIDER_AUTH_MAP: Dict[str, tuple] = {
     "anthropic": ("ANTHROPIC_API_KEY", "api_key"),
     "openrouter": ("OPENROUTER_API_KEY", "api_key"),
     "ollama": ("OLLAMA_BASE_URL", "url"),
+    "vertex_ai": ("VERTEX_PROJECT", "vertex_project"),
 }
 
 # Map of channel name -> list of (env var, config key) tuples

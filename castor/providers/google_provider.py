@@ -128,12 +128,25 @@ class GoogleProvider(BaseProvider):
                 from castor.runtime_stats import record_api_call
 
                 usage = getattr(response, "usage_metadata", None)
+                _tokens_in = getattr(usage, "prompt_token_count", 0) if usage else 0
+                _tokens_out = getattr(usage, "candidates_token_count", 0) if usage else 0
                 record_api_call(
-                    tokens_in=getattr(usage, "prompt_token_count", 0) if usage else 0,
-                    tokens_out=getattr(usage, "candidates_token_count", 0) if usage else 0,
+                    tokens_in=_tokens_in,
+                    tokens_out=_tokens_out,
                     bytes_in=len(image_bytes) + len(instruction.encode()),
                     bytes_out=len(text.encode()),
                     model=self.model_name,
+                )
+            except Exception:
+                pass
+            try:
+                from castor.usage import get_tracker
+
+                get_tracker().log_usage(
+                    provider="google",
+                    model=self.model_name,
+                    prompt_tokens=_tokens_in,
+                    completion_tokens=_tokens_out,
                 )
             except Exception:
                 pass

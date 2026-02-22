@@ -15,6 +15,7 @@ __all__ = [
     "MLXProvider",
     "OllamaProvider",
     "OpenAIProvider",
+    "VertexAIProvider",
 ]
 
 
@@ -40,6 +41,10 @@ def _builtin_get_provider(config: dict):
         return LlamaCppProvider(config)
     elif provider_name in ("mlx", "mlx-lm", "vllm-mlx"):
         return MLXProvider(config)
+    elif provider_name in ("vertex_ai", "vertex", "vertexai"):
+        from .vertex_provider import VertexAIProvider
+
+        return VertexAIProvider(config)
     else:
         raise ValueError(f"Unknown AI provider: {provider_name}")
 

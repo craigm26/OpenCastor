@@ -630,13 +630,28 @@ def cmd_replay(args) -> None:
 
 
 def cmd_benchmark(args) -> None:
-    """Profile a single perception-action loop iteration."""
-    from castor.benchmark import run_benchmark
+    """Profile a single perception-action loop iteration, or benchmark multiple providers."""
+    providers = getattr(args, "providers", None)
 
+    # New provider-comparison mode: activated when --providers is supplied
+    if providers is not None:
+        from castor.commands.benchmark import cmd_provider_benchmark
+
+        cmd_provider_benchmark(
+            providers=providers if providers else None,
+            rounds=getattr(args, "rounds", 3),
+            config_path=args.config if os.path.exists(args.config) else None,
+            output=getattr(args, "output", None),
+        )
+        return
+
+    # Legacy single-config hardware benchmark
     if not os.path.exists(args.config):
         print(f"\n  Config not found: {args.config}")
         print("  Run `castor wizard` to create one first.\n")
         return
+
+    from castor.benchmark import run_benchmark
 
     run_benchmark(
         config_path=args.config,
@@ -2394,8 +2409,13 @@ def main() -> None:
     # castor benchmark
     p_bench = sub.add_parser(
         "benchmark",
-        help="Profile perception-action loop performance",
-        epilog="Example: castor benchmark --config robot.rcan.yaml --iterations 5",
+        help="Profile perception-action loop performance, or compare provider latency/cost",
+        epilog=(
+            "Examples:\n"
+            "  castor benchmark --config robot.rcan.yaml --iterations 5\n"
+            "  castor benchmark --providers google,openai --rounds 3\n"
+            "  castor benchmark --providers anthropic --rounds 5 --output results.json\n"
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_bench.add_argument("--config", default="robot.rcan.yaml", help="RCAN config file")
@@ -2403,6 +2423,23 @@ def main() -> None:
         "--iterations", type=int, default=3, help="Number of iterations (default: 3)"
     )
     p_bench.add_argument("--simulate", action="store_true", help="Skip hardware driver")
+    p_bench.add_argument(
+        "--providers",
+        default=None,
+        help="Comma-separated provider names to benchmark (e.g. google,openai,anthropic). "
+             "Omit to use the single-config hardware benchmark.",
+    )
+    p_bench.add_argument(
+        "--rounds",
+        type=int,
+        default=3,
+        help="Number of prompt-suite rounds per provider (default: 3; used with --providers)",
+    )
+    p_bench.add_argument(
+        "--output",
+        default=None,
+        help="Write benchmark results to this JSON file (used with --providers)",
+    )
 
     # castor lint
     p_lint = sub.add_parser(

@@ -11,6 +11,9 @@ import sys
 import yaml
 from jsonschema import ValidationError, validate
 
+# Accepted rcan_version values — update this set when the spec advances.
+ACCEPTED_RCAN_VERSIONS = {"1.0.0-alpha", "1.1.0"}
+
 
 def load_yaml(path):
     with open(path) as f:
@@ -64,6 +67,16 @@ def main():
         try:
             data = load_yaml(file_path)
             validate(instance=data, schema=schema)
+
+            # Extra version gate — schema regex allows any semver; this list
+            # enforces that we only accept known, tested spec versions.
+            rcan_ver = data.get("rcan_version", "")
+            if rcan_ver not in ACCEPTED_RCAN_VERSIONS:
+                raise ValidationError(
+                    f"rcan_version '{rcan_ver}' is not in the accepted set "
+                    f"{sorted(ACCEPTED_RCAN_VERSIONS)}"
+                )
+
             print(f"  [PASS] {file_path}")
         except ValidationError as e:
             print(f"  [FAIL] {file_path}")

@@ -670,7 +670,7 @@ Hardware-specific (RPi only): `adafruit-circuitpython-pca9685`, `adafruit-circui
 ## Configuration (RCAN)
 
 - All robot configs use the `.rcan.yaml` extension
-- Configs follow the [RCAN Spec schema](https://rcan.dev/spec/)
+- Configs follow the [RCAN Spec schema](https://rcan.dev/spec/) — current version: `1.1.0`
 - Required top-level keys: `rcan_version`, `metadata`, `agent`, `physics`, `drivers`, `network`, `rcan_protocol`
   - `metadata.robot_name` — required
   - `agent.model` — required

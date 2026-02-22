@@ -470,6 +470,17 @@ class OllamaProvider(BaseProvider):
 
         text = response.get("message", {}).get("content", "")
         action = self._clean_json(text)
+        try:
+            from castor.usage import get_tracker
+
+            get_tracker().log_usage(
+                provider="ollama",
+                model=self.model_name,
+                prompt_tokens=response.get("prompt_eval_count", 0),
+                completion_tokens=response.get("eval_count", 0),
+            )
+        except Exception:
+            pass
         return Thought(text, action)
 
     def _think_text(self, instruction: str, surface: str = "whatsapp") -> Thought:
@@ -491,6 +502,17 @@ class OllamaProvider(BaseProvider):
 
         text = response.get("message", {}).get("content", "")
         action = self._clean_json(text)
+        try:
+            from castor.usage import get_tracker
+
+            get_tracker().log_usage(
+                provider="ollama",
+                model=self.model_name,
+                prompt_tokens=response.get("prompt_eval_count", 0),
+                completion_tokens=response.get("eval_count", 0),
+            )
+        except Exception:
+            pass
         return Thought(text, action)
 
     def think_stream(

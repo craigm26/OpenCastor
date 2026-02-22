@@ -165,13 +165,26 @@ class AnthropicProvider(BaseProvider):
                 from castor.runtime_stats import record_api_call
 
                 usage = response.usage
+                _tokens_in = getattr(usage, "input_tokens", 0)
+                _tokens_out = getattr(usage, "output_tokens", 0)
                 record_api_call(
-                    tokens_in=getattr(usage, "input_tokens", 0),
-                    tokens_out=getattr(usage, "output_tokens", 0),
+                    tokens_in=_tokens_in,
+                    tokens_out=_tokens_out,
                     tokens_cached=getattr(usage, "cache_read_input_tokens", 0),
                     bytes_in=len(instruction.encode()),
                     bytes_out=len(response.content[0].text.encode()) if response.content else 0,
                     model=self.model_name,
+                )
+            except Exception:
+                pass
+            try:
+                from castor.usage import get_tracker
+
+                get_tracker().log_usage(
+                    provider="anthropic",
+                    model=self.model_name,
+                    prompt_tokens=_tokens_in,
+                    completion_tokens=_tokens_out,
                 )
             except Exception:
                 pass

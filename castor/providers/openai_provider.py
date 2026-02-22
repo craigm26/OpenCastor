@@ -102,6 +102,18 @@ class OpenAIProvider(BaseProvider):
                 )
             text = response.choices[0].message.content
             action = self._clean_json(text)
+            try:
+                from castor.usage import get_tracker
+
+                _usage = getattr(response, "usage", None)
+                get_tracker().log_usage(
+                    provider="openai",
+                    model=self.model_name,
+                    prompt_tokens=getattr(_usage, "prompt_tokens", 0) if _usage else 0,
+                    completion_tokens=getattr(_usage, "completion_tokens", 0) if _usage else 0,
+                )
+            except Exception:
+                pass
             return Thought(text, action)
         except Exception as e:
             logger.error(f"OpenAI error: {e}")

@@ -147,6 +147,7 @@ class AppState:
     paused: bool = False      # Runtime pause flag (issue #93)
     _health_cache_time: float = 0.0   # last time health_check() was called
     _health_cache_result: dict = {}   # cached result (TTL: 30s)
+    usage_tracker = None               # UsageTracker singleton (lazy-init)
 
 
 state = AppState()
@@ -468,6 +469,25 @@ async def get_metrics():
 
 
 # ---------------------------------------------------------------------------
+# Token usage endpoint  (issue #104)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/usage", dependencies=[Depends(verify_token)])
+async def get_usage():
+    """Return token usage and estimated cost for this session and past 7 days."""
+    try:
+        from castor.usage import get_tracker
+        tracker = get_tracker()
+        return {
+            "session": tracker.get_session_totals(),
+            "daily": tracker.get_daily_totals(days=7),
+            "all_time": tracker.get_all_time_totals(),
+        }
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
 # Config hot-reload endpoint  (issue #94)
 # ---------------------------------------------------------------------------
 
@@ -568,6 +588,30 @@ async def clear_episodes():
     mem = EpisodeMemory()
     deleted = mem.clear()
     return {"deleted": deleted}
+
+
+@app.post("/api/memory/replay/{episode_id}", dependencies=[Depends(verify_token)])
+async def replay_episode(episode_id: str):
+    """Re-execute the action from a stored episode through the active driver."""
+    from castor.memory import EpisodeMemory
+
+    mem = EpisodeMemory()
+    ep = mem.get_episode(episode_id)
+    if ep is None:
+        raise HTTPException(status_code=404, detail=f"Episode {episode_id} not found")
+
+    action = ep.get("action")
+    if not action:
+        raise HTTPException(status_code=422, detail="Episode has no action to replay")
+
+    if state.driver is None:
+        raise HTTPException(status_code=503, detail="Driver not initialized")
+
+    try:
+        _execute_action(action)
+        return {"replayed": True, "episode_id": episode_id, "action": action}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Replay failed: {exc}") from exc
 
 
 # ---------------------------------------------------------------------------
