@@ -23,12 +23,21 @@ import time
 from typing import Any, Dict, Optional
 
 import yaml
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from castor.api_errors import CastorAPIError, register_error_handlers
+from castor.api_errors import register_error_handlers
 from castor.auth import (
     list_available_channels,
     list_available_providers,
@@ -212,7 +221,7 @@ async def verify_token(request: Request):
     # --- Layer 1: Multi-user JWT (Issue #124) ---
     if raw_token:
         try:
-            from castor.auth_jwt import HAS_JWT, ROLES, decode_token
+            from castor.auth_jwt import HAS_JWT, decode_token
 
             if HAS_JWT:
                 payload = decode_token(raw_token)
@@ -637,9 +646,9 @@ async def reload_config(request: Request):
         logger.info("Config reloaded from %s", config_path)
         return {"status": "reloaded", "config_path": config_path}
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail=f"Config file not found: {config_path}")
+        raise HTTPException(status_code=404, detail=f"Config file not found: {config_path}") from None
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Config reload failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"Config reload failed: {exc}") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -1248,8 +1257,6 @@ async def guardian_report():
     # Guardian report lives in the AppState's shared agent state (if any)
     # Try the orchestrator's guardian first, then fall through gracefully.
     try:
-        from castor.agents.guardian import GuardianAgent
-        from castor.agents.shared_state import SharedState
 
         # Look for a guardian attached to the fs or a module-level shared state
         if state.fs is not None and hasattr(state.fs, "_shared_state"):
@@ -1301,7 +1308,7 @@ async def audio_transcribe(
     except ImportError:
         raise HTTPException(
             status_code=503, detail="Voice transcription module not available"
-        )
+        ) from None
 
     audio_bytes = await file.read()
     if not audio_bytes:
@@ -1587,7 +1594,7 @@ async def voice_listen():
 # Waypoint navigation endpoints (issue #120)
 # ---------------------------------------------------------------------------
 
-import uuid as _uuid
+import uuid as _uuid  # noqa: E402
 
 
 @app.post("/api/nav/waypoint", dependencies=[Depends(verify_token)])
@@ -1685,7 +1692,7 @@ async def behavior_run(req: _BehaviorRunRequest):
         try:
             behavior = runner.load(req.path)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Cannot load behavior: {exc}")
+            raise HTTPException(status_code=400, detail=f"Cannot load behavior: {exc}") from exc
     elif req.behavior:
         behavior = req.behavior
         missing = {"name", "steps"} - set(behavior.keys())
@@ -1857,7 +1864,7 @@ async def slack_webhook(request: Request):
     try:
         payload = json.loads(body)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
+        raise HTTPException(status_code=400, detail="Invalid JSON body") from None
 
     # Slack URL verification challenge (exempt from rate limiting)
     if payload.get("type") == "url_verification":

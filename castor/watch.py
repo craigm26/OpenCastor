@@ -21,7 +21,6 @@ from typing import Optional
 
 # ── rich imports (graceful error) ──────────────────────────────────────────────
 try:
-    from rich.columns import Columns
     from rich.console import Console
     from rich.layout import Layout
     from rich.live import Live

@@ -250,7 +250,6 @@ def cmd_hub_install(args) -> None:
     if item_type == "preset":
         try:
             import yaml
-            import jsonschema
 
             parsed = yaml.safe_load(content)
             # Basic structural validation (no external schema fetch required)

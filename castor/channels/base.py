@@ -91,9 +91,9 @@ class BaseChannel(ABC):
                     store.push(user_id, role="user", text=text, channel=self.name, chat_id=chat_id)
                     # Inject conversation context into the text if history exists
                     ctx = store.build_context(user_id, max_messages=6)
-                    enriched_text = f"{text}\n\n{ctx}" if ctx else text
+                    _enriched_text = f"{text}\n\n{ctx}" if ctx else text
                 except Exception:
-                    enriched_text = text
+                    _enriched_text = text
                     user_id = chat_id
 
                 if inspect.iscoroutinefunction(self._on_message_callback):

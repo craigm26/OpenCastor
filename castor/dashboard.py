@@ -19,8 +19,8 @@ import time
 _this_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path = [p for p in sys.path if os.path.normpath(p) != os.path.normpath(_this_dir)]
 
-import requests as _req
-import streamlit as st
+import requests as _req  # noqa: E402
+import streamlit as st  # noqa: E402
 
 # ── page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -538,7 +538,6 @@ st.markdown("### 🤖 Fleet")
 
 def _load_fleet_nodes():
     """Load nodes from config/swarm.yaml, gracefully returning [] on any error."""
-    import concurrent.futures
     from pathlib import Path
     try:
         import yaml

@@ -11,7 +11,6 @@ Both commands support ``--dry-run`` (print commands without executing).
 from __future__ import annotations
 
 import logging
-import os
 import shutil
 import subprocess
 import sys
@@ -103,8 +102,7 @@ def _update_git(
     dry_run: bool = False,
 ) -> None:
     """Update a git-based editable install."""
-    pip_exe = sys.executable.replace("python", "pip") if "python" in sys.executable else "pip"
-    pip_exe = sys.executable  # use current interpreter's pip via -m
+    _pip_exe = sys.executable  # use current interpreter's pip via -m
 
     if pin_version:
         # Checkout a specific git tag

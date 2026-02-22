@@ -1196,10 +1196,9 @@ def main():
                 if action_to_execute:
                     # --- SAFETY: PHASE 3a — Bounds check before executing ---
                     try:
-                        from castor.safety import BoundsChecker
-                        from castor.safety.bounds import BoundsStatus
+                        from castor.safety import BoundsChecker as _BC
 
-                        _bounds = BoundsChecker.from_virtual_fs(fs.ns)
+                        _bounds = _BC.from_virtual_fs(fs.ns)
                         _br = _bounds.check_action(action_to_execute)
                         if _br.violated:
                             logger.warning(
@@ -1214,7 +1213,6 @@ def main():
                     # --- SAFETY: PHASE 3b — Work authorization for destructive actions ---
                     if action_to_execute:
                         try:
-                            from castor.safety import WorkAuthority
                             from castor.safety.authorization import DestructiveActionDetector
 
                             _detector = DestructiveActionDetector()

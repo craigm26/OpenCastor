@@ -299,8 +299,7 @@ class AnthropicProvider(BaseProvider):
                 messages=[{"role": "user", "content": content}],
                 extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
             ) as stream:
-                for text in stream.text_stream:
-                    yield text
+                yield from stream.text_stream
         except Exception as e:
             logger.error(f"Anthropic streaming error: {e}")
             yield f"Error: {e}"
