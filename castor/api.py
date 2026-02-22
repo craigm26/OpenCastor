@@ -1772,6 +1772,268 @@ async def behavior_status():
 
 
 # ---------------------------------------------------------------------------
+# Behavior generation (#128 — natural language → YAML behavior)
+# ---------------------------------------------------------------------------
+
+
+class _BehaviorGenerateRequest(BaseModel):
+    description: str
+    steps_hint: int = 5
+
+
+@app.post("/api/behavior/generate", dependencies=[Depends(verify_token)])
+async def behavior_generate(req: _BehaviorGenerateRequest):
+    """Generate a YAML behavior file from a natural language description.
+
+    Uses the active LLM brain to produce a structured YAML behavior that can
+    be immediately loaded and executed via ``POST /api/behavior/run``.
+
+    Returns:
+        200: ``{"behavior_yaml": str, "behavior_name": str, "saved_path": str}``
+    """
+    brain = _get_active_brain()
+    if brain is None:
+        raise HTTPException(status_code=503, detail="No AI brain configured")
+
+    prompt = (
+        f"Generate a robot behavior YAML with exactly {req.steps_hint} steps for: "
+        f"{req.description}. "
+        "Output ONLY valid YAML with this structure:\n"
+        "behavior_name: snake_case_name\n"
+        "steps:\n"
+        "  - action: forward|backward|turn_left|turn_right|stop|wait|speak\n"
+        "    duration: 2.0\n"
+        "    speed: 0.5\n"
+        "    text: 'optional speech text'\n"
+        "Do not include any explanation, just the YAML."
+    )
+
+    try:
+        import tempfile
+
+        thought = brain.think(b"", prompt)
+        yaml_text = thought.raw_text.strip()
+        # Strip markdown fences if present
+        if yaml_text.startswith("```"):
+            lines = yaml_text.splitlines()
+            yaml_text = "\n".join(
+                line for line in lines if not line.startswith("```")
+            ).strip()
+
+        tmp = tempfile.NamedTemporaryFile(
+            suffix=".yaml",
+            prefix="generated_behavior_",
+            dir="/tmp",
+            delete=False,
+            mode="w",
+        )
+        tmp.write(yaml_text)
+        tmp.close()
+        saved_path = tmp.name
+
+        behavior_name = "generated_behavior"
+        for line in yaml_text.splitlines():
+            if line.startswith("behavior_name:"):
+                behavior_name = line.split(":", 1)[1].strip().strip("'\"")
+                break
+
+        return {
+            "behavior_yaml": yaml_text,
+            "behavior_name": behavior_name,
+            "saved_path": saved_path,
+        }
+    except Exception as exc:
+        logger.error("Behavior generation error: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+# ---------------------------------------------------------------------------
+# Outbound webhook management (#125)
+# ---------------------------------------------------------------------------
+
+
+class _WebhookAddRequest(BaseModel):
+    url: str
+    events: Optional[List[str]] = None
+    secret: Optional[str] = None
+    timeout_s: int = 5
+    retry: int = 1
+
+
+class _WebhookDeleteRequest(BaseModel):
+    url: str
+
+
+@app.get("/api/webhooks", dependencies=[Depends(verify_token)])
+async def list_webhooks():
+    """GET /api/webhooks — List registered outbound webhooks."""
+    from castor.webhooks import get_dispatcher
+
+    return {"webhooks": get_dispatcher().list_hooks()}
+
+
+@app.post("/api/webhooks", dependencies=[Depends(verify_token)])
+async def add_webhook(req: _WebhookAddRequest):
+    """POST /api/webhooks — Register a new outbound webhook."""
+    from castor.webhooks import WEBHOOK_EVENTS, get_dispatcher
+
+    bad = [e for e in (req.events or []) if e not in WEBHOOK_EVENTS and e != "*"]
+    if bad:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown events: {bad}. Valid: {sorted(WEBHOOK_EVENTS)}",
+        )
+    get_dispatcher().add_hook(
+        req.url,
+        events=req.events,
+        secret=req.secret,
+        timeout_s=req.timeout_s,
+        retry=req.retry,
+    )
+    return {"ok": True, "url": req.url}
+
+
+@app.post("/api/webhooks/delete", dependencies=[Depends(verify_token)])
+async def delete_webhook(req: _WebhookDeleteRequest):
+    """POST /api/webhooks/delete — Remove a webhook by URL."""
+    from castor.webhooks import get_dispatcher
+
+    removed = get_dispatcher().remove_hook(req.url)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Webhook URL not found")
+    return {"ok": True, "url": req.url}
+
+
+@app.post("/api/webhooks/test", dependencies=[Depends(verify_token)])
+async def test_webhook(req: _WebhookDeleteRequest):
+    """POST /api/webhooks/test — Send a test ping to a registered webhook URL."""
+    from castor.webhooks import get_dispatcher
+
+    hooks = get_dispatcher().list_hooks()
+    urls = [h["url"] for h in hooks]
+    if req.url not in urls:
+        raise HTTPException(status_code=404, detail="Webhook URL not registered")
+
+    results = get_dispatcher().emit_sync("startup", {"test": True})
+    return {"ok": all(results), "results": results}
+
+
+# ---------------------------------------------------------------------------
+# Video recording endpoints (#127)
+# ---------------------------------------------------------------------------
+
+
+class _RecordingStartRequest(BaseModel):
+    session_name: Optional[str] = None
+
+
+@app.post("/api/recording/start", dependencies=[Depends(verify_token)])
+async def recording_start(req: _RecordingStartRequest = _RecordingStartRequest()):
+    """POST /api/recording/start — Begin MP4 video recording of camera stream."""
+    from castor.recorder import get_recorder
+
+    rec = get_recorder()
+    if rec.is_recording:
+        raise HTTPException(status_code=409, detail="Recording already in progress")
+    try:
+        rec_id = rec.start(req.session_name)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"ok": True, "id": rec_id, "session_name": req.session_name}
+
+
+@app.post("/api/recording/stop", dependencies=[Depends(verify_token)])
+async def recording_stop():
+    """POST /api/recording/stop — Stop recording and flush to disk."""
+    from castor.recorder import get_recorder
+
+    meta = get_recorder().stop()
+    if meta is None:
+        raise HTTPException(status_code=409, detail="No recording in progress")
+    return meta
+
+
+@app.get("/api/recording/list", dependencies=[Depends(verify_token)])
+async def recording_list():
+    """GET /api/recording/list — List saved recordings (newest first)."""
+    from castor.recorder import get_recorder
+
+    return {"recordings": get_recorder().list_recordings()}
+
+
+@app.get("/api/recording/{rec_id}", dependencies=[Depends(verify_token)])
+async def recording_get(rec_id: str):
+    """GET /api/recording/{id} — Metadata for a specific recording."""
+    from castor.recorder import get_recorder
+
+    meta = get_recorder().get_recording(rec_id)
+    if meta is None:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    return meta
+
+
+@app.get("/api/recording/{rec_id}/download", dependencies=[Depends(verify_token)])
+async def recording_download(rec_id: str):
+    """GET /api/recording/{id}/download — Stream MP4 file."""
+    from fastapi.responses import FileResponse
+
+    from castor.recorder import get_recorder
+
+    meta = get_recorder().get_recording(rec_id)
+    if meta is None:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    path = Path(meta["path"])
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Recording file not found on disk")
+    return FileResponse(
+        str(path),
+        media_type="video/mp4",
+        filename=f"{rec_id}.mp4",
+    )
+
+
+@app.delete("/api/recording/{rec_id}", dependencies=[Depends(verify_token)])
+async def recording_delete(rec_id: str):
+    """DELETE /api/recording/{id} — Delete a recording from disk."""
+    from castor.recorder import get_recorder
+
+    removed = get_recorder().delete_recording(rec_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    return {"ok": True, "id": rec_id}
+
+
+# ---------------------------------------------------------------------------
+# Gesture recognition endpoints (#131)
+# ---------------------------------------------------------------------------
+
+
+class _GestureFrameRequest(BaseModel):
+    image_base64: str
+
+
+@app.post("/api/gesture/frame", dependencies=[Depends(verify_token)])
+async def gesture_frame(req: _GestureFrameRequest):
+    """POST /api/gesture/frame — Recognize hand gesture from base64 JPEG.
+
+    Returns:
+        200: ``{"gesture": str, "action": dict, "confidence": float, "latency_ms": float}``
+    """
+    from castor.gestures import get_controller
+
+    result = get_controller().recognize_from_base64(req.image_base64)
+    return result
+
+
+@app.get("/api/gesture/gestures", dependencies=[Depends(verify_token)])
+async def gesture_list():
+    """GET /api/gesture/gestures — List all gesture → action mappings."""
+    from castor.gestures import get_controller
+
+    return {"gestures": get_controller().list_gestures()}
+
+
+# ---------------------------------------------------------------------------
 # Webhook endpoints for messaging channels
 # ---------------------------------------------------------------------------
 def _verify_twilio_signature(request_url: str, form_params: dict, signature: str) -> bool:

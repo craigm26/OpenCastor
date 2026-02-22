@@ -21,9 +21,7 @@ Install::
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import time
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("OpenCastor.Stream.WebRTC")
@@ -36,9 +34,9 @@ except ImportError:
     HAS_CV2 = False
 
 try:
+    import av
     from aiortc import RTCPeerConnection, RTCSessionDescription
     from aiortc.contrib.media import MediaStreamTrack
-    import av
 
     HAS_AIORTC = True
 except ImportError:
@@ -106,7 +104,6 @@ class CameraTrack:
 
 # Patch CameraTrack to inherit from VideoStreamTrack when aiortc is available
 if HAS_AIORTC:
-    from aiortc.contrib.media import MediaStreamTrack as _MST
 
     _orig_init = CameraTrack.__init__
 

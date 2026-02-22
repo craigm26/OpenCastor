@@ -158,7 +158,7 @@ class HomeAssistantChannel(BaseChannel):
 
             await self._set_switch_state(session, "off")
 
-    async def _fetch_state(self, session: "aiohttp.ClientSession", entity_id: str) -> Optional[str]:
+    async def _fetch_state(self, session: aiohttp.ClientSession, entity_id: str) -> Optional[str]:
         """Fetch current state of an HA entity."""
         url = f"{self._ha_url}/api/states/{entity_id}"
         async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
@@ -183,7 +183,7 @@ class HomeAssistantChannel(BaseChannel):
                 if resp.status not in (200, 201):
                     logger.debug("HA sensor update → HTTP %d", resp.status)
 
-    async def _set_switch_state(self, session: "aiohttp.ClientSession", state: str) -> None:
+    async def _set_switch_state(self, session: aiohttp.ClientSession, state: str) -> None:
         """Set the castor switch entity state (on/off) in HA."""
         service = "turn_on" if state == "on" else "turn_off"
         url = f"{self._ha_url}/api/services/switch/{service}"

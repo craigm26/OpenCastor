@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opencastor"
-version = "2026.2.22.0"
+version = "2026.2.22.1"
 description = "The Universal Runtime for Embodied AI"
 readme = "README.md"
 license = "Apache-2.0"
@@ -94,8 +94,12 @@ vertex = ["google-genai>=1.0.0"]
 homeassistant = ["aiohttp>=3.9.0"]
 webrtc = ["aiortc>=1.6.0", "av>=11.0.0"]
 ros2 = []  # rclpy is installed via ROS2 distro, not pip
+onnx = ["onnxruntime>=1.17.0"]
+onnx-gpu = ["onnxruntime-gpu>=1.17.0"]
+gestures = ["mediapipe>=0.10.0"]
+simulation = []  # Gazebo uses ROS2/rclpy; Webots via REST — no extra pip deps
 all = [
-    "opencastor[rpi,whatsapp,telegram,discord,slack,rcan,dynamixel,vertex,homeassistant,webrtc,dev]",
+    "opencastor[rpi,whatsapp,telegram,discord,slack,rcan,dynamixel,vertex,homeassistant,webrtc,onnx,gestures,dev]",
 ]
 dev = [
     "pytest>=8.0.0",

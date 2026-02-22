@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: "opencastor"
+    static_configs:
+      - targets: ["gateway:8000"]
+    metrics_path: "/api/metrics"
+    scrape_interval: 5s
+
+  - job_name: "opencastor_node_alex"
+    static_configs:
+      - targets: ["alex.local:8000"]
+    metrics_path: "/api/metrics"
+    scrape_interval: 10s
+    # Uncomment and fill in if your gateway has auth:
+    # authorization:
+    #   credentials: YOUR_API_TOKEN

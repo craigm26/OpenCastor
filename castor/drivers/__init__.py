@@ -47,6 +47,10 @@ def get_driver(config: dict):
         from castor.drivers.dynamixel import DynamixelDriver
 
         return DynamixelDriver(driver_config)
+    elif protocol in ("simulation", "gazebo", "webots"):
+        from castor.drivers.simulation_driver import SimulationDriver
+
+        return SimulationDriver(driver_config)
     else:
         logger.warning(f"Unknown driver protocol: {protocol}. Running without hardware.")
         return None

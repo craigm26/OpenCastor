@@ -1048,7 +1048,8 @@ def cmd_fleet(args) -> None:
 
     if fleet_subcmd == "status":
         # Proxy to gateway fleet API
-        import urllib.request, json as _json
+        import json as _json
+        import urllib.request
         gateway = getattr(args, "gateway", "http://127.0.0.1:8000")
         ruri = args.ruri
         try:
@@ -1059,7 +1060,8 @@ def cmd_fleet(args) -> None:
         return
 
     if fleet_subcmd == "command":
-        import json as _json, urllib.request
+        import json as _json
+        import urllib.request
         gateway = getattr(args, "gateway", "http://127.0.0.1:8000")
         ruri = args.ruri
         payload = _json.dumps({"instruction": args.instruction}).encode()

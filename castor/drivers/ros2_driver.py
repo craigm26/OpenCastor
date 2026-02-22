@@ -37,7 +37,6 @@ logger = logging.getLogger("OpenCastor.Driver.ROS2")
 
 try:
     import rclpy
-    from rclpy.node import Node
     from geometry_msgs.msg import Twist
 
     HAS_RCLPY = True

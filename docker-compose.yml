@@ -27,6 +27,51 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Prometheus metrics scraper (enable with --profile monitoring)
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: opencastor_prometheus
+    volumes:
+      - ./config/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # Grafana dashboard (enable with --profile monitoring)
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: opencastor_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-opencastor}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/monitoring/grafana_dashboard.json:/etc/grafana/provisioning/dashboards/opencastor.json:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
   # Optional: WhatsApp/messaging gateway (enable with --profile gateway)
   gateway:
     build: .
@@ -45,3 +90,7 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  prometheus_data:
+  grafana_data:

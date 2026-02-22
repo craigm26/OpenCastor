@@ -45,6 +45,10 @@ def _builtin_get_provider(config: dict):
         from .vertex_provider import VertexAIProvider
 
         return VertexAIProvider(config)
+    elif provider_name in ("onnx", "onnxruntime"):
+        from .onnx_provider import ONNXProvider
+
+        return ONNXProvider(config)
     else:
         raise ValueError(f"Unknown AI provider: {provider_name}")
 
