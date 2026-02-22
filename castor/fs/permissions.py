@@ -184,10 +184,13 @@ class PermissionTable:
             ),
         )
         # /dev/motor -- needs MOTOR_WRITE to write
+        # "api" is granted write so that POST /api/action (direct motor control)
+        # and POST /cap/teleop work.  The required_caps gate (MOTOR_WRITE) still
+        # applies, so arbitrary low-privilege callers are blocked.
         self.set_acl(
             "/dev/motor",
             ACL(
-                {"brain": "rw-", "driver": "rw-", "api": "r--", "channel": "---"},
+                {"brain": "rw-", "driver": "rw-", "api": "rw-", "channel": "---"},
                 required_caps=Cap.MOTOR_WRITE,
             ),
         )
