@@ -4,7 +4,7 @@
 
 OpenCastor is a universal runtime for embodied AI. It connects LLM "brains" (Gemini, GPT-4.1, Claude, Ollama, HuggingFace, llama.cpp, MLX) to robot "bodies" (Raspberry Pi, Jetson, Arduino, ESP32, LEGO) through a plug-and-play architecture, and exposes them to messaging platforms (WhatsApp, Telegram, Discord, Slack) for remote control. Configuration is driven by YAML files compliant with the [RCAN Standard](https://rcan.dev/spec/).
 
-**Version**: 2026.2.21.13
+**Version**: 2026.2.21.16
 **License**: Apache 2.0
 **Python**: 3.10+
 
@@ -93,17 +93,31 @@ OpenCastor/
 │   ├── tools.py                      # LLM tool calling registry (ToolRegistry, ToolDefinition)
 │   ├── memory_search.py              # Memory search utilities
 │   ├── claude_proxy.py               # Claude API proxy
+│   ├── depth.py                      # OAK-D depth overlay + obstacle zone detection
+│   ├── nav.py                        # WaypointNav dead-reckoning navigation
+│   ├── behaviors.py                  # BehaviorRunner (YAML step sequences)
+│   ├── auth_jwt.py                   # Multi-user JWT auth (OPENCASTOR_USERS env var)
+│   ├── usage.py                      # UsageTracker (SQLite token/cost tracking)
+│   ├── provider_fallback.py          # ProviderFallbackManager (quota-error auto-switch)
+│   │
+│   ├── commands/                     # CLI sub-commands
+│   │   ├── __init__.py
+│   │   ├── swarm.py                  # castor swarm status/command/stop/sync
+│   │   ├── hub.py                    # castor hub list/search/install/publish
+│   │   ├── update.py                 # castor update (git pull / pip upgrade + swarm SSH)
+│   │   └── benchmark.py             # castor benchmark --providers comparison
 │   │
 │   ├── providers/                    # LLM provider adapters
 │   │   ├── __init__.py               # get_provider() factory
-│   │   ├── base.py                   # BaseProvider ABC + Thought class
+│   │   ├── base.py                   # BaseProvider ABC + Thought + ProviderQuotaError
 │   │   ├── google_provider.py        # Google Gemini
 │   │   ├── openai_provider.py        # OpenAI GPT-4.1
 │   │   ├── anthropic_provider.py     # Anthropic Claude
 │   │   ├── ollama_provider.py        # Local Ollama
-│   │   ├── huggingface_provider.py   # HuggingFace Hub
+│   │   ├── huggingface_provider.py   # HuggingFace Hub (_is_quota_error helper)
 │   │   ├── llamacpp_provider.py      # llama.cpp local inference
-│   │   └── mlx_provider.py           # Apple MLX acceleration
+│   │   ├── mlx_provider.py           # Apple MLX acceleration
+│   │   └── vertex_provider.py        # Google Vertex AI (google-genai SDK)
 │   │
 │   ├── drivers/                      # Hardware driver implementations
 │   │   ├── __init__.py
@@ -195,6 +209,8 @@ OpenCastor/
 │       └── patch_sync.py             # PatchSync (incremental config sync)
 │
 ├── config/
+│   ├── swarm.yaml                    # Swarm node registry (host/port/token/tags per robot)
+│   ├── hub_index.json                # Model hub index (16 presets, GitHub raw URLs)
 │   └── presets/                      # 16 hardware preset RCAN configs
 │       ├── amazon_kit_generic.rcan.yaml
 │       ├── adeept_generic.rcan.yaml
@@ -213,7 +229,7 @@ OpenCastor/
 │       ├── vex_iq.rcan.yaml
 │       └── yahboom_rosmaster.rcan.yaml
 │
-├── tests/                            # 96 test files, 2578 tests (0 failures)
+├── tests/                            # 110+ test files, 2816 tests (0 failures)
 │   ├── test_api_endpoints.py         # FastAPI gateway (133 tests)
 │   ├── test_config_validation.py     # Config validation
 │   ├── test_offline_fallback.py      # OfflineFallbackManager
@@ -297,6 +313,11 @@ OpenCastor/
 - **`MetricsRegistry`** (`castor/metrics.py`): Stdlib-only Prometheus metrics; `get_registry()` singleton; exposed at `GET /api/metrics`.
 - **`ToolRegistry`** (`castor/tools.py`): Named LLM-callable tools; 4 built-ins; `call(name, /, **kwargs)`.
 - **`CompositeDriver`** (`castor/drivers/composite.py`): Routes action keys to sub-drivers via RCAN `routing:` config.
+- **`BehaviorRunner`** (`castor/behaviors.py`): Executes YAML step sequences (waypoint/wait/think/speak/stop/command dispatch table). API: `load(path)`, `run(behavior)`, `stop()`, `is_running`.
+- **`WaypointNav`** (`castor/nav.py`): Dead-reckoning navigation using `wheel_circumference_m` and `turn_time_per_deg_s` from RCAN `physics` block. `execute(distance_m, heading_deg, speed)`.
+- **`Listener`** (`castor/main.py`): SpeechRecognition-based voice input. `listen_once() -> Optional[str]`. Gated by `HAS_SR`.
+- **`UsageTracker`** (`castor/usage.py`): SQLite token/cost tracker at `~/.castor/usage.db` (override: `CASTOR_USAGE_DB`). Per-provider daily aggregation.
+- **`ProviderFallbackManager`** (`castor/provider_fallback.py`): Transparent quota-error fallback. Wraps primary provider; auto-switches to backup on `ProviderQuotaError`. Cooldown-based retry of primary.
 - **Factory functions**: `get_provider()` (providers), `create_channel()` (channels).
 
 ### Authentication (`castor/auth.py`)
@@ -362,16 +383,41 @@ FastAPI server providing:
 - `POST /api/config/reload` — Hot-reload `robot.rcan.yaml` without restart
 - `GET /api/provider/health` — Brain provider health check ({ok, latency_ms, error, usage_stats})
 
-**Episode Memory:**
+**Episode Memory & Usage:**
 - `GET /api/memory/episodes` — Recent episodes from SQLite store (`?limit=N`, max 100)
 - `GET /api/memory/export` — Export all episodes as JSONL download
 - `DELETE /api/memory/episodes` — Clear all episode memory
+- `POST /api/memory/replay/{id}` — Replay a stored episode through the active driver
+- `GET /api/usage` — Token/cost summary from UsageTracker (today + all-time per provider)
+
+**Depth / Vision (OAK-D):**
+- `GET /api/depth/frame` — JPEG with JET colormap overlay; `{available: false}` if no depth sensor
+- `GET /api/depth/obstacles` — Obstacle zones `{left_cm, center_cm, right_cm, nearest_cm}`
+
+**Real-time Telemetry:**
+- `WS /ws/telemetry` — 5 Hz JSON push (loop_latency_ms, battery_v, provider, obstacles); `?token=` query-param auth
+
+**Voice:**
+- `POST /api/voice/listen` — Trigger one STT capture via Listener; returns `{text}` or `{error}`
+
+**Navigation:**
+- `POST /api/nav/waypoint` — `{distance_m, heading_deg, speed}` dead-reckoning move via WaypointNav
+- `GET /api/nav/status` — Current nav job status `{running, job_id, distance_m, heading_deg}`
+
+**Behaviors:**
+- `POST /api/behavior/run` — `{behavior_file, behavior_name}` start a named behavior sequence
+- `POST /api/behavior/stop` — Stop the running behavior
+- `GET /api/behavior/status` — `{running, current_step, behavior_name}`
+
+**Multi-user JWT Auth:**
+- `POST /auth/token` — `{username, password}` → `{access_token, token_type, role}` (OPENCASTOR_USERS)
+- `GET /auth/me` — Current JWT user `{username, role}`
 
 **Webhooks (messaging channels):**
 - `POST /webhooks/whatsapp` — Twilio WhatsApp (rate-limited 10/min/sender)
 - `POST /webhooks/slack` — Slack Events API (rate-limited 10/min/sender)
 
-Protected by optional `OPENCASTOR_API_TOKEN` (bearer) or `OPENCASTOR_JWT_SECRET` (JWT/RCAN). JWT is checked before the static token when both are configured.
+Auth layers (checked in order): (1) Multi-user JWT via `OPENCASTOR_USERS` + `JWT_SECRET` (`castor/auth_jwt.py`) → (2) RCAN JWT via `OPENCASTOR_JWT_SECRET` → (3) Static bearer `OPENCASTOR_API_TOKEN` → (4) open (no auth). Roles: `admin(3) > operator(2) > viewer(1)`. Viewers get 403 on `/api/command`; operators get 403 on `/api/config/reload`.
 
 ### Channel System (`castor/channels/`)
 
@@ -578,11 +624,26 @@ castor safety                                         # Safety controls
 castor install-service                                # Generate systemd unit
 castor upgrade                                        # Self-update + doctor
 castor plugin(s)                                      # Plugin management
-castor hub                                            # Model hub integration
 castor login                                          # Authentication
 castor privacy                                        # Privacy/data deletion
 castor schedule / network / approvals / profile       # Misc utilities
 castor update-check                                   # Version updates
+
+# Swarm management (config/swarm.yaml)
+castor swarm status   [--swarm config/swarm.yaml] [--json]   # Query all nodes concurrently
+castor swarm command  --instruction "go forward" [--node alex]  # Broadcast/target instruction
+castor swarm stop     [--node alex]                            # E-stop all or one node
+castor swarm sync     [--node alex]                            # Sync RCAN config to nodes
+
+# Hub (preset registry)
+castor hub list                                       # List available presets from hub_index.json
+castor hub search <query>                             # Search preset names/descriptions
+castor hub install <preset-name>                      # Download preset to config/presets/
+castor hub publish <preset-file>                      # Submit preset to hub (GitHub PR)
+
+# Self-update
+castor update  [--node alex]                          # git pull / pip upgrade (+ swarm SSH)
+castor benchmark --providers google,openai,anthropic  # Compare provider latency/cost
 ```
 
 Also available as Python modules:
@@ -620,8 +681,10 @@ Copy `.env.example` to `.env` and fill in what you need.
 ### Gateway & Runtime
 | Variable | Default | Purpose |
 |---|---|---|
-| `OPENCASTOR_API_TOKEN` | None | Bearer token for API auth (`openssl rand -hex 32`) |
-| `OPENCASTOR_JWT_SECRET` | None | JWT signing secret (RCAN auth; checked before API_TOKEN) |
+| `OPENCASTOR_API_TOKEN` | None | Static bearer token for API auth (`openssl rand -hex 32`) |
+| `OPENCASTOR_JWT_SECRET` | None | RCAN JWT signing secret (checked before static token) |
+| `JWT_SECRET` | None | Multi-user JWT signing secret (checked first; falls back to API_TOKEN) |
+| `OPENCASTOR_USERS` | None | Multi-user credentials: `user:pass:role,user2:pass2:role2` (SHA-256 passwords) |
 | `OPENCASTOR_CORS_ORIGINS` | `*` | Comma-separated allowed CORS origins (restrict in prod) |
 | `OPENCASTOR_API_HOST` | 127.0.0.1 | Bind address |
 | `OPENCASTOR_API_PORT` | 8000 | Port |
@@ -631,6 +694,14 @@ Copy `.env.example` to `.env` and fill in what you need.
 | `OPENCASTOR_CONFIG` | robot.rcan.yaml | Config file path |
 | `OPENCASTOR_MEMORY_DIR` | — | Memory persistence directory |
 | `CASTOR_MEMORY_DB` | `~/.castor/memory.db` | SQLite episode memory database path |
+| `CASTOR_USAGE_DB` | `~/.castor/usage.db` | SQLite token/cost tracking database |
+| `CASTOR_HUB_URL` | GitHub raw `config/hub_index.json` | Override URL for `castor hub` preset index |
+| `CASTOR_SWARM_CONFIG` | `config/swarm.yaml` | Swarm node registry path |
+| `VERTEX_PROJECT` | — | GCP project for Vertex AI provider |
+| `VERTEX_LOCATION` | us-central1 | GCP region for Vertex AI |
+| `VERTEX_MODEL` | gemini-1.5-pro-002 | Model for Vertex AI |
+| `SDL_AUDIODRIVER` | — | Override SDL audio driver (e.g., `alsa` for RPi USB speaker) |
+| `AUDIODEV` | — | ALSA device override for gTTS/pygame (e.g., `plughw:2,0`) |
 | `DYNAMIXEL_PORT` | — | Serial port override |
 | `CAMERA_INDEX` | 0 | Camera device index |
 | `LOG_LEVEL` | INFO | Logging level |
@@ -657,8 +728,9 @@ pip install opencastor[discord]         # discord.py>=2.3.0
 pip install opencastor[slack]           # slack-bolt>=1.18.0
 pip install opencastor[mqtt]            # paho-mqtt>=2.0.0
 pip install opencastor[channels]        # All messaging channels (including mqtt)
-pip install opencastor[rcan]            # PyJWT + zeroconf (RCAN protocol)
+pip install opencastor[rcan]            # zeroconf (RCAN protocol; PyJWT is now core)
 pip install opencastor[dynamixel]       # dynamixel-sdk>=3.7.31
+pip install opencastor[vertex]          # google-genai>=1.0.0 (Vertex AI)
 pip install opencastor[all]             # Everything
 pip install opencastor[dev]             # pytest, pytest-asyncio, ruff, qrcode
 ```
@@ -678,6 +750,30 @@ Hardware-specific (RPi only): `adafruit-circuitpython-pca9685`, `adafruit-circui
 - Validated by `castor/config_validation.py` on gateway startup (`log_validation_result()`)
 - 16 presets in `config/presets/`
 - The wizard (`castor wizard`) generates new configs and saves API keys to `.env`
+
+## Swarm Node Registry (`config/swarm.yaml`)
+
+Register remote Castor nodes for `castor swarm` commands:
+
+```yaml
+nodes:
+  - name: alex
+    host: alex.local          # mDNS hostname or IP
+    ip: 192.168.68.91         # Static IP fallback
+    port: 8000
+    token: <OPENCASTOR_API_TOKEN for this node>
+    rcan: ~/OpenCastor/alex.rcan.yaml   # Local copy of node's RCAN config
+    tags: [rpi5, camera, i2c, rover]
+    added: "2026-02-21"
+```
+
+`castor status --swarm` queries all nodes concurrently and shows a Rich table. `castor swarm command --instruction "go forward"` broadcasts to all nodes (or `--node alex` for one).
+
+**RPi5 hardware setup notes:**
+- GPIO I2C must be enabled: add `dtparam=i2c_arm=on` to `/boot/firmware/config.txt`, reboot → `/dev/i2c-1` appears
+- PCA9685 requires external power before i2cdetect shows `0x40`
+- OAK-D: `pip install depthai==3.3.0` + `sudo udevadm control --reload-rules`
+- USB speaker ALSA routing: `~/.asoundrc` → `defaults.pcm.card 2`; set `SDL_AUDIODRIVER=alsa` + `AUDIODEV=plughw:2,0`
 
 ## Docker
 
@@ -720,7 +816,7 @@ pip install -e ".[dev]"
 pytest tests/
 ```
 
-Current: **2578 tests, 8 skipped, 0 failures**
+Current: **2816 tests, 8 skipped, 0 failures**
 
 Key fixture: `_reset_state_and_env` (autouse in `test_api_endpoints.py`) — resets all `AppState` fields before every test, including `thought_history = deque(maxlen=50)`, `learner = None`, `offline_fallback = None`, and clears `_command_history`/`_webhook_history` rate-limiter dicts.
 
