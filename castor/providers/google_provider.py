@@ -106,7 +106,11 @@ class GoogleProvider(BaseProvider):
             if is_blank:
                 # Text-only: prepend messaging prompt (Gemini system_instruction is
                 # set at model init, so we inject it as a leading text part here)
-                messaging_ctx = self.build_messaging_prompt(surface=surface)
+                messaging_ctx = self.build_messaging_prompt(
+                    robot_name=self._robot_name,
+                    capabilities=self._caps,
+                    surface=surface,
+                )
                 response = self.model.generate_content([f"{messaging_ctx}\n\nUser: {instruction}"])
             else:
                 image_part = {"mime_type": "image/jpeg", "data": image_bytes}
@@ -172,7 +176,11 @@ class GoogleProvider(BaseProvider):
 
         try:
             if is_blank:
-                messaging_ctx = self.build_messaging_prompt(surface=surface)
+                messaging_ctx = self.build_messaging_prompt(
+                    robot_name=self._robot_name,
+                    capabilities=self._caps,
+                    surface=surface,
+                )
                 response = self.model.generate_content(
                     [f"{messaging_ctx}\n\nUser: {instruction}"],
                     stream=True,

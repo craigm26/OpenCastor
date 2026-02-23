@@ -39,6 +39,9 @@ class BaseProvider(ABC):
         self.config = config
         self.model_name = config.get("model", "default-model")
         self.system_prompt = self._build_system_prompt()
+        # Set by api.py after brain init from RCAN config; used in build_messaging_prompt()
+        self._caps: List[str] = []
+        self._robot_name: str = "robot"
 
     # ── Vision/action system prompt (used when a camera frame is present) ────
 

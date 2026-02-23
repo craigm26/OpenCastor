@@ -3088,6 +3088,8 @@ async def on_startup():
             from castor.providers import get_provider
 
             state.brain = get_provider(state.config["agent"])
+            state.brain._caps = (state.config.get("rcan_protocol", {}).get("capabilities", []))
+            state.brain._robot_name = state.config.get("metadata", {}).get("robot_name", "robot")
             logger.info(f"Brain online: {state.config['agent'].get('model')}")
 
             # Initialize offline fallback manager (if configured)
