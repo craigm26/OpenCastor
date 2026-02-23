@@ -3587,6 +3587,125 @@ async def matrix_webhook(request: Request):
     return {"ok": True}
 
 
+# ── 3D Point Cloud ─────────────────────────────────────────────────────────────
+
+
+@app.get("/api/depth/pointcloud", dependencies=[Depends(verify_token)])
+async def pointcloud_json():
+    from castor.pointcloud import get_capture
+
+    return get_capture().to_json_dict()
+
+
+@app.get("/api/depth/pointcloud.ply")
+async def pointcloud_ply():
+    from castor.pointcloud import get_capture
+
+    from fastapi.responses import Response
+
+    ply_bytes = get_capture().to_ply_bytes()
+    return Response(content=ply_bytes, media_type="application/octet-stream",
+                    headers={"Content-Disposition": "attachment; filename=pointcloud.ply"})
+
+
+@app.get("/api/depth/pointcloud/stats", dependencies=[Depends(verify_token)])
+async def pointcloud_stats():
+    from castor.pointcloud import get_capture
+
+    return get_capture().stats()
+
+
+# ── Object Detection ───────────────────────────────────────────────────────────
+
+
+@app.get("/api/detection/frame")
+async def detection_frame():
+    """Return JPEG with bounding box overlays."""
+    from castor.detection import get_detector
+
+    from fastapi.responses import Response
+
+    det = get_detector()
+    jpeg = b""
+    if state.camera:
+        jpeg = state.camera.capture()
+    annotated = det.detect_and_annotate(jpeg)
+    return Response(content=annotated, media_type="image/jpeg")
+
+
+@app.get("/api/detection/latest", dependencies=[Depends(verify_token)])
+async def detection_latest():
+    from castor.detection import get_detector
+
+    det = get_detector()
+    if state.camera:
+        det.detect(state.camera.capture())
+    return {"detections": det.latest, "latency_ms": round(det.latency_ms, 1), "mode": det.mode}
+
+
+@app.post("/api/detection/configure", dependencies=[Depends(verify_token)])
+async def detection_configure(request: Request):
+    body = await request.json()
+    from castor.detection import get_detector
+
+    det = get_detector()
+    det.configure(
+        conf_threshold=body.get("conf_threshold"),
+        model=body.get("model"),
+    )
+    return {"ok": True, "mode": det.mode}
+
+
+# ── Sim-to-Real Transfer ───────────────────────────────────────────────────────
+
+
+@app.get("/api/sim/formats", dependencies=[Depends(verify_token)])
+async def sim_formats():
+    from castor.sim_bridge import get_bridge
+
+    return {"formats": get_bridge().supported_formats()}
+
+
+@app.get("/api/sim/export/{fmt}", dependencies=[Depends(verify_token)])
+async def sim_export(fmt: str, limit: int = 50):
+    from castor.sim_bridge import get_bridge
+
+    episodes = []
+    if state.memory:
+        episodes = state.memory.query_recent(limit=limit)
+    result = get_bridge().export(episodes, fmt=fmt)
+    return result
+
+
+@app.post("/api/sim/import", dependencies=[Depends(verify_token)])
+async def sim_import(request: Request):
+    from castor.sim_bridge import get_bridge
+
+    body = await request.body()
+    fmt = request.headers.get("X-Sim-Format", "json")
+    episodes = get_bridge().import_trajectory(body, fmt=fmt)
+    if state.memory:
+        for ep in episodes:
+            try:
+                state.memory.log_episode(ep)
+            except Exception:
+                pass
+    return {"ok": True, "imported": len(episodes)}
+
+
+@app.get("/api/sim/config/{sim}", dependencies=[Depends(verify_token)])
+async def sim_config(sim: str):
+    from castor.sim_bridge import get_bridge
+
+    rcan_config = {}
+    if state.config:
+        rcan_config = state.config
+    xml_or_sdf = get_bridge().generate_sim_config(rcan_config, sim=sim)
+    from fastapi.responses import PlainTextResponse
+
+    return PlainTextResponse(xml_or_sdf)
+
+
 @app.on_event("shutdown")
 async def on_shutdown():
     # Close WebRTC peers

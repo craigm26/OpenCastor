@@ -1,0 +1,48 @@
+{
+  "name": "@opencastor/sdk",
+  "version": "2026.2.23.0",
+  "description": "JavaScript/TypeScript SDK for the OpenCastor API gateway",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "lint": "eslint src"
+  },
+  "keywords": [
+    "opencastor",
+    "robot",
+    "embodied-ai",
+    "rcan",
+    "sdk"
+  ],
+  "author": "Continuon AI",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/craigm26/OpenCastor.git",
+    "directory": "sdk/js"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "jest": "^29.0.0",
+    "@jest/globals": "^29.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -18,6 +18,7 @@ __all__ = [
     "OllamaProvider",
     "OpenAIProvider",
     "VertexAIProvider",
+    "VLAProvider",
 ]
 
 
@@ -53,6 +54,10 @@ def _builtin_get_provider(config: dict):
         return ONNXProvider(config)
     elif provider_name == "groq":
         return GroqProvider(config)
+    elif provider_name in ("vla", "openvla"):
+        from .vla_provider import VLAProvider
+
+        return VLAProvider(config)
     else:
         raise ValueError(f"Unknown AI provider: {provider_name}")
 

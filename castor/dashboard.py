@@ -768,6 +768,138 @@ with st.expander("🎬 Behaviors", expanded=False):
             except Exception as _bse:
                 st.toast(f"Stop failed: {_bse}", icon="❌")
 
+# ── GAMEPAD PANEL ─────────────────────────────────────────────────────────────
+st.divider()
+with st.expander("🎮 Gamepad / Manual Drive", expanded=False):
+    st.caption(
+        "Connect a USB/Bluetooth gamepad and use the left stick to drive. "
+        "Commands are sent to /api/command at ~10 Hz."
+    )
+    _gamepad_html = f"""
+<div id="gp-status" style="font-family:monospace;font-size:0.8rem;color:#8b949e;margin-bottom:8px;">
+  Gamepad: <span id="gp-name">Not connected — press any button to activate</span>
+</div>
+<div style="display:flex;gap:12px;align-items:center;margin-bottom:6px;">
+  <div style="text-align:center;">
+    <div id="gp-linear" style="font-size:1.4rem;color:#3fb950;">↕ 0.00</div>
+    <div style="font-size:0.7rem;color:#6e7681;">linear</div>
+  </div>
+  <div style="text-align:center;">
+    <div id="gp-angular" style="font-size:1.4rem;color:#58a6ff;">↔ 0.00</div>
+    <div style="font-size:0.7rem;color:#6e7681;">angular</div>
+  </div>
+  <button id="gp-estop" style="padding:6px 18px;background:#da3633;color:white;border:none;
+    border-radius:6px;cursor:pointer;font-size:0.85rem;">E-STOP</button>
+</div>
+<script>
+(function() {{
+  const GW = "{GW}";
+  const TOKEN = "{st.session_state.get('token', '')}";
+  const headers = TOKEN ? {{"Authorization": "Bearer " + TOKEN}} : {{}};
+  let interval = null;
+  let gpIndex = null;
+
+  window.addEventListener("gamepadconnected", function(e) {{
+    gpIndex = e.gamepad.index;
+    document.getElementById("gp-name").textContent = e.gamepad.id;
+    if (!interval) interval = setInterval(loop, 100);
+  }});
+  window.addEventListener("gamepaddisconnected", function(e) {{
+    if (e.gamepad.index === gpIndex) {{
+      gpIndex = null;
+      clearInterval(interval); interval = null;
+      document.getElementById("gp-name").textContent = "Disconnected";
+    }}
+  }});
+
+  document.getElementById("gp-estop").onclick = function() {{
+    fetch(GW + "/api/stop", {{method:"POST", headers:headers}});
+  }};
+
+  function deadzone(v, dz=0.12) {{ return Math.abs(v) < dz ? 0 : v; }}
+
+  function loop() {{
+    const gp = navigator.getGamepads ? navigator.getGamepads()[gpIndex] : null;
+    if (!gp) return;
+    const linear = -deadzone(gp.axes[1]);
+    const angular = -deadzone(gp.axes[0]);
+    document.getElementById("gp-linear").textContent = "↕ " + linear.toFixed(2);
+    document.getElementById("gp-angular").textContent = "↔ " + angular.toFixed(2);
+    if (Math.abs(linear) > 0.01 || Math.abs(angular) > 0.01) {{
+      fetch(GW + "/api/action", {{
+        method: "POST",
+        headers: Object.assign({{"Content-Type":"application/json"}}, headers),
+        body: JSON.stringify({{linear: linear, angular: angular}})
+      }}).catch(function(){{}});
+    }}
+  }}
+}})();
+</script>
+"""
+    st.components.v1.html(_gamepad_html, height=130)
+
+
+# ── SLAM MAP PANEL ─────────────────────────────────────────────────────────────
+st.divider()
+with st.expander("🗺 SLAM / Nav Map", expanded=False):
+    _map_data = _get("/api/nav/map/current")
+    _map_available = _map_data.get("available", False)
+
+    _mcol1, _mcol2 = st.columns([3, 1])
+    with _mcol1:
+        if _map_available:
+            _map_width = _map_data.get("width", 0)
+            _map_height = _map_data.get("height", 0)
+            _map_res = _map_data.get("resolution_m", 0)
+            st.caption(
+                f"Map: {_map_width}×{_map_height} cells | "
+                f"Resolution: {_map_res * 100:.1f} cm/cell"
+            )
+            _cells = _map_data.get("cells")
+            if _cells:
+                try:
+                    import numpy as _np
+                    _arr = _np.array(_cells, dtype=float)
+                    # Normalize: -1=unknown→grey, 0=free→white, 100=occupied→black
+                    _img = _np.zeros((_arr.shape[0], _arr.shape[1], 3), dtype=_np.uint8)
+                    _img[_arr < 0] = [80, 80, 80]      # unknown: grey
+                    _img[_arr == 0] = [230, 230, 230]  # free: light grey
+                    _img[_arr > 50] = [20, 20, 20]     # occupied: dark
+                    # Mark robot pose
+                    _pose = _map_data.get("robot_pose", {})
+                    if _pose:
+                        _rx = int(_pose.get("x", 0))
+                        _ry = int(_pose.get("y", 0))
+                        if 0 <= _rx < _img.shape[1] and 0 <= _ry < _img.shape[0]:
+                            _img[max(0,_ry-2):_ry+3, max(0,_rx-2):_rx+3] = [63, 185, 80]
+                    import io as _io
+                    from PIL import Image as _PILImg
+                    _pil = _PILImg.fromarray(_img)
+                    _buf = _io.BytesIO()
+                    _pil.save(_buf, format="PNG")
+                    st.image(_buf.getvalue(), caption="Occupancy Map", use_container_width=True)
+                except Exception as _me:
+                    st.warning(f"Map render error: {_me}")
+            else:
+                _map_img_url = _map_data.get("image_url")
+                if _map_img_url:
+                    st.image(f"{GW}{_map_img_url}", caption="SLAM Map", use_container_width=True)
+                else:
+                    st.info("Map data received but no cells/image available.")
+        else:
+            st.info("SLAM map not available — start navigation or enable SLAM in your RCAN config.")
+
+    with _mcol2:
+        st.metric("Map Status", "Active" if _map_available else "Unavailable")
+        _nav_status = _get("/api/nav/status")
+        if _nav_status.get("running"):
+            st.metric("Nav Job", _nav_status.get("job_id", "?")[:8])
+            st.metric("Distance", f"{_nav_status.get('distance_m', 0):.1f} m")
+        if st.button("Clear Map", key="slam_clear_btn"):
+            _r = _req.post(f"{GW}/api/nav/map/clear", headers=_hdr(), timeout=5)
+            st.toast("Map cleared" if _r.ok else f"Error {_r.status_code}", icon="🗑")
+
+
 # ── AUTO-REFRESH ──────────────────────────────────────────────────────────────
 time.sleep(refresh_s)
 st.rerun()
