@@ -115,7 +115,7 @@ class TestCheckHardwareSDKs:
     def test_returns_list(self):
         results = check_hardware_sdks()
         assert isinstance(results, list)
-        assert len(results) == 4  # dynamixel, pca9685, picamera2, cv2
+        assert len(results) == 5  # dynamixel, pca9685, picamera2, cv2, depthai
 
     def test_each_result_is_tuple(self):
         for ok, name, detail in check_hardware_sdks():

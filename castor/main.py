@@ -71,7 +71,10 @@ _CAMERA_TYPE_PRIORITY = ["oakd", "realsense", "usb", "csi"]
 
 _USB_CAMERA_IDS = {
     "03e7:2485",
-    "03e7:f63b",  # OAK-D family
+    "03e7:f63b",  # OAK-D family (Myriad X)
+    "03e7:3001",
+    "03e7:3000",
+    "03e7:f63c",  # OAK-4 Pro / OAK-4 Lite / OAK bootloader
     "8086:0b3a",
     "8086:0b07",  # Intel RealSense
     "046d:082d",
@@ -135,7 +138,8 @@ def apply_hardware_overrides(config: dict) -> dict:
         else:
             # Fallback: direct USB + device checks
             usb_ids = _lsusb_ids()
-            if "03e7:2485" in usb_ids or "03e7:f63b" in usb_ids:
+            _oakd_ids = {"03e7:2485", "03e7:f63b", "03e7:3001", "03e7:3000", "03e7:f63c"}
+            if usb_ids & _oakd_ids:
                 available_types.add("oakd")
             if "8086:0b3a" in usb_ids or "8086:0b07" in usb_ids:
                 available_types.add("realsense")
@@ -281,14 +285,17 @@ class Camera:
         self._oakd_pipeline = None
         self._oakd_rgb_q = None
         self._oakd_depth_q = None
+        self._oakd_imu_q = None
         self.last_depth = None  # Expose depth for reactive layer
+        self.last_imu = None   # Expose IMU for orientation-aware navigation (OAK-4 Pro)
 
         cam_cfg = config.get("camera", {})
         cam_type = cam_cfg.get("type", "auto")
         res = cam_cfg.get("resolution", [640, 480])
         depth_enabled = cam_cfg.get("depth_enabled", False)
+        imu_enabled = cam_cfg.get("imu_enabled", False)
 
-        # --- Try OAK-D (DepthAI USB camera with depth) ---
+        # --- Try OAK-D / OAK-4 Pro (DepthAI USB camera with depth) ---
         if cam_type in ("oakd", "auto"):
             try:
                 import depthai as dai
@@ -311,16 +318,32 @@ class Camera:
                     )
                     self._oakd_depth_q = stereo.depth.createOutputQueue()
 
+                # IMU support — OAK-4 Pro has a built-in BNO085 (accel + gyro)
+                if imu_enabled:
+                    try:
+                        imu_node = pipeline.create(dai.node.IMU)
+                        imu_node.enableIMUSensor(
+                            [dai.IMUSensor.ACCELEROMETER_RAW, dai.IMUSensor.GYROSCOPE_RAW],
+                            100,  # Hz
+                        )
+                        imu_node.setBatchReportThreshold(1)
+                        imu_node.setMaxBatchReports(10)
+                        self._oakd_imu_q = imu_node.out.createOutputQueue()
+                        logger.info("OAK-4 Pro IMU enabled (BNO085 accel + gyro @ 100 Hz)")
+                    except Exception as imu_exc:
+                        logger.warning("IMU init failed (device may not have IMU): %s", imu_exc)
+
                 pipeline.start()
                 self._oakd_pipeline = pipeline
                 depth_str = " + depth" if depth_enabled else ""
-                logger.info(f"OAK-D camera online ({res[0]}x{res[1]}{depth_str})")
+                imu_str = " + IMU" if self._oakd_imu_q is not None else ""
+                logger.info(f"OAK camera online ({res[0]}x{res[1]}{depth_str}{imu_str})")
                 return
             except Exception as exc:
                 if cam_type == "oakd":
-                    logger.error(f"OAK-D camera requested but failed: {exc}")
+                    logger.error(f"OAK camera requested but failed: {exc}")
                 else:
-                    logger.debug(f"OAK-D not available: {exc}")
+                    logger.debug(f"OAK camera not available: {exc}")
                 self._oakd_pipeline = None
 
         # --- Try picamera2 (CSI ribbon cable camera) ---
@@ -384,6 +407,27 @@ class Camera:
                         depth_frame = self._oakd_depth_q.tryGet()
                         if depth_frame is not None:
                             self.last_depth = depth_frame.getFrame()
+                    except Exception:
+                        pass
+
+                # Grab IMU if available (OAK-4 Pro BNO085)
+                if self._oakd_imu_q is not None:
+                    try:
+                        imu_data = self._oakd_imu_q.tryGet()
+                        if imu_data is not None and imu_data.packets:
+                            pkt = imu_data.packets[-1]
+                            self.last_imu = {
+                                "accel": {
+                                    "x": pkt.acceleroMeter.x,
+                                    "y": pkt.acceleroMeter.y,
+                                    "z": pkt.acceleroMeter.z,
+                                },
+                                "gyro": {
+                                    "x": pkt.gyroscope.x,
+                                    "y": pkt.gyroscope.y,
+                                    "z": pkt.gyroscope.z,
+                                },
+                            }
                     except Exception:
                         pass
 

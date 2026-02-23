@@ -137,6 +137,7 @@ def check_hardware_sdks():
         ("adafruit_pca9685", "Adafruit PCA9685"),
         ("picamera2", "PiCamera2"),
         ("cv2", "OpenCV"),
+        ("depthai", "DepthAI (OAK cameras)"),
     ]
     results = []
     for module, label in sdks:

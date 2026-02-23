@@ -1,0 +1,62 @@
+rcan_version: "1.1.0"
+
+metadata:
+  robot_name: "OAK-4-Pro-Robot"
+  robot_uuid: "00000000-0000-0000-0000-000000000020"
+  author: "OpenCastor Default"
+  license: "Apache-2.0"
+  description: >
+    Preset for robots using the Luxonis OAK-4 Pro depth AI camera.
+    Enables stereo depth, obstacle detection, SLAM mapping, and IMU-based
+    orientation. Requires: pip install depthai==3.3.0
+  tags:
+    - mobile
+    - rover
+    - depth
+    - oak4
+    - slam
+    - vision
+
+agent:
+  provider: "google"
+  model: "gemini-1.5-flash"
+  vision_enabled: true
+  latency_budget_ms: 300
+  safety_stop: true
+
+# OAK-4 Pro camera — 12 MP RGB + stereo depth + BNO085 IMU
+# USB ID: 03e7:3001  (Intel Keem Bay VPU, depthai 3.x)
+# Install: pip install depthai==3.3.0
+# Udev:    echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="03e7", MODE="0666"' |
+#            sudo tee /etc/udev/rules.d/80-luxonis.rules &&
+#            sudo udevadm control --reload-rules
+camera:
+  type: "oakd"
+  depth_enabled: true
+  imu_enabled: true
+  resolution: [1920, 1080]   # OAK-4 Pro RGB max: 4032x3040; 1080p is default
+  fps: 30
+
+drivers:
+  - id: "wheels"
+    protocol: "mock"
+    note: "Replace with pca9685 or dynamixel for real motors"
+
+physics:
+  type: "differential_drive"
+  dof: 2
+
+# Safety: uses OAK-4 Pro depth to stop within 30 cm of obstacles
+safety:
+  obstacle_stop_cm: 30
+  estop_on_startup: false
+
+network:
+  telemetry_stream: true
+  allow_remote_override: true
+
+rcan_protocol:
+  port: 8000
+  capabilities: [status, nav, teleop, slam, depth, imu, chat]
+  enable_mdns: true
+  enable_jwt: false

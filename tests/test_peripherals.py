@@ -34,6 +34,21 @@ LSUSB_OAKD_LINE = (
     "Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub\n"
 )
 
+LSUSB_OAK4PRO_LINE = (
+    "Bus 002 Device 003: ID 03e7:3001 Luxonis OAK-4 Pro\n"
+    "Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub\n"
+)
+
+LSUSB_OAK4LITE_LINE = (
+    "Bus 002 Device 004: ID 03e7:3000 Luxonis OAK-4 Lite\n"
+    "Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub\n"
+)
+
+LSUSB_OAK_BOOTLOADER_LINE = (
+    "Bus 002 Device 005: ID 03e7:f63c Luxonis OAK bootloader\n"
+    "Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub\n"
+)
+
 LSUSB_UNKNOWN_LINE = (
     "Bus 002 Device 003: ID dead:beef Unknown Gadget Corp. SuperThing 9000\n"
     "Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub\n"
@@ -98,6 +113,86 @@ def test_scan_usb_parses_known_vid_pid():
     assert p.driver_hint == "depthai"
     assert p.confidence == "identified"
     assert "oakd" in p.rcan_snippet
+
+
+# ---------------------------------------------------------------------------
+# OAK-4 Pro detection tests
+# ---------------------------------------------------------------------------
+
+
+def test_scan_usb_detects_oak4_pro():
+    """scan_usb identifies OAK-4 Pro via USB ID 03e7:3001."""
+    with patch("subprocess.run", return_value=_make_completed_process(LSUSB_OAK4PRO_LINE)):
+        results = scan_usb()
+
+    oak4 = [p for p in results if p.usb_id == "03e7:3001"]
+    assert len(oak4) == 1, f"Expected 1 OAK-4 Pro, got: {results}"
+
+    p = oak4[0]
+    assert "OAK-4 Pro" in p.name
+    assert p.category == "depth"
+    assert p.interface == "usb"
+    assert p.driver_hint == "depthai"
+    assert p.confidence == "identified"
+    assert 'type: "oakd"' in p.rcan_snippet
+    assert "depth_enabled: true" in p.rcan_snippet
+    assert "imu_enabled: true" in p.rcan_snippet
+
+
+def test_scan_usb_detects_oak4_lite():
+    """scan_usb identifies OAK-4 Lite via USB ID 03e7:3000."""
+    with patch("subprocess.run", return_value=_make_completed_process(LSUSB_OAK4LITE_LINE)):
+        results = scan_usb()
+
+    oak4l = [p for p in results if p.usb_id == "03e7:3000"]
+    assert len(oak4l) == 1
+
+    p = oak4l[0]
+    assert "OAK-4" in p.name
+    assert p.category == "depth"
+    assert p.driver_hint == "depthai"
+    assert p.confidence == "identified"
+
+
+def test_scan_usb_detects_oak_bootloader():
+    """scan_usb recognizes Luxonis OAK bootloader/DFU mode (03e7:f63c)."""
+    with patch("subprocess.run", return_value=_make_completed_process(LSUSB_OAK_BOOTLOADER_LINE)):
+        results = scan_usb()
+
+    boot = [p for p in results if p.usb_id == "03e7:f63c"]
+    assert len(boot) == 1
+    assert boot[0].driver_hint == "depthai"
+
+
+def test_usb_devices_has_oak4_pro_ids():
+    """_USB_DEVICES must contain OAK-4 Pro, Lite, and bootloader entries."""
+    assert "03e7:3001" in _USB_DEVICES, "OAK-4 Pro PID missing from device DB"
+    assert "03e7:3000" in _USB_DEVICES, "OAK-4 Lite PID missing from device DB"
+    assert "03e7:f63c" in _USB_DEVICES, "OAK bootloader PID missing from device DB"
+
+    pro = _USB_DEVICES["03e7:3001"]
+    assert pro["category"] == "depth"
+    assert pro["driver_hint"] == "depthai"
+    assert "1920" in pro["rcan_snippet"]  # OAK-4 Pro defaults to 1080p
+    assert "imu_enabled: true" in pro["rcan_snippet"]
+
+
+def test_scan_all_oak4_pro_no_v4l2_duplicate():
+    """When OAK-4 Pro is the only depth device, scan_all suppresses generic v4l2 entries."""
+    lsusb_output = LSUSB_OAK4PRO_LINE
+
+    with (
+        patch("subprocess.run", return_value=_make_completed_process(lsusb_output)),
+        patch("glob.glob", side_effect=lambda pat: ["/dev/video0"] if "video" in pat else []),
+    ):
+        all_p = scan_all()
+
+    depth_hits = [p for p in all_p if p.driver_hint == "depthai"]
+    assert len(depth_hits) >= 1
+
+    # Generic v4l2 probe named "Video device /dev/video0" should be suppressed
+    generic_v4l2 = [p for p in all_p if p.name.startswith("Video device")]
+    assert len(generic_v4l2) == 0, "Generic v4l2 entry should be suppressed when OAK-4 Pro present"
 
 
 # ---------------------------------------------------------------------------
