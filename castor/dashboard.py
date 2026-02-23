@@ -472,24 +472,53 @@ with left_col:
         '<p class="section-header green">📋 Live Logs</p>',
         unsafe_allow_html=True,
     )
-    with st.expander(f"Gateway log — last 40 lines (refreshes every {refresh_s}s)", expanded=True):
+    with st.expander(f"Gateway log — last 50 lines (refreshes every {refresh_s}s)", expanded=True):
+        import subprocess as _subprocess
         from pathlib import Path as _Path
+
         _log_lines: list = []
-        for _log_candidate in [
-            "/tmp/alex_gateway.log",
-            "/tmp/bob_gateway.log",
-            "/tmp/castor_gateway.log",
-        ]:
-            try:
-                _raw = _Path(_log_candidate).read_text(errors="replace")
-                _log_lines = _raw.splitlines()[-40:]
-                break
-            except Exception:
-                continue
+        _log_source = ""
+        # 1. Try journalctl (systemd --user service)
+        try:
+            _jctl = _subprocess.run(
+                [
+                    "journalctl",
+                    "--user",
+                    "-u",
+                    "opencastor.service",
+                    "-n",
+                    "50",
+                    "--no-pager",
+                    "--output=short",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if _jctl.returncode == 0 and _jctl.stdout.strip():
+                _log_lines = _jctl.stdout.splitlines()
+                _log_source = "journalctl --user -u opencastor.service"
+        except Exception:
+            pass
+        # 2. Fallback: /tmp log files
+        if not _log_lines:
+            for _log_candidate in [
+                "/tmp/alex_gateway.log",
+                "/tmp/bob_gateway.log",
+                "/tmp/castor_gateway.log",
+            ]:
+                try:
+                    _raw = _Path(_log_candidate).read_text(errors="replace")
+                    _log_lines = _raw.splitlines()[-50:]
+                    _log_source = _log_candidate
+                    break
+                except Exception:
+                    continue
         if _log_lines:
+            st.caption(f"Source: {_log_source}")
             st.code("\n".join(_log_lines), language=None)
         else:
-            st.caption("No gateway log found — checked /tmp/alex_gateway.log, /tmp/bob_gateway.log")
+            st.caption("No gateway log found — start the gateway or check systemd service")
 
 # ═══════════════════════════════════════════════════════════════════
 # RIGHT COLUMN — status panels (mirrors terminal watch)

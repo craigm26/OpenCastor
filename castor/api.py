@@ -980,6 +980,11 @@ async def mjpeg_stream():
     """
     import asyncio
 
+    # Fail fast when camera is offline so the browser img.onerror fires immediately
+    # instead of hanging on a silent 200 stream with no frames.
+    if state.camera is None or not state.camera.is_available():
+        raise HTTPException(status_code=503, detail="Camera offline")
+
     global _active_streams
     with _rate_lock:
         if _active_streams >= _MAX_STREAMS:
