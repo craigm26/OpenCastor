@@ -39,6 +39,7 @@ All LLM adapters subclass `BaseProvider`. Key methods:
 | Apple MLX | `mlx_provider.py` | Local (macOS only) |
 | Google Vertex AI | `vertex_provider.py` | `VERTEX_PROJECT` |
 | OpenRouter (100+ models) | `openrouter_provider.py` | `OPENROUTER_API_KEY` |
+| Groq LPU | `groq_provider.py` | `GROQ_API_KEY` |
 | Sentence Transformers | `sentence_transformers_provider.py` | none (local) |
 | VLA (OpenVLA/Octo/pi0) | `vla_provider.py` | none (local) |
 | ONNX Runtime | `onnx_provider.py` | `ONNX_MODEL_PATH` |
@@ -724,3 +725,118 @@ for await (const chunk of client.stream({ instruction: 'describe what you see' }
 ```
 
 Methods: `command()`, `stream()`, `status()`, `stop()`, `health()`, `listRecordings()`, `getDepthFrame()`.
+
+---
+
+## Additional Drivers
+
+### Stepper Motor Driver (`castor/drivers/stepper_driver.py`)
+
+Controls NEMA 17/23 stepper motors via DRV8825, TMC2209, or A4988 driver boards.
+
+- Step/direction GPIO-based control
+- Configurable microstep resolution (1, 2, 4, 8, 16, 32)
+- Mock mode when RPi.GPIO / gpiod unavailable
+- `move({"steps": N, "direction": 1})` — positive = forward
+
+### GPIO Driver (`castor/drivers/gpio_driver.py`)
+
+Direct GPIO pin control on Raspberry Pi via `RPi.GPIO` (BCM/BOARD) or `gpiod` (libgpiod).
+
+- Pin mappings from RCAN `drivers[].pins` config
+- `move({"pin_name": value})` for digital output
+- Mock mode on non-RPi hardware
+
+### ODrive/VESC Brushless Motor Driver (`castor/drivers/odrive_driver.py`)
+
+High-performance brushless motor control for ODrive and VESC controllers.
+
+- USB or CAN bus communication
+- Velocity, position, and torque modes
+- `move({"left": float, "right": float})` — normalized -1.0 to 1.0
+- Mock mode when `odrive` library unavailable
+
+### Simulation Driver (`castor/drivers/simulation_driver.py`)
+
+Connects to Gazebo (ROS2/`gazebo_msgs`), Webots (REST API), or pure mock mode.
+
+- Protocol identifiers: `simulation`, `gazebo`, `webots`
+- Publishes motion to simulator; reads back pose
+- Enables sim-to-real transfer without code changes
+
+---
+
+## Battery Monitor (`castor/ina219.py`)
+
+Reads voltage, current, and state-of-charge from an INA219 I2C sensor.
+
+- Auto-detected on addresses `0x40`–`0x4F`
+- Low-battery alert: publishes to `GET /api/battery`
+- Triggers e-stop if voltage drops below `min_voltage_v` (RCAN config)
+- Mock mode returns synthetic readings when smbus2 unavailable
+
+---
+
+## SLAM Mapper (`castor/slam.py`)
+
+2D occupancy grid mapping using wheel odometry combined with LiDAR scans.
+
+- `SlamMapper.update(odom, scan)` — incremental update
+- `get_map() -> dict` — `{width, height, resolution_m, data, robot_pose}`
+- Occupancy grid exposed as REST API: `GET /api/slam/map`
+- Dashboard renders live occupancy grid on HTML5 canvas
+
+---
+
+## Privacy Mode (`castor/privacy_mode.py`)
+
+Zero-cloud-egress enforcement mode. When active:
+
+- All outbound LLM API calls are blocked
+- Only local providers (Ollama, llama.cpp, MLX, ONNX) are allowed
+- Camera frames are never transmitted externally
+- Audit log records every blocked egress attempt
+
+```python
+from castor.privacy_mode import get_privacy_manager
+pm = get_privacy_manager()
+pm.enable()  # blocks all cloud providers
+pm.disable()
+pm.status()  # -> {active, blocked_count, ...}
+```
+
+---
+
+## RCAN Config Generator (`castor/rcan_generator.py`)
+
+Generates valid RCAN YAML config from a natural language hardware description.
+
+- Uses the active brain provider to interpret the description
+- Validates output against `config/rcan.schema.json`
+- Falls back to nearest preset template if validation fails
+
+```bash
+castor config generate --description "two-wheeled Raspberry Pi rover with USB camera"
+```
+
+REST: `POST /api/config/generate` → `{rcan_yaml: string, preset_used: string}`
+
+---
+
+## Microsoft Teams Channel (`castor/channels/teams_channel.py`)
+
+Sends robot status and command responses to a Microsoft Teams channel via incoming webhooks.
+
+- Outbound: `TEAMS_WEBHOOK_URL` — formatted Adaptive Cards
+- Bot auth: `TEAMS_APP_ID`, `TEAMS_APP_PASSWORD`, `TEAMS_TENANT_ID`
+- Incoming commands via Bot Framework webhook (optional)
+
+---
+
+## Matrix/Element Channel (`castor/channels/matrix_channel.py`)
+
+Connects to a Matrix homeserver (matrix.org or self-hosted) via `matrix-nio`.
+
+- Env vars: `MATRIX_HOMESERVER_URL`, `MATRIX_USER_ID`, `MATRIX_ACCESS_TOKEN`
+- E2E encryption supported (if libolm installed)
+- Responds to commands in any joined room

@@ -10,6 +10,7 @@ Copy `.env.example` to `.env` and fill in what you need.
 | `OPENAI_API_KEY` | OpenAI GPT-4.1 | Also used for OpenRouter |
 | `ANTHROPIC_API_KEY` | Anthropic Claude | |
 | `OPENROUTER_API_KEY` | OpenRouter (100+ models) | `pip install opencastor` — same `openai` SDK, different base_url |
+| `GROQ_API_KEY` | Groq LPU inference | sub-100ms inference; `pip install groq` |
 | `MOONSHOT_API_KEY` | Kimi (Moonshot AI) | Chinese LLM |
 | `MINIMAX_API_KEY` | MiniMax | Chinese LLM |
 | `OLLAMA_BASE_URL` | Local Ollama | No key needed; default `http://localhost:11434` |
@@ -38,6 +39,13 @@ Copy `.env.example` to `.env` and fill in what you need.
 | `MQTT_USERNAME` | MQTT |
 | `MQTT_PASSWORD` | MQTT |
 | `HA_LONG_LIVED_TOKEN` | Home Assistant |
+| `TEAMS_WEBHOOK_URL` | Microsoft Teams | Incoming webhook URL for outbound notifications |
+| `TEAMS_APP_ID` | Microsoft Teams | Azure AD App ID (bot auth) |
+| `TEAMS_APP_PASSWORD` | Microsoft Teams | Azure AD App Password (bot auth) |
+| `TEAMS_TENANT_ID` | Microsoft Teams | Azure tenant ID |
+| `MATRIX_HOMESERVER_URL` | Matrix/Element | Homeserver URL (e.g. `https://matrix.org`) |
+| `MATRIX_USER_ID` | Matrix/Element | Bot user ID (e.g. `@castorbot:matrix.org`) |
+| `MATRIX_ACCESS_TOKEN` | Matrix/Element | Bot access token |
 
 ## Gateway & Runtime
 
@@ -130,6 +138,7 @@ Copy `.env.example` to `.env` and fill in what you need.
 | `onnx` | `onnxruntime>=1.17.0` | ONNX on-device inference |
 | `onnx-gpu` | `onnxruntime-gpu>=1.17.0` | ONNX GPU inference |
 | `gestures` | `mediapipe>=0.10.0` | Hand gesture control |
+| `simulation` | Gazebo/Webots via ROS2 — no extra pip deps | Sim-to-real bridge |
 | `all` | Everything above | Full installation |
 | `dev` | `pytest`, `pytest-asyncio`, `ruff`, `qrcode` | Development tools |
 

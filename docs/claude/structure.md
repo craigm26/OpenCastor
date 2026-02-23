@@ -92,6 +92,10 @@ OpenCastor/
 │   ├── workspace.py                  # WorkspaceManager: multi-robot namespace isolation
 │   ├── personalities.py              # PersonalityManager: tone-injection profiles
 │   ├── finetune.py                   # FineTuneExporter: JSONL export for OpenAI/Anthropic
+│   ├── slam.py                       # SLAM mapper: occupancy grid via wheel odometry + LiDAR
+│   ├── ina219.py                     # Battery monitor: INA219 I2C sensor (voltage/current/SOC)
+│   ├── privacy_mode.py               # PrivacyMode: zero-cloud-egress enforcement
+│   ├── rcan_generator.py             # RCAN config generator: NL description → YAML via LLM
 │   │
 │   ├── commands/                     # CLI sub-commands
 │   │   ├── __init__.py
@@ -113,11 +117,12 @@ OpenCastor/
 │   │   ├── mlx_provider.py           # Apple MLX acceleration
 │   │   ├── vertex_provider.py        # Google Vertex AI (google-genai SDK)
 │   │   ├── openrouter_provider.py    # OpenRouter (100+ models, OPENROUTER_API_KEY)
+│   │   ├── groq_provider.py          # Groq LPU-accelerated inference (GROQ_API_KEY)
 │   │   ├── sentence_transformers_provider.py  # Sentence Transformers embeddings
 │   │   ├── vla_provider.py           # Vision-Language-Action (OpenVLA/Octo/pi0)
-│   │   ├── onnx_provider.py          # ONNX Runtime on-device inference
-│   │   ├── kimi_provider.py          # Moonshot AI (Kimi)
-│   │   ├── minimax_provider.py       # MiniMax
+│   │   ├── onnx_provider.py          # ONNX Runtime on-device inference (ONNX_MODEL_PATH)
+│   │   ├── kimi_provider.py          # Moonshot AI Kimi (MOONSHOT_API_KEY)
+│   │   ├── minimax_provider.py       # MiniMax (MINIMAX_API_KEY)
 │   │   └── qwen_provider.py          # Qwen3 local via Ollama
 │   │
 │   ├── drivers/                      # Hardware driver implementations
@@ -128,7 +133,11 @@ OpenCastor/
 │   │   ├── composite.py              # CompositeDriver: routes action keys to sub-drivers
 │   │   ├── ros2_driver.py            # ROS2 bridge driver (rclpy, mock mode)
 │   │   ├── imu_driver.py             # IMU driver: MPU6050/BNO055/ICM-42688 (smbus2)
-│   │   └── lidar_driver.py           # 2D LiDAR driver: RPLidar A1/A2/C1/S2
+│   │   ├── lidar_driver.py           # 2D LiDAR driver: RPLidar A1/A2/C1/S2
+│   │   ├── stepper_driver.py         # Stepper motor: NEMA 17/23 via DRV8825/TMC2209/A4988
+│   │   ├── gpio_driver.py            # GPIO driver: RPi.GPIO + gpiod pin control
+│   │   ├── odrive_driver.py          # Brushless motor: ODrive / VESC (CAN bus)
+│   │   └── simulation_driver.py      # Simulation driver: Gazebo/Webots/mock
 │   │
 │   ├── channels/                     # Messaging channel integrations
 │   │   ├── __init__.py               # Channel registry + create_channel() factory
@@ -140,7 +149,9 @@ OpenCastor/
 │   │   ├── discord_channel.py        # Discord Bot
 │   │   ├── slack_channel.py          # Slack Bot (Socket Mode)
 │   │   ├── mqtt_channel.py           # MQTT (paho-mqtt)
-│   │   └── homeassistant_channel.py  # Home Assistant (websocket)
+│   │   ├── homeassistant_channel.py  # Home Assistant (websocket)
+│   │   ├── teams_channel.py          # Microsoft Teams (incoming webhook + Bot Framework)
+│   │   └── matrix_channel.py         # Matrix/Element (matrix-nio)
 │   │
 │   ├── fs/                           # Virtual Filesystem (Unix-inspired)
 │   │   ├── __init__.py               # CastorFS facade class
