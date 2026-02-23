@@ -74,8 +74,7 @@ class TestMatrixChannelSendMessage:
         ch = _make_channel()
         mock_client = AsyncMock()
         ch._client = mock_client
-        with patch("castor.channels.matrix_channel.HAS_NIO", True):
-            await ch.send_message("!room:matrix.org", "hello world")
+        await ch.send_message("!room:matrix.org", "hello world")
         mock_client.room_send.assert_called_once()
         call = mock_client.room_send.call_args
         assert call[1]["room_id"] == "!room:matrix.org"
@@ -103,8 +102,7 @@ class TestMatrixChannelOnMessage:
         mock_event.body = "hello robot"
         mock_event.sender = "@user:matrix.org"
 
-        with patch("castor.channels.matrix_channel.HAS_NIO", True):
-            await ch._on_room_message(mock_room, mock_event)
+        await ch._on_room_message(mock_room, mock_event)
         mock_client.room_send.assert_called_once()
 
     @pytest.mark.asyncio

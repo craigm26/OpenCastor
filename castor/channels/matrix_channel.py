@@ -83,7 +83,7 @@ class MatrixChannel(BaseChannel):
 
     async def send_message(self, room_id: str, text: str):
         """Send a plain-text message to *room_id*."""
-        if not HAS_NIO or self._client is None:
+        if self._client is None:
             logger.warning("Matrix client not ready — cannot send message")
             return
         try:

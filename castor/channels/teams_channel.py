@@ -43,10 +43,10 @@ class TeamsChannel(BaseChannel):
         self._running = False
 
     async def start(self):
+        self._running = True
         if not HAS_AIOHTTP:
             logger.warning("aiohttp not installed — Teams channel unavailable")
             return
-        self._running = True
         logger.info(
             "Teams channel started (webhook=%s, bot=%s)",
             bool(self._webhook_url),

@@ -388,9 +388,12 @@ class WhatsAppChannel(BaseChannel):
             return self._group_name_cache[chat_user]
 
         try:
-            from neonize.utils.jid import build_jid
+            try:
+                from neonize.utils.jid import build_jid
 
-            jid = build_jid(chat_user, "g.us")
+                jid = build_jid(chat_user, "g.us")
+            except ImportError:
+                jid = f"{chat_user}@g.us"
             info = client.get_group_info(jid)
             # GroupInfo.GroupName is a sub-message; .Name is the actual string
             subject = getattr(info.GroupName, "Name", None) or str(info.GroupName) or None

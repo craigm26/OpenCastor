@@ -53,6 +53,14 @@ class TestTeamsChannelLifecycle:
             await ch.start()  # Should not raise
 
 
+def _mock_aiohttp(sess):
+    """Return a MagicMock standing in for the aiohttp module."""
+    mock_mod = MagicMock()
+    mock_mod.ClientSession.return_value = sess
+    mock_mod.ClientTimeout = MagicMock()
+    return mock_mod
+
+
 class TestTeamsChannelSendMessage:
     @pytest.mark.asyncio
     async def test_send_via_webhook(self):
@@ -65,7 +73,9 @@ class TestTeamsChannelSendMessage:
         mock_sess.post.return_value.__aenter__ = AsyncMock(return_value=mock_resp)
         mock_sess.post.return_value.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("aiohttp.ClientSession", return_value=mock_sess):
+        with patch("castor.channels.teams_channel.HAS_AIOHTTP", True), patch(
+            "castor.channels.teams_channel.aiohttp", _mock_aiohttp(mock_sess), create=True
+        ):
             await ch.send_message("conv_id", "Hello Teams!")
 
     @pytest.mark.asyncio
@@ -86,7 +96,9 @@ class TestTeamsChannelSendMessage:
         mock_sess.post.return_value.__aenter__ = AsyncMock(return_value=mock_resp)
         mock_sess.post.return_value.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("aiohttp.ClientSession", return_value=mock_sess):
+        with patch("castor.channels.teams_channel.HAS_AIOHTTP", True), patch(
+            "castor.channels.teams_channel.aiohttp", _mock_aiohttp(mock_sess), create=True
+        ):
             await ch.send_message("conv_id", "test")
 
 

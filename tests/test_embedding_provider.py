@@ -42,6 +42,7 @@ def _real_model_provider():
         with patch(
             "castor.providers.sentence_transformers_provider.SentenceTransformer",
             return_value=mock_model,
+            create=True,  # needed when sentence_transformers is not installed (HAS_ST=False at import time)
         ):
             from castor.providers.sentence_transformers_provider import EmbeddingProvider
             return EmbeddingProvider()
