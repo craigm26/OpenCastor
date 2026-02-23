@@ -2,7 +2,7 @@
 
 ## Overview
 
-OpenCastor is a universal runtime for embodied AI (~241 Python files, 110+ test files, 2816 tests).
+OpenCastor is a universal runtime for embodied AI (~270 Python files, 125+ test files, 3381 tests).
 
 ## Full Repository Tree
 
@@ -79,6 +79,19 @@ OpenCastor/
 │   ├── usage.py                      # UsageTracker (SQLite token/cost tracking)
 │   ├── camera.py                     # CameraManager (multi-camera support)
 │   ├── stream.py                     # WebRTC stream (aiortc optional)
+│   ├── recorder.py                   # VideoRecorder: MP4 capture via OpenCV
+│   ├── webhooks.py                   # WebhookDispatcher: outbound POST on robot events
+│   ├── gestures.py                   # GestureController: MediaPipe hand gesture → action
+│   ├── response_cache.py             # SQLite LRU cache keyed by SHA-256(instruction+image)
+│   ├── avoidance.py                  # ReactiveAvoidance: LiDAR+depth obstacle stop/slow
+│   ├── pointcloud.py                 # PointCloudCapture: 3D PLY export from OAK-D
+│   ├── detection.py                  # ObjectDetector: YOLOv8/DETR real-time detection
+│   ├── sim_bridge.py                 # SimBridge: MuJoCo/Gazebo/Webots export+import
+│   ├── episode_search.py             # EpisodeSearchIndex: BM25 memory search
+│   ├── voice_loop.py                 # VoiceLoop: wake-word + STT + brain pipeline
+│   ├── workspace.py                  # WorkspaceManager: multi-robot namespace isolation
+│   ├── personalities.py              # PersonalityManager: tone-injection profiles
+│   ├── finetune.py                   # FineTuneExporter: JSONL export for OpenAI/Anthropic
 │   │
 │   ├── commands/                     # CLI sub-commands
 │   │   ├── __init__.py
@@ -92,13 +105,20 @@ OpenCastor/
 │   │   ├── __init__.py               # get_provider() factory
 │   │   ├── base.py                   # BaseProvider ABC + Thought + ProviderQuotaError
 │   │   ├── google_provider.py        # Google Gemini
-│   │   ├── openai_provider.py        # OpenAI GPT-4.1
+│   │   ├── openai_provider.py        # OpenAI GPT-4.1 (also OpenRouter proxy)
 │   │   ├── anthropic_provider.py     # Anthropic Claude
 │   │   ├── ollama_provider.py        # Local Ollama
 │   │   ├── huggingface_provider.py   # HuggingFace Hub
 │   │   ├── llamacpp_provider.py      # llama.cpp local inference
 │   │   ├── mlx_provider.py           # Apple MLX acceleration
-│   │   └── vertex_provider.py        # Google Vertex AI (google-genai SDK)
+│   │   ├── vertex_provider.py        # Google Vertex AI (google-genai SDK)
+│   │   ├── openrouter_provider.py    # OpenRouter (100+ models, OPENROUTER_API_KEY)
+│   │   ├── sentence_transformers_provider.py  # Sentence Transformers embeddings
+│   │   ├── vla_provider.py           # Vision-Language-Action (OpenVLA/Octo/pi0)
+│   │   ├── onnx_provider.py          # ONNX Runtime on-device inference
+│   │   ├── kimi_provider.py          # Moonshot AI (Kimi)
+│   │   ├── minimax_provider.py       # MiniMax
+│   │   └── qwen_provider.py          # Qwen3 local via Ollama
 │   │
 │   ├── drivers/                      # Hardware driver implementations
 │   │   ├── __init__.py
@@ -106,7 +126,9 @@ OpenCastor/
 │   │   ├── pca9685.py                # I2C PWM motor driver (Amazon/Adafruit kits)
 │   │   ├── dynamixel.py              # Robotis Dynamixel servo (Protocol 2.0)
 │   │   ├── composite.py              # CompositeDriver: routes action keys to sub-drivers
-│   │   └── ros2_driver.py            # ROS2 bridge driver (rclpy, mock mode)
+│   │   ├── ros2_driver.py            # ROS2 bridge driver (rclpy, mock mode)
+│   │   ├── imu_driver.py             # IMU driver: MPU6050/BNO055/ICM-42688 (smbus2)
+│   │   └── lidar_driver.py           # 2D LiDAR driver: RPLidar A1/A2/C1/S2
 │   │
 │   ├── channels/                     # Messaging channel integrations
 │   │   ├── __init__.py               # Channel registry + create_channel() factory
@@ -193,7 +215,7 @@ OpenCastor/
 ├── config/
 │   ├── swarm.yaml                    # Swarm node registry (name/host/ip/port/token/tags)
 │   ├── hub_index.json                # Model hub index (16 presets, GitHub raw URLs)
-│   └── presets/                      # 16 hardware preset RCAN configs
+│   └── presets/                      # 18 hardware preset RCAN configs
 │       ├── amazon_kit_generic.rcan.yaml
 │       ├── adeept_generic.rcan.yaml
 │       ├── waveshare_alpha.rcan.yaml
@@ -209,9 +231,17 @@ OpenCastor/
 │       ├── lego_spike_prime.rcan.yaml
 │       ├── makeblock_mbot.rcan.yaml
 │       ├── vex_iq.rcan.yaml
-│       └── yahboom_rosmaster.rcan.yaml
+│       ├── yahboom_rosmaster.rcan.yaml
+│       ├── groq_rover.rcan.yaml       # Groq LPU-accelerated rover
+│       └── oak4_pro.rcan.yaml         # OAK-4 Pro with depth+IMU
 │
-├── tests/                            # 110+ test files, 2816 tests (0 failures)
+├── sdk/
+│   └── js/                           # JavaScript/TypeScript client SDK
+│       ├── src/index.ts              # CastorClient: command/stream/status/stop/health
+│       ├── package.json
+│       └── tsconfig.json
+│
+├── tests/                            # 125+ test files, 3381 tests (0 failures)
 │   ├── test_api_endpoints.py         # FastAPI gateway (133 tests)
 │   ├── test_config_validation.py     # Config validation
 │   ├── test_offline_fallback.py      # OfflineFallbackManager

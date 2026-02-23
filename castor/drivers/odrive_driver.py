@@ -26,7 +26,6 @@ Install: pip install odrive   (ODrive)
 """
 
 import logging
-import time
 
 from castor.drivers.base import DriverBase
 

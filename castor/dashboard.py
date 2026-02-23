@@ -910,6 +910,7 @@ with st.expander("🗺 SLAM / Nav Map", expanded=False):
                         if 0 <= _rx < _img.shape[1] and 0 <= _ry < _img.shape[0]:
                             _img[max(0,_ry-2):_ry+3, max(0,_rx-2):_rx+3] = [63, 185, 80]
                     import io as _io
+
                     from PIL import Image as _PILImg
                     _pil = _PILImg.fromarray(_img)
                     _buf = _io.BytesIO()

@@ -23,7 +23,6 @@ RCAN config:
     model: openvla/openvla-7b   # or local path
 """
 
-import base64
 import io
 import logging
 import os
@@ -38,8 +37,8 @@ _VLA_DEVICE = os.getenv("VLA_DEVICE", "cpu")
 _UNNORM_KEY = os.getenv("VLA_UNNORM_KEY", "bridge_orig")
 
 try:
-    from transformers import AutoModelForVision2Seq, AutoProcessor
     from PIL import Image as _PILImage
+    from transformers import AutoModelForVision2Seq, AutoProcessor
 
     HAS_TRANSFORMERS = True
 except ImportError:

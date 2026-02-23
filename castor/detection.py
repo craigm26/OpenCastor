@@ -21,7 +21,6 @@ Install:  pip install ultralytics   (YOLOv8 — recommended)
           pip install opencv-python  (already a dep)
 """
 
-import io
 import logging
 import os
 import threading

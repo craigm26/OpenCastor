@@ -393,3 +393,125 @@ Twilio WhatsApp webhook. Rate limited: 10 req/min/sender.
 
 ### POST /webhooks/slack
 Slack Events API webhook. Rate limited: 10 req/min/sender.
+
+---
+
+## IMU (Inertial Measurement Unit)
+
+### GET /api/imu/reading
+Read accelerometer, gyroscope, magnetometer, and temperature from IMU sensor.
+Response: `{accel_g: {x,y,z}, gyro_dps: {x,y,z}, mag_uT, temp_c, mode}`
+
+### GET /api/imu/health
+IMU driver health check. Response: `{ok, mode: "hardware"|"mock", error}`
+
+---
+
+## LiDAR
+
+### GET /api/lidar/scan
+Full 360° scan. Response: `[{angle_deg, distance_mm, quality}, ...]`
+
+### GET /api/lidar/obstacles
+4-sector obstacle map. Response: `{min_distance_mm, sectors: {front,right,back,left}}`
+
+### GET /api/lidar/health
+LiDAR driver health check.
+
+---
+
+## Reactive Obstacle Avoidance
+
+### GET /api/avoidance/status
+Current avoidance state. Response: `{active, mode, estop_zone_mm, slow_zone_mm, slow_factor}`
+
+### POST /api/avoidance/configure
+Update avoidance parameters. Body: `{estop_zone_mm?, slow_zone_mm?, slow_factor?}`
+
+---
+
+## LLM Response Cache
+
+### GET /api/cache/stats
+Cache statistics. Response: `{hits, misses, entries, hit_rate_pct, enabled, max_age_s, max_size}`
+
+### POST /api/cache/clear
+Delete all cached entries. Response: `{deleted}`
+
+### POST /api/cache/enable
+Re-enable cache for this session.
+
+### POST /api/cache/disable
+Bypass cache for this session.
+
+---
+
+## Point Cloud
+
+### GET /api/depth/pointcloud
+Current point cloud as JSON array of `{x, y, z}` points.
+
+### GET /api/depth/pointcloud.ply
+Current point cloud as a PLY file download.
+
+### GET /api/depth/pointcloud/stats
+Point cloud statistics: `{point_count, bounds, density}`
+
+---
+
+## Object Detection
+
+### GET /api/detection/frame
+Current camera frame with detection overlays (JPEG).
+
+### GET /api/detection/latest
+Latest detection results. Response: `{detections: [{class, confidence, bbox}]}`
+
+### POST /api/detection/configure
+Update detection parameters. Body: `{confidence_threshold?, model?}`
+
+---
+
+## Simulation Bridge
+
+### GET /api/sim/formats
+Supported simulation formats. Response: `{formats: ["mujoco", "gazebo", "webots"]}`
+
+### POST /api/sim/export
+Export current RCAN config to a simulation format. Body: `{format: "mujoco"|"gazebo"|"webots"}`
+
+### POST /api/sim/import
+Import sim config into RCAN. Body: `{format, content}`
+
+### GET /api/sim/config
+Current sim bridge configuration.
+
+---
+
+## Fine-Tune Export
+
+### GET /api/finetune/export
+Export episode memory as JSONL for fine-tuning. Query params: `limit` (default 500), `provider` (`openai`|`anthropic`).
+
+---
+
+## Personality
+
+### GET /api/personality
+Current active personality profile. Response: `{name, description, system_prompt_prefix}`
+
+### POST /api/personality/set
+Set a personality profile. Body: `{name}` — e.g. `friendly`, `military`, `scientist`, `child`, `pirate`, `chef`.
+
+---
+
+## Workspace
+
+### GET /api/workspace/list
+List all robot workspaces.
+
+### POST /api/workspace/create
+Create a new isolated workspace. Body: `{name, rcan_path?}`
+
+### POST /api/workspace/switch
+Switch the active workspace. Body: `{name}`

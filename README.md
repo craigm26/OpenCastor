@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <b>56,006 lines of code · 2,233 tests · Python 3.10–3.12</b><br/>
+  <b>95,399 lines of code · 3,381 tests · Python 3.10–3.13</b><br/>
   <i>Connect any AI model to any robot hardware through a single YAML config.</i>
 </p>
 
@@ -51,16 +51,26 @@ Supports **Linux, macOS (Apple Silicon & Intel), Windows 11, Raspberry Pi, Docke
 Installer flags: `--dry-run`, `--no-rpi`, `--skip-wizard`
 </details>
 
-## ✨ What's New in v2026.2.21.2
+## ✨ What's New in v2026.2.23.3
 
-- **Unified ComponentRegistry** — plug-in providers, drivers, and channels without touching core files
-- **Plugin manifest enforcement** — third-party plugins require a `plugin.json` before execution
-- **WorkAuthority audit logs** — tamper-evident on-disk record of every approved/denied action
-- **BoundsChecker wired into loop** — physical limits enforced on every motor command in real time
-- **base64 scan fix** — camera frames no longer trigger false-positive safety blocks (#38)
-- **CLAUDE.md fully refreshed** — developer guide now reflects all 131 modules, 8 providers, 16 presets
+- **OpenRouter provider** — one API key unlocks 100+ models (GPT-4.1, Claude, Gemini, Mistral, DeepSeek, LLaMA 3.3…)
+- **IMU driver** — MPU6050 / BNO055 / ICM-42688 accelerometer + gyroscope via smbus2, auto-detected
+- **2D LiDAR driver** — RPLidar A1/A2/C1/S2, 4-sector obstacle mapping, REST API
+- **Reactive obstacle avoidance** — fuses LiDAR + OAK-D depth; e-stop zone, slow zone, configurable via REST
+- **LLM response cache** — SQLite cache keyed by SHA-256(instruction + image); dramatically cuts API cost on repeated scenes
+- **JS/TS SDK** (`sdk/js/`) — zero-dependency TypeScript client: `command()`, `stream()`, `status()`, `stop()`
+- **Fine-tune export** — `castor export-finetune` / `GET /api/finetune/export` — JSONL in OpenAI/Anthropic format from episode memory
+- **Sentence Transformers provider** — dense embeddings for semantic search and RAG pipelines
+- **VLA provider** — Vision-Language-Action model support (OpenVLA / Octo / pi0)
+- **3D point cloud** (`castor/pointcloud.py`) — PLY export from OAK-D depth frames
+- **Object detection** (`castor/detection.py`) — YOLOv8/DETR real-time detection with REST overlays
+- **Simulation bridge** (`castor/sim_bridge.py`) — generate MuJoCo MJCF / Gazebo SDF from RCAN spec
+- **Personality profiles** — inject tone characters (friendly, military, scientist…) into every brain prompt
+- **Wake-word voice loop** (`castor/voice_loop.py`) — Porcupine → STT → brain pipeline
+- **Groq provider preset** — `groq_rover.rcan.yaml` for LPU-accelerated inference
+- **OAK-4 Pro preset** — `oak4_pro.rcan.yaml` with 4K + depth + IMU auto-detection
 
-> Previous highlights (v2026.2.20.x): 8 AI providers · Tiered brain · Hailo-8 NPU · OAK-D depth · Community Hub · Auto-start daemon · Offline fallback · `castor doctor`
+> Previous highlights (v2026.2.22.x): ROS2 driver · swarm CLI · dead-reckoning nav · YAML behavior runner · multi-user JWT · WebRTC streaming · MediaPipe gestures · video recording · outbound webhooks · BM25 episode search
 
 ## 🔄 Self-Improving Loop (Sisyphus Pattern)
 
@@ -135,13 +145,19 @@ OpenCastor doesn't send every decision to a $0.015/request cloud API. Instead, i
 
 | Provider | Models | Latency | Best For |
 |---|---|---|---|
-| **Anthropic** | `claude-opus-4-6`, `claude-sonnet-4-5` | ~12s | Complex planning, safety-critical reasoning |
-| **Google** | `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3-flash-preview` | ~500ms | Multimodal, video, speed |
-| **OpenAI** | `gpt-4.1`, `gpt-4.1-mini`, `gpt-5` | ~2s | Instruction following, 1M context |
+| **Anthropic** | `claude-opus-4-6`, `claude-sonnet-4-6` | ~12s | Complex planning, safety-critical reasoning |
+| **Google** | `gemini-2.5-flash`, `gemini-2.5-pro` | ~500ms | Multimodal, video, speed |
+| **OpenAI** | `gpt-4.1`, `gpt-4.1-mini` | ~2s | Instruction following, 1M context |
+| **OpenRouter** | 100+ models (Mistral, DeepSeek, LLaMA…) | Varies | Multi-model fallback, cost optimization |
 | **HuggingFace** | Transformers, any hosted model | ~500ms | Fast brain layer, classification |
 | **Ollama** | `llava:13b`, any local model | Varies | Privacy, offline, zero cost |
 | **llama.cpp** | GGUF models | ~200ms | Edge inference, Raspberry Pi |
-| **MLX** | Apple Silicon native (mlx-lm, vLLM-MLX) | ~50ms | Mac M1-M4, 400+ tok/s |
+| **MLX** | Apple Silicon native (mlx-lm, vLLM-MLX) | ~50ms | Mac M1–M4, 400+ tok/s |
+| **Groq** | `llama-3.3-70b`, `mixtral-8x7b` | ~100ms | LPU-accelerated, fastest API |
+| **VLA** | OpenVLA, Octo, pi0 | Varies | End-to-end robot action models |
+| **Sentence Transformers** | `all-MiniLM-L6-v2`, others | ~10ms | Semantic search, RAG, embeddings |
+| **ONNX Runtime** | Any `.onnx` model | ~50ms | Quantized on-device inference |
+| **Kimi / MiniMax / Qwen** | Chinese LLMs | Varies | Chinese language, local Qwen3 |
 | **Claude OAuth** | Proxy-authenticated Claude | ~12s | Team/org deployments |
 
 Swap providers with one YAML change:

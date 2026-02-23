@@ -9,8 +9,12 @@ Copy `.env.example` to `.env` and fill in what you need.
 | `GOOGLE_API_KEY` | Google Gemini | |
 | `OPENAI_API_KEY` | OpenAI GPT-4.1 | Also used for OpenRouter |
 | `ANTHROPIC_API_KEY` | Anthropic Claude | |
-| `OPENROUTER_API_KEY` | OpenRouter (multi-model) | |
+| `OPENROUTER_API_KEY` | OpenRouter (100+ models) | `pip install opencastor` — same `openai` SDK, different base_url |
+| `MOONSHOT_API_KEY` | Kimi (Moonshot AI) | Chinese LLM |
+| `MINIMAX_API_KEY` | MiniMax | Chinese LLM |
 | `OLLAMA_BASE_URL` | Local Ollama | No key needed; default `http://localhost:11434` |
+| `ONNX_MODEL_PATH` | ONNX Runtime | Path to `.onnx` model file; `pip install opencastor[onnx]` |
+| `PORCUPINE_ACCESS_KEY` | Wake-word (pvporcupine) | Required for `castor/voice_loop.py` |
 | `GOOGLE_AUTH_MODE=adc` | Google ADC | Application Default Credentials |
 | `HF_AUTH_MODE=cli` | HuggingFace | CLI auth (`huggingface-cli login`) |
 | `VERTEX_PROJECT` | Vertex AI | GCP project ID |
@@ -58,6 +62,12 @@ Copy `.env.example` to `.env` and fill in what you need.
 |----------|---------|---------|
 | `CASTOR_MEMORY_DB` | `~/.castor/memory.db` | SQLite episode memory database |
 | `CASTOR_USAGE_DB` | `~/.castor/usage.db` | SQLite token/cost tracking |
+| `CASTOR_CACHE_DB` | `~/.castor/response_cache.db` | LLM response cache database |
+| `CASTOR_CACHE_MAX_AGE` | `3600` | Cache entry TTL in seconds |
+| `CASTOR_CACHE_MAX_SIZE` | `10000` | Max cached entries before LRU eviction |
+| `CASTOR_CACHE_ENABLED` | `1` | Set to `0` to disable cache globally |
+| `CASTOR_RECORDINGS_DIR` | `~/.castor/recordings/` | Video recording output directory |
+| `CASTOR_WORKSPACE_DIR` | `~/.castor/workspaces/` | Multi-robot workspace storage |
 | `CASTOR_HUB_URL` | GitHub raw `config/hub_index.json` | Override hub preset index URL |
 | `CASTOR_SWARM_CONFIG` | `config/swarm.yaml` | Swarm node registry path |
 
@@ -117,6 +127,9 @@ Copy `.env.example` to `.env` and fill in what you need.
 | `homeassistant` | `aiohttp>=3.9.0` | Home Assistant channel |
 | `ros2` | `rclpy` | ROS2 bridge driver (install via ROS2 distro) |
 | `webrtc` | `aiortc>=1.6.0` | WebRTC streaming |
+| `onnx` | `onnxruntime>=1.17.0` | ONNX on-device inference |
+| `onnx-gpu` | `onnxruntime-gpu>=1.17.0` | ONNX GPU inference |
+| `gestures` | `mediapipe>=0.10.0` | Hand gesture control |
 | `all` | Everything above | Full installation |
 | `dev` | `pytest`, `pytest-asyncio`, `ruff`, `qrcode` | Development tools |
 

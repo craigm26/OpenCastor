@@ -5,6 +5,133 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.2.23.3] - 2026-02-23 🔧 CI lint & RCAN schema fixes
+
+### Fixed
+- **B904** — added `raise ... from exc` / `raise ... from None` to 5 `except` blocks in `castor/api.py` (fleet proxy and WebRTC endpoints)
+- **F841** — removed unused `center_cm` variable in `castor/avoidance.py`; removed unused `audio` variable in `castor/tts_local.py`
+- **B905** — added `strict=False` to `zip()` calls in `castor/episode_search.py` and `castor/providers/sentence_transformers_provider.py`
+- **F401** — replaced bare try-import aliases with `importlib.util.find_spec` in `castor/pointcloud.py` (open3d), `castor/sim_bridge.py` (mujoco), `castor/workspace.py` (jwt)
+- **B023** — fixed lambda not binding loop variable `woke` in `castor/voice_loop.py` → `lambda e=woke: e.set()`
+- **RCAN schema** — added `safety` top-level property (`obstacle_stop_cm`, `estop_on_startup`), `fps` and `imu_enabled` to `camera` properties, and `groq` to provider enum in `config/rcan.schema.json` — fixes `groq_rover.rcan.yaml` and `oak4_pro.rcan.yaml` validation failures
+
+---
+
+## [2026.2.23.2] - 2026-02-23 🔭 8 New Features — OpenRouter, IMU, LiDAR, Avoidance, Cache, JS SDK, Finetuning, Embeddings — issues #166–#173
+
+### Added
+- **`castor/providers/openrouter_provider.py`** (issue #166) — OpenRouter provider giving access to 100+ models (GPT-4.1, Claude, Gemini, Mistral, DeepSeek, LLaMA 3.3, etc.) via a single `OPENROUTER_API_KEY`. Routes through `https://openrouter.ai/api/v1`; sends required `HTTP-Referer` and `X-Title` headers for API compliance.
+- **`castor/drivers/imu_driver.py`** (issue #167) — IMU driver for MPU6050, BNO055, and ICM-42688 sensors via smbus2. Auto-detects chip by probing I2C addresses. Returns `{accel_g, gyro_dps, mag_uT, temp_c, mode}`. Mock mode when smbus2 unavailable. REST: `GET /api/imu/reading`, `GET /api/imu/health`.
+- **`castor/drivers/lidar_driver.py`** (issue #168) — 2D LiDAR driver for RPLidar A1/A2/C1/S2 via rplidar SDK. 4-sector obstacle mapping (front/right/back/left). Returns `{angle_deg, distance_mm, quality}` per point; `obstacles()` → `{min_distance_mm, sectors}`. REST: `GET /api/lidar/scan`, `GET /api/lidar/obstacles`, `GET /api/lidar/health`.
+- **`castor/avoidance.py`** (issue #169) — Reactive obstacle avoidance layer. Integrates LiDAR + depth sensors. E-stop zone (< 200 mm by default) → `driver.stop()`; slow zone (< 500 mm) → scales linear velocity by configurable `slow_factor`. REST: `GET /api/avoidance/status`, `POST /api/avoidance/configure`.
+- **`castor/response_cache.py`** (issue #170) — SQLite-backed LRU response cache keyed by SHA-256(instruction + image_hash). Dramatically reduces API costs on repeated scenes/commands. `CachedProvider` wrapper is transparent to callers. REST: `GET /api/cache/stats`, `POST /api/cache/clear`, `POST /api/cache/enable`, `POST /api/cache/disable`. Env vars: `CASTOR_CACHE_DB`, `CASTOR_CACHE_MAX_AGE`, `CASTOR_CACHE_MAX_SIZE`, `CASTOR_CACHE_ENABLED`.
+- **`sdk/js/`** (issue #172, renumbered) — TypeScript/JavaScript client SDK. `CastorClient` class with methods for `command()`, `stream()`, `status()`, `stop()`, `health()`, `listRecordings()`, and more. Ships with `package.json`, `tsconfig.json`, and JSDoc comments. Zero runtime dependencies.
+- **`castor/finetune.py`** (issue #172) — Fine-tune data export CLI and API. Exports episode memory to JSONL in OpenAI chat-completion format. REST: `GET /api/finetune/export?limit=N&provider=openai`. CLI: `castor export-finetune [--output FILE] [--limit N] [--provider openai]`.
+- **`castor/providers/sentence_transformers_provider.py`** (issue #173) — Sentence Transformers embedding provider. Encodes text into dense vectors via HuggingFace sentence-transformers. `think()` returns cosine similarity score in `raw_text`; suitable for semantic search and RAG pipelines. `pip install sentence-transformers`.
+- **Dashboard** — new battery-level gauge panel and live object-detection overlay panel (issue #171).
+- **API endpoints** — `/api/imu/*`, `/api/lidar/*`, `/api/avoidance/*`, `/api/cache/*`, `/api/finetune/*`.
+
+### Tests
+- 77 new tests covering imu_driver, lidar_driver, avoidance, response_cache, openrouter_provider, sentence_transformers_provider, finetune.
+
+---
+
+## [2026.2.23.1] - 2026-02-23 🗺️ 7 New Features — Point Cloud, Object Detection, VLA, Sim Bridge, Gamepad, SLAM, JS SDK — issues #149/#150/#154/#157–#161
+
+### Added
+- **`castor/pointcloud.py`** (issue #157) — 3D point cloud capture from OAK-D or simulated depth maps. Exports PLY files. Downsampling, normals estimation, clustering. REST: `GET /api/depth/pointcloud`, `GET /api/depth/pointcloud.ply`, `GET /api/depth/pointcloud/stats`.
+- **`castor/detection.py`** (issue #160) — Real-time object detection via YOLOv8/HuggingFace DETR/mock. 80-class COCO. Configurable confidence threshold. Annotation overlays. REST: `GET /api/detection/frame`, `GET /api/detection/latest`, `POST /api/detection/configure`.
+- **`castor/providers/vla_provider.py`** (issue #158) — Vision-Language-Action (VLA) provider. Wraps OpenVLA, Octo, or pi0 model checkpoints. Maps LLM-style think() interface to robot action tokens. `pip install opencastor[vla]`.
+- **`castor/sim_bridge.py`** (issue #161) — Simulation bridge for MuJoCo, Gazebo, and Webots. Generates MJCF/SDF config from RCAN spec. REST: `GET /api/sim/formats`, `POST /api/sim/export`, `POST /api/sim/import`, `GET /api/sim/config`.
+- **Dashboard gamepad panel** (issue #149) — HTML5 Gamepad API panel in the Streamlit dashboard. Live axis/button readout; maps joystick axes to `forward/backward/left/right` commands via REST.
+- **Dashboard SLAM map panel** (issue #150) — Occupancy grid map rendered as an HTML5 canvas overlay in the dashboard. Reads from `/api/slam/map` (placeholder) and updates on each tick.
+- **`sdk/js/`** (issue #154) — JavaScript/TypeScript SDK with full API coverage (see above).
+
+---
+
+## [2026.2.23.0] - 2026-02-23 🤖 10 New Features — Workspace isolation, ONNX, Chinese models, OAK-4, episode search, voice loop, finetuning, personalities, gesture API, WebRTC fixes
+
+### Added
+- **`castor/workspace.py`** — Multi-robot workspace isolation. Each robot gets its own sandboxed namespace and config scope. Supports workspace create/list/switch/delete. REST: `GET /api/workspace/list`, `POST /api/workspace/create`, `POST /api/workspace/switch`.
+- **`castor/providers/onnx_provider.py`** — ONNX Runtime provider for quantized on-device inference. Loads `.onnx` model files locally. `ONNX_MODEL_PATH` env var. `pip install opencastor[onnx]`.
+- **Chinese model support** — `castor/providers/kimi_provider.py` (Moonshot AI), `castor/providers/minimax_provider.py` (MiniMax), `castor/providers/qwen_provider.py` (Qwen3 local via Ollama). Env vars: `MOONSHOT_API_KEY`, `MINIMAX_API_KEY`.
+- **OAK-4 Pro support** — `castor/depth.py` extended for OAK-4 Pro with IMU data, 4K RGB, and auto-detection. New preset: `config/presets/oak4_pro.rcan.yaml`.
+- **`castor/episode_search.py`** — BM25 full-text search over episode memory. REST: `GET /api/memory/search?q=<query>&limit=N`.
+- **`castor/voice_loop.py`** — Wake-word detection voice loop (Porcupine / pvporcupine). Separate thread: listens → wakes → transcribes → sends to brain. `PORCUPINE_ACCESS_KEY` env var.
+- **`castor/finetune.py`** — LLM fine-tune data export (see v2026.2.23.2 for full description).
+- **`castor/personalities.py`** — Robot personality profiles. Pre-defined personalities (friendly, military, scientist, child, etc.) inject system-level tone instructions into every brain prompt. REST: `GET /api/personality`, `POST /api/personality/set`.
+- **Gesture REST API** — `POST /api/gesture/frame`, `GET /api/gesture/gestures` endpoints wired to `castor/gestures.py` (MediaPipe hand recognition).
+- **WebRTC stability fixes** — `close_all_peers()` called on gateway shutdown; connection-state change handler added.
+
+---
+
+## [2026.2.22.5] - 2026-02-22
+
+### Changed
+- Version bump only (pre-release tag).
+
+---
+
+## [2026.2.22.4] - 2026-02-22 🎙️ 6 New Features — Voice conversation, wake word, WebRTC, recordings, webhooks, gestures
+
+### Added
+- **Voice conversation layer** — end-to-end audio pipeline: browser mic → transcribe → brain → TTS → speaker. Dashboard voice mode toggle (sidebar).
+- **`castor/stream.py`** — WebRTC video stream via aiortc. `CameraTrack(VideoStreamTrack)`. `handle_webrtc_offer()`. `close_all_peers()` on shutdown. `pip install opencastor[webrtc]`.
+- **`castor/recorder.py`** — `VideoRecorder`: MP4 recording via OpenCV. `get_recorder()` singleton. `start(name)`, `write_frame()`, `stop()→meta`. `CASTOR_RECORDINGS_DIR` env override. REST: `POST /api/recording/start`, `POST /api/recording/stop`, `GET /api/recording/list`.
+- **`castor/webhooks.py`** — `WebhookDispatcher`: outbound POST hooks on robot events. `get_dispatcher()` singleton. `emit(event, data)` async. REST: `GET/POST /api/webhooks`, `POST /api/webhooks/test`.
+- **`castor/gestures.py`** — `GestureController`: MediaPipe hand gesture → robot action. 8 default gestures. Mock mode when mediapipe absent. `pip install opencastor[gestures]`.
+
+---
+
+## [2026.2.22.3] - 2026-02-22 🚀 8 New Features — Deploy CLI, swarm, nav, behaviors, hub, JWT, ROS2, WebRTC
+
+### Added
+- **`castor/commands/deploy.py`** — `castor deploy pi@host --config ...`: SSH-push RCAN + restart service. `--full` for pip install. `--status`/`--dry-run`. Hosts cached in `~/.castor/hosts.json`.
+- **`castor/commands/swarm.py`** — `castor swarm status/command/stop/sync`. Concurrent httpx queries. Rich table. `--json` flag.
+- **`castor/nav.py`** — `WaypointNav`: dead-reckoning nav via `wheel_circumference_m` + `turn_time_per_deg_s`. REST: `POST /api/nav/waypoint`, `GET /api/nav/status`.
+- **`castor/behaviors.py`** — `BehaviorRunner`: YAML step sequences (waypoint/wait/think/speak/stop/command). REST: `POST /api/behavior/run`, `POST /api/behavior/generate`.
+- **`castor/commands/hub.py`** — `castor hub list/search/install/publish`. Index at `config/hub_index.json`. `CASTOR_HUB_URL` override.
+- **Multi-user JWT** (`castor/auth_jwt.py`) — `OPENCASTOR_USERS=user:pass:role,...` admin/operator/viewer roles. `POST /auth/token`, `GET /auth/me`.
+- **ROS2 driver** (`castor/drivers/ros2_driver.py`) — Publishes Twist to `/cmd_vel`, subscribes `/odom`. Mock mode. `pip install opencastor[ros2]`.
+- **WebRTC offer endpoint** — `POST /api/webrtc/offer` wired to `castor/stream.py`.
+
+---
+
+## [2026.2.22.2] - 2026-02-22 🧪 Finetuning + Personality Profiles
+
+### Added
+- **`castor/finetune.py`** — Fine-tune data export in OpenAI and Anthropic formats. CLI: `castor export-finetune`.
+- **`castor/personalities.py`** — Personality profile injection (friendly, military, scientist, child, pirate, chef). REST: `GET /api/personality`, `POST /api/personality/set`.
+
+---
+
+## [2026.2.22.1] - 2026-02-22 🔭 8 New Features — OAK-4 Pro, episode search, voice loop, workspace, ONNX, Chinese models, gestures
+
+### Added
+- OAK-4 Pro DepthAI camera with auto-detection and 4K+IMU support
+- Episode memory BM25 search (`castor/episode_search.py`)
+- Wake-word voice loop (`castor/voice_loop.py`)
+- Multi-robot workspace isolation (`castor/workspace.py`)
+- ONNX Runtime on-device inference provider
+- Chinese model providers: Kimi (Moonshot), MiniMax, Qwen3
+- MediaPipe gesture controller (`castor/gestures.py`)
+- New preset: `config/presets/oak4_pro.rcan.yaml`
+
+---
+
+## [2026.2.22.0] - 2026-02-22 🧠 7 New Features — Provider fallback health cache, dashboard channel sorting, JS SDK foundation
+
+### Changed
+- Provider health-check cache (30s TTL) prevents flooding dead providers on `/api/status` refresh
+- Dashboard channels table: active-first sort, 250px height, WhatsApp row no longer hidden
+- `ProviderFallbackManager.health_check()` delegates to active provider
+- CLAUDE.md slimmed from 50.9 KB → 12.4 KB with detailed docs split into `docs/claude/`
+
+### Added
+- `docs/claude/` reference docs: `api-reference.md`, `cli-reference.md`, `env-vars.md`, `structure.md`, `subsystems.md`
+
+---
+
 ## [2026.2.21.13] - 2026-02-21 🧠 Memory, Metrics, Tools, MQTT — issues #92–#101
 
 ### Added

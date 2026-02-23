@@ -27,12 +27,11 @@ Install::
     # pip install depthai==3.3.0
 """
 
-import io
 import logging
 import math
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 
 import numpy as np
 
