@@ -440,9 +440,24 @@ class Speaker:
         self.language = audio_cfg.get("language", "en")
         self._lock = threading.Lock()
         self._mixer_ready = False
+        self._local_tts = None  # LocalTTS instance (issue #138)
 
         if not self.enabled:
             return
+
+        # Use CASTOR_TTS_ENGINE to select engine (issue #138)
+        tts_engine = os.getenv("CASTOR_TTS_ENGINE", "gtts")
+        if tts_engine != "gtts":
+            try:
+                from castor.tts_local import LocalTTS, available_engines
+
+                avail = available_engines()
+                if avail:
+                    self._local_tts = LocalTTS(engine=tts_engine, language=self.language)
+                    logger.info("TTS speaker online (engine=%s)", self._local_tts.engine)
+                    return
+            except Exception as exc:
+                logger.debug("LocalTTS unavailable: %s; falling back to gTTS", exc)
 
         try:
             import pygame
@@ -493,6 +508,16 @@ class Speaker:
 
     def _speak(self, text: str):
         with self._lock:
+            # Use LocalTTS if available (issue #138)
+            if self._local_tts is not None:
+                try:
+                    for chunk in self._split_sentences(text):
+                        self._local_tts.say(chunk)
+                        time.sleep(0.15)
+                except Exception as exc:
+                    logger.debug(f"LocalTTS error: {exc}")
+                return
+
             try:
                 import pygame
                 from gtts import gTTS

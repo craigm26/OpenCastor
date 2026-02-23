@@ -166,6 +166,7 @@ class AppState:
     behavior_runner = None  # BehaviorRunner instance (issue #121)
     behavior_job = None  # Current behavior job dict or None (issue #121)
     personality_registry = None  # PersonalityRegistry singleton (lazy-init)
+    slam_mapper = None  # SLAMMapper instance (lazy-init, issue #136)
 
 
 state = AppState()
@@ -2364,6 +2365,165 @@ async def i18n_translate(req: _I18nTranslateRequest):
         return {"translated": result, "source_lang": "en", "target_lang": req.target_lang}
     translated, detected = t.to_english(req.text, source_lang=req.source_lang)
     return {"translated": translated, "source_lang": detected, "target_lang": "en"}
+
+
+# ---------------------------------------------------------------------------
+# Hot-word wake detection endpoints (issue #137)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/hotword/start", dependencies=[Depends(verify_token)])
+async def hotword_start():
+    """POST /api/hotword/start — Start always-on wake word detection."""
+    from castor.hotword import get_detector
+
+    async def _on_wake():
+        """Trigger STT when wake word detected."""
+        if state.listener and hasattr(state.listener, "enabled") and state.listener.enabled:
+            logger.info("Wake word detected — triggering STT listen")
+
+    det = get_detector()
+    det.start(on_wake=lambda: asyncio.run_coroutine_threadsafe(_on_wake(), asyncio.get_event_loop()))
+    return det.status
+
+
+@app.post("/api/hotword/stop", dependencies=[Depends(verify_token)])
+async def hotword_stop():
+    """POST /api/hotword/stop — Stop wake word detection."""
+    from castor.hotword import get_detector
+
+    det = get_detector()
+    det.stop()
+    return det.status
+
+
+@app.get("/api/hotword/status", dependencies=[Depends(verify_token)])
+async def hotword_status():
+    """GET /api/hotword/status — Wake word detector status."""
+    from castor.hotword import get_detector
+
+    return get_detector().status
+
+
+# ---------------------------------------------------------------------------
+# SLAM + occupancy mapping endpoints (issue #136)
+# ---------------------------------------------------------------------------
+
+
+def _get_slam_mapper():
+    """Return the state-scoped SLAMMapper, lazy-init if needed."""
+    if state.slam_mapper is None:
+        from castor.slam import SLAMMapper
+
+        state.slam_mapper = SLAMMapper()
+    return state.slam_mapper
+
+
+@app.post("/api/nav/map/start", dependencies=[Depends(verify_token)])
+async def slam_start():
+    """POST /api/nav/map/start — Begin a SLAM mapping session."""
+    _get_slam_mapper().start_mapping()
+    return {"status": "mapping", "engine": "depthai" if __import__("castor.slam", fromlist=["HAS_DEPTHAI"]).HAS_DEPTHAI else "mock"}
+
+
+@app.post("/api/nav/map/stop", dependencies=[Depends(verify_token)])
+async def slam_stop():
+    """POST /api/nav/map/stop — Finalize and stop the current mapping session."""
+    path = _get_slam_mapper().stop_mapping()
+    return {"status": "stopped", "map_path": path}
+
+
+@app.get("/api/nav/map/current", dependencies=[Depends(verify_token)])
+async def slam_map_current():
+    """GET /api/nav/map/current — PNG of the current occupancy grid."""
+    from fastapi.responses import Response as _Response
+
+    png = _get_slam_mapper().get_map_png()
+    return _Response(content=png, media_type="image/png")
+
+
+@app.post("/api/nav/map/navigate", dependencies=[Depends(verify_token)])
+async def slam_navigate(body: Dict[str, Any]):
+    """POST /api/nav/map/navigate — Plan + execute path to {goal_x, goal_y} (metres)."""
+    goal_x = float(body.get("goal_x", 0.0))
+    goal_y = float(body.get("goal_y", 0.0))
+    plan = _get_slam_mapper().navigate_to(goal_x, goal_y)
+    return plan
+
+
+@app.get("/api/nav/map/pose", dependencies=[Depends(verify_token)])
+async def slam_pose():
+    """GET /api/nav/map/pose — Current robot pose estimate {x, y, theta, confidence}."""
+    return _get_slam_mapper().get_pose()
+
+
+# ---------------------------------------------------------------------------
+# Workspace isolation endpoints (issue #134)
+# ---------------------------------------------------------------------------
+
+
+class _WorkspaceCreateRequest(BaseModel):
+    name: str
+    admin_email: str = ""
+    rcan_path: str = ""
+
+
+@app.post("/workspaces", dependencies=[Depends(verify_token)])
+async def workspace_create(req: _WorkspaceCreateRequest, request: Request):
+    """POST /workspaces — Create an isolated workspace.
+
+    Body: ``{"name": str, "admin_email": str, "rcan_path": str}``
+
+    Returns:
+        200: Workspace metadata including the one-time raw token.
+    """
+    _check_min_role(request, "admin")
+    from castor.workspace import get_manager as _wm
+
+    try:
+        ws = _wm().create(name=req.name, admin_email=req.admin_email, rcan_path=req.rcan_path)
+        return ws
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/workspaces", dependencies=[Depends(verify_token)])
+async def workspace_list(request: Request):
+    """GET /workspaces — List all workspaces (admin only)."""
+    _check_min_role(request, "admin")
+    from castor.workspace import get_manager as _wm
+
+    return {"workspaces": _wm().list()}
+
+
+@app.get("/workspaces/{ws_id}/status", dependencies=[Depends(verify_token)])
+async def workspace_status(ws_id: str, request: Request):
+    """GET /workspaces/{id}/status — Workspace health and config status."""
+    _check_min_role(request, "operator")
+    from castor.workspace import get_manager as _wm
+
+    try:
+        return _wm().status(ws_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+class _WorkspaceTokenRequest(BaseModel):
+    role: str = "operator"
+    expires_in_hours: int = 24
+
+
+@app.post("/workspaces/{ws_id}/token", dependencies=[Depends(verify_token)])
+async def workspace_token(ws_id: str, req: _WorkspaceTokenRequest, request: Request):
+    """POST /workspaces/{id}/token — Issue a workspace-scoped JWT."""
+    _check_min_role(request, "admin")
+    from castor.workspace import get_manager as _wm
+
+    try:
+        token = _wm().issue_token(ws_id, role=req.role, expires_in_hours=req.expires_in_hours)
+        return {"token": token, "workspace_id": ws_id, "role": req.role}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,18 @@
+apiVersion: v2
+name: opencastor
+description: Universal runtime for embodied AI — deploy robot fleets to Kubernetes
+type: application
+version: 0.1.0
+appVersion: "2026.2.22"
+keywords:
+  - robot
+  - ai
+  - embodied-ai
+  - robotics
+  - llm
+home: https://opencastor.com
+sources:
+  - https://github.com/craigm26/OpenCastor
+maintainers:
+  - name: OpenCastor Team
+    email: hello@opencastor.com

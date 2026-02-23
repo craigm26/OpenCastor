@@ -300,3 +300,159 @@ OpenCastor repository on GitHub.  Here is the process:
 Thank you for contributing to OpenCastor!
 """
     )
+
+
+# ---------------------------------------------------------------------------
+# Plugin marketplace v2 (issue #135) — community plugins as pip packages
+# ---------------------------------------------------------------------------
+
+_PLUGIN_ENTRY_POINT_GROUP = "opencastor.plugins"
+_PYPI_SEARCH_URL = "https://pypi.org/search/?q=opencastor-plugin&o=-created"
+
+
+def _discover_installed_plugins() -> List[Dict[str, Any]]:
+    """Discover installed OpenCastor plugins via Python entry points.
+
+    Returns:
+        List of plugin metadata dicts from ``opencastor.plugins`` entry points.
+    """
+    plugins: List[Dict[str, Any]] = []
+    try:
+        from importlib.metadata import entry_points
+
+        eps = entry_points(group=_PLUGIN_ENTRY_POINT_GROUP)
+        for ep in eps:
+            try:
+                dist = ep.dist
+                meta: Dict[str, Any] = {
+                    "name": dist.name if dist else ep.name,
+                    "version": dist.version if dist else "unknown",
+                    "entry_point": ep.name,
+                    "value": ep.value,
+                    "description": "",
+                }
+                if dist:
+                    meta_obj = dist.metadata
+                    meta["description"] = meta_obj.get("Summary", "")
+                    meta["author"] = meta_obj.get("Author", "")
+                    meta["url"] = meta_obj.get("Home-page", "")
+                plugins.append(meta)
+            except Exception as exc:
+                logger.debug("Plugin entry point error: %s", exc)
+    except Exception as exc:
+        logger.debug("Entry points discovery error: %s", exc)
+    return plugins
+
+
+def _load_plugin(entry_point_value: str) -> Any:
+    """Load and return the plugin object from an entry point value."""
+    import importlib
+
+    module_name, _, attr = entry_point_value.partition(":")
+    mod = importlib.import_module(module_name)
+    return getattr(mod, attr) if attr else mod
+
+
+def cmd_hub_plugins(args) -> None:
+    """List all installed OpenCastor plugins (pip packages with entry points)."""
+    plugins = _discover_installed_plugins()
+
+    try:
+        from rich.console import Console
+        from rich.table import Table
+
+        console = Console()
+        if not plugins:
+            console.print("[dim]No OpenCastor plugins installed.[/]")
+            console.print(
+                "\n[cyan]Install plugins:[/] castor hub install opencastor-plugin-<name>\n"
+                "[cyan]Browse:[/]         pip search opencastor-plugin\n"
+            )
+            return
+
+        table = Table(title="Installed OpenCastor Plugins")
+        table.add_column("Package", style="cyan")
+        table.add_column("Version", style="green")
+        table.add_column("Entry Point", style="yellow")
+        table.add_column("Description")
+        for p in plugins:
+            table.add_row(p["name"], p["version"], p["entry_point"], p.get("description", ""))
+        console.print(table)
+    except ImportError:
+        print(f"{'Package':<30} {'Version':<12} {'Entry Point':<25} Description")
+        print("-" * 80)
+        for p in plugins:
+            print(f"{p['name']:<30} {p['version']:<12} {p['entry_point']:<25} {p.get('description', '')}")
+        if not plugins:
+            print("No OpenCastor plugins installed.")
+
+
+def cmd_hub_install_plugin(args) -> None:
+    """Install an OpenCastor plugin package from PyPI or a GitHub URL.
+
+    Usage: castor hub install opencastor-plugin-gpio
+           castor hub install https://github.com/user/my-plugin
+    """
+    import subprocess
+    import sys
+
+    name: str = getattr(args, "name", "") or ""
+    if not name:
+        print("Usage: castor hub install <package-or-url>")
+        return
+
+    # Normalise: bare names get 'opencastor-plugin-' prefix if not already a URL or full name
+    if not name.startswith("http") and not name.startswith("opencastor-"):
+        package = f"opencastor-plugin-{name}"
+    else:
+        package = name
+
+    print(f"Installing plugin: {package}")
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", package],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            print(f"✓ Installed {package}")
+            # Reload entry points
+            plugins = _discover_installed_plugins()
+            matching = [p for p in plugins if p["name"] == package.replace("-", "_") or p["name"] == package]
+            if matching:
+                print(f"  Entry point: {matching[0]['entry_point']} → {matching[0]['value']}")
+        else:
+            print(f"✗ Installation failed:\n{result.stderr}")
+    except Exception as exc:
+        print(f"Error: {exc}")
+
+
+def cmd_hub_uninstall_plugin(args) -> None:
+    """Uninstall an OpenCastor plugin package.
+
+    Usage: castor hub uninstall opencastor-plugin-gpio
+    """
+    import subprocess
+    import sys
+
+    name: str = getattr(args, "name", "") or ""
+    if not name:
+        print("Usage: castor hub uninstall <package>")
+        return
+
+    if not name.startswith("opencastor-"):
+        name = f"opencastor-plugin-{name}"
+
+    print(f"Uninstalling plugin: {name}")
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "uninstall", "-y", name],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            print(f"✓ Uninstalled {name}")
+        else:
+            print(f"✗ Uninstall failed:\n{result.stderr}")
+    except Exception as exc:
+        print(f"Error: {exc}")

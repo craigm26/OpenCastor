@@ -72,7 +72,9 @@ def test_on_connect_sets_event():
     mock_client = MagicMock()
     ch._on_connect(mock_client, None, None, 0)
     assert ch._connected.is_set()
-    mock_client.subscribe.assert_called_once_with("opencastor/input", qos=0)
+    # Channel subscribes to input topic AND command bridge topic
+    calls = [str(c) for c in mock_client.subscribe.call_args_list]
+    assert any("opencastor/input" in c for c in calls)
 
 
 def test_on_connect_error_rc():

@@ -344,6 +344,7 @@ MODELS = {
             "label": "Kimi k2.5 (8K context)",
             "desc": "Fast, bilingual Chinese/English",
             "tags": ["fast", "bilingual"],
+            "recommended": True,
         },
         {
             "id": "moonshot-v1-32k",
@@ -358,6 +359,7 @@ MODELS = {
             "label": "MiniMax M2.5 Text",
             "desc": "Strong Chinese & English reasoning",
             "tags": ["reasoning", "bilingual"],
+            "recommended": True,
         },
         {
             "id": "abab6.5s-chat",

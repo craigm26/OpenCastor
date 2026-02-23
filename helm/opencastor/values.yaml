@@ -1,0 +1,94 @@
+# Default values for opencastor Helm chart.
+# Override with --set or a custom values.yaml.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/craigm26/opencastor
+  pullPolicy: IfNotPresent
+  tag: ""  # Defaults to Chart.appVersion
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Robot configuration
+robot:
+  name: "my-robot"
+  config: ""  # Inline RCAN YAML (mounted as ConfigMap)
+
+# AI provider
+config:
+  provider: google       # google | openai | anthropic | ollama | huggingface
+  model: ""              # Provider-specific model name (empty = provider default)
+
+# Secrets (use --set or external secrets operator)
+secrets:
+  googleApiKey: ""
+  openaiApiKey: ""
+  anthropicApiKey: ""
+  jwtSecret: ""
+  apiToken: ""           # OPENCASTOR_API_TOKEN
+
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: opencastor.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "256Mi"
+  limits:
+    cpu: "1000m"
+    memory: "1Gi"
+
+# Prometheus metrics scraping
+metrics:
+  enabled: true
+  port: 8000
+  path: /api/metrics
+
+# Persistent storage for episode memory, recordings, etc.
+persistence:
+  enabled: false
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 5Gi
+  mountPath: /root/.castor
+
+# Fleet mode: deploy multiple robots
+fleet:
+  enabled: false
+  robots: []
+  # - name: bot-1
+  #   config: {}
+  # - name: bot-2
+  #   config: {}
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# ServiceAccount
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""

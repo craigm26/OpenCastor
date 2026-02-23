@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "opencastor.fullname" . }}
+  labels:
+    {{- include "opencastor.labels" . | nindent 4 }}
+  {{- if .Values.metrics.enabled }}
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "{{ .Values.metrics.port }}"
+    prometheus.io/path: "{{ .Values.metrics.path }}"
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "opencastor.selectorLabels" . | nindent 4 }}
