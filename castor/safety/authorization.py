@@ -376,3 +376,31 @@ class WorkAuthority:
 
     def requires_authorization(self, path_or_command: str) -> bool:
         return self.detector.classify(path_or_command)
+
+    def capability_audit_hook(self, event: str, **kwargs: object) -> None:
+        """Audit hook compatible with ``CapabilityBroker`` event logging."""
+        self._audit(event, **kwargs)
+
+    def make_high_risk_approval_hook(self):
+        """Build an approval callback for broker-managed high-risk actions.
+
+        Approval is mapped to a matching active work order using the provided
+        intent context fields ``action_type`` and ``target``.
+        """
+
+        def _hook(*, principal: str, lease: object, path: str, data: object, intent_context: dict) -> bool:
+            action = str(intent_context.get("action_type", "")) or "property_access"
+            target = str(intent_context.get("target", "")) or path
+            order = self.check_authorization(action, target)
+            allowed = order is not None
+            self._audit(
+                "high_risk_approval_hook",
+                principal=principal,
+                allowed=allowed,
+                action_type=action,
+                target=target,
+                intent_context=intent_context,
+            )
+            return allowed
+
+        return _hook

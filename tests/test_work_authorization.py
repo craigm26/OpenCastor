@@ -391,3 +391,28 @@ class TestSecurityHardening:
     def test_unknown_principal_cannot_approve(self, authority: WorkAuthority) -> None:
         wo = authority.request_authorization("cut", "x", "operator_carol")
         assert not authority.approve(wo.order_id, "unknown_eve")
+
+
+class TestCapabilityHooks:
+    def test_high_risk_hook_uses_work_order(self):
+        auth = WorkAuthority(role_resolver={"creator": "CREATOR"}, ttl=3600.0)
+        hook = auth.make_high_risk_approval_hook()
+
+        intent = {"action_type": "property_access", "target": "/dev/property/door"}
+        assert not hook(
+            principal="api",
+            lease=None,
+            path="/dev/property/door",
+            data={"mode": "unlock"},
+            intent_context=intent,
+        )
+
+        wo = auth.request_authorization("property_access", "/dev/property/door", "requester")
+        auth.approve(wo.order_id, "creator")
+        assert hook(
+            principal="api",
+            lease=None,
+            path="/dev/property/door",
+            data={"mode": "unlock"},
+            intent_context=intent,
+        )

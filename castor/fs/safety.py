@@ -21,6 +21,8 @@ import threading
 import time
 from typing import Any, Dict, List, Optional
 
+from castor.rcan.rbac import CapabilityBroker, Scope
+
 from castor.fs.namespace import Namespace
 from castor.fs.permissions import Cap, PermissionTable
 from castor.safety.anti_subversion import scan_before_write as _scan_before_write
@@ -80,11 +82,18 @@ class SafetyLayer:
         limits: Optional dict overriding default safety limits.
     """
 
-    def __init__(self, ns: Namespace, perms: PermissionTable, limits: Optional[Dict] = None):
+    def __init__(
+        self,
+        ns: Namespace,
+        perms: PermissionTable,
+        limits: Optional[Dict] = None,
+        capability_broker: Optional[CapabilityBroker] = None,
+    ):
         self.ns = ns
         self.perms = perms
         self.limits = {**DEFAULT_LIMITS, **(limits or {})}
         self._lock = threading.Lock()
+        self.capability_broker = capability_broker
 
         # Rate limiting state
         self._motor_timestamps: List[float] = []
@@ -322,6 +331,16 @@ class SafetyLayer:
                 logger.info("Clamped motor angular: %s -> %s", orig, clamped["angular"])
         return clamped
 
+
+    def _required_scope_for_path(self, path: str) -> Scope:
+        if path.startswith("/etc/"):
+            return Scope.CONFIG
+        if path.startswith(("/mem", "/ctx")):
+            return Scope.TRAINING
+        if path.startswith("/dev/"):
+            return Scope.CONTROL
+        return Scope.STATUS
+
     # ------------------------------------------------------------------
     # Public API (permission-enforced)
     # ------------------------------------------------------------------
@@ -369,6 +388,24 @@ class SafetyLayer:
             self._record_violation(principal, path, "w", "permission denied")
             self._audit_safety(principal, path, "deny_write", "permission denied")
             return False
+
+        if self.capability_broker and principal != "root":
+            lease_token = (meta or {}).get("lease_token")
+            if not lease_token:
+                self._audit_safety(principal, path, "deny_lease", "missing capability lease")
+                return False
+            required_scope = self._required_scope_for_path(path)
+            if not self.capability_broker.validate_lease(
+                lease_token,
+                principal,
+                required_scope,
+                path,
+                path=path,
+                data=data,
+                intent_context=(meta or {}).get("intent_context"),
+            ):
+                self._audit_safety(principal, path, "deny_lease", "invalid or expired capability lease")
+                return False
 
         # Anti-subversion scan for AI-generated /dev/ writes
         if path.startswith("/dev/"):

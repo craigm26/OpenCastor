@@ -11,6 +11,7 @@ from unittest.mock import patch
 from castor.fs.namespace import Namespace
 from castor.fs.permissions import PermissionTable
 from castor.fs.safety import SafetyLayer
+from castor.rcan.rbac import CapabilityBroker, RCANPrincipal, RCANRole, Scope
 
 
 class _Base:
@@ -208,3 +209,26 @@ class TestEstopAuthCode(_Base):
         safety_log = ns.read("/var/log/safety")
         deny_events = [e for e in safety_log if e.get("event") == "deny_clear_estop"]
         assert any("auth code" in e.get("detail", "") for e in deny_events)
+
+
+class TestCapabilityLeaseEnforcement(_Base):
+    def test_write_requires_lease_when_broker_enabled(self):
+        broker = CapabilityBroker(signing_key="secret")
+        sl, _, _ = self._make_safety()
+        sl.capability_broker = broker
+        assert not sl.write("/tmp/lease.txt", "x", principal="api")
+
+    def test_write_accepts_valid_lease(self):
+        broker = CapabilityBroker(signing_key="secret")
+        principal = RCANPrincipal(name="api", role=RCANRole.LEASEE)
+        token = broker.issue_lease(principal, Scope.STATUS, "/tmp/lease.txt", ttl_seconds=120)
+
+        sl, ns, _ = self._make_safety()
+        sl.capability_broker = broker
+        assert sl.write(
+            "/tmp/lease.txt",
+            "ok",
+            principal="api",
+            meta={"lease_token": token, "intent_context": {"action_type": "write_tmp"}},
+        )
+        assert ns.read("/tmp/lease.txt") == "ok"
