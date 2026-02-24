@@ -133,6 +133,87 @@ def _get_security_profile(config_path: str) -> str:
     return str(profile) if profile else "hardened"
 
 
+def generate_driver_worker_units(config_path: str, working_dir: Optional[str] = None) -> dict[str, str]:
+    """Generate hardened per-driver worker unit files.
+
+    Each driver receives a dedicated ``User=``/``Group=`` identity suggestion,
+    ``DevicePolicy=closed``, and a minimal ``DeviceAllow=`` set inferred from
+    protocol + explicit config (e.g. serial ``port``).
+    """
+    with open(config_path, encoding="utf-8") as fh:
+        data = yaml.safe_load(fh) or {}
+    drivers = data.get("drivers", []) if isinstance(data, dict) else []
+    workdir = working_dir or str(Path(config_path).resolve().parent)
+    config_abs = str(Path(config_path).resolve())
+    units: dict[str, str] = {}
+
+    for index, drv in enumerate(drivers):
+        if not isinstance(drv, dict):
+            continue
+        drv_id = str(drv.get("id") or f"driver{index}")
+        protocol = str(drv.get("protocol") or "unknown")
+        user = f"castor-drv-{drv_id}"
+        group = user
+        service_name = f"castor-driver@{drv_id}.service"
+        device_allows = "\n".join(
+            f"DeviceAllow={node} rw" for node in _device_nodes_for_driver(protocol, drv)
+        )
+
+        units[service_name] = f"""\
+[Unit]
+Description=OpenCastor isolated driver worker ({drv_id} / {protocol})
+After=network.target
+
+[Service]
+Type=simple
+User={user}
+Group={group}
+WorkingDirectory={workdir}
+Environment=PYTHONUNBUFFERED=1
+ExecStart={sys.prefix}/bin/python -m castor.drivers.worker --config {config_abs} --driver-id {drv_id}
+Restart=on-failure
+RestartSec=2s
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX
+PrivateNetwork=true
+DevicePolicy=closed
+{device_allows}
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+    return units
+
+
+def _device_nodes_for_driver(protocol: str, drv_cfg: dict) -> list[str]:
+    nodes = {"/dev/null", "/dev/zero", "/dev/random", "/dev/urandom"}
+    proto = protocol.lower()
+    if "pca9685" in proto:
+        nodes.add(str(drv_cfg.get("port") or "/dev/i2c-1"))
+    if proto in {"gpio", "stepper"}:
+        nodes.add("/dev/gpiochip0")
+    if "dynamixel" in proto or proto in {"odrive", "vesc", "lidar"}:
+        port = drv_cfg.get("port")
+        if port:
+            nodes.add(str(port))
+        else:
+            nodes.update({"/dev/ttyUSB0", "/dev/ttyACM0"})
+    if proto == "imu":
+        nodes.add("/dev/i2c-1")
+    return sorted(nodes)
+
+
 # ── Install / remove ──────────────────────────────────────────────────────────
 
 

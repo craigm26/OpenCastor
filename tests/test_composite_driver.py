@@ -81,3 +81,35 @@ def test_unknown_subsystem_protocol():
     drv = CompositeDriver(cfg)
     drv.move(0.0, 0.0)  # routes to NullDriver — should not raise
     drv.stop()
+
+
+
+def test_isolation_mode_uses_ipc_adapter(monkeypatch):
+    cfg = _make_config(subsystems=[{"id": "base", "protocol": "mock"}])
+    cfg["driver_isolation"] = {"enabled": True}
+
+    calls = []
+
+    class FakeAdapter:
+        def __init__(self, sub_id, sub_cfg, full_config, **kwargs):
+            calls.append((sub_id, sub_cfg.get("protocol"), kwargs))
+
+        def move(self, *args, **kwargs):
+            return None
+
+        def stop(self):
+            return None
+
+        def close(self):
+            return None
+
+        def health_check(self):
+            return {"ok": True}
+
+    monkeypatch.setattr("castor.drivers.ipc.DriverIPCAdapter", FakeAdapter)
+
+    drv = CompositeDriver(cfg)
+    assert calls and calls[0][0] == "base"
+    drv.move(0.2, 0.0)
+    drv.stop()
+    drv.close()

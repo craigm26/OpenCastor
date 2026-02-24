@@ -56,6 +56,8 @@ class CompositeDriver:
     def __init__(self, config: dict):
         self._sub_drivers: Dict[str, Any] = {}
         self._routing: Dict[str, str] = {}  # action_key → sub-driver id
+        isolation_cfg = (config.get("driver_isolation") or {}) if isinstance(config, dict) else {}
+        self._isolation_enabled = bool(isolation_cfg.get("enabled", False))
 
         # Find the composite driver entry
         driver_entries: List[dict] = config.get("drivers", [])
@@ -78,12 +80,27 @@ class CompositeDriver:
             sub_id = sub_cfg.get("id", "sub")
             protocol = sub_cfg.get("protocol", "")
             try:
-                driver = self._make_sub_driver(sub_id, protocol, sub_cfg, config)
+                if self._isolation_enabled:
+                    from castor.drivers.ipc import DriverIPCAdapter
+
+                    driver = DriverIPCAdapter(
+                        sub_id,
+                        sub_cfg,
+                        config,
+                        rpc_timeout_s=float(isolation_cfg.get("rpc_timeout_s", 1.5)),
+                        heartbeat_interval_s=float(
+                            isolation_cfg.get("heartbeat_interval_s", 0.75)
+                        ),
+                        heartbeat_timeout_s=float(isolation_cfg.get("heartbeat_timeout_s", 3.0)),
+                    )
+                else:
+                    driver = self._make_sub_driver(sub_id, protocol, sub_cfg, config)
                 # get_driver() returns None for unknown protocols — treat as failure
                 if driver is None:
                     raise ValueError(f"get_driver() returned None for protocol '{protocol}'")
                 self._sub_drivers[sub_id] = driver
-                logger.info("CompositeDriver: sub-driver '%s' (%s) loaded", sub_id, protocol)
+                mode = "isolated-worker" if self._isolation_enabled else "in-process"
+                logger.info("CompositeDriver: sub-driver '%s' (%s) loaded [%s]", sub_id, protocol, mode)
             except Exception as exc:
                 logger.warning(
                     "CompositeDriver: sub-driver '%s' (%s) failed to load: %s",

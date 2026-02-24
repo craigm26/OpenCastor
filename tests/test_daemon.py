@@ -12,6 +12,7 @@ from castor.daemon import (
     SERVICE_NAME,
     daemon_status,
     generate_service_file,
+    generate_driver_worker_units,
 )
 
 
@@ -132,3 +133,33 @@ class TestDaemonStatus:
         assert status["running"] is False
         assert status["enabled"] is False
         assert status["installed"] is False
+
+
+
+def test_generate_driver_worker_units(tmp_path):
+    cfg = tmp_path / "robot.rcan.yaml"
+    cfg.write_text(
+        textwrap.dedent(
+            """
+            drivers:
+              - id: base
+                protocol: pca9685_rc
+                port: /dev/i2c-1
+              - id: scan
+                protocol: lidar
+                port: /dev/ttyUSB2
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    units = generate_driver_worker_units(str(cfg))
+    assert "castor-driver@base.service" in units
+    base = units["castor-driver@base.service"]
+    assert "User=castor-drv-base" in base
+    assert "DevicePolicy=closed" in base
+    assert "DeviceAllow=/dev/i2c-1 rw" in base
+
+    scan = units["castor-driver@scan.service"]
+    assert "DeviceAllow=/dev/ttyUSB2 rw" in scan
+    assert "PrivateNetwork=true" in scan
