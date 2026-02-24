@@ -987,6 +987,35 @@ def main():
 
                 def _on_message(channel_name: str, chat_id: str, text: str) -> str | None:
                     logger.info(f"[{ch_name}] Incoming from {chat_id}: {text!r}")
+
+                    orchestrator = getattr(tiered, "orchestrator", None) if tiered else None
+                    cmd = text.strip()
+                    if orchestrator is not None and cmd.startswith("/intent"):
+                        parts = cmd.split()
+                        sub = parts[1].lower() if len(parts) > 1 else ""
+                        if sub in ("list", "ls"):
+                            intents = orchestrator.list_intents()
+                            if not intents:
+                                return "No active intents."
+                            return "\n".join(
+                                f"{i['intent_id']} prio={i['priority']} state={i['state']} goal={i['goal'][:48]}"
+                                for i in intents[:8]
+                            )
+                        if sub == "pause" and len(parts) >= 3:
+                            ok = orchestrator.pause_intent(parts[2], paused=True)
+                            return "Paused." if ok else "Intent not found."
+                        if sub == "resume" and len(parts) >= 3:
+                            ok = orchestrator.pause_intent(parts[2], paused=False)
+                            return "Resumed." if ok else "Intent not found."
+                        if sub == "reprio" and len(parts) >= 4:
+                            try:
+                                pval = int(parts[3])
+                            except Exception:
+                                return "Usage: /intent reprio <intent_id> <priority>"
+                            ok = orchestrator.reprioritize_intent(parts[2], pval)
+                            return "Updated priority." if ok else "Intent not found."
+                        return "Intent commands: /intent list | /intent pause <id> | /intent resume <id> | /intent reprio <id> <n>"
+
                     fs.context.push(
                         "user",
                         text,

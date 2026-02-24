@@ -19,9 +19,15 @@ are mapped to RCAN roles via :meth:`RCANPrincipal.from_legacy`.
 from __future__ import annotations
 
 import logging
+import base64
+import hashlib
+import hmac
+import json
+import time
+import uuid
 from dataclasses import dataclass, field
 from enum import IntEnum, IntFlag, auto
-from typing import Dict, List
+from typing import Callable, Dict, List, Optional
 
 from castor.fs.permissions import Cap
 
@@ -211,3 +217,236 @@ class RCANPrincipal:
             "rate_limit": self.rate_limit,
             "session_timeout": self.session_timeout,
         }
+
+
+@dataclass
+class CapabilityLease:
+    """A signed capability lease bound to a principal + resource scope."""
+
+    lease_id: str
+    principal: str
+    scope: Scope
+    resource: str
+    intent_context: dict
+    issued_at: float
+    expires_at: float
+
+    @property
+    def is_expired(self) -> bool:
+        return time.time() > self.expires_at
+
+    def to_payload(self) -> dict:
+        return {
+            "lease_id": self.lease_id,
+            "principal": self.principal,
+            "scope": int(self.scope),
+            "resource": self.resource,
+            "intent_context": self.intent_context,
+            "issued_at": self.issued_at,
+            "expires_at": self.expires_at,
+        }
+
+    @classmethod
+    def from_payload(cls, payload: dict) -> "CapabilityLease":
+        return cls(
+            lease_id=payload["lease_id"],
+            principal=payload["principal"],
+            scope=Scope(payload["scope"]),
+            resource=payload["resource"],
+            intent_context=payload.get("intent_context", {}),
+            issued_at=float(payload["issued_at"]),
+            expires_at=float(payload["expires_at"]),
+        )
+
+
+class CapabilityBroker:
+    """Issues and validates scoped signed capability leases."""
+
+    def __init__(
+        self,
+        signing_key: str,
+        max_ttl_seconds: float = 600.0,
+        approval_hook: Optional[Callable[..., bool]] = None,
+        audit_hook: Optional[Callable[..., None]] = None,
+    ):
+        self._key = signing_key.encode("utf-8")
+        self._max_ttl = max_ttl_seconds
+        self._approval_hook = approval_hook
+        self._audit_hook = audit_hook
+        self._revoked_lease_ids: set[str] = set()
+
+    def _audit(self, event: str, **kwargs: object) -> None:
+        if self._audit_hook:
+            self._audit_hook(event=event, **kwargs)
+
+    def _encode(self, data: bytes) -> str:
+        return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+
+    def _decode(self, text: str) -> bytes:
+        pad = "=" * (-len(text) % 4)
+        return base64.urlsafe_b64decode(text + pad)
+
+    def _sign(self, payload: dict) -> str:
+        raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        mac = hmac.new(self._key, raw, hashlib.sha256).digest()
+        return f"{self._encode(raw)}.{self._encode(mac)}"
+
+    def _verify(self, token: str) -> Optional[CapabilityLease]:
+        try:
+            payload_part, sig_part = token.split(".", 1)
+            raw = self._decode(payload_part)
+            got = self._decode(sig_part)
+            want = hmac.new(self._key, raw, hashlib.sha256).digest()
+            if not hmac.compare_digest(got, want):
+                return None
+            payload = json.loads(raw.decode("utf-8"))
+            return CapabilityLease.from_payload(payload)
+        except Exception:
+            return None
+
+    def issue_lease(
+        self,
+        principal: RCANPrincipal,
+        scope: Scope,
+        resource: str,
+        ttl_seconds: float,
+        intent_context: Optional[dict] = None,
+    ) -> str:
+        if not principal.has_scope(scope):
+            raise PermissionError(f"principal {principal.name} does not hold requested scope {scope}")
+        ttl = max(1.0, min(float(ttl_seconds), self._max_ttl))
+        now = time.time()
+        lease = CapabilityLease(
+            lease_id=str(uuid.uuid4()),
+            principal=principal.name,
+            scope=scope,
+            resource=resource,
+            intent_context=intent_context or {},
+            issued_at=now,
+            expires_at=now + ttl,
+        )
+        token = self._sign(lease.to_payload())
+        self._audit(
+            "capability_grant",
+            principal=principal.name,
+            lease_id=lease.lease_id,
+            resource=resource,
+            scope=scope.to_strings(),
+            intent_context=lease.intent_context,
+            expires_at=lease.expires_at,
+        )
+        return token
+
+    def revoke_lease(self, token: str, principal: str, reason: str = "manual_revoke") -> bool:
+        lease = self._verify(token)
+        if not lease:
+            self._audit("capability_revoke_failed", principal=principal, reason="invalid_token")
+            return False
+        self._revoked_lease_ids.add(lease.lease_id)
+        self._audit(
+            "capability_revoke",
+            principal=principal,
+            lease_id=lease.lease_id,
+            target_principal=lease.principal,
+            reason=reason,
+            intent_context=lease.intent_context,
+        )
+        return True
+
+    def _resource_matches(self, granted: str, requested: str) -> bool:
+        if granted == "*":
+            return True
+        if granted.endswith("*"):
+            return requested.startswith(granted[:-1])
+        return granted == requested
+
+    def _requires_high_risk_approval(self, path: str, data: object) -> bool:
+        if "/property" in path or path.startswith("/dev/property"):
+            return True
+        if path.startswith("/dev/arm") and isinstance(data, dict):
+            for key in ("force", "max_force", "force_threshold"):
+                if key in data and float(data[key]) > 40.0:
+                    return True
+        return False
+
+    def validate_lease(
+        self,
+        token: str,
+        principal: str,
+        required_scope: Scope,
+        resource: str,
+        *,
+        path: str,
+        data: object,
+        intent_context: Optional[dict] = None,
+    ) -> bool:
+        lease = self._verify(token)
+        if not lease:
+            self._audit("capability_denied", principal=principal, reason="invalid_signature")
+            return False
+        if lease.lease_id in self._revoked_lease_ids:
+            self._audit(
+                "capability_denied",
+                principal=principal,
+                lease_id=lease.lease_id,
+                reason="revoked",
+                intent_context=lease.intent_context,
+            )
+            return False
+        if lease.is_expired:
+            self._audit(
+                "capability_expired",
+                principal=principal,
+                lease_id=lease.lease_id,
+                intent_context=lease.intent_context,
+            )
+            return False
+        if lease.principal != principal:
+            self._audit("capability_denied", principal=principal, reason="principal_mismatch")
+            return False
+        if not (lease.scope & required_scope):
+            self._audit(
+                "capability_denied",
+                principal=principal,
+                lease_id=lease.lease_id,
+                reason="scope_mismatch",
+                required_scope=required_scope.to_strings(),
+            )
+            return False
+        if not self._resource_matches(lease.resource, resource):
+            self._audit(
+                "capability_denied",
+                principal=principal,
+                lease_id=lease.lease_id,
+                reason="resource_mismatch",
+                resource=resource,
+            )
+            return False
+
+        if self._requires_high_risk_approval(path, data):
+            if not self._approval_hook:
+                self._audit(
+                    "capability_denied",
+                    principal=principal,
+                    lease_id=lease.lease_id,
+                    reason="high_risk_requires_approval",
+                    intent_context=intent_context or lease.intent_context,
+                )
+                return False
+            allowed = self._approval_hook(
+                principal=principal,
+                lease=lease,
+                path=path,
+                data=data,
+                intent_context=intent_context or lease.intent_context,
+            )
+            if not allowed:
+                self._audit(
+                    "capability_denied",
+                    principal=principal,
+                    lease_id=lease.lease_id,
+                    reason="approval_hook_denied",
+                    intent_context=intent_context or lease.intent_context,
+                )
+                return False
+        return True

@@ -4,6 +4,7 @@ import logging
 
 from castor.fs.permissions import Cap
 from castor.rcan.rbac import (
+    CapabilityBroker,
     RCANPrincipal,
     RCANRole,
     Scope,
@@ -209,3 +210,52 @@ class TestBackwardCompatibility:
         with caplog.at_level(logging.WARNING, logger="castor.rcan.rbac"):
             assert resolve_role_name("admin") == "OWNER"
             assert resolve_role_name("operator") == "LEASEE"
+
+
+class TestCapabilityBroker:
+    def test_issue_and_validate(self):
+        principal = RCANPrincipal(name="api", role=RCANRole.LEASEE)
+        broker = CapabilityBroker(signing_key="secret")
+        token = broker.issue_lease(
+            principal,
+            Scope.CONTROL,
+            "/dev/motor*",
+            ttl_seconds=180,
+            intent_context={"action_type": "teleop"},
+        )
+
+        assert broker.validate_lease(
+            token,
+            principal="api",
+            required_scope=Scope.CONTROL,
+            resource="/dev/motor/left",
+            path="/dev/motor/left",
+            data={"linear": 0.2},
+        )
+
+    def test_revoke(self):
+        principal = RCANPrincipal(name="api", role=RCANRole.LEASEE)
+        broker = CapabilityBroker(signing_key="secret")
+        token = broker.issue_lease(principal, Scope.CONTROL, "/dev/motor*", ttl_seconds=180)
+        assert broker.revoke_lease(token, principal="owner")
+        assert not broker.validate_lease(
+            token,
+            principal="api",
+            required_scope=Scope.CONTROL,
+            resource="/dev/motor/left",
+            path="/dev/motor/left",
+            data={"linear": 0.2},
+        )
+
+    def test_high_risk_requires_approval_hook(self):
+        principal = RCANPrincipal(name="api", role=RCANRole.LEASEE)
+        broker = CapabilityBroker(signing_key="secret")
+        token = broker.issue_lease(principal, Scope.CONTROL, "/dev/property*", ttl_seconds=180)
+        assert not broker.validate_lease(
+            token,
+            principal="api",
+            required_scope=Scope.CONTROL,
+            resource="/dev/property/door",
+            path="/dev/property/door",
+            data={"mode": "unlock"},
+        )

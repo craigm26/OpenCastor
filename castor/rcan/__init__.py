@@ -13,7 +13,7 @@ within that section.
 
 from castor.rcan.capabilities import Capability, CapabilityRegistry
 from castor.rcan.message import MessageType, Priority, RCANMessage
-from castor.rcan.rbac import RCANPrincipal, RCANRole, Scope
+from castor.rcan.rbac import CapabilityBroker, CapabilityLease, RCANPrincipal, RCANRole, Scope
 from castor.rcan.router import MessageRouter
 from castor.rcan.ruri import RURI
 
@@ -25,6 +25,8 @@ __all__ = [
     "RCANRole",
     "Scope",
     "RCANPrincipal",
+    "CapabilityLease",
+    "CapabilityBroker",
     "Capability",
     "CapabilityRegistry",
     "MessageRouter",
