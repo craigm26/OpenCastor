@@ -106,6 +106,7 @@ class AuditLog:
             action_type=action.get("type", "?"),
             linear=action.get("linear"),
             angular=action.get("angular"),
+            intent_id=action.get("intent_id"),
         )
 
     def log_approval(self, approval_id: int, decision: str, source: str = "cli"):

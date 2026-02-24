@@ -306,3 +306,24 @@ class TestTieredBrainLayer3:
 
         brain = TieredBrain(fast_provider=self._make_fast_provider())
         assert "swarm_pct" in brain.get_stats()
+
+
+class TestOrchestratorIntents:
+    def test_submit_intent_sets_current(self):
+        o = make_orchestrator()
+        created = o.submit_intent(goal="patrol room", priority=3, owner="tester")
+        assert created["intent"]["goal"] == "patrol room"
+        assert created["current"] == created["intent"]["intent_id"]
+
+    def test_resolve_includes_intent_id(self):
+        o = make_orchestrator()
+        created = o.submit_intent(goal="go dock", priority=1)
+        action = o._resolve({"nav_plan": {"action": {"type": "move", "linear": 0.2}}})
+        assert action["intent_id"] == created["intent"]["intent_id"]
+
+    def test_checkpoint_written_for_manipulator(self):
+        o = make_orchestrator()
+        o.submit_intent(goal="pick item", priority=5)
+        o._resolve({"manipulation_result": {"status": "running"}})
+        cp = o.get_specialist_checkpoint("Manipulator")
+        assert cp["status"] == "running"

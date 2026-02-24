@@ -165,7 +165,7 @@ class TestHealthEndpoint:
         assert resp.json()["brain"] is False
 
     def test_health_brain_true_when_loaded(self, client, api_mod):
-        api_mod.state.brain = _make_mock_brain()
+        api_mod.state.brain = object()
         resp = client.get("/health")
         assert resp.json()["brain"] is True
 
@@ -345,7 +345,7 @@ class TestCommandEndpoint:
         assert api_mod.state.last_thought["raw_text"] == "done"
 
     def test_command_with_image_base64(self, client, api_mod):
-        api_mod.state.brain = _make_mock_brain()
+        api_mod.state.brain = object()
         img_b64 = base64.b64encode(b"\x89PNG fake image").decode()
         resp = client.post(
             "/api/command",
@@ -1503,3 +1503,42 @@ class TestAudioTranscribe:
         assert resp.status_code == 200
         call_kwargs = mock_fn.call_args
         assert "google" in str(call_kwargs)
+
+
+class TestIntentEndpoints:
+    def test_list_intents_disabled_when_no_orchestrator(self, client, api_mod):
+        api_mod.state.brain = object()
+        resp = client.get('/api/intents')
+        assert resp.status_code == 200
+        assert resp.json()['enabled'] is False
+
+    def test_create_and_reprioritize_intent(self, client, api_mod):
+        from castor.agents.orchestrator import OrchestratorAgent
+        from castor.agents.shared_state import SharedState
+
+        brain = _make_mock_brain()
+        brain.orchestrator = OrchestratorAgent(config={}, shared_state=SharedState())
+        api_mod.state.brain = brain
+
+        created = client.post('/api/intents', json={'goal': 'dock robot', 'priority': 1, 'owner': 'api'})
+        assert created.status_code == 200
+        iid = created.json()['intent']['intent_id']
+
+        reprio = client.post('/api/intents/reprioritize', json={'intent_id': iid, 'priority': 9})
+        assert reprio.status_code == 200
+
+        listed = client.get('/api/intents')
+        assert listed.status_code == 200
+        assert listed.json()['intents'][0]['intent_id'] == iid
+        assert listed.json()['intents'][0]['priority'] == 9
+
+    def test_pause_intent_not_found(self, client, api_mod):
+        from castor.agents.orchestrator import OrchestratorAgent
+        from castor.agents.shared_state import SharedState
+
+        brain = _make_mock_brain()
+        brain.orchestrator = OrchestratorAgent(config={}, shared_state=SharedState())
+        api_mod.state.brain = brain
+
+        resp = client.post('/api/intents/pause', json={'intent_id': 'missing', 'paused': True})
+        assert resp.status_code == 404

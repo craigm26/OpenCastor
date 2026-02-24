@@ -9,9 +9,133 @@ import logging
 import threading
 import time
 import uuid
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("OpenCastor.SharedState")
+
+
+@dataclass
+class Intent:
+    """First-class orchestration intent.
+
+    Attributes:
+        goal: Human/task objective description.
+        priority: Higher value means higher urgency.
+        deadline_ts: Optional unix timestamp deadline/SLA target.
+        safety_class: Safety class (normal, elevated, emergency, etc.).
+        owner: Issuer/owner of the intent.
+    """
+
+    goal: str
+    priority: int = 0
+    deadline_ts: Optional[float] = None
+    safety_class: str = "normal"
+    owner: str = "system"
+    intent_id: str = field(default_factory=lambda: f"intent-{uuid.uuid4().hex[:12]}")
+    state: str = "queued"
+    created_at: float = field(default_factory=time.time)
+    paused: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        payload = asdict(self)
+        payload["created_at_iso"] = datetime.fromtimestamp(self.created_at).isoformat()
+        if self.deadline_ts is not None:
+            payload["deadline_iso"] = datetime.fromtimestamp(self.deadline_ts).isoformat()
+        return payload
+
+
+class IntentQueue:
+    """Thread-safe intent queue with preemption support."""
+
+    def __init__(self) -> None:
+        self._lock: threading.RLock = threading.RLock()
+        self._queue: List[Intent] = []
+        self._current_id: Optional[str] = None
+
+    @staticmethod
+    def _preempts(a: Intent, b: Optional[Intent]) -> bool:
+        if b is None:
+            return True
+        if a.safety_class == "emergency" and b.safety_class != "emergency":
+            return True
+        if a.priority > b.priority:
+            return True
+        if (
+            a.deadline_ts is not None
+            and b.deadline_ts is not None
+            and a.deadline_ts < b.deadline_ts
+            and a.priority >= b.priority
+        ):
+            return True
+        return False
+
+    def enqueue(self, intent: Intent) -> Dict[str, Any]:
+        with self._lock:
+            self._queue = [i for i in self._queue if i.intent_id != intent.intent_id]
+            self._queue.append(intent)
+            active = self.current()
+            preempted = None
+            if self._preempts(intent, active):
+                if active is not None and active.intent_id != intent.intent_id:
+                    active.state = "queued"
+                    preempted = active.intent_id
+                intent.state = "active"
+                self._current_id = intent.intent_id
+            return {"accepted": True, "preempted": preempted, "current": self._current_id}
+
+    def current(self) -> Optional[Intent]:
+        with self._lock:
+            if self._current_id is None:
+                return None
+            for i in self._queue:
+                if i.intent_id == self._current_id:
+                    return i
+            self._current_id = None
+            return None
+
+    def list_intents(self) -> List[Dict[str, Any]]:
+        with self._lock:
+            ranked = sorted(
+                self._queue,
+                key=lambda i: (
+                    i.state != "active",
+                    i.paused,
+                    -i.priority,
+                    i.deadline_ts if i.deadline_ts is not None else float("inf"),
+                    i.created_at,
+                ),
+            )
+            return [i.to_dict() for i in ranked]
+
+    def pause(self, intent_id: str, paused: bool = True) -> bool:
+        with self._lock:
+            for intent in self._queue:
+                if intent.intent_id == intent_id:
+                    intent.paused = paused
+                    intent.state = "paused" if paused else "queued"
+                    if paused and self._current_id == intent_id:
+                        self._current_id = None
+                    if not paused and self._current_id is None:
+                        self._current_id = intent_id
+                        intent.state = "active"
+                    return True
+            return False
+
+    def reprioritize(self, intent_id: str, priority: int) -> bool:
+        with self._lock:
+            for intent in self._queue:
+                if intent.intent_id == intent_id:
+                    intent.priority = int(priority)
+                    active = self.current()
+                    if self._preempts(intent, active):
+                        if active is not None and active.intent_id != intent.intent_id:
+                            active.state = "queued"
+                        intent.state = "active"
+                        self._current_id = intent_id
+                    return True
+            return False
 
 
 class _Entry:
@@ -57,6 +181,7 @@ class SharedState:
         self._store: Dict[str, _Entry] = {}
         # key → {sub_id → callback}
         self._subscribers: Dict[str, Dict[str, Callable]] = {}
+        self._intents = IntentQueue()
 
     # ------------------------------------------------------------------
     # Core store operations
@@ -169,3 +294,51 @@ class SharedState:
             for k in expired:
                 del self._store[k]
             return result
+
+    # ------------------------------------------------------------------
+    # Intent orchestration
+    # ------------------------------------------------------------------
+
+    def add_intent(self, intent: Intent) -> Dict[str, Any]:
+        """Add an intent to the queue and evaluate preemption."""
+        result = self._intents.enqueue(intent)
+        self.set("swarm.current_intent_id", result.get("current"))
+        self.set("swarm.intent_queue", self._intents.list_intents())
+        return result
+
+    def list_intents(self) -> List[Dict[str, Any]]:
+        """Return all intents in queue order with active intent first."""
+        return self._intents.list_intents()
+
+    def pause_intent(self, intent_id: str, paused: bool = True) -> bool:
+        """Pause or resume an intent by ID."""
+        ok = self._intents.pause(intent_id, paused=paused)
+        if ok:
+            current = self._intents.current()
+            self.set("swarm.current_intent_id", current.intent_id if current else None)
+            self.set("swarm.intent_queue", self._intents.list_intents())
+        return ok
+
+    def reprioritize_intent(self, intent_id: str, priority: int) -> bool:
+        """Update an intent's priority and re-run preemption selection."""
+        ok = self._intents.reprioritize(intent_id, priority)
+        if ok:
+            current = self._intents.current()
+            self.set("swarm.current_intent_id", current.intent_id if current else None)
+            self.set("swarm.intent_queue", self._intents.list_intents())
+        return ok
+
+    def current_intent(self) -> Optional[Dict[str, Any]]:
+        """Return the current active intent, if present."""
+        current = self._intents.current()
+        return current.to_dict() if current else None
+
+    def set_specialist_checkpoint(self, specialist: str, checkpoint: Dict[str, Any]) -> None:
+        """Persist a resume checkpoint for a long-running specialist."""
+        key = f"swarm.checkpoint.{specialist}"
+        payload = {"specialist": specialist, "updated_at": time.time(), **checkpoint}
+        self.set(key, payload)
+
+    def get_specialist_checkpoint(self, specialist: str) -> Optional[Dict[str, Any]]:
+        """Get the last checkpoint for the specialist."""
+        return self.get(f"swarm.checkpoint.{specialist}")

@@ -24,7 +24,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from .base import BaseAgent
-from .shared_state import SharedState
+from .shared_state import Intent, SharedState
 
 logger = logging.getLogger("OpenCastor.Agents.Orchestrator")
 
@@ -73,43 +73,95 @@ class OrchestratorAgent(BaseAgent):
             "scene_graph": self._state.get("swarm.scene_graph"),
             "manipulation_result": self._state.get("swarm.manipulation_result"),
             "incoming_message": self._state.get("swarm.incoming_message"),
+            "current_intent": self._state.current_intent(),
         }
 
+    def _active_intent_id(self) -> Optional[str]:
+        current = self._state.current_intent()
+        if isinstance(current, dict):
+            return current.get("intent_id")
+        return self._state.get("swarm.current_intent_id")
+
+    def submit_intent(
+        self,
+        goal: str,
+        priority: int = 0,
+        deadline_ts: Optional[float] = None,
+        safety_class: str = "normal",
+        owner: str = "system",
+    ) -> Dict[str, Any]:
+        """Create and enqueue a new orchestration intent."""
+        intent = Intent(
+            goal=goal,
+            priority=priority,
+            deadline_ts=deadline_ts,
+            safety_class=safety_class,
+            owner=owner,
+        )
+        result = self._state.add_intent(intent)
+        logger.info(
+            "Intent queued: %s (priority=%s safety=%s preempted=%s)",
+            intent.intent_id,
+            priority,
+            safety_class,
+            result.get("preempted"),
+        )
+        return {"intent": intent.to_dict(), **result}
+
+    def list_intents(self) -> List[Dict[str, Any]]:
+        """List active and queued intents."""
+        return self._state.list_intents()
+
+    def pause_intent(self, intent_id: str, paused: bool = True) -> bool:
+        """Pause or resume an intent by ID."""
+        return self._state.pause_intent(intent_id, paused=paused)
+
+    def reprioritize_intent(self, intent_id: str, priority: int) -> bool:
+        """Change priority of an existing intent."""
+        return self._state.reprioritize_intent(intent_id, priority=priority)
+
+    def checkpoint_specialist(self, specialist: str, checkpoint: Dict[str, Any]) -> None:
+        """Store resumable specialist state (Scout/Navigator/Manipulator)."""
+        self._state.set_specialist_checkpoint(specialist, checkpoint)
+
+    def get_specialist_checkpoint(self, specialist: str) -> Optional[Dict[str, Any]]:
+        """Get latest checkpoint for specialist."""
+        return self._state.get_specialist_checkpoint(specialist)
+
     def _resolve(self, outputs: Dict[str, Any]) -> Dict[str, Any]:
-        """Merge agent outputs into a single RCAN action.
+        """Merge agent outputs into a single RCAN action."""
+        intent_id = self._active_intent_id()
 
-        Priority (highest first):
-
-        1. E-stop active → ``{"type": "stop"}``
-        2. Guardian veto → ``{"type": "stop"}``
-        3. Manipulation in-progress → ``{"type": "wait"}``
-        4. Navigation plan action
-        5. Default → ``{"type": "idle"}``
-        """
         # 1. E-stop
         if outputs.get("estop_active"):
-            return {"type": "stop", "reason": "orchestrator_estop"}
+            return {"type": "stop", "reason": "orchestrator_estop", "intent_id": intent_id}
 
         # 2. Guardian veto
         report = outputs.get("guardian_report") or {}
         if report.get("vetoes"):
             first_reason = report["vetoes"][0].get("reason", "unknown")
-            return {"type": "stop", "reason": f"guardian_veto:{first_reason}"}
+            return {
+                "type": "stop",
+                "reason": f"guardian_veto:{first_reason}",
+                "intent_id": intent_id,
+            }
 
         # 3. Active manipulation
         manip = outputs.get("manipulation_result") or {}
         if manip.get("status") == "running":
-            return {"type": "wait", "reason": "manipulation_in_progress"}
+            self.checkpoint_specialist("Manipulator", {"status": "running", "intent_id": intent_id})
+            return {"type": "wait", "reason": "manipulation_in_progress", "intent_id": intent_id}
 
         # 4. Navigation plan
         nav = outputs.get("nav_plan")
         if isinstance(nav, dict):
             action = nav.get("action") or nav
             if isinstance(action, dict) and action.get("type"):
-                return action
+                self.checkpoint_specialist("Navigator", {"nav_plan": nav, "intent_id": intent_id})
+                return {**action, "intent_id": intent_id}
 
         # 5. Default
-        return {"type": "idle"}
+        return {"type": "idle", "intent_id": intent_id}
 
     # ------------------------------------------------------------------
     # BaseAgent interface
@@ -176,4 +228,6 @@ class OrchestratorAgent(BaseAgent):
             "last_action": self._last_action,
             "estop": self._state.get("swarm.estop_active", False),
             "log_entries": len(self._log),
+            "current_intent": self._state.current_intent(),
+            "queued_intents": len(self._state.list_intents()),
         }
