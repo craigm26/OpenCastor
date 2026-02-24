@@ -34,8 +34,9 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
-import secrets
 from typing import Any, Dict, Optional, Tuple
+
+from castor.secret_provider import get_jwt_secret_provider
 
 logger = logging.getLogger("OpenCastor.AuthJWT")
 
@@ -75,22 +76,8 @@ def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _get_jwt_secret() -> str:
-    """Return the JWT secret, falling back to API token or random value."""
-    secret = os.getenv("JWT_SECRET") or os.getenv("OPENCASTOR_JWT_SECRET")
-    if secret:
-        return secret
-    api_token = os.getenv("OPENCASTOR_API_TOKEN")
-    if api_token:
-        return api_token
-    # Generate a random secret once per process and cache it
-    if not hasattr(_get_jwt_secret, "_cached"):
-        _get_jwt_secret._cached = secrets.token_hex(32)  # type: ignore[attr-defined]
-        logger.warning(
-            "No JWT_SECRET or OPENCASTOR_API_TOKEN configured — "
-            "using a per-process random secret.  Tokens will not survive restarts."
-        )
-    return _get_jwt_secret._cached  # type: ignore[attr-defined]
+def _get_secret_bundle():
+    return get_jwt_secret_provider().get_bundle()
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +152,9 @@ def create_token(
     if role not in ROLES:
         raise ValueError(f"Unknown role: {role!r}.  Valid roles: {list(ROLES)}")
 
-    secret = secret or _get_jwt_secret()
+    provided_secret = secret
+    key = _get_secret_bundle().active
+    secret = secret or key.secret
     now = datetime.datetime.now(datetime.timezone.utc)
     payload = {
         "sub": username,
@@ -173,7 +162,8 @@ def create_token(
         "iat": now,
         "exp": now + datetime.timedelta(hours=expires_h),
     }
-    return _pyjwt.encode(payload, secret, algorithm="HS256")
+    headers = {"kid": key.kid} if provided_secret is None else None
+    return _pyjwt.encode(payload, secret, algorithm="HS256", headers=headers)
 
 
 def decode_token(token: str, secret: Optional[str] = None) -> Dict[str, Any]:
@@ -194,8 +184,36 @@ def decode_token(token: str, secret: Optional[str] = None) -> Dict[str, Any]:
     if not HAS_JWT:
         raise ImportError("PyJWT is required for JWT auth.  Install with: pip install PyJWT>=2.8.0")
 
-    secret = secret or _get_jwt_secret()
-    return _pyjwt.decode(token, secret, algorithms=["HS256"])
+    if secret:
+        return _pyjwt.decode(token, secret, algorithms=["HS256"])
+
+    bundle = _get_secret_bundle()
+    key_candidates = [bundle.active]
+    if bundle.previous:
+        key_candidates.append(bundle.previous)
+
+    header_kid = None
+    try:
+        header_kid = _pyjwt.get_unverified_header(token).get("kid")
+    except Exception:
+        header_kid = None
+
+    if header_kid:
+        ordered = [k for k in key_candidates if k.kid == header_kid]
+        ordered.extend([k for k in key_candidates if k.kid != header_kid])
+        key_candidates = ordered
+
+    last_exc = None
+    for key in key_candidates:
+        try:
+            payload = _pyjwt.decode(token, key.secret, algorithms=["HS256"])
+            payload.setdefault("kid", key.kid)
+            return payload
+        except Exception as exc:
+            last_exc = exc
+    if last_exc:
+        raise last_exc
+    raise ValueError("No JWT key candidates available")
 
 
 def authenticate_user(

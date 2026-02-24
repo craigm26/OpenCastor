@@ -226,12 +226,26 @@ def cmd_dashboard_tui(args) -> None:
 def cmd_token(args) -> None:
     """Issue a JWT token for RCAN API access."""
     from castor.auth import load_dotenv_if_available
+    from castor.secret_provider import get_jwt_secret_provider
 
     load_dotenv_if_available()
 
     import os
 
-    jwt_secret = os.getenv("OPENCASTOR_JWT_SECRET")
+    provider = get_jwt_secret_provider()
+    if args.rotate:
+        bundle = provider.rotate(new_secret=args.new_secret, new_kid=args.kid)
+        print("\n  JWT key rotated\n")
+        print(f"  active_kid:   {bundle.active.kid}")
+        print(f"  previous_kid: {bundle.previous.kid if bundle.previous else 'none'}\n")
+        return
+
+    if args.kid:
+        os.environ["OPENCASTOR_JWT_KID"] = args.kid
+        provider.invalidate()
+
+    bundle = provider.get_bundle()
+    jwt_secret = bundle.active.secret
     if not jwt_secret:
         print("Error: OPENCASTOR_JWT_SECRET is not set in environment or .env file.")
         print("Generate one with: openssl rand -hex 32")
@@ -253,7 +267,7 @@ def cmd_token(args) -> None:
             scopes=scopes,
             ttl_seconds=int(args.ttl) * 3600,
         )
-        print(f"\n  RCAN JWT Token (role={role.name}, ttl={args.ttl}h)\n")
+        print(f"\n  RCAN JWT Token (role={role.name}, ttl={args.ttl}h, kid={bundle.active.kid})\n")
         print(f"  {token}\n")
     except ImportError as exc:
         print("Error: PyJWT is not installed. Install with: pip install PyJWT")
@@ -2391,6 +2405,9 @@ def main() -> None:
     )
     p_token.add_argument("--ttl", default="24", help="Token lifetime in hours (default: 24)")
     p_token.add_argument("--subject", default=None, help="Principal name (default: cli-user)")
+    p_token.add_argument("--rotate", action="store_true", help="Rotate JWT signing key")
+    p_token.add_argument("--new-secret", default=None, help="Explicit replacement secret for --rotate")
+    p_token.add_argument("--kid", default=None, help="Key ID (kid) for issued or rotated key")
 
     # castor discover
     p_discover = sub.add_parser("discover", help="Discover RCAN peers on the local network")

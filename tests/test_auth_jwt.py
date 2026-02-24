@@ -84,6 +84,28 @@ class TestCreateDecodeToken:
         with pytest.raises(jwt.exceptions.DecodeError):
             decode_token("this.is.not.a.valid.jwt", secret="test-secret-xyz")
 
+    def test_decode_accepts_previous_key_with_kid(self):
+        """decode_token should accept previous secret during rotation window."""
+        from castor.auth_jwt import create_token, decode_token
+        from castor.secret_provider import get_jwt_secret_provider
+
+        provider = get_jwt_secret_provider()
+        with patch.dict(
+            os.environ,
+            {
+                "JWT_SECRET": "active-secret",
+                "OPENCASTOR_JWT_KID": "kid-active",
+                "OPENCASTOR_JWT_PREVIOUS_SECRET": "old-secret",
+                "OPENCASTOR_JWT_PREVIOUS_KID": "kid-old",
+            },
+            clear=False,
+        ):
+            provider.invalidate()
+            old_token = create_token("legacy", "viewer", secret="old-secret")
+            payload = decode_token(old_token)
+            assert payload["sub"] == "legacy"
+            assert payload["kid"] == "kid-old"
+
 
 class TestAPIEndpoints:
     """Tests for the FastAPI /auth/token and /auth/me endpoints."""
@@ -183,3 +205,16 @@ class TestAPIEndpoints:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert cmd_resp.status_code != 403
+
+    def test_rotate_key_endpoint_requires_auth_and_rotates(self, client):
+        login = client.post("/auth/token", json={"username": "admin", "password": "adminpass"})
+        token = login.json()["access_token"]
+        resp = client.post(
+            "/auth/rotate-key",
+            json={"new_secret": "next-secret", "new_kid": "next-kid"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["active_kid"] == "next-kid"
+        assert body["previous_kid"] is not None
