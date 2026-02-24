@@ -24,7 +24,7 @@ import streamlit as st  # noqa: E402
 
 # ── page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="CastorDash · Bob",
+    page_title="CastorDash",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -311,16 +311,13 @@ with left_col:
         unsafe_allow_html=True,
     )
 
-    _mjpeg_base = f"{GW}/api/stream/mjpeg"
     _tok = st.session_state.api_token
-    _mjpeg_url = f"{_mjpeg_base}?token={_tok}" if _tok else _mjpeg_base
-
-    # Embed MJPEG via HTML img tag.
-    # IMPORTANT: Replace 127.0.0.1/localhost with window.location.hostname via JS
-    # so remote browsers (not on the Pi) can reach the stream.
-    cam_border_cls = "cam-offline" if not cam_ok else ""
     cam_border_style = "border:2px solid #3fb950;" if cam_ok else "border:2px solid #f85149;"
-    _gw_port = GW.split(":")[-1] if ":" in GW else "8000"
+    # Parse host/port from GW so we can pass them to JS without relying on
+    # window.location inside the about:blank Streamlit component iframe.
+    _gw_host = GW.replace("http://", "").replace("https://", "").split(":")[0]
+    _gw_port = GW.split(":")[-1].split("/")[0] if ":" in GW else "8000"
+    _gw_proto = "https:" if GW.startswith("https") else "http:"
     _tok_js = _tok.replace('"', '\\"') if _tok else ""
     st.components.v1.html(
         f"""
@@ -354,8 +351,15 @@ with left_col:
 (function() {{
   var tok = "{_tok_js}";
   var port = "{_gw_port}";
-  var host = window.location.hostname;
-  var proto = window.location.protocol;
+  var cfgHost = "{_gw_host}";
+  var proto = "{_gw_proto}";
+  // If config host is localhost/127.0.0.1, use the browser's parent-frame host
+  // (the Streamlit iframe runs in about:blank so window.location is empty)
+  var host = cfgHost;
+  if (host === "127.0.0.1" || host === "localhost" || host === "") {{
+    try {{ var ph = window.parent.location.hostname; if (ph) host = ph; }} catch(e) {{}}
+    try {{ var th = window.top.location.hostname;    if (th) host = th; }} catch(e) {{}}
+  }}
   var base = proto + "//" + host + ":" + port + "/api/stream/mjpeg";
   var url = tok ? base + "?token=" + encodeURIComponent(tok) : base;
   var img = document.getElementById("cam");
