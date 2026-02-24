@@ -5,6 +5,7 @@ Provides a unified command interface for the OpenCastor runtime.
 Usage:
     castor run      --config robot.rcan.yaml          # Run the robot
     castor gateway  --config robot.rcan.yaml          # Start the API gateway
+    castor mcp      --host 127.0.0.1 --port 8765      # Start MCP tool server
     castor wizard                                      # Interactive setup
     castor dashboard                                   # Launch CastorDash
     castor status                                      # Check provider/channel readiness
@@ -150,6 +151,13 @@ def cmd_gateway(args) -> None:
         str(args.port),
     ]
     run_gateway()
+
+
+def cmd_mcp(args) -> None:
+    """Start the MCP server."""
+    from castor.mcp_server import main as run_mcp
+
+    run_mcp(host=args.host, port=args.port)
 
 
 def cmd_wizard(args) -> None:
@@ -2349,6 +2357,16 @@ def main() -> None:
     p_gw.add_argument("--host", default="127.0.0.1", help="Bind address")
     p_gw.add_argument("--port", type=int, default=8000, help="Port number")
 
+    # castor mcp
+    p_mcp = sub.add_parser(
+        "mcp",
+        help="Start the MCP server for tool-based agent integration",
+        epilog="Example: castor mcp --host 127.0.0.1 --port 8765",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_mcp.add_argument("--host", default="127.0.0.1", help="Bind address")
+    p_mcp.add_argument("--port", type=int, default=8765, help="Port number")
+
     # castor wizard
     p_wizard = sub.add_parser(
         "wizard",
@@ -3332,6 +3350,7 @@ def main() -> None:
     commands = {
         "run": cmd_run,
         "gateway": cmd_gateway,
+        "mcp": cmd_mcp,
         "wizard": cmd_wizard,
         "dashboard": cmd_dashboard,
         "dashboard-tui": cmd_dashboard_tui,

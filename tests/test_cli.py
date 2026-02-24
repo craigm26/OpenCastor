@@ -59,6 +59,7 @@ from castor.cli import (
 ALL_COMMANDS = [
     "run",
     "gateway",
+    "mcp",
     "wizard",
     "dashboard",
     "token",
@@ -250,6 +251,12 @@ class TestParserEdgeCases:
         args = self._dispatch_and_capture("castor.cli.cmd_gateway", "castor", "gateway")
         assert args.host == "127.0.0.1"
         assert args.port == 8000
+
+    def test_mcp_defaults(self):
+        """'castor mcp' defaults host=127.0.0.1 port=8765."""
+        args = self._dispatch_and_capture("castor.cli.cmd_mcp", "castor", "mcp")
+        assert args.host == "127.0.0.1"
+        assert args.port == 8765
 
     def test_demo_args(self):
         """'castor demo --steps 5 --delay 2.0' parses correctly."""
