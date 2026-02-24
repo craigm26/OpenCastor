@@ -46,6 +46,7 @@ from castor.auth import (
     load_dotenv_if_available,
 )
 from castor.fs import CastorFS
+from castor.secret_provider import get_jwt_secret_provider
 from castor.security_posture import publish_attestation
 
 logging.basicConfig(
@@ -242,12 +243,11 @@ async def verify_token(request: Request):
             pass  # Not a multi-user JWT; fall through
 
     # --- Layer 2: RCAN JWT (legacy JWT path) ---
-    jwt_secret = os.getenv("OPENCASTOR_JWT_SECRET")
-    if jwt_secret and raw_token:
+    if raw_token:
         try:
             from castor.rcan.jwt_auth import RCANTokenManager
 
-            mgr = RCANTokenManager(secret=jwt_secret, issuer=state.ruri or "")
+            mgr = RCANTokenManager(issuer=state.ruri or "")
             principal = mgr.verify(raw_token)
             request.state.principal = principal
             request.state.jwt_username = getattr(principal, "name", "unknown")
@@ -316,6 +316,11 @@ class UserLoginRequest(BaseModel):
     password: str
 
 
+class JWTKeyRotateRequest(BaseModel):
+    new_secret: Optional[str] = None
+    new_kid: Optional[str] = None
+
+
 @app.post("/auth/token")
 async def auth_token(req: UserLoginRequest):
     """Issue a JWT access token using username + password (multi-user auth).
@@ -369,6 +374,18 @@ async def auth_me(request: Request):
         return {"username": "api", "role": "admin", "auth_type": "static"}
 
     return {"username": "anonymous", "role": "viewer", "auth_type": "none"}
+
+
+@app.post("/auth/rotate-key", dependencies=[Depends(verify_token)])
+async def auth_rotate_key(req: JWTKeyRotateRequest, request: Request):
+    """Rotate JWT signing key and keep one previous verification key."""
+    _check_min_role(request, "admin")
+    bundle = get_jwt_secret_provider().rotate(new_secret=req.new_secret, new_kid=req.new_kid)
+    return {
+        "active_kid": bundle.active.kid,
+        "previous_kid": bundle.previous.kid if bundle.previous else None,
+        "source": bundle.source,
+    }
 
 
 def _maybe_wrap_rcan(payload: dict, request: Request) -> dict:
@@ -920,8 +937,8 @@ class TokenRequest(BaseModel):
 @app.post("/api/auth/token", dependencies=[Depends(verify_token)])
 async def issue_token(req: TokenRequest):
     """Issue a JWT token (requires OPENCASTOR_JWT_SECRET)."""
-    jwt_secret = os.getenv("OPENCASTOR_JWT_SECRET")
-    if not jwt_secret:
+    bundle = get_jwt_secret_provider().get_bundle()
+    if not bundle.active.secret:
         raise HTTPException(
             status_code=501,
             detail="JWT not configured. Set OPENCASTOR_JWT_SECRET.",
@@ -930,7 +947,7 @@ async def issue_token(req: TokenRequest):
         from castor.rcan.jwt_auth import RCANTokenManager
         from castor.rcan.rbac import RCANRole
 
-        mgr = RCANTokenManager(secret=jwt_secret, issuer=state.ruri or "")
+        mgr = RCANTokenManager(issuer=state.ruri or "")
         role = RCANRole[req.role.upper()]
         token = mgr.issue(
             subject=req.subject,
@@ -938,7 +955,7 @@ async def issue_token(req: TokenRequest):
             scopes=req.scopes,
             ttl_seconds=req.ttl_seconds,
         )
-        return {"token": token, "expires_in": req.ttl_seconds}
+        return {"token": token, "expires_in": req.ttl_seconds, "kid": bundle.active.kid}
     except KeyError as e:
         raise HTTPException(status_code=400, detail=f"Invalid role: {req.role}") from e
     except Exception as e:
@@ -3272,8 +3289,15 @@ async def on_startup():
     port = os.getenv("OPENCASTOR_API_PORT", "8000")
     logger.info(f"OpenCastor Gateway ready on {host}:{port}")
 
+    provider = get_jwt_secret_provider()
+    try:
+        provider.enforce_weak_source_policy()
+    except RuntimeError as exc:
+        logger.error("%s", exc)
+        raise
+
     # Warn if running without authentication
-    if not os.getenv("OPENCASTOR_API_TOKEN") and not os.getenv("OPENCASTOR_JWT_SECRET"):
+    if not os.getenv("OPENCASTOR_API_TOKEN") and not provider.get_bundle().active.secret:
         logger.warning(
             "Gateway running WITHOUT authentication. "
             "Set OPENCASTOR_API_TOKEN or OPENCASTOR_JWT_SECRET in .env for production."

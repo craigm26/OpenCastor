@@ -26,6 +26,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from castor.rcan.rbac import RCANPrincipal, RCANRole, Scope
+from castor.secret_provider import get_jwt_secret_provider
 
 logger = logging.getLogger("OpenCastor.RCAN.JWT")
 
@@ -53,17 +54,26 @@ class RCANTokenManager:
         issuer: Optional[str] = None,
         algorithm: str = "HS256",
     ):
-        self.secret = secret or os.getenv("OPENCASTOR_JWT_SECRET", "")
+        self._static_secret = secret
         self.issuer = issuer or "rcan://opencastor.unknown.00000000"
         self.algorithm = algorithm
 
-        if not self.secret:
+        if not self._static_secret and not get_jwt_secret_provider().get_bundle().active.secret:
             logger.debug("JWT secret not configured -- token operations will fail")
+
+    def _key_candidates(self):
+        if self._static_secret:
+            return [(os.getenv("OPENCASTOR_JWT_KID", "static"), self._static_secret)]
+        bundle = get_jwt_secret_provider().get_bundle()
+        candidates = [(bundle.active.kid, bundle.active.secret)]
+        if bundle.previous:
+            candidates.append((bundle.previous.kid, bundle.previous.secret))
+        return candidates
 
     @property
     def enabled(self) -> bool:
         """True if JWT is configured (secret is set and PyJWT available)."""
-        return bool(self.secret) and HAS_JWT
+        return bool(self._key_candidates()) and HAS_JWT
 
     def issue(
         self,
@@ -92,7 +102,8 @@ class RCANTokenManager:
         """
         if not HAS_JWT:
             raise RuntimeError("PyJWT is not installed. Install with: pip install PyJWT")
-        if not self.secret:
+        key_candidates = self._key_candidates()
+        if not key_candidates:
             raise RuntimeError("OPENCASTOR_JWT_SECRET is not configured")
 
         now = time.time()
@@ -110,7 +121,8 @@ class RCANTokenManager:
             "exp": int(now + ttl_seconds),
         }
 
-        token = jwt.encode(claims, self.secret, algorithm=self.algorithm)
+        active_kid, active_secret = key_candidates[0]
+        token = jwt.encode(claims, active_secret, algorithm=self.algorithm, headers={"kid": active_kid})
         logger.info("Issued JWT for %s (role=%s, ttl=%ds)", subject, role.name, ttl_seconds)
         return token
 
@@ -130,15 +142,36 @@ class RCANTokenManager:
         """
         if not HAS_JWT:
             raise RuntimeError("PyJWT is not installed")
-        if not self.secret:
+        key_candidates = self._key_candidates()
+        if not key_candidates:
             raise RuntimeError("OPENCASTOR_JWT_SECRET is not configured")
 
-        claims = jwt.decode(
-            token,
-            self.secret,
-            algorithms=[self.algorithm],
-            options={"verify_aud": False},
-        )
+        header_kid = None
+        try:
+            header_kid = jwt.get_unverified_header(token).get("kid")
+        except Exception:
+            header_kid = None
+        if header_kid:
+            key_candidates = [k for k in key_candidates if k[0] == header_kid] + [
+                k for k in key_candidates if k[0] != header_kid
+            ]
+
+        claims = None
+        last_exc = None
+        for kid, key_secret in key_candidates:
+            try:
+                claims = jwt.decode(
+                    token,
+                    key_secret,
+                    algorithms=[self.algorithm],
+                    options={"verify_aud": False},
+                )
+                claims.setdefault("kid", kid)
+                break
+            except Exception as exc:
+                last_exc = exc
+        if claims is None and last_exc is not None:
+            raise last_exc
 
         role = RCANRole[claims.get("role", "GUEST")]
         scopes = Scope.from_strings(claims.get("scope", []))
@@ -158,9 +191,12 @@ class RCANTokenManager:
         """Decode a JWT token without verification (for inspection only)."""
         if not HAS_JWT:
             raise RuntimeError("PyJWT is not installed")
+        key_candidates = self._key_candidates()
+        if not key_candidates:
+            raise RuntimeError("OPENCASTOR_JWT_SECRET is not configured")
         return jwt.decode(
             token,
-            self.secret,
+            key_candidates[0][1],
             algorithms=[self.algorithm],
             options={"verify_exp": False, "verify_aud": False},
         )
