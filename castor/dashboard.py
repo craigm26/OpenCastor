@@ -327,7 +327,7 @@ with left_col:
   50%  {{ border-color:#ff7b72; box-shadow:0 0 8px #f85149; }}
   100% {{ border-color:#f85149; box-shadow:0 0 0px #f85149; }}
 }}
-.cam-wrap {{ animation: {'cam-pulse 2s ease-in-out infinite' if not cam_ok else 'none'}; }}
+.cam-wrap {{ animation: {"cam-pulse 2s ease-in-out infinite" if not cam_ok else "none"}; }}
 </style>
 <div class="cam-wrap" style="background:#0d1117;{cam_border_style}border-radius:8px;
             overflow:hidden;aspect-ratio:4/3;max-height:420px;position:relative;">
