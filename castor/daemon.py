@@ -22,6 +22,7 @@ import yaml
 
 SERVICE_NAME = "castor-gateway"
 SERVICE_PATH = Path(f"/etc/systemd/system/{SERVICE_NAME}.service")
+SECURITY_INSTALL_PATH = Path("/etc/opencastor/security")
 
 
 # ── Service file generation ────────────────────────────────────────────────────
@@ -91,6 +92,10 @@ DeviceAllow=/dev/spidev0.1 rw
 DeviceAllow=/dev/gpiochip0 rw
 DeviceAllow=/dev/video0 rw
 ReadWritePaths={runtime_dir}
+AppArmorProfile=opencastor-gateway
+SystemCallFilter=@system-service @network-io @file-system @io-event
+SystemCallFilter=~@mount @swap @clock @cpu-emulation @obsolete
+SystemCallErrorNumber=EPERM
 """
 
     return f"""\
@@ -187,6 +192,10 @@ SystemCallArchitectures=native
 RestrictAddressFamilies=AF_UNIX
 PrivateNetwork=true
 DevicePolicy=closed
+AppArmorProfile=opencastor-driver
+SystemCallFilter=@basic-io @file-system @signal
+SystemCallFilter=~@mount @network-io @privileged @resources @raw-io @debug
+SystemCallErrorNumber=EPERM
 {device_allows}
 
 [Install]
@@ -228,6 +237,7 @@ def enable_daemon(
     Returns a status dict with ``ok``, ``message``, and ``service_path``.
     """
     service_content = generate_service_file(config_path, user, venv_path, working_dir)
+    _install_security_profiles()
 
     try:
         SERVICE_PATH.write_text(service_content)
@@ -324,8 +334,54 @@ def daemon_logs(lines: int = 50) -> str:
     return result.stdout.decode()
 
 
+def daemon_security_status() -> dict:
+    """Return whether MAC/seccomp protections are present and active."""
+    status = {
+        "profiles_installed": SECURITY_INSTALL_PATH.exists(),
+        "apparmor_profile": None,
+        "seccomp_mode": None,
+        "enabled_in_unit": False,
+    }
+
+    if SERVICE_PATH.exists():
+        unit_text = SERVICE_PATH.read_text(encoding="utf-8")
+        status["enabled_in_unit"] = (
+            "AppArmorProfile=opencastor-gateway" in unit_text
+            and "SystemCallFilter=" in unit_text
+        )
+
+    service = daemon_status()
+    pid = service.get("pid") if isinstance(service, dict) else None
+    if not pid:
+        return status
+
+    attr_current = Path(f"/proc/{pid}/attr/current")
+    proc_status = Path(f"/proc/{pid}/status")
+
+    if attr_current.exists():
+        status["apparmor_profile"] = attr_current.read_text(encoding="utf-8").strip()
+
+    if proc_status.exists():
+        for line in proc_status.read_text(encoding="utf-8").splitlines():
+            if line.startswith("Seccomp:"):
+                status["seccomp_mode"] = line.split(":", 1)[1].strip()
+                break
+
+    return status
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
 def _run(cmd: list[str], check: bool = False, **kwargs) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, check=check, **kwargs)
+
+
+def _install_security_profiles() -> None:
+    script = Path(__file__).resolve().parent.parent / "deploy" / "security" / "install_profiles.sh"
+    if not script.exists():
+        return
+    runner = ["bash", str(script)]
+    if os.geteuid() != 0:
+        runner = ["sudo", *runner]
+    _run(runner, check=False)

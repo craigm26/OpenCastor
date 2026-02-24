@@ -13,6 +13,7 @@ from castor.daemon import (
     daemon_status,
     generate_service_file,
     generate_driver_worker_units,
+    daemon_security_status,
 )
 
 
@@ -77,6 +78,8 @@ class TestGenerateServiceFile:
         assert "NoNewPrivileges=true" in content
         assert "ProtectSystem=strict" in content
         assert "DevicePolicy=closed" in content
+        assert "AppArmorProfile=opencastor-gateway" in content
+        assert "SystemCallFilter=" in content
 
     def test_permissive_profile_from_config(self, tmp_path):
         config_path = tmp_path / "robot.rcan.yaml"
@@ -86,6 +89,7 @@ class TestGenerateServiceFile:
 
         assert "NoNewPrivileges=true" not in content
         assert "DevicePolicy=closed" not in content
+        assert "AppArmorProfile=opencastor-gateway" not in content
 
 
 class TestDaemonStatus:
@@ -163,3 +167,21 @@ def test_generate_driver_worker_units(tmp_path):
     scan = units["castor-driver@scan.service"]
     assert "DeviceAllow=/dev/ttyUSB2 rw" in scan
     assert "PrivateNetwork=true" in scan
+
+
+class TestDaemonSecurityStatus:
+    def test_reports_unit_configuration_without_pid(self, tmp_path):
+        service_file = tmp_path / "castor-gateway.service"
+        service_file.write_text("AppArmorProfile=opencastor-gateway\nSystemCallFilter=@system-service\n", encoding="utf-8")
+
+        with (
+            patch("castor.daemon.SECURITY_INSTALL_PATH", tmp_path),
+            patch("castor.daemon.SERVICE_PATH", service_file),
+            patch("castor.daemon.daemon_status", return_value={"pid": None}),
+        ):
+            status = daemon_security_status()
+
+        assert status["profiles_installed"] is True
+        assert status["enabled_in_unit"] is True
+        assert status["seccomp_mode"] is None
+        assert status["apparmor_profile"] is None

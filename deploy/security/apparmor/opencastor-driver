@@ -1,0 +1,30 @@
+#include <tunables/global>
+
+profile opencastor-driver flags=(attach_disconnected,mediate_deleted) {
+  include <abstractions/base>
+  include <abstractions/python>
+
+  /usr/bin/python3 ixr,
+
+  /opt/opencastor/** r,
+  /etc/opencastor/** r,
+  /var/lib/opencastor/drivers/** rwk,
+  /run/opencastor/** rwk,
+
+  /dev/null rw,
+  /dev/zero rw,
+  /dev/random rw,
+  /dev/urandom rw,
+  /dev/ttyUSB[0-9]* rw,
+  /dev/ttyACM[0-9]* rw,
+  /dev/i2c-[0-9]* rw,
+  /dev/gpiochip[0-9]* rw,
+
+  # Drivers run offline by default.
+  deny network,
+
+  # Deny privilege escalation and shells.
+  deny /bin/sh x,
+  deny /bin/bash x,
+  deny /usr/bin/sudo x,
+}

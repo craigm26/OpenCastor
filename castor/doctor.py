@@ -13,6 +13,28 @@ import os
 import sys
 
 
+def check_mac_seccomp():
+    """Check whether daemon MAC and seccomp hardening are active."""
+    try:
+        from castor.daemon import daemon_security_status
+
+        status = daemon_security_status()
+    except Exception as exc:
+        return False, "MAC/seccomp", f"status unavailable: {exc}"
+
+    if not status.get("profiles_installed"):
+        return False, "MAC/seccomp", "profiles not installed (/etc/opencastor/security missing)"
+
+    apparmor = status.get("apparmor_profile") or "n/a"
+    seccomp = status.get("seccomp_mode") or "n/a"
+    in_unit = status.get("enabled_in_unit", False)
+    seccomp_active = seccomp == "2"
+    apparmor_active = apparmor not in {"n/a", "unconfined"}
+    ok = bool(in_unit and seccomp_active and apparmor_active)
+    detail = f"unit={'on' if in_unit else 'off'}, apparmor={apparmor}, seccomp={seccomp}"
+    return ok, "MAC/seccomp", detail
+
+
 def check_python_version():
     """Check Python >= 3.10."""
     ok = sys.version_info >= (3, 10)
@@ -194,6 +216,7 @@ def run_all_checks(config_path=None):
 
     results.extend(check_hardware_sdks())
     results.append(check_camera())
+    results.append(check_mac_seccomp())
 
     return results
 

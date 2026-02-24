@@ -96,3 +96,31 @@ Environment=OPENCASTOR_ATTESTATION_PATH=/run/opencastor/attestation.json
 ```
 
 This profile is intentionally lightweight and achievable on constrained SBC deployments.
+
+## 6) Mandatory access control + seccomp profiles
+
+OpenCastor ships deployable Linux MAC/seccomp artifacts under `deploy/security/`:
+
+- `deploy/security/apparmor/opencastor-gateway` — gateway profile with constrained file paths, device nodes, and exec transitions.
+- `deploy/security/apparmor/opencastor-driver` — stricter driver-worker profile with no network access.
+- `deploy/security/seccomp/gateway-seccomp.json` — gateway syscall allow-list.
+- `deploy/security/seccomp/driver-strict-seccomp.json` — tighter driver syscall allow-list.
+
+Install and load profiles:
+
+```bash
+bash deploy/security/install_profiles.sh
+```
+
+When `castor daemon enable` is used with hardened profile (default), generated units now include:
+
+- `AppArmorProfile=opencastor-gateway` (or `opencastor-driver` for worker units)
+- `SystemCallFilter=...` seccomp hardening rules
+
+To verify runtime posture:
+
+```bash
+castor doctor
+```
+
+The doctor report includes a `MAC/seccomp` line that confirms profile installation plus active AppArmor + seccomp mode for the running daemon.

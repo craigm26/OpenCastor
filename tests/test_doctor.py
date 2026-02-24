@@ -7,6 +7,7 @@ from castor.doctor import (
     check_camera,
     check_env_file,
     check_hardware_sdks,
+    check_mac_seccomp,
     check_provider_keys,
     check_python_version,
     check_rcan_config,
@@ -122,6 +123,27 @@ class TestCheckHardwareSDKs:
             assert isinstance(ok, bool)
             assert isinstance(name, str)
             assert isinstance(detail, str)
+
+
+class TestCheckMacSeccomp:
+    @patch("castor.daemon.daemon_security_status")
+    def test_active(self, mock_status):
+        mock_status.return_value = {
+            "profiles_installed": True,
+            "enabled_in_unit": True,
+            "apparmor_profile": "opencastor-gateway (enforce)",
+            "seccomp_mode": "2",
+        }
+        ok, name, detail = check_mac_seccomp()
+        assert ok is True
+        assert name == "MAC/seccomp"
+
+    @patch("castor.daemon.daemon_security_status")
+    def test_missing_profiles(self, mock_status):
+        mock_status.return_value = {"profiles_installed": False}
+        ok, _, detail = check_mac_seccomp()
+        assert ok is False
+        assert "profiles not installed" in detail
 
 
 # =====================================================================

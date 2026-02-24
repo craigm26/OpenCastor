@@ -321,6 +321,12 @@ if ! ls *.rcan.yaml &>/dev/null; then
   info "Edit robot.rcan.yaml to customize, or run 'castor wizard' to generate a new one."
 fi
 
+# Install MAC/seccomp deployment artifacts on Linux hosts
+if [ "$OS" = "linux" ] && [ "$DRY_RUN" = false ] && [ -x "deploy/security/install_profiles.sh" ]; then
+  info "Installing MAC/seccomp security profiles..."
+  run bash deploy/security/install_profiles.sh || warn "Security profile installation failed; run deploy/security/install_profiles.sh manually"
+fi
+
 # ── PATH setup — add venv/bin to shell profile ────────
 CASTOR_PATH_LINE="export PATH=\"$INSTALL_DIR/venv/bin:\$PATH\" # opencastor"
 

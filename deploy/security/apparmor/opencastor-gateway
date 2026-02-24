@@ -1,0 +1,45 @@
+#include <tunables/global>
+
+profile opencastor-gateway flags=(attach_disconnected,mediate_deleted) {
+  include <abstractions/base>
+  include <abstractions/python>
+
+  # Executables allowed for process transitions.
+  /usr/bin/python3 ixr,
+  /usr/bin/env ixr,
+  /bin/sh ixr,
+
+  # OpenCastor install + runtime paths.
+  /opt/opencastor/** r,
+  /etc/opencastor/** r,
+  /var/lib/opencastor/** rwk,
+  /run/opencastor/** rwk,
+  owner @{HOME}/opencastor/** rwk,
+
+  # Required device nodes.
+  /dev/null rw,
+  /dev/zero rw,
+  /dev/full rw,
+  /dev/random rw,
+  /dev/urandom rw,
+  /dev/tty rw,
+  /dev/ttyAMA0 rw,
+  /dev/ttyS0 rw,
+  /dev/ttyUSB[0-9]* rw,
+  /dev/ttyACM[0-9]* rw,
+  /dev/i2c-[0-9]* rw,
+  /dev/spidev[0-9]*.[0-9]* rw,
+  /dev/gpiochip[0-9]* rw,
+  /dev/video[0-9]* rw,
+
+  # Networking and proc reads for telemetry/status.
+  network inet stream,
+  network inet6 stream,
+  /proc/** r,
+  /sys/devices/** r,
+
+  # Block shell escapes + arbitrary exec transitions.
+  deny /bin/bash x,
+  deny /usr/bin/sudo x,
+  deny /usr/bin/ssh x,
+}
