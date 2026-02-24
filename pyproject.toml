@@ -73,7 +73,7 @@ rpi = [
     "picamera2>=0.3.17; sys_platform == 'linux'",
     "neonize==0.3.14.post0",
 ]
-whatsapp = ["neonize==0.3.10"]
+whatsapp = ["neonize==0.3.14.post0"]
 whatsapp-twilio = ["twilio>=9.0.0"]
 telegram = ["python-telegram-bot>=21.0"]
 discord = ["discord.py>=2.3.0"]
