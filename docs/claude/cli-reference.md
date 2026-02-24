@@ -14,6 +14,13 @@ python -m castor.wizard
 
 ---
 
+## Agent Skills
+
+For external agents, start with these production skills in `skills/`:
+
+- `skills/opencastor-operator/SKILL.md` for robot ops, diagnostics, config checks, and safe recovery workflows.
+- `skills/opencastor-developer/SKILL.md` for API checks, RCAN validate/lint/migrate workflows, and dashboard/watch debugging usage.
+
 ## Core Operations
 
 ### castor run

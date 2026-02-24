@@ -218,6 +218,15 @@ castor privacy --config r.yaml  # Show sensor access policy
 
 ## 📦 Quick Start
 
+## 🧩 Agent Skills
+
+External agents can load production-ready runbooks from `skills/`:
+
+- `skills/opencastor-operator/SKILL.md` — robot operations, diagnostics, config checks, safety guardrails, and failure recovery.
+- `skills/opencastor-developer/SKILL.md` — API checks, RCAN validate/lint/migrate workflow, and dashboard/watch debugging flow.
+
+If you are integrating with coding agents (Codex, Claude, etc.), point them to these skill files first so they follow OpenCastor-safe command sequences.
+
 ### 1. Install & Configure
 
 ```bash
