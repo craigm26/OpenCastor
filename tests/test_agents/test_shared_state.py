@@ -338,3 +338,23 @@ class TestSharedStateThreadSafety:
         for t in threads:
             t.join()
         assert errors == []
+
+
+class TestSharedStateIntents:
+    def test_emergency_preempts_navigation(self):
+        from castor.agents.shared_state import Intent
+
+        state = SharedState()
+        nav = Intent(goal="navigate hallway", priority=2, safety_class="normal", owner="nav")
+        state.add_intent(nav)
+        emerg = Intent(goal="emergency stop", priority=1, safety_class="emergency", owner="guardian")
+        result = state.add_intent(emerg)
+        assert result["preempted"] == nav.intent_id
+        assert state.current_intent()["intent_id"] == emerg.intent_id
+
+    def test_checkpoint_roundtrip(self):
+        state = SharedState()
+        state.set_specialist_checkpoint("Navigator", {"step": 4, "path": ["a", "b"]})
+        cp = state.get_specialist_checkpoint("Navigator")
+        assert cp["step"] == 4
+        assert cp["specialist"] == "Navigator"

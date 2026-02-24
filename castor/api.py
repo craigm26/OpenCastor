@@ -291,6 +291,24 @@ class WaypointRequest(BaseModel):
     speed: float = 0.6
 
 
+class IntentCreateRequest(BaseModel):
+    goal: str
+    priority: int = 0
+    deadline_ts: Optional[float] = None
+    safety_class: str = "normal"
+    owner: str = "api"
+
+
+class IntentPauseRequest(BaseModel):
+    intent_id: str
+    paused: bool = True
+
+
+class IntentReprioritizeRequest(BaseModel):
+    intent_id: str
+    priority: int
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -602,6 +620,60 @@ async def runtime_status():
         "driver_ready": state.driver is not None,
     }
 
+
+
+
+@app.get("/api/intents", dependencies=[Depends(verify_token)])
+async def list_intents(request: Request):
+    """List active and queued orchestration intents."""
+    _check_min_role(request, "viewer")
+    orchestrator = _get_orchestrator()
+    if orchestrator is None:
+        return {"intents": [], "current_intent": None, "enabled": False}
+    intents = orchestrator.list_intents()
+    current = orchestrator.get_status().get("current_intent")
+    return {"intents": intents, "current_intent": current, "enabled": True}
+
+
+@app.post("/api/intents", dependencies=[Depends(verify_token)])
+async def create_intent(req: IntentCreateRequest, request: Request):
+    """Create an orchestration intent in the orchestrator queue."""
+    _check_min_role(request, "operator")
+    orchestrator = _get_orchestrator()
+    if orchestrator is None:
+        raise HTTPException(status_code=503, detail="Orchestrator not available")
+    created = orchestrator.submit_intent(
+        goal=req.goal,
+        priority=req.priority,
+        deadline_ts=req.deadline_ts,
+        safety_class=req.safety_class,
+        owner=req.owner,
+    )
+    return created
+
+
+@app.post("/api/intents/pause", dependencies=[Depends(verify_token)])
+async def pause_intent(req: IntentPauseRequest, request: Request):
+    """Pause or resume an intent."""
+    _check_min_role(request, "operator")
+    orchestrator = _get_orchestrator()
+    if orchestrator is None:
+        raise HTTPException(status_code=503, detail="Orchestrator not available")
+    if not orchestrator.pause_intent(req.intent_id, paused=req.paused):
+        raise HTTPException(status_code=404, detail="Intent not found")
+    return {"ok": True, "intent_id": req.intent_id, "paused": req.paused}
+
+
+@app.post("/api/intents/reprioritize", dependencies=[Depends(verify_token)])
+async def reprioritize_intent(req: IntentReprioritizeRequest, request: Request):
+    """Reprioritize an existing intent."""
+    _check_min_role(request, "operator")
+    orchestrator = _get_orchestrator()
+    if orchestrator is None:
+        raise HTTPException(status_code=503, detail="Orchestrator not available")
+    if not orchestrator.reprioritize_intent(req.intent_id, priority=req.priority):
+        raise HTTPException(status_code=404, detail="Intent not found")
+    return {"ok": True, "intent_id": req.intent_id, "priority": req.priority}
 
 # ---------------------------------------------------------------------------
 # Prometheus metrics endpoint  (issue #99)
@@ -2859,6 +2931,12 @@ def _execute_action(action: dict):
         logger.info(f"Grip: {action.get('state', 'unknown')}")
     elif action_type == "wait":
         logger.info(f"Wait: {action.get('duration_ms', 0)}ms")
+
+
+def _get_orchestrator():
+    """Return layer-3 orchestrator if active."""
+    brain = state.brain
+    return getattr(brain, "orchestrator", None) if brain is not None else None
 
 
 def _get_active_brain():
