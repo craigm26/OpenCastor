@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 
 from .base import AgentStatus, BaseAgent
 from .shared_state import SharedState
+from castor.world import EntityRecord, WorldModel
 
 logger = logging.getLogger("OpenCastor.Agents.Observer")
 
@@ -164,6 +165,7 @@ class ObserverAgent(BaseAgent):
         )
 
         self._state.set("scene_graph", scene)
+        self._update_world_model(scene)
         self.status = AgentStatus.RUNNING
         return scene
 
@@ -186,6 +188,28 @@ class ObserverAgent(BaseAgent):
         if scene.closest_obstacle_m is not None and scene.closest_obstacle_m < 0.3:
             return {"action": "stop", "reason": "obstacle_close"}
         return {"action": "observe", "free_space_pct": scene.free_space_pct}
+
+    def _update_world_model(self, scene: "SceneGraph") -> None:
+        """Merge observer detections into the shared world model."""
+        world = self._state.get("world_model") or WorldModel()
+        for idx, det in enumerate(scene.detections):
+            category = "people" if det.label.lower() == "person" else "objects"
+            if det.is_obstacle:
+                category = "obstacles"
+            entity = EntityRecord(
+                entity_id=f"{det.label.lower()}-{idx}",
+                kind=det.label.lower(),
+                confidence=det.confidence,
+                source_agent=self.name,
+                observed_at=scene.timestamp,
+                attrs={
+                    "label": det.label,
+                    "bbox": tuple(det.bbox),
+                    "distance_m": det.distance_m,
+                },
+            )
+            world.merge(category, entity)
+        self._state.set("world_model", world)
 
     # ------------------------------------------------------------------
     # Private helpers

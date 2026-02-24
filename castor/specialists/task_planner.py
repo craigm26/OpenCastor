@@ -6,6 +6,9 @@ import asyncio
 import heapq
 from dataclasses import dataclass, field
 
+from castor.agents.shared_state import SharedState
+from castor.world import WorldModel
+
 from .base_specialist import BaseSpecialist, Task, TaskResult, TaskStatus
 
 
@@ -21,8 +24,13 @@ class _PrioritizedTask:
 class TaskPlanner:
     """Orchestrates task delegation to the best available specialist."""
 
-    def __init__(self, specialists: list[BaseSpecialist]) -> None:
+    def __init__(
+        self,
+        specialists: list[BaseSpecialist],
+        shared_state: SharedState | None = None,
+    ) -> None:
         self._specialists: list[BaseSpecialist] = list(specialists)
+        self._state: SharedState = shared_state or SharedState()
         self._queue: list[_PrioritizedTask] = []  # heapq
         self._pending: dict[str, Task] = {}  # task_id -> Task (queued but not started)
         self._running: dict[str, Task] = {}  # task_id -> Task (in-flight)
@@ -61,6 +69,7 @@ class TaskPlanner:
                 return None  # queue empty
 
         self._pending.pop(task.id, None)
+        self._enrich_task_from_world(task)
 
         # Find best specialist
         specialist = self.best_specialist(task)
@@ -98,6 +107,7 @@ class TaskPlanner:
         semaphore = asyncio.Semaphore(max_concurrent)
 
         async def _run_one(task: Task) -> None:
+            self._enrich_task_from_world(task)
             specialist = self.best_specialist(task)
             if specialist is None:
                 result = TaskResult(
@@ -158,6 +168,37 @@ class TaskPlanner:
         if not candidates:
             return None
         return min(candidates, key=lambda s: s.estimate_duration_s(task))
+
+    def _enrich_task_from_world(self, task: Task) -> None:
+        """Attach world-model query hints to task params for specialists."""
+        world: WorldModel | None = self._state.get("world_model")
+        if world is None:
+            return
+
+        goal_lower = task.goal.lower()
+        if "charger" in goal_lower:
+            last_seen = world.last_seen("charger")
+            if last_seen is not None:
+                task.params.setdefault(
+                    "world_hint",
+                    {
+                        "query": "where_was_charger_last_seen",
+                        "position": last_seen.position,
+                        "room_id": last_seen.room_id,
+                        "age_s": round(last_seen.age_s, 3),
+                        "confidence": last_seen.confidence,
+                    },
+                )
+
+        avoid_zones = task.params.get("avoid_zones")
+        start_wp = task.params.get("start_waypoint")
+        end_wp = task.params.get("end_waypoint")
+        if avoid_zones and start_wp and end_wp:
+            task.params["safe_route"] = world.safe_route(
+                str(start_wp),
+                str(end_wp),
+                [str(z) for z in avoid_zones],
+            )
 
     def queue_status(self) -> dict:
         """Return counts of tasks in each state."""

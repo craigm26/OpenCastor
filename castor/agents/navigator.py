@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .base import AgentStatus, BaseAgent
 from .observer import SceneGraph
 from .shared_state import SharedState
+from castor.world import WorldModel
 
 logger = logging.getLogger("OpenCastor.Agents.Navigator")
 
@@ -135,7 +136,9 @@ class NavigatorAgent(BaseAgent):
         goal_y = float(context.get("goal_y", self._goal_y))
 
         scene: Optional[SceneGraph] = context.get("scene_graph") or self._state.get("scene_graph")
+        world: Optional[WorldModel] = self._state.get("world_model")
         plan = self._plan(scene, goal_x, goal_y)
+        plan = self._apply_world_constraints(plan, world, context)
 
         self._state.set("nav_plan", plan)
         self.status = AgentStatus.RUNNING
@@ -253,6 +256,33 @@ class NavigatorAgent(BaseAgent):
         if scene.closest_obstacle_m is not None:
             return max(0.0, scene.closest_obstacle_m - self._min_obstacle_m)
         return 5.0  # assume clear path when no depth data
+
+    def _apply_world_constraints(
+        self,
+        plan: NavigationPlan,
+        world: Optional[WorldModel],
+        context: Dict[str, Any],
+    ) -> NavigationPlan:
+        """Modify plan using world-model constraints and route queries."""
+        if world is None:
+            return plan
+
+        avoid_zones = [str(z) for z in context.get("avoid_zones", [])]
+        start_wp = context.get("start_waypoint")
+        end_wp = context.get("end_waypoint")
+        if avoid_zones and start_wp and end_wp:
+            safe_path = world.safe_route(str(start_wp), str(end_wp), avoid_zones=avoid_zones)
+            if not safe_path:
+                plan.is_blocked = True
+                plan.replan_reason = "no_safe_route"
+            else:
+                plan.replan_reason = f"safe_route:{'->'.join(safe_path)}"
+
+        for zone in world.zones.values():
+            if zone.kind == "child" and zone.age_s < 180.0:
+                plan.replan_reason = plan.replan_reason or "child_zone_present"
+                break
+        return plan
 
     # ------------------------------------------------------------------
     # RCAN action output

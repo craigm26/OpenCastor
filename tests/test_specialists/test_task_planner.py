@@ -365,3 +365,31 @@ class TestGetResult:
         run(self.planner.run_next())
         result = self.planner.get_result(task.id)
         assert result.status == TaskStatus.SUCCESS
+
+
+def test_task_planner_adds_world_hint_for_charger_goal():
+    from castor.agents.shared_state import SharedState
+    from castor.world import EntityRecord, WorldModel
+
+    state = SharedState()
+    model = WorldModel()
+    model.merge(
+        "objects",
+        EntityRecord(
+            entity_id="charger-kitchen",
+            kind="charger",
+            position=(1.0, 2.0),
+            room_id="kitchen",
+            confidence=0.88,
+            attrs={"label": "charger"},
+        ),
+    )
+    state.set("world_model", model)
+
+    planner = TaskPlanner([DockSpecialist()], shared_state=state)
+    task = _make_task("dock", goal="Find charger and dock")
+    planner.submit(task)
+    run(planner.run_next())
+
+    assert task.params["world_hint"]["query"] == "where_was_charger_last_seen"
+    assert task.params["world_hint"]["room_id"] == "kitchen"

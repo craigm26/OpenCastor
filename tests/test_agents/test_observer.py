@@ -392,3 +392,12 @@ class TestObserverAct:
         observe(agent, {})  # populates scene_graph
         result = act(agent)
         assert result["action"] == "observe"
+
+
+def test_observer_updates_shared_world_model():
+    state = SharedState()
+    agent = ObserverAgent(shared_state=state)
+    observe(agent, {"hailo_detections": [make_hailo_det("charger", 0.91)]})
+    world = state.get("world_model")
+    assert world is not None
+    assert any(obj.attrs.get("label") == "charger" for obj in world.objects.values())

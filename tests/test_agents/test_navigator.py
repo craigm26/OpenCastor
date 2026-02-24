@@ -393,3 +393,33 @@ class TestNavigatorDistanceEstimation:
         scene = make_scene(closest_obstacle_m=0.1)
         dist = agent._estimate_distance(scene)
         assert dist >= 0.0
+
+
+def test_navigator_blocks_when_no_safe_route():
+    from castor.world import WaypointRecord, WorldModel
+
+    state = SharedState()
+    state.set(
+        "world_model",
+        WorldModel(
+            waypoints={
+                "A": WaypointRecord(entity_id="A", kind="waypoint", neighbors=["B"]),
+                "B": WaypointRecord(entity_id="B", kind="waypoint", neighbors=["C"], zone_ids=["child"]),
+                "C": WaypointRecord(entity_id="C", kind="waypoint", neighbors=[]),
+            }
+        ),
+    )
+    agent = NavigatorAgent(shared_state=state)
+    result = act(
+        agent,
+        {
+            "scene_graph": make_scene(free_space_pct=0.8),
+            "start_waypoint": "A",
+            "end_waypoint": "C",
+            "avoid_zones": ["child"],
+        },
+    )
+    plan = state.get("nav_plan")
+    assert result["direction"] == "stop"
+    assert plan.is_blocked is True
+    assert plan.replan_reason == "no_safe_route"
