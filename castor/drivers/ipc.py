@@ -86,7 +86,9 @@ class DriverIPCAdapter:
                     self.close()
                     return
 
-    def _rpc(self, method: str, *args: Any, wait_timeout: float | None = None, **kwargs: Any) -> Any:
+    def _rpc(
+        self, method: str, *args: Any, wait_timeout: float | None = None, **kwargs: Any
+    ) -> Any:
         if not self._alive:
             raise RuntimeError(f"driver worker {self.sub_id!r} is unavailable")
 
@@ -144,10 +146,17 @@ class DriverIPCAdapter:
                 return res
             return {"ok": True, "mode": "isolated", "worker_pid": self._proc.pid}
         except Exception as exc:
-            return {"ok": False, "mode": "isolated", "error": str(exc), "worker_pid": self._proc.pid}
+            return {
+                "ok": False,
+                "mode": "isolated",
+                "error": str(exc),
+                "worker_pid": self._proc.pid,
+            }
 
 
-def _driver_worker_main(socket_path: str, sub_cfg: dict, full_config: dict, heartbeat_timeout_s: float) -> None:
+def _driver_worker_main(
+    socket_path: str, sub_cfg: dict, full_config: dict, heartbeat_timeout_s: float
+) -> None:
     driver = None
     listener = None
     last_heartbeat = time.monotonic()

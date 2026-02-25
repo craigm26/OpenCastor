@@ -2424,7 +2424,9 @@ def main() -> None:
     p_token.add_argument("--ttl", default="24", help="Token lifetime in hours (default: 24)")
     p_token.add_argument("--subject", default=None, help="Principal name (default: cli-user)")
     p_token.add_argument("--rotate", action="store_true", help="Rotate JWT signing key")
-    p_token.add_argument("--new-secret", default=None, help="Explicit replacement secret for --rotate")
+    p_token.add_argument(
+        "--new-secret", default=None, help="Explicit replacement secret for --rotate"
+    )
     p_token.add_argument("--kid", default=None, help="Key ID (kid) for issued or rotated key")
 
     # castor discover

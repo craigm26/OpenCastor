@@ -10,9 +10,10 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from castor.world import EntityRecord, WorldModel
+
 from .base import AgentStatus, BaseAgent
 from .shared_state import SharedState
-from castor.world import EntityRecord, WorldModel
 
 logger = logging.getLogger("OpenCastor.Agents.Observer")
 

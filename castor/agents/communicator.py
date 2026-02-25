@@ -8,9 +8,10 @@ message to the correct swarm agent via SharedState.
 import logging
 from typing import Any, Dict, List, Optional
 
+from castor.command_interpreter import get_command_interpreter
+
 from .base import BaseAgent
 from .shared_state import SharedState
-from castor.command_interpreter import get_command_interpreter
 
 logger = logging.getLogger("OpenCastor.Agents.Communicator")
 

@@ -45,7 +45,9 @@ class JWTSecretProvider:
     def invalidate(self) -> None:
         self._cached_bundle = None
 
-    def rotate(self, *, new_secret: Optional[str] = None, new_kid: Optional[str] = None) -> JWTSecretBundle:
+    def rotate(
+        self, *, new_secret: Optional[str] = None, new_kid: Optional[str] = None
+    ) -> JWTSecretBundle:
         current = self.get_bundle()
         active = current.active
         replacement = JWTKeyMaterial(
@@ -64,7 +66,11 @@ class JWTSecretProvider:
         os.environ["OPENCASTOR_JWT_SECRETS_FILE"] = str(rotation_path)
         self.invalidate()
         bundle = self.get_bundle()
-        logger.info("Rotated JWT signing key. active_kid=%s previous_kid=%s", bundle.active.kid, bundle.previous.kid if bundle.previous else None)
+        logger.info(
+            "Rotated JWT signing key. active_kid=%s previous_kid=%s",
+            bundle.active.kid,
+            bundle.previous.kid if bundle.previous else None,
+        )
         return bundle
 
     def enforce_weak_source_policy(self) -> None:
@@ -73,11 +79,15 @@ class JWTSecretProvider:
             return
 
         env_profile = (
-            os.getenv("OPENCASTOR_ENV")
-            or os.getenv("OPENCASTOR_PROFILE")
-            or os.getenv("OPENCASTOR_SECURITY_PROFILE")
-            or ""
-        ).strip().lower()
+            (
+                os.getenv("OPENCASTOR_ENV")
+                or os.getenv("OPENCASTOR_PROFILE")
+                or os.getenv("OPENCASTOR_SECURITY_PROFILE")
+                or ""
+            )
+            .strip()
+            .lower()
+        )
         is_prod = env_profile in {"prod", "production", "secure", "hardened"}
         if not is_prod:
             return
@@ -157,13 +167,17 @@ class JWTSecretProvider:
         return None
 
     def _from_vault_file(self) -> Optional[JWTSecretBundle]:
-        configured = os.getenv("OPENCASTOR_JWT_SECRETS_FILE") or os.getenv("OPENCASTOR_JWT_SECRET_FILE")
+        configured = os.getenv("OPENCASTOR_JWT_SECRETS_FILE") or os.getenv(
+            "OPENCASTOR_JWT_SECRET_FILE"
+        )
         paths = [configured] if configured else []
-        paths.extend([
-            os.getenv("OPENCASTOR_JWT_ROTATION_FILE"),
-            "/vault/secrets/opencastor-jwt.json",
-            "/vault/secrets/opencastor_jwt_secret",
-        ])
+        paths.extend(
+            [
+                os.getenv("OPENCASTOR_JWT_ROTATION_FILE"),
+                "/vault/secrets/opencastor-jwt.json",
+                "/vault/secrets/opencastor_jwt_secret",
+            ]
+        )
         for raw in paths:
             if not raw:
                 continue
@@ -192,14 +206,20 @@ class JWTSecretProvider:
                 return JWTSecretBundle(active=active, previous=previous, source=f"file:{path}")
             except json.JSONDecodeError:
                 return JWTSecretBundle(
-                    active=JWTKeyMaterial(kid=os.getenv("OPENCASTOR_JWT_KID", "file-active"), secret=raw_text),
+                    active=JWTKeyMaterial(
+                        kid=os.getenv("OPENCASTOR_JWT_KID", "file-active"), secret=raw_text
+                    ),
                     previous=None,
                     source=f"file:{path}",
                 )
         return None
 
     def _from_env(self) -> Optional[JWTSecretBundle]:
-        active_secret = os.getenv("JWT_SECRET") or os.getenv("OPENCASTOR_JWT_SECRET") or os.getenv("OPENCASTOR_API_TOKEN")
+        active_secret = (
+            os.getenv("JWT_SECRET")
+            or os.getenv("OPENCASTOR_JWT_SECRET")
+            or os.getenv("OPENCASTOR_API_TOKEN")
+        )
         if not active_secret:
             return None
         active = JWTKeyMaterial(

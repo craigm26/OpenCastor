@@ -621,8 +621,6 @@ async def runtime_status():
     }
 
 
-
-
 @app.get("/api/intents", dependencies=[Depends(verify_token)])
 async def list_intents(request: Request):
     """List active and queued orchestration intents."""
@@ -674,6 +672,7 @@ async def reprioritize_intent(req: IntentReprioritizeRequest, request: Request):
     if not orchestrator.reprioritize_intent(req.intent_id, priority=req.priority):
         raise HTTPException(status_code=404, detail="Intent not found")
     return {"ok": True, "intent_id": req.intent_id, "priority": req.priority}
+
 
 # ---------------------------------------------------------------------------
 # Prometheus metrics endpoint  (issue #99)

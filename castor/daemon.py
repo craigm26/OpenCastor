@@ -138,7 +138,9 @@ def _get_security_profile(config_path: str) -> str:
     return str(profile) if profile else "hardened"
 
 
-def generate_driver_worker_units(config_path: str, working_dir: Optional[str] = None) -> dict[str, str]:
+def generate_driver_worker_units(
+    config_path: str, working_dir: Optional[str] = None
+) -> dict[str, str]:
     """Generate hardened per-driver worker unit files.
 
     Each driver receives a dedicated ``User=``/``Group=`` identity suggestion,
@@ -346,8 +348,7 @@ def daemon_security_status() -> dict:
     if SERVICE_PATH.exists():
         unit_text = SERVICE_PATH.read_text(encoding="utf-8")
         status["enabled_in_unit"] = (
-            "AppArmorProfile=opencastor-gateway" in unit_text
-            and "SystemCallFilter=" in unit_text
+            "AppArmorProfile=opencastor-gateway" in unit_text and "SystemCallFilter=" in unit_text
         )
 
     service = daemon_status()

@@ -99,9 +99,7 @@ def detect_attestation_status() -> Dict[str, Any]:
         verified = bool(secure_boot and measured_boot and update_chain)
 
     profile = str(
-        payload.get("profile")
-        or env_profile
-        or ("secure" if verified else "minimum-viable")
+        payload.get("profile") or env_profile or ("secure" if verified else "minimum-viable")
     )
 
     mode = "enforced" if verified else "degraded"
@@ -144,6 +142,8 @@ def publish_attestation(fs: Any) -> Optional[Dict[str, Any]]:
     fs.ns.write("/proc/safety", posture)
     fs.ns.write("/proc/safety/mode", posture["mode"])
     fs.ns.write("/proc/safety/attestation", posture)
-    fs.ns.write("/proc/safety/attestation_status", "verified" if posture["verified"] else "degraded")
+    fs.ns.write(
+        "/proc/safety/attestation_status", "verified" if posture["verified"] else "degraded"
+    )
     fs.ns.write("/proc/safety/attestation_token", posture.get("token"))
     return posture

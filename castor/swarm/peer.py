@@ -65,7 +65,13 @@ class SwarmPeer:
                 return False
         return True
 
-    def update_runtime(self, *, load_score: float | None = None, status: str | None = None, metrics: dict | None = None) -> None:
+    def update_runtime(
+        self,
+        *,
+        load_score: float | None = None,
+        status: str | None = None,
+        metrics: dict | None = None,
+    ) -> None:
         """Update runtime health and telemetry for scheduling decisions."""
         if load_score is not None:
             self.load_score = float(load_score)

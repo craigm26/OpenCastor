@@ -21,10 +21,9 @@ import threading
 import time
 from typing import Any, Dict, List, Optional
 
-from castor.rcan.rbac import CapabilityBroker, Scope
-
 from castor.fs.namespace import Namespace
 from castor.fs.permissions import Cap, PermissionTable
+from castor.rcan.rbac import CapabilityBroker, Scope
 from castor.safety.anti_subversion import scan_before_write as _scan_before_write
 from castor.safety.bounds import BoundsChecker, check_write_bounds
 from castor.safety.protocol import check_write_protocol
@@ -331,7 +330,6 @@ class SafetyLayer:
                 logger.info("Clamped motor angular: %s -> %s", orig, clamped["angular"])
         return clamped
 
-
     def _required_scope_for_path(self, path: str) -> Scope:
         if path.startswith("/etc/"):
             return Scope.CONFIG
@@ -404,7 +402,9 @@ class SafetyLayer:
                 data=data,
                 intent_context=(meta or {}).get("intent_context"),
             ):
-                self._audit_safety(principal, path, "deny_lease", "invalid or expired capability lease")
+                self._audit_safety(
+                    principal, path, "deny_lease", "invalid or expired capability lease"
+                )
                 return False
 
         # Anti-subversion scan for AI-generated /dev/ writes

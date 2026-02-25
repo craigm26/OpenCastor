@@ -72,7 +72,6 @@ class BaseChannel(ABC):
         q.append(now)
         return True
 
-
     def _render_blocked_message(self, safety: dict) -> str:
         alternatives = safety.get("alternatives") or []
         alt_text = "; ".join(alternatives) if alternatives else "No safe alternatives available."
@@ -124,7 +123,11 @@ class BaseChannel(ABC):
                     interpreted = self._interpreter.interpret(text, dry_run=False)
                 else:
                     dry_run = self._dry_run_mode or incoming.lower().startswith("--dry-run")
-                    actual_text = incoming[len("--dry-run") :].strip() if incoming.lower().startswith("--dry-run") else incoming
+                    actual_text = (
+                        incoming[len("--dry-run") :].strip()
+                        if incoming.lower().startswith("--dry-run")
+                        else incoming
+                    )
                     interpreted = self._interpreter.interpret(actual_text, dry_run=dry_run)
                     text = actual_text
 

@@ -388,7 +388,9 @@ class WorkAuthority:
         intent context fields ``action_type`` and ``target``.
         """
 
-        def _hook(*, principal: str, lease: object, path: str, data: object, intent_context: dict) -> bool:
+        def _hook(
+            *, principal: str, lease: object, path: str, data: object, intent_context: dict
+        ) -> bool:
             action = str(intent_context.get("action_type", "")) or "property_access"
             target = str(intent_context.get("target", "")) or path
             order = self.check_authorization(action, target)

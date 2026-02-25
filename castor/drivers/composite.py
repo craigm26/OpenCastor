@@ -88,9 +88,7 @@ class CompositeDriver:
                         sub_cfg,
                         config,
                         rpc_timeout_s=float(isolation_cfg.get("rpc_timeout_s", 1.5)),
-                        heartbeat_interval_s=float(
-                            isolation_cfg.get("heartbeat_interval_s", 0.75)
-                        ),
+                        heartbeat_interval_s=float(isolation_cfg.get("heartbeat_interval_s", 0.75)),
                         heartbeat_timeout_s=float(isolation_cfg.get("heartbeat_timeout_s", 3.0)),
                     )
                 else:
@@ -100,7 +98,9 @@ class CompositeDriver:
                     raise ValueError(f"get_driver() returned None for protocol '{protocol}'")
                 self._sub_drivers[sub_id] = driver
                 mode = "isolated-worker" if self._isolation_enabled else "in-process"
-                logger.info("CompositeDriver: sub-driver '%s' (%s) loaded [%s]", sub_id, protocol, mode)
+                logger.info(
+                    "CompositeDriver: sub-driver '%s' (%s) loaded [%s]", sub_id, protocol, mode
+                )
             except Exception as exc:
                 logger.warning(
                     "CompositeDriver: sub-driver '%s' (%s) failed to load: %s",

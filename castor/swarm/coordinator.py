@@ -38,7 +38,9 @@ class Assignment:
 class SwarmCoordinator:
     """Coordinates task assignment across the robot fleet."""
 
-    def __init__(self, my_robot_id: str, shared_memory: SharedMemory, consensus: SwarmConsensus) -> None:
+    def __init__(
+        self, my_robot_id: str, shared_memory: SharedMemory, consensus: SwarmConsensus
+    ) -> None:
         self.my_robot_id = my_robot_id
         self._mem = shared_memory
         self._consensus = consensus
@@ -88,7 +90,11 @@ class SwarmCoordinator:
         return task.task_id
 
     def _pending_tasks(self) -> list[SwarmTask]:
-        assigned_ids = {a.task.task_id for a in self._assignments.values() if a.status in {"assigned", "handed_off"}}
+        assigned_ids = {
+            a.task.task_id
+            for a in self._assignments.values()
+            if a.status in {"assigned", "handed_off"}
+        }
         pending = [t for t in self._tasks.values() if t.task_id not in assigned_ids]
         pending.sort(key=lambda t: (-t.priority, t.created_at))
         return pending
@@ -113,7 +119,9 @@ class SwarmCoordinator:
             if not self._consensus.claim_task(task.task_id):
                 continue
 
-            assignment = Assignment(task=task, assigned_to=best, assigned_at=time.time(), status="assigned")
+            assignment = Assignment(
+                task=task, assigned_to=best, assigned_at=time.time(), status="assigned"
+            )
             self._assignments[task.task_id] = assignment
             return assignment
         return None
@@ -133,7 +141,9 @@ class SwarmCoordinator:
         if task is None:
             return None
 
-        candidates = self.discover_peers(capabilities=required_capabilities, constraints=constraints)
+        candidates = self.discover_peers(
+            capabilities=required_capabilities, constraints=constraints
+        )
         if task.required_capability:
             candidates = [p for p in candidates if p.can_do(task.required_capability)]
         if not candidates:
@@ -150,7 +160,10 @@ class SwarmCoordinator:
             assigned_robot_id=target.robot_id,
             action=action,
             params=params,
-            policy_constraints={"required_capabilities": required_capabilities or [], **(constraints or {})},
+            policy_constraints={
+                "required_capabilities": required_capabilities or [],
+                **(constraints or {}),
+            },
             issued_at=time.time(),
             ttl_s=ttl_s,
         )
@@ -162,12 +175,18 @@ class SwarmCoordinator:
             assigned_at=time.time(),
             status="assigned",
             intent_id=intent.intent_id,
-            intent_context={"action": action, "params": params, "policy_constraints": intent.policy_constraints},
+            intent_context={
+                "action": action,
+                "params": params,
+                "policy_constraints": intent.policy_constraints,
+            },
         )
         self._assignments[task.task_id] = assignment
         return assignment
 
-    def handoff_task(self, task_id: str, to_robot_id: str, world_snapshot: dict, context: dict) -> HandoffRecord | None:
+    def handoff_task(
+        self, task_id: str, to_robot_id: str, world_snapshot: dict, context: dict
+    ) -> HandoffRecord | None:
         """Handoff an in-progress task while preserving intent + world state."""
         assignment = self._assignments.get(task_id)
         if assignment is None or assignment.intent_id is None:
@@ -202,7 +221,10 @@ class SwarmCoordinator:
                 p
                 for p in self.available_peers()
                 if p.robot_id != peer.robot_id
-                and (assignment.task.required_capability is None or p.can_do(assignment.task.required_capability))
+                and (
+                    assignment.task.required_capability is None
+                    or p.can_do(assignment.task.required_capability)
+                )
             ]
             if not candidates:
                 continue
@@ -234,7 +256,9 @@ class SwarmCoordinator:
         return {k: v.to_dict() for k, v in self._mem.snapshot().items()}
 
     def fleet_status(self) -> dict:
-        assigned_count = sum(1 for a in self._assignments.values() if a.status in {"assigned", "handed_off"})
+        assigned_count = sum(
+            1 for a in self._assignments.values() if a.status in {"assigned", "handed_off"}
+        )
         pending_count = len(self._pending_tasks())
         unhealthy = sum(1 for p in self._peers.values() if p.is_degraded or p.is_disconnected)
         return {

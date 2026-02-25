@@ -52,6 +52,7 @@ _INTENT_ROUTING: List[tuple[str, str]] = [
     ("what can you", "communicator"),
 ]
 
+
 class CommandInterpreter:
     """Shared command interpreter used by channel/voice/agent pathways."""
 
@@ -117,7 +118,7 @@ class CommandInterpreter:
         return [
             f"Interpret request as '{kw}' intent.",
             f"Route to {target} subsystem.",
-            f"Execute action safely and report outcome.",
+            "Execute action safely and report outcome.",
         ]
 
     def interpret(self, text: str, *, dry_run: bool = False) -> Dict[str, Any]:

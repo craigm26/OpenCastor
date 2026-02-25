@@ -32,16 +32,19 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    name: "Test"
+    name: "Test (Python ${{ matrix.python-version }})"
     timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
 
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.10'
-          cache: pip
+          python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
         run: pip install -e ".[dev]"
@@ -49,15 +52,17 @@ jobs:
       - name: Lint
         run: ruff check castor/
 
+      - name: Check formatting
+        run: ruff format --check castor/
+
       - name: Validate RCAN configs
         run: |
-          pip install jsonschema pyyaml
           python3 .github/scripts/validate_rcan.py \
             --schema config/rcan.schema.json \
             --dir .
 
-      - name: Run tests
-        run: pytest tests/ -q
+      - name: Run tests with coverage
+        run: pytest tests/ -q --cov=castor --cov-report=term-missing --cov-fail-under=30
 
   release:
     needs: test

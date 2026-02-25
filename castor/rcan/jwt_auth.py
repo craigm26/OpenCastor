@@ -122,7 +122,9 @@ class RCANTokenManager:
         }
 
         active_kid, active_secret = key_candidates[0]
-        token = jwt.encode(claims, active_secret, algorithm=self.algorithm, headers={"kid": active_kid})
+        token = jwt.encode(
+            claims, active_secret, algorithm=self.algorithm, headers={"kid": active_kid}
+        )
         logger.info("Issued JWT for %s (role=%s, ttl=%ds)", subject, role.name, ttl_seconds)
         return token
 

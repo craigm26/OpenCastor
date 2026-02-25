@@ -18,11 +18,11 @@ are mapped to RCAN roles via :meth:`RCANPrincipal.from_legacy`.
 
 from __future__ import annotations
 
-import logging
 import base64
 import hashlib
 import hmac
 import json
+import logging
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -247,7 +247,7 @@ class CapabilityLease:
         }
 
     @classmethod
-    def from_payload(cls, payload: dict) -> "CapabilityLease":
+    def from_payload(cls, payload: dict) -> CapabilityLease:
         return cls(
             lease_id=payload["lease_id"],
             principal=payload["principal"],
@@ -313,7 +313,9 @@ class CapabilityBroker:
         intent_context: Optional[dict] = None,
     ) -> str:
         if not principal.has_scope(scope):
-            raise PermissionError(f"principal {principal.name} does not hold requested scope {scope}")
+            raise PermissionError(
+                f"principal {principal.name} does not hold requested scope {scope}"
+            )
         ttl = max(1.0, min(float(ttl_seconds), self._max_ttl))
         now = time.time()
         lease = CapabilityLease(

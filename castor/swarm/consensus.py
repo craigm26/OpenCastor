@@ -152,7 +152,9 @@ class SwarmConsensus:
     No Paxos — just optimistic locking with TTL-based expiry.
     """
 
-    def __init__(self, robot_id: str, shared_memory: SharedMemory, signing_secret: str | None = None) -> None:
+    def __init__(
+        self, robot_id: str, shared_memory: SharedMemory, signing_secret: str | None = None
+    ) -> None:
         self.robot_id = robot_id
         self._mem = shared_memory
         self._signing_secret = signing_secret or f"swarm-secret:{robot_id}"
@@ -198,7 +200,9 @@ class SwarmConsensus:
         existing = self._get_claim(task_id)
         if existing is not None and existing.robot_id != self.robot_id:
             return False
-        claim = TaskClaim(task_id=task_id, robot_id=self.robot_id, claimed_at=time.time(), ttl_s=ttl_s)
+        claim = TaskClaim(
+            task_id=task_id, robot_id=self.robot_id, claimed_at=time.time(), ttl_s=ttl_s
+        )
         self._store_claim(claim)
         return True
 
@@ -219,7 +223,9 @@ class SwarmConsensus:
         existing = self._get_claim(task_id)
         if existing is None or existing.robot_id != self.robot_id:
             return False
-        renewed = TaskClaim(task_id=task_id, robot_id=self.robot_id, claimed_at=time.time(), ttl_s=existing.ttl_s)
+        renewed = TaskClaim(
+            task_id=task_id, robot_id=self.robot_id, claimed_at=time.time(), ttl_s=existing.ttl_s
+        )
         self._store_claim(renewed)
         return True
 

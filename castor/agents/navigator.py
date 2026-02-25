@@ -10,10 +10,11 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
+from castor.world import WorldModel
+
 from .base import AgentStatus, BaseAgent
 from .observer import SceneGraph
 from .shared_state import SharedState
-from castor.world import WorldModel
 
 logger = logging.getLogger("OpenCastor.Agents.Navigator")
 

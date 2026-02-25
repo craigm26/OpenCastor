@@ -195,7 +195,6 @@ class VoiceAssistantLoop:
             logger.error("Audio record error: %s", exc)
             return b""
 
-
     def _handle_command(self, text: str) -> str:
         incoming = (text or "").strip()
         if incoming.lower() == "cancel" and self._pending_confirmation:
@@ -233,10 +232,7 @@ class VoiceAssistantLoop:
         if interpreted.get("dry_run"):
             self._pending_confirmation = text
             steps = " ".join(
-                [
-                    f"Step {i}: {step}"
-                    for i, step in enumerate(interpreted.get("plan", []), start=1)
-                ]
+                [f"Step {i}: {step}" for i, step in enumerate(interpreted.get("plan", []), start=1)]
             )
             return f"[{safety['explanation_id']}] Dry-run plan. {steps} Say confirm to execute or cancel."
 

@@ -204,7 +204,13 @@ async def mcp_endpoint(payload: MCPRequest, authorization: str | None = Header(d
 
     try:
         if payload.method == "initialize":
-            return _jsonrpc_result(payload.id, {"protocolVersion": "2025-03-26", "serverInfo": {"name": "castor-mcp", "version": "0.1.0"}})
+            return _jsonrpc_result(
+                payload.id,
+                {
+                    "protocolVersion": "2025-03-26",
+                    "serverInfo": {"name": "castor-mcp", "version": "0.1.0"},
+                },
+            )
 
         if payload.method == "tools/list":
             return _jsonrpc_result(payload.id, {"tools": _TOOL_SCHEMAS})
@@ -217,7 +223,10 @@ async def mcp_endpoint(payload: MCPRequest, authorization: str | None = Header(d
             if tool is None:
                 return _jsonrpc_error(payload.id, -32601, f"Unknown tool: {tool_name}")
             result = await tool(arguments)
-            return _jsonrpc_result(payload.id, {"content": [{"type": "text", "text": str(result)}], "structuredContent": result})
+            return _jsonrpc_result(
+                payload.id,
+                {"content": [{"type": "text", "text": str(result)}], "structuredContent": result},
+            )
 
         return _jsonrpc_error(payload.id, -32601, f"Unsupported method: {payload.method}")
     except ValueError as exc:
