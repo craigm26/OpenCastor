@@ -51,7 +51,7 @@ Supports **Linux, macOS (Apple Silicon & Intel), Windows 11, Raspberry Pi, Docke
 Installer flags: `--dry-run`, `--no-rpi`, `--skip-wizard`
 </details>
 
-## ✨ What's New in v2026.2.23.12
+## ✨ What's New in v2026.2.23.13
 
 - **Stability pass (2026-02-25)** — full-suite hardening complete: 3,431 tests passing; fixed cross-platform daemon path rendering, JWT fallback edge cases, plugin SHA newline normalization, and async warning cleanup in Teams/WhatsApp channels
 - **Messaging channels now drive hardware** — fixed a silent VFS ACL bug where the `channel` principal was denied write access to `/dev/motor`, causing every WhatsApp/Telegram/Discord motor command to reply but never move the wheels
