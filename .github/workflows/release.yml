@@ -27,10 +27,64 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    name: "Gate: main CI must be green"
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Verify tag commit is on main and CI passed
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sha = context.sha;
+            const ref = context.ref;
+            core.info(`Validating release gate for ${ref} @ ${sha}`);
+
+            const compare = await github.rest.repos.compareCommitsWithBasehead({
+              owner,
+              repo,
+              basehead: `main...${sha}`,
+            });
+            const status = compare.data.status;
+            if (!["behind", "identical"].includes(status)) {
+              core.setFailed(
+                `Tag commit ${sha} is not on main history (compare status: ${status}).`
+              );
+              return;
+            }
+
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: "ci.yml",
+              head_sha: sha,
+              status: "completed",
+              per_page: 20,
+            });
+            const successfulRun = runs.data.workflow_runs.find(
+              (r) => r.conclusion === "success"
+            );
+            if (!successfulRun) {
+              core.setFailed(
+                `No successful ci.yml run found for ${sha}. Wait for CI on main to pass, then push the tag.`
+              );
+              return;
+            }
+
+            core.info(
+              `Gate passed with CI run #${successfulRun.run_number}: ${successfulRun.html_url}`
+            );
+
   test:
+    needs: gate
     runs-on: ubuntu-latest
     name: "Test (Python ${{ matrix.python-version }})"
     timeout-minutes: 10

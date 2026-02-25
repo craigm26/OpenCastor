@@ -1,0 +1,110 @@
+name: Release Drift Monitor
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-release-drift:
+    runs-on: ubuntu-latest
+    name: "Check GitHub Release vs PyPI"
+    steps:
+      - name: Compare latest GitHub release and PyPI version
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            let latestRelease;
+            try {
+              latestRelease = await github.rest.repos.getLatestRelease({ owner, repo });
+            } catch (error) {
+              core.setFailed(`Unable to fetch latest GitHub release: ${error.message}`);
+              return;
+            }
+
+            const tagName = latestRelease.data.tag_name || "";
+            const githubVersion = tagName.startsWith("v") ? tagName.slice(1) : tagName;
+            if (!githubVersion) {
+              core.setFailed("Latest GitHub release has no tag/version.");
+              return;
+            }
+
+            const pypiResponse = await fetch("https://pypi.org/pypi/opencastor/json", {
+              headers: { "User-Agent": "opencastor-release-drift-monitor" },
+            });
+            if (!pypiResponse.ok) {
+              core.setFailed(
+                `Unable to fetch PyPI metadata (HTTP ${pypiResponse.status}).`
+              );
+              return;
+            }
+
+            const pypiData = await pypiResponse.json();
+            const pypiVersion = pypiData?.info?.version || "";
+            if (!pypiVersion) {
+              core.setFailed("PyPI metadata did not include a package version.");
+              return;
+            }
+
+            const openIssues = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: "open",
+              per_page: 100,
+            });
+            const openDriftIssues = openIssues.data.filter(
+              (issue) =>
+                !issue.pull_request && issue.title.startsWith("Release drift:")
+            );
+
+            if (githubVersion !== pypiVersion) {
+              const title = `Release drift: GitHub v${githubVersion} vs PyPI ${pypiVersion}`;
+              const body = [
+                "Automated release drift check detected a mismatch.",
+                "",
+                `- GitHub latest release: \`${tagName}\``,
+                `- PyPI latest version: \`${pypiVersion}\``,
+                `- Detected at: \`${new Date().toISOString()}\``,
+                "",
+                "Expected: latest GitHub release version should match latest PyPI version.",
+              ].join("\n");
+
+              const alreadyOpen = openDriftIssues.some((issue) => issue.title === title);
+              if (!alreadyOpen) {
+                await github.rest.issues.create({
+                  owner,
+                  repo,
+                  title,
+                  body,
+                });
+              }
+
+              core.setFailed(
+                `Release drift detected: GitHub ${tagName} vs PyPI ${pypiVersion}.`
+              );
+              return;
+            }
+
+            for (const issue of openDriftIssues) {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issue.number,
+                body: `Resolved by automated check at ${new Date().toISOString()}: GitHub and PyPI now both report \`${githubVersion}\`.`,
+              });
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: issue.number,
+                state: "closed",
+              });
+            }
+
+            core.info(`No release drift detected. GitHub and PyPI both report ${githubVersion}.`);
