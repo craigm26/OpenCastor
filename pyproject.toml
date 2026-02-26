@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opencastor"
-version = "2026.2.26.1"
+version = "2026.2.26.2"
 description = "The Universal Runtime for Embodied AI"
 readme = "README.md"
 license = "Apache-2.0"
@@ -88,6 +88,14 @@ rcan = [
     "zeroconf>=0.131.0",
 ]
 dynamixel = ["dynamixel-sdk>=3.7.31"]
+esp32 = ["websocket-client>=1.7.0"]
+ev3 = ["python-ev3dev2>=2.1.0.post1; sys_platform == 'linux'"]
+spike = ["bleak>=0.22.0"]
+stem-hardware = [
+    "websocket-client>=1.7.0",
+    "python-ev3dev2>=2.1.0.post1; sys_platform == 'linux'",
+    "bleak>=0.22.0",
+]
 vertex = ["google-genai>=1.0.0"]
 homeassistant = ["aiohttp>=3.9.0"]
 webrtc = ["aiortc>=1.6.0", "av>=11.0.0"]

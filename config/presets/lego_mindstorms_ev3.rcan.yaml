@@ -105,7 +105,7 @@ notes:
     3. Connect via USB cable (RNDIS) or add a WiFi USB dongle.
     4. SSH: ssh robot@ev3dev.local (default password: maker)
     5. pip install python-ev3dev2
-    6. castor run --config lego_mindstorms_ev3.rcan.yaml
+    6. castor run --config config/presets/lego_mindstorms_ev3.rcan.yaml
   second_hand_tips: >
     Common at school surplus, Goodwill, and Facebook Marketplace for $30-80.
     Check that all motor/sensor ports click firmly. Test each motor with the

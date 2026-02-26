@@ -1009,13 +1009,39 @@ def verify_setup_config(
     if not drivers:
         errors.append("Generated config has no drivers configured.")
     else:
+        from castor.drivers import get_driver as resolve_driver
+        from castor.drivers import is_supported_protocol
+
         host = detect_device_info().get("platform", "")
         for idx, drv in enumerate(drivers):
-            protocol = str(drv.get("protocol", ""))
+            enabled_value = drv.get("enabled", True)
+            if isinstance(enabled_value, str):
+                enabled = enabled_value.strip().lower() not in {"0", "false", "no", "off"}
+            else:
+                enabled = bool(enabled_value)
+            if not enabled:
+                continue
+            protocol = str(drv.get("protocol", "")).strip().lower()
+            external_class = str(drv.get("class", "")).strip()
+            if not protocol and not external_class:
+                errors.append(f"Driver {idx} is missing both protocol and class fields.")
+                continue
+            if external_class:
+                continue
+            if not is_supported_protocol(protocol):
+                errors.append(f"Driver {idx} uses unsupported protocol '{protocol}'.")
+                continue
             if "i2c" in protocol.lower() and host not in {"linux"}:
                 warnings.append(
                     f"Driver {idx} uses {protocol}, which is typically unsupported on {host}."
                 )
+        if not errors:
+            driver = resolve_driver(config)
+            if driver is None:
+                errors.append("Driver factory returned no driver for generated config.")
+            else:
+                with contextlib.suppress(Exception):
+                    driver.close()
 
     # Channel credential sanity.
     channels = config.get("channels")

@@ -386,6 +386,9 @@ _HARDWARE_PRESETS: List[HardwarePreset] = [
     HardwarePreset(id="adeept_generic", label="Adeept RaspTank"),
     HardwarePreset(id="freenove_4wd", label="Freenove 4WD Car"),
     HardwarePreset(id="sunfounder_picar", label="SunFounder PiCar-X"),
+    HardwarePreset(id="esp32_generic", label="ESP32 Generic Wi-Fi Bot"),
+    HardwarePreset(id="lego_mindstorms_ev3", label="LEGO Mindstorms EV3"),
+    HardwarePreset(id="lego_spike_prime", label="LEGO SPIKE Prime"),
     HardwarePreset(id="dynamixel_arm", label="Dynamixel Arm"),
 ]
 
@@ -481,7 +484,10 @@ def get_hardware_preset_map() -> Dict[str, Optional[str]]:
         "4": "adeept_generic",
         "5": "freenove_4wd",
         "6": "sunfounder_picar",
-        "7": "dynamixel_arm",
+        "7": "esp32_generic",
+        "8": "lego_mindstorms_ev3",
+        "9": "lego_spike_prime",
+        "10": "dynamixel_arm",
     }
 
 

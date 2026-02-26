@@ -3,7 +3,7 @@
 # Supports: macOS, Debian/Ubuntu, Fedora/RHEL, Arch, Alpine, Raspberry Pi
 set -euo pipefail
 
-VERSION="2026.2.26.1"
+VERSION="2026.2.26.2"
 REPO_URL="https://github.com/craigm26/OpenCastor.git"
 INSTALL_DIR="${OPENCASTOR_DIR:-$HOME/opencastor}"
 APPLE_SDK_GIT_REF="3204b7ee892131a5d2c940d95caaabc90b4a40c9"

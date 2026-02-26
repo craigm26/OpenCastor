@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from castor.wizard import (
     MODELS,
+    PRESETS,
     PROVIDER_AUTH,
     PROVIDER_ORDER,
     _build_agent_config,
@@ -76,6 +77,13 @@ class TestChooseProviderStep:
     @patch("builtins.input", return_value="99")
     def test_invalid_defaults_anthropic(self, _):
         assert choose_provider_step() == "anthropic"
+
+
+class TestHardwarePresetMenu:
+    def test_includes_new_stem_hardware_options(self):
+        assert PRESETS["7"] == "esp32_generic"
+        assert PRESETS["8"] == "lego_mindstorms_ev3"
+        assert PRESETS["9"] == "lego_spike_prime"
 
 
 class TestChooseModel:

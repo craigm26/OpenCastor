@@ -37,7 +37,7 @@ physics:
 drivers:
   - id: "motor_driver"
     protocol: "esp32_websocket"
-    # ESP32 runs firmware/esp32_ws_bridge (Arduino sketch or MicroPython)
+    # ESP32 should expose /status, /cmd, and /ws endpoints.
     host: "192.168.1.200"   # Set static IP or use mDNS: esp32bot.local
     port: 81
     endpoint: "/ws"
@@ -99,9 +99,10 @@ rcan_protocol:
 
 notes:
   firmware: >
-    Flash firmware/esp32_ws_bridge.ino with Arduino IDE (install ESP32 board package).
-    Or use firmware/esp32_ws_bridge.py with MicroPython + uasyncio.
-    The ESP32 serves a WebSocket on port 81. Commands are JSON:
+    Flash an ESP32 sketch/runtime that exposes /status (GET), /cmd (POST), and /ws
+    (WebSocket) on this host/port. Arduino IDE, PlatformIO, and ESP-IDF are all
+    valid paths as long as endpoint contracts match.
+    Commands are JSON:
       {"cmd":"drive","left":200,"right":200,"duration_ms":500}
       {"cmd":"stop"}
       {"cmd":"sensor","id":"hcsr04"}

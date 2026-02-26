@@ -82,6 +82,22 @@ def scan_usb_serial() -> list:
     return ports
 
 
+def scan_usb_descriptors() -> list:
+    """Return raw ``lsusb`` descriptor lines (lower-cased) when available."""
+    try:
+        proc = subprocess.run(
+            ["lsusb"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return []
+    if proc.returncode != 0:
+        return []
+    return [line.strip().lower() for line in proc.stdout.splitlines() if line.strip()]
+
+
 def scan_cameras() -> list:
     """Detect available camera devices.
 
@@ -121,6 +137,7 @@ def detect_hardware() -> dict:
         {
             "i2c_devices": [...],
             "usb_serial": [...],
+            "usb_descriptors": [...],
             "cameras": [...],
             "platform": "rpi"|"jetson"|"generic",
         }
@@ -128,6 +145,7 @@ def detect_hardware() -> dict:
     result = {
         "i2c_devices": scan_i2c(),
         "usb_serial": scan_usb_serial(),
+        "usb_descriptors": scan_usb_descriptors(),
         "cameras": scan_cameras(),
         "platform": _detect_platform(),
     }
@@ -164,12 +182,25 @@ def suggest_preset(hw: dict) -> tuple:
     has_serial = len(hw.get("usb_serial", [])) > 0
     has_camera = len(hw.get("cameras", [])) > 0
     is_rpi = hw.get("platform") == "rpi"
+    usb_desc = " ".join(hw.get("usb_descriptors", []))
+
+    # EV3 may appear over USB/RNDIS with explicit ev3/mindstorms descriptors.
+    if "ev3" in usb_desc or "mindstorms" in usb_desc:
+        return "lego_mindstorms_ev3", "medium", "LEGO EV3 device hint detected over USB"
+
+    # SPIKE Prime commonly appears as LEGO USB descriptors (VID 0694).
+    if "lego" in usb_desc or "0694:" in usb_desc:
+        return "lego_spike_prime", "medium", "LEGO USB device detected (likely SPIKE Prime hub)"
 
     # PCA9685 at 0x40 + RPi -> rpi_rc_car
     if "0x40" in i2c_addrs and is_rpi:
         if has_camera:
             return "rpi_rc_car", "high", "PCA9685 at 0x40 + RPi + camera detected"
         return "rpi_rc_car", "medium", "PCA9685 at 0x40 + RPi detected (no camera)"
+
+    # ESP32 dev boards often expose CP210x/CH340 serial bridges.
+    if has_serial and any(token in usb_desc for token in ("esp32", "cp210", "ch340")):
+        return "esp32_generic", "medium", f"Serial bridge detected ({hw['usb_serial'][0]})"
 
     # Serial port present -> likely Dynamixel
     if has_serial:

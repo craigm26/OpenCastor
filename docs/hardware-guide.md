@@ -59,8 +59,8 @@ Did you find a robot kit?
 ├─► Is it a Raspberry Pi-based kit?
 │   ├─► 4-wheel car, PCA9685 board visible? → freenove_4wd.rcan.yaml or
 │   │                                          yahboom_rosmaster.rcan.yaml
-│   ├─► Has a SunFounder label? → presets/sunfounder_picar.rcan.yaml
-│   └─► Has a Waveshare label? → presets/waveshare_alpha.rcan.yaml
+│   ├─► Has a SunFounder label? → config/presets/sunfounder_picar.rcan.yaml
+│   └─► Has a Waveshare label? → config/presets/waveshare_alpha.rcan.yaml
 │
 ├─► Is it an Arduino-based car kit?
 │   ├─► Green/blue PCB with "Elegoo" + CH340? → elegoo_tumbller.rcan.yaml
@@ -290,22 +290,14 @@ Before running autonomy, always verify your hardware manually.
 ### Basic Test Sequence
 
 ```bash
-# 1. List detected hardware
-castor test-hardware --config my_robot.rcan.yaml --list
+# 1. Run the guided hardware test (interactive prompts)
+castor test-hardware --config my_robot.rcan.yaml
 
-# 2. Test each motor individually (2 seconds each direction)
-castor test-hardware --config my_robot.rcan.yaml --motor left_motor
-castor test-hardware --config my_robot.rcan.yaml --motor right_motor
+# 2. Run the same full sequence non-interactively
+castor test-hardware --config my_robot.rcan.yaml -y
 
-# 3. Test all motors together
-castor test-hardware --config my_robot.rcan.yaml --motors-all
-
-# 4. Test sensors
-castor test-hardware --config my_robot.rcan.yaml --sensor ultrasonic_sensor
-castor test-hardware --config my_robot.rcan.yaml --sensors-all
-
-# 5. Full diagnostic
-castor test-hardware --config my_robot.rcan.yaml --full
+# 3. If movement looks good, start the runtime
+castor run --config my_robot.rcan.yaml
 ```
 
 ### What to Look For

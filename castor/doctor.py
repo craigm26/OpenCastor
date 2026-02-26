@@ -160,6 +160,9 @@ def check_hardware_sdks():
         ("picamera2", "PiCamera2"),
         ("cv2", "OpenCV"),
         ("depthai", "DepthAI (OAK cameras)"),
+        ("websocket", "WebSocket Client (ESP32)"),
+        ("ev3dev2", "python-ev3dev2 (EV3)"),
+        ("bleak", "Bleak BLE (SPIKE optional)"),
     ]
     results = []
     for module, label in sdks:

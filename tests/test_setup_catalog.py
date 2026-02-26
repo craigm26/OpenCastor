@@ -6,7 +6,7 @@ import json
 
 from castor.auth import PROVIDER_AUTH_MAP
 from castor.conformance import KNOWN_PROVIDERS
-from castor.setup_catalog import get_provider_specs
+from castor.setup_catalog import get_hardware_preset_map, get_hardware_presets, get_provider_specs
 from castor.wizard import PROVIDER_ORDER
 
 
@@ -33,3 +33,17 @@ def test_provider_catalog_consistency_across_layers():
 
     # Providers declared in schema enum should be accepted by conformance.
     assert schema_providers.issubset(KNOWN_PROVIDERS)
+
+
+def test_setup_catalog_includes_stem_hardware_presets():
+    """Setup catalog should expose ESP32 and LEGO presets for beginner flows."""
+    ids = {item.id for item in get_hardware_presets()}
+    assert {"esp32_generic", "lego_mindstorms_ev3", "lego_spike_prime"}.issubset(ids)
+
+
+def test_hardware_preset_numeric_map_includes_stem_options():
+    """Wizard numeric map should expose ESP32 + LEGO choices."""
+    preset_map = get_hardware_preset_map()
+    assert preset_map["7"] == "esp32_generic"
+    assert preset_map["8"] == "lego_mindstorms_ev3"
+    assert preset_map["9"] == "lego_spike_prime"

@@ -36,7 +36,16 @@ _BUILTIN_PROVIDER_NAMES: List[str] = [
     "mlx-lm",
     "vllm-mlx",
 ]
-_BUILTIN_DRIVER_NAMES: List[str] = ["pca9685_rc", "pca9685", "dynamixel"]
+_BUILTIN_DRIVER_NAMES: List[str] = [
+    "pca9685_rc",
+    "pca9685",
+    "dynamixel",
+    "esp32_websocket",
+    "ev3dev_tacho_motor",
+    "ev3dev_sensor",
+    "spike_hub_serial",
+    "spike_hub_internal",
+]
 
 
 class ComponentRegistry:

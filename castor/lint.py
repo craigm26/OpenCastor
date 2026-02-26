@@ -103,10 +103,29 @@ def _check_drivers(config: dict) -> list:
         issues.append(("info", "No drivers configured -- will run in simulation mode"))
         return issues
 
+    from castor.drivers import is_supported_protocol
+
     for i, drv in enumerate(drivers):
-        protocol = drv.get("protocol", "")
+        enabled_value = drv.get("enabled", True)
+        if isinstance(enabled_value, str):
+            enabled = enabled_value.strip().lower() not in {"0", "false", "no", "off"}
+        else:
+            enabled = bool(enabled_value)
+        if not enabled:
+            continue
+
+        protocol = str(drv.get("protocol", "")).strip().lower()
+        external_class = str(drv.get("class", "")).strip()
         if not protocol:
-            issues.append(("error", f"drivers[{i}].protocol is empty"))
+            if not external_class:
+                issues.append(
+                    ("error", f"drivers[{i}] is missing protocol and class (no driver target)")
+                )
+            continue
+
+        if not external_class and not is_supported_protocol(protocol):
+            issues.append(("error", f"drivers[{i}].protocol '{protocol}' is not supported"))
+            continue
 
         # PCA9685 checks
         if "pca9685" in protocol:

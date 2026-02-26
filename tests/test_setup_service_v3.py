@@ -68,6 +68,31 @@ def test_verify_config_returns_warnings_and_blocks_by_default():
     assert any("typically unsupported" in item for item in result["warnings"])
 
 
+def test_verify_config_rejects_unknown_driver_protocol():
+    with patch("castor.setup_service.generate_setup_config") as mock_gen:
+        mock_gen.return_value = {
+            "filename": "verifybot.rcan.yaml",
+            "agent_config": {"provider": "ollama", "model": "llava:13b", "env_var": None},
+            "config": {
+                "drivers": [{"protocol": "unknown_future_proto"}],
+                "channels": [],
+            },
+        }
+        fake_provider = MagicMock()
+        fake_provider.health_check.return_value = {"ok": True}
+        with patch("castor.providers.get_provider", return_value=fake_provider):
+            result = setup_service.verify_setup_config(
+                robot_name="VerifyBot",
+                provider="ollama",
+                model="llava:13b",
+                preset="rpi_rc_car",
+                allow_warnings=True,
+            )
+
+    assert result["ok"] is False
+    assert any("unsupported protocol" in item for item in result["blocking_errors"])
+
+
 def test_metrics_respect_telemetry_disabled(monkeypatch, tmp_path):
     monkeypatch.setenv("OPENCASTOR_ALLOW_TELEMETRY", "0")
     monkeypatch.setattr(setup_service, "SETUP_METRICS_DB", Path(tmp_path / "setup.db"))
@@ -89,4 +114,3 @@ def test_metrics_respect_telemetry_disabled(monkeypatch, tmp_path):
     metrics = setup_service.get_setup_metrics()
     assert metrics["telemetry_enabled"] is False
     assert metrics["total_runs"] == 0
-

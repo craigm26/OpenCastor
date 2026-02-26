@@ -99,7 +99,7 @@ notes:
     1. Connect SPIKE Prime hub via USB-C cable.
     2. Put hub in REPL/shell mode via LEGO Education SPIKE app → advanced → REPL.
     3. Or use the spike-prime-tools Python package: pip install spike-prime
-    4. castor run --config lego_spike_prime.rcan.yaml
+    4. castor run --config config/presets/lego_spike_prime.rcan.yaml
   second_hand_tips: >
     Often found in school auction lots or STEM program surplus. Check hub battery
     health (charge fully before testing). All 6 ports are multi-function — same

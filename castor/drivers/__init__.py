@@ -4,6 +4,37 @@ from .base import DriverBase as DriverBase
 
 logger = logging.getLogger("OpenCastor.Drivers")
 
+_EXACT_PROTOCOLS = {
+    "composite",
+    "pca9685_rc",
+    "simulation",
+    "gazebo",
+    "webots",
+    "gpio",
+    "stepper",
+    "odrive",
+    "vesc",
+    "imu",
+    "lidar",
+    "esp32_websocket",
+    "ev3dev_tacho_motor",
+    "ev3dev_sensor",
+    "spike_hub_serial",
+    "spike_hub_internal",
+}
+
+
+def is_supported_protocol(protocol: str) -> bool:
+    """Return True when *protocol* maps to a built-in driver."""
+    proto = (protocol or "").lower()
+    if proto in _EXACT_PROTOCOLS:
+        return True
+    if "pca9685" in proto:
+        return True
+    if "dynamixel" in proto:
+        return True
+    return False
+
 
 def get_driver(config: dict):
     """Initialize the appropriate driver based on RCAN config.
@@ -11,11 +42,26 @@ def get_driver(config: dict):
     Supports protocol-based lookup for built-in drivers and fully-qualified
     class paths (``class`` key) for external/plugin drivers.
     """
-    if not config.get("drivers"):
+    drivers = config.get("drivers") or []
+    if not drivers:
         return None
 
-    driver_config = config["drivers"][0]
-    protocol = driver_config.get("protocol", "")
+    driver_config = None
+    for candidate in drivers:
+        enabled_value = candidate.get("enabled", True)
+        if isinstance(enabled_value, str):
+            enabled = enabled_value.strip().lower() not in {"0", "false", "no", "off"}
+        else:
+            enabled = bool(enabled_value)
+        if enabled:
+            driver_config = candidate
+            break
+
+    if driver_config is None:
+        logger.warning("No enabled driver entries found. Running without hardware.")
+        return None
+
+    protocol = str(driver_config.get("protocol", "")).lower()
 
     # External driver via fully-qualified class path (issue #33 / #20)
     fq_class = driver_config.get("class", "")
@@ -81,6 +127,18 @@ def get_driver(config: dict):
             baud=driver_config.get("baud"),
             timeout=driver_config.get("timeout"),
         )
+    elif protocol == "esp32_websocket":
+        from castor.drivers.esp32_websocket import ESP32WebsocketDriver
+
+        return ESP32WebsocketDriver(driver_config)
+    elif protocol in ("ev3dev_tacho_motor", "ev3dev_sensor"):
+        from castor.drivers.ev3dev_driver import EV3DevDriver
+
+        return EV3DevDriver(config)
+    elif protocol in ("spike_hub_serial", "spike_hub_internal"):
+        from castor.drivers.spike_driver import SpikeHubDriver
+
+        return SpikeHubDriver(config)
     else:
         logger.warning(f"Unknown driver protocol: {protocol}. Running without hardware.")
         return None

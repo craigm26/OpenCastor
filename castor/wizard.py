@@ -1926,7 +1926,10 @@ def choose_hardware():
     print("  [4] Adeept RaspTank ($55)")
     print("  [5] Freenove 4WD Car ($49)")
     print("  [6] SunFounder PiCar-X ($60)")
-    print("  [7] Dynamixel Arm")
+    print("  [7] ESP32 Generic Wi-Fi Bot")
+    print("  [8] LEGO Mindstorms EV3")
+    print("  [9] LEGO SPIKE Prime")
+    print("  [10] Dynamixel Arm")
 
     choice = input_default("Selection", "2")
     return PRESETS.get(choice)

@@ -51,7 +51,7 @@ Supports **Linux, macOS (Apple Silicon & Intel), Windows 11, Raspberry Pi, Docke
 Installer flags: `--dry-run`, `--no-rpi`, `--skip-wizard`
 </details>
 
-## ✨ What's New in v2026.2.26.1
+## ✨ What's New in v2026.2.26.2
 
 - **Stability pass (2026-02-25)** — full-suite hardening complete: 3,431 tests passing; fixed cross-platform daemon path rendering, JWT fallback edge cases, plugin SHA newline normalization, and async warning cleanup in Teams/WhatsApp channels
 - **Messaging channels now drive hardware** — fixed a silent VFS ACL bug where the `channel` principal was denied write access to `/dev/motor`, causing every WhatsApp/Telegram/Discord motor command to reply but never move the wheels
@@ -383,11 +383,11 @@ Pre-made RCAN presets for popular kits, or generate your own:
 
 | Kit | Price | Preset |
 |---|---|---|
-| Waveshare AlphaBot / JetBot | ~$45 | `presets/waveshare_alpha.rcan.yaml` |
-| Adeept RaspTank / DarkPaw | ~$55 | `presets/adeept_generic.rcan.yaml` |
-| SunFounder PiCar-X | ~$60 | `presets/sunfounder_picar.rcan.yaml` |
-| Robotis Dynamixel (X-Series) | Varies | `presets/dynamixel_arm.rcan.yaml` |
-| Hailo-8 + OAK-D Vision Stack | ~$150 | `presets/hailo_oakd_vision.rcan.yaml` |
+| Waveshare AlphaBot / JetBot | ~$45 | `config/presets/waveshare_alpha.rcan.yaml` |
+| Adeept RaspTank / DarkPaw | ~$55 | `config/presets/adeept_generic.rcan.yaml` |
+| SunFounder PiCar-X | ~$60 | `config/presets/sunfounder_picar.rcan.yaml` |
+| Robotis Dynamixel (X-Series) | Varies | `config/presets/dynamixel_arm.rcan.yaml` |
+| OAK-4 Pro + Depth + IMU | ~$150 | `config/presets/oak4_pro.rcan.yaml` |
 | DIY (ESP32, Arduino, custom) | Any | Generate with `castor wizard` |
 
 ## 🏫 STEM & Second-Hand Hardware
@@ -399,32 +399,32 @@ there's probably a preset for it.
 
 | Kit | Typical New Price | Where to Find Used | Preset |
 |---|---|---|---|
-| LEGO Mindstorms EV3 | ~$300 new | School surplus, eBay $30-80 | `presets/lego_mindstorms_ev3.rcan.yaml` |
-| LEGO SPIKE Prime | ~$320 new | STEM program donations, eBay $80-150 | `presets/lego_spike_prime.rcan.yaml` |
-| VEX IQ System | ~$250 new | Robotics team surplus, school auctions $50-120 | `presets/vex_iq.rcan.yaml` |
-| Makeblock mBot | ~$50 new | eBay $10-25, Amazon Warehouse | `presets/makeblock_mbot.rcan.yaml` |
-| Arduino + L298N (DIY) | ~$8-15 total | Makerspace bins, AliExpress | `presets/arduino_l298n.rcan.yaml` |
-| ESP32 + Motor Driver (DIY) | ~$6-12 total | AliExpress, hackerspaces | `presets/esp32_generic.rcan.yaml` |
-| Yahboom ROSMASTER X3 | ~$150-200 | Amazon Warehouse, eBay | `presets/yahboom_rosmaster.rcan.yaml` |
-| Elegoo Tumbller / Smart Car | ~$35-40 new | Amazon Warehouse $15-25, eBay | `presets/elegoo_tumbller.rcan.yaml` |
-| Freenove 4WD Car (Pi-based) | ~$40 new | eBay $15-25 (Pi not included) | `presets/freenove_4wd.rcan.yaml` |
-| Cytron Maker Pi RP2040 | ~$10 new | Hackerspaces, STEM lab surplus | `presets/cytron_maker_pi.rcan.yaml` |
+| LEGO Mindstorms EV3 | ~$300 new | School surplus, eBay $30-80 | `config/presets/lego_mindstorms_ev3.rcan.yaml` |
+| LEGO SPIKE Prime | ~$320 new | STEM program donations, eBay $80-150 | `config/presets/lego_spike_prime.rcan.yaml` |
+| VEX IQ System | ~$250 new | Robotics team surplus, school auctions $50-120 | `config/presets/vex_iq.rcan.yaml` |
+| Makeblock mBot | ~$50 new | eBay $10-25, Amazon Warehouse | `config/presets/makeblock_mbot.rcan.yaml` |
+| Arduino + L298N (DIY) | ~$8-15 total | Makerspace bins, AliExpress | `config/presets/arduino_l298n.rcan.yaml` |
+| ESP32 + Motor Driver (DIY) | ~$6-12 total | AliExpress, hackerspaces | `config/presets/esp32_generic.rcan.yaml` |
+| Yahboom ROSMASTER X3 | ~$150-200 | Amazon Warehouse, eBay | `config/presets/yahboom_rosmaster.rcan.yaml` |
+| Elegoo Tumbller / Smart Car | ~$35-40 new | Amazon Warehouse $15-25, eBay | `config/presets/elegoo_tumbller.rcan.yaml` |
+| Freenove 4WD Car (Pi-based) | ~$40 new | eBay $15-25 (Pi not included) | `config/presets/freenove_4wd.rcan.yaml` |
+| Cytron Maker Pi RP2040 | ~$10 new | Hackerspaces, STEM lab surplus | `config/presets/cytron_maker_pi.rcan.yaml` |
 
 > **🔍 Not sure what you have?** See the [Hardware Identification Guide](docs/hardware-guide.md)
 > for a decision tree: *"I found this at a thrift store, now what?"*
 
 ### Tips for Second-Hand Hardware
 
-- **Test first, code later.** Run `castor test-hardware --config <preset>.rcan.yaml` to verify
-  each motor and sensor before writing any autonomy code.
+- **Test first, code later.** Run `castor test-hardware --config config/presets/<preset>.rcan.yaml -y`
+  to verify motion and stop behavior before writing autonomy code.
 - **Cables are the most common failure point.** LEGO connector cables, USB-B ports,
   and servo leads are all cheap to replace.
 - **Clone boards are fine.** Arduino Uno clones with CH340 USB chips work perfectly.
   You may need to install the CH341SER driver on Windows.
 - **Battery health matters.** Test battery packs under load — many donated robots have
   degraded cells that drop voltage and confuse motor drivers.
-- **Community firmware exists** for almost every kit. Check the `firmware/` directory
-  in this repo for Arduino sketches and MicroPython scripts.
+- **Firmware toolchains vary by kit.** Use each preset's `notes` section for the
+  expected firmware/runtime path and connection mode.
 
 ## 🤝 Contributing
 

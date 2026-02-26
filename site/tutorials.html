@@ -182,10 +182,10 @@ POST /cmd      -> {"linear": 0.25, "angular": -0.1}</div>
           <article class="tutorial-step reveal reveal-d2">
             <h3>Step 2 — Create the OpenCastor config</h3>
             <p>Create a new project and point the driver to your ESP32 endpoint.</p>
-            <div class="code-sample">castor init my-esp32-bot
-cd my-esp32-bot
-castor wizard</div>
-            <p>In your <code>robot.rcan.yaml</code>, select the ESP32/web transport profile (or start from <code>esp32_generic.rcan.yaml</code>) and set the robot IP address.</p>
+            <div class="code-sample">castor wizard
+# Choose "ESP32 Generic Wi-Fi Bot"
+castor run --config my_robot.rcan.yaml</div>
+            <p>In your <code>my_robot.rcan.yaml</code>, use the <code>esp32_generic</code> preset flow and set the robot IP address under <code>connection.host</code>.</p>
           </article>
 
           <article class="tutorial-step reveal reveal-d3">
@@ -242,7 +242,9 @@ castor doctor</div>
               <li>Issue a simple move-forward then stop task.</li>
               <li>Confirm emergency stop behavior works before longer runs.</li>
             </ul>
-            <div class="code-sample">castor run --config presets/lego_mindstorms_ev3.rcan.yaml</div>
+            <div class="code-sample">castor run --config config/presets/lego_mindstorms_ev3.rcan.yaml
+# or
+castor run --config config/presets/lego_spike_prime.rcan.yaml</div>
           </article>
 
           <article class="tutorial-step reveal reveal-d4">
@@ -273,10 +275,33 @@ castor doctor</div>
     const toggle = document.querySelector('.mobile-toggle');
     const navLinks = document.querySelector('.nav-links');
     if (toggle && navLinks) {
-      toggle.addEventListener('click', () => {
+      toggle.addEventListener('click', function () {
         navLinks.classList.toggle('open');
+        toggle.classList.toggle('active');
+        document.body.style.overflow = navLinks.classList.contains('open') ? 'hidden' : '';
+      });
+      document.querySelectorAll('.nav-links a').forEach(a => {
+        a.addEventListener('click', () => {
+          navLinks.classList.remove('open');
+          toggle.classList.remove('active');
+          document.body.style.overflow = '';
+        });
       });
     }
+    const nav = document.querySelector('.site-nav');
+    if (nav) {
+      window.addEventListener('scroll', () => nav.classList.toggle('scrolled', window.scrollY > 20), { passive: true });
+      nav.classList.toggle('scrolled', window.scrollY > 20);
+    }
+    const ro = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('visible');
+          ro.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+    document.querySelectorAll('.reveal').forEach(el => ro.observe(el));
   </script>
 </body>
 

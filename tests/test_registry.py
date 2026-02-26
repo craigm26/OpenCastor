@@ -207,6 +207,9 @@ class TestComponentRegistryListMethods:
         drivers = registry.list_drivers()
         assert "pca9685" in drivers
         assert "dynamixel" in drivers
+        assert "esp32_websocket" in drivers
+        assert "ev3dev_tacho_motor" in drivers
+        assert "spike_hub_serial" in drivers
 
     def test_list_drivers_includes_plugin(self):
         registry = ComponentRegistry()
