@@ -186,11 +186,29 @@ _MODELS: Dict[str, List[Dict[str, Any]]] = {
     ],
     "google": [
         {
+            "id": "gemini-3.1-pro",
+            "label": "Gemini 3.1 Pro",
+            "desc": "Top-tier reasoning & multimodal",
+            "tags": ["reasoning", "multimodal"],
+            "recommended": True,
+        },
+        {
+            "id": "gemini-3.1-flash",
+            "label": "Gemini 3.1 Flash",
+            "desc": "Fast multimodal with strong tool use",
+            "tags": ["fast", "multimodal", "tool-use"],
+        },
+        {
+            "id": "gemini-3.1-flash-lite",
+            "label": "Gemini 3.1 Flash Lite",
+            "desc": "Lowest-cost Gemini for high-frequency calls",
+            "tags": ["fast", "cost-effective"],
+        },
+        {
             "id": "gemini-2.5-flash",
             "label": "Gemini 2.5 Flash",
             "desc": "Fast & multimodal",
             "tags": ["fast", "multimodal"],
-            "recommended": True,
         },
         {
             "id": "gemini-2.5-pro",
@@ -203,6 +221,30 @@ _MODELS: Dict[str, List[Dict[str, Any]]] = {
             "label": "Gemini 3 Flash - Agentic Vision (Preview)",
             "desc": "Think-act-observe loop for fine-grained vision tasks",
             "tags": ["preview", "agentic", "vision", "code-execution"],
+        },
+        {
+            "id": "gemini-er-1.5",
+            "label": "Gemini Robotics ER 1.5",
+            "desc": "Robotics-focused model for embodied tasks",
+            "tags": ["robotics", "physical-ai"],
+        },
+        {
+            "id": "gemma-3-27b-it",
+            "label": "Gemma 3 27B Instruct",
+            "desc": "High-quality open model (Kaggle/HuggingFace available)",
+            "tags": ["gemma", "open-model", "kaggle", "huggingface"],
+        },
+        {
+            "id": "gemma-3-12b-it",
+            "label": "Gemma 3 12B Instruct",
+            "desc": "Balanced Gemma model for quality and cost",
+            "tags": ["gemma", "balanced", "open-model"],
+        },
+        {
+            "id": "gemma-3-4b-it",
+            "label": "Gemma 3 4B Instruct",
+            "desc": "Smaller Gemma model for quick responses",
+            "tags": ["gemma", "fast", "cost-effective"],
         },
     ],
     "openai": [
@@ -366,10 +408,17 @@ _SECONDARY_MODELS: List[Dict[str, Any]] = [
     },
     {
         "provider": "google",
-        "id": "gemini-2.5-flash",
-        "label": "Google Gemini 2.5 Flash",
+        "id": "gemini-3.1-flash",
+        "label": "Google Gemini 3.1 Flash",
         "desc": "Fast vision & multimodal",
-        "tags": ["vision", "multimodal"],
+        "tags": ["vision", "multimodal", "fast"],
+    },
+    {
+        "provider": "google",
+        "id": "gemma-3-12b-it",
+        "label": "Google Gemma 3 12B Instruct",
+        "desc": "Open model option available on Kaggle/HuggingFace",
+        "tags": ["gemma", "open-model", "kaggle", "huggingface"],
     },
     {
         "provider": "openai",

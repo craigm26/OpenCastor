@@ -104,8 +104,8 @@ PROVIDERS = {
     },
     "2": {
         "provider": "google",
-        "model": "gemini-2.5-flash",
-        "label": "Google Gemini 2.5 Flash",
+        "model": "gemini-3.1-pro",
+        "label": "Google Gemini 3.1 Pro",
         "env_var": "GOOGLE_API_KEY",
     },
     "3": {
@@ -272,6 +272,10 @@ def _select_model_default(provider_key: str, model_id: str):
 
 def ensure_provider_preflight(provider_key, model_info, stack_id=None, session_id=None):
     """Run provider preflight and optionally guide install/fallback."""
+    if provider_key == "google":
+        model_info = _ensure_google_model_ready(model_info)
+        return provider_key, model_info, False, stack_id
+
     if provider_key != "apple":
         return provider_key, model_info, False, stack_id
 
@@ -674,12 +678,56 @@ def _run_gcloud_login():
         return False
 
 
+
+def _ensure_google_model_ready(model_info):
+    """Validate selected Google model availability and auto-fallback for first-run success."""
+    model_id = str(model_info.get("id", ""))
+    if not model_id:
+        return model_info
+
+    try:
+        import google.generativeai as genai
+
+        configured = False
+        api_key = os.getenv("GOOGLE_API_KEY", "").strip()
+        if api_key:
+            genai.configure(api_key=api_key)
+            configured = True
+        elif os.getenv("GOOGLE_AUTH_MODE", "").lower() == "adc" and _check_google_adc():
+            configured = True
+
+        if not configured:
+            return model_info
+
+        available_ids = set()
+        for item in genai.list_models():
+            name = str(getattr(item, "name", "") or "")
+            short = name.split("/")[-1]
+            if short:
+                available_ids.add(short)
+
+        if model_id in available_ids:
+            return model_info
+    except Exception:
+        return model_info
+
+    fallback = next((m for m in MODELS.get("google", []) if m.get("recommended")), None)
+    if fallback and fallback.get("id") != model_id:
+        print(
+            f"\n  {Colors.WARNING}[WARN]{Colors.ENDC} Google model '{model_id}' is not currently available "
+            f"for this account. Switching to '{fallback['id']}' for first-run reliability."
+        )
+        return fallback
+
+    return model_info
+
 def _google_auth_flow(env_var):
     """Handle Google auth: ADC/OAuth or API key."""
     print(f"\n{Colors.GREEN}--- AUTHENTICATION (Google) ---{Colors.ENDC}")
     print("  How would you like to authenticate with Google?")
     print("  [1] Google AI Studio subscription (sign in with Google account)")
     print("  [2] API key (paste GOOGLE_API_KEY)")
+    print("  Tip: AI Studio/ADC usually exposes the broadest Gemini + Gemma model access.")
 
     auth_choice = input_default("Selection", "1").strip()
 
