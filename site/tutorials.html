@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tutorials — OpenCastor</title>
+  <meta name="description"
+    content="Step-by-step beginner tutorials for integrating ESP32 and LEGO Mindstorms robots with OpenCastor.">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .tutorial-grid {
+      display: grid;
+      gap: 24px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+
+    .tutorial-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+    }
+
+    .tutorial-card h3 {
+      margin-bottom: 10px;
+      font-size: 1.2rem;
+    }
+
+    .tutorial-card p {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      line-height: 1.7;
+    }
+
+    .tutorial-flow {
+      max-width: 760px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .tutorial-step {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px 24px 20px;
+    }
+
+    .tutorial-step h3 {
+      margin-bottom: 10px;
+      font-size: 1.1rem;
+    }
+
+    .tutorial-step p,
+    .tutorial-step li {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      line-height: 1.7;
+    }
+
+    .tutorial-step ul {
+      margin: 8px 0 12px 20px;
+    }
+
+    .tutorial-step code {
+      font-size: 0.85rem;
+      background: var(--surface);
+      border-radius: 6px;
+      padding: 2px 6px;
+      color: var(--accent);
+    }
+
+    .code-sample {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      margin: 10px 0 14px;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.84rem;
+      color: var(--accent-hover);
+      line-height: 1.6;
+      white-space: pre;
+    }
+
+    .tutorial-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 14px;
+    }
+  </style>
+</head>
+
+<body>
+  <nav class="site-nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo">
+        <img src="/assets/icon.svg" alt="" width="32" height="32" style="display:block;flex-shrink:0;">
+        <span>OpenCastor</span>
+      </a>
+      <div class="nav-links">
+        <a href="/docs">Docs</a>
+        <a href="/hardware">Hardware</a>
+        <a href="/hub">Hub</a>
+        <a href="/beginners">Beginners</a>
+        <a href="/tutorials" class="active">Tutorials</a>
+        <a href="/about">About</a>
+        <a href="https://github.com/craigm26/OpenCastor" class="btn-nav">GitHub <svg viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2.5">
+            <path d="M7 17L17 7M17 7H7M17 7V17" />
+          </svg></a>
+      </div>
+      <button class="mobile-toggle" aria-label="Menu"><span></span><span></span><span></span></button>
+    </div>
+  </nav>
+
+  <main>
+    <section class="page-hero">
+      <p class="section-label reveal">Tutorials</p>
+      <h1 class="reveal reveal-d1">Build your first integrations.</h1>
+      <p class="reveal reveal-d2">Beginner-friendly walkthroughs for getting ESP32 and LEGO Mindstorms robots running with OpenCastor.</p>
+    </section>
+
+    <section class="section" style="padding-top:0">
+      <div class="container">
+        <div class="tutorial-grid">
+          <article class="tutorial-card reveal">
+            <h3>⚡ ESP32 Integration</h3>
+            <p>Learn how to wire an ESP32-based robot, expose a simple API over Wi-Fi, and connect it to OpenCastor using an RCAN preset.</p>
+          </article>
+          <article class="tutorial-card reveal reveal-d1">
+            <h3>🧱 LEGO Mindstorms Integration</h3>
+            <p>Connect EV3 or SPIKE hardware, map motors and sensors, and validate that OpenCastor can safely command movement.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section alt-section" id="esp32">
+      <div class="container">
+        <div class="section-header reveal">
+          <p class="section-label">Tutorial 1</p>
+          <h2 class="section-title">ESP32 + OpenCastor (Beginner Path)</h2>
+          <p class="section-desc">Goal: drive a two-motor robot using OpenCastor commands routed through an ESP32 over Wi-Fi.</p>
+        </div>
+
+        <div class="tutorial-flow">
+          <article class="tutorial-step reveal">
+            <span class="tutorial-label">What you need</span>
+            <ul>
+              <li>ESP32 dev board (WROOM or S3), USB cable, motor driver (L298N or TB6612), and a battery pack.</li>
+              <li>One machine running OpenCastor on the same network.</li>
+              <li>Optional: HC-SR04 or IMU sensor for obstacle/safety feedback.</li>
+            </ul>
+          </article>
+
+          <article class="tutorial-step reveal reveal-d1">
+            <h3>Step 1 — Flash your ESP32 control firmware</h3>
+            <p>Use your preferred firmware path (Arduino IDE, PlatformIO, or ESP-IDF). Ensure your robot exposes a health endpoint and a command endpoint.</p>
+            <div class="code-sample">GET  /status   -> {"ok": true, "robot": "esp32-rover"}
+POST /cmd      -> {"linear": 0.25, "angular": -0.1}</div>
+            <p>Tip for beginners: start by confirming the ESP32 can receive a command and blink an LED before controlling motors.</p>
+          </article>
+
+          <article class="tutorial-step reveal reveal-d2">
+            <h3>Step 2 — Create the OpenCastor config</h3>
+            <p>Create a new project and point the driver to your ESP32 endpoint.</p>
+            <div class="code-sample">castor init my-esp32-bot
+cd my-esp32-bot
+castor wizard</div>
+            <p>In your <code>robot.rcan.yaml</code>, select the ESP32/web transport profile (or start from <code>esp32_generic.rcan.yaml</code>) and set the robot IP address.</p>
+          </article>
+
+          <article class="tutorial-step reveal reveal-d3">
+            <h3>Step 3 — Validate movement safely</h3>
+            <ul>
+              <li>Put the robot on blocks first so wheels can spin freely.</li>
+              <li>Run <code>castor test-hardware</code> and verify forward, reverse, and stop commands.</li>
+              <li>Set conservative speed limits before floor testing.</li>
+            </ul>
+          </article>
+
+          <article class="tutorial-step reveal reveal-d4">
+            <h3>Step 4 — Add beginner-friendly behaviors</h3>
+            <p>Once base movement works, add one behavior at a time: voice command routing, obstacle stop, and simple patrol routes. Keep logs enabled to track command latency and dropped packets.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="mindstorms">
+      <div class="container">
+        <div class="section-header reveal">
+          <p class="section-label">Tutorial 2</p>
+          <h2 class="section-title">LEGO Mindstorms + OpenCastor</h2>
+          <p class="section-desc">Goal: connect EV3/SPIKE hardware and run your first autonomous command loop with OpenCastor.</p>
+        </div>
+
+        <div class="tutorial-flow">
+          <article class="tutorial-step reveal">
+            <span class="tutorial-label">Choose your platform</span>
+            <ul>
+              <li><strong>EV3:</strong> use the <code>lego_mindstorms_ev3.rcan.yaml</code> preset and verify ev3dev access.</li>
+              <li><strong>SPIKE Prime:</strong> use <code>lego_spike_prime.rcan.yaml</code> and verify serial/BLE bridge availability.</li>
+            </ul>
+          </article>
+
+          <article class="tutorial-step reveal reveal-d1">
+            <h3>Step 1 — Connect and verify hardware</h3>
+            <p>For EV3, connect over USB or network and confirm motors/sensors are listed by ev3dev. For SPIKE, validate the hub is discoverable before launching OpenCastor.</p>
+            <div class="code-sample">castor scan
+castor doctor</div>
+          </article>
+
+          <article class="tutorial-step reveal reveal-d2">
+            <h3>Step 2 — Map ports in RCAN</h3>
+            <p>Use explicit port naming so beginners can troubleshoot quickly. For example: left motor on <code>outB</code>, right motor on <code>outC</code>, distance sensor on <code>in1</code>.</p>
+            <p>Keep drive speed low until turning behavior is tuned.</p>
+          </article>
+
+          <article class="tutorial-step reveal reveal-d3">
+            <h3>Step 3 — Run your first mission</h3>
+            <ul>
+              <li>Start OpenCastor with your LEGO preset.</li>
+              <li>Issue a simple move-forward then stop task.</li>
+              <li>Confirm emergency stop behavior works before longer runs.</li>
+            </ul>
+            <div class="code-sample">castor run --config presets/lego_mindstorms_ev3.rcan.yaml</div>
+          </article>
+
+          <article class="tutorial-step reveal reveal-d4">
+            <h3>Step 4 — Extend the project</h3>
+            <p>Add line-following or classroom challenge scenarios, then layer in language tasks ("drive to marker", "scan the room"). This keeps the project educational while introducing real robot autonomy concepts.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <img src="/assets/icon.svg" alt="" width="26" height="26">
+        <span>OpenCastor</span>
+      </div>
+      <div class="footer-links">
+        <a href="/docs">Docs</a>
+        <a href="/hardware">Hardware</a>
+        <a href="/tutorials">Tutorials</a>
+        <a href="https://github.com/craigm26/OpenCastor">GitHub</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const toggle = document.querySelector('.mobile-toggle');
+    const navLinks = document.querySelector('.nav-links');
+    if (toggle && navLinks) {
+      toggle.addEventListener('click', () => {
+        navLinks.classList.toggle('open');
+      });
+    }
+  </script>
+</body>
+
+</html>
