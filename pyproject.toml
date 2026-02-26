@@ -95,6 +95,9 @@ ros2 = []  # rclpy is installed via ROS2 distro, not pip
 onnx = ["onnxruntime>=1.17.0"]
 onnx-gpu = ["onnxruntime-gpu>=1.17.0"]
 gestures = ["mediapipe>=0.10.0"]
+apple = [
+    "apple-fm-sdk @ git+https://github.com/apple/python-apple-fm-sdk.git@3204b7ee892131a5d2c940d95caaabc90b4a40c9 ; sys_platform == 'darwin'",
+]
 simulation = []  # Gazebo uses ROS2/rclpy; Webots via REST — no extra pip deps
 all = [
     # Keep this installable across supported Python versions.

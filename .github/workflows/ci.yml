@@ -37,5 +37,8 @@ jobs:
             --schema config/rcan.schema.json \
             --dir .
 
+      - name: Check setup docs sync
+        run: python scripts/sync_setup_docs.py --check
+
       - name: Run tests with coverage
         run: pytest tests/ -q --cov=castor --cov-report=term-missing --cov-fail-under=30

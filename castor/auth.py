@@ -19,9 +19,13 @@ PROVIDER_AUTH_MAP: Dict[str, tuple] = {
     "google": ("GOOGLE_API_KEY", "api_key"),
     "openai": ("OPENAI_API_KEY", "api_key"),
     "anthropic": ("ANTHROPIC_API_KEY", "api_key"),
+    "huggingface": ("HF_TOKEN", "api_key"),
     "openrouter": ("OPENROUTER_API_KEY", "api_key"),
     "groq": ("GROQ_API_KEY", "api_key"),
     "ollama": ("OLLAMA_BASE_URL", "url"),
+    "llamacpp": ("LLAMACPP_MODEL", "model"),
+    "mlx": ("MLX_BASE_URL", "url"),
+    "apple": ("APPLE_FM_SDK", "api_key"),
     "vertex_ai": ("VERTEX_PROJECT", "vertex_project"),
 }
 
@@ -145,11 +149,21 @@ def resolve_channel_credentials(channel: str, config: Optional[Dict] = None) -> 
 
 def check_provider_ready(provider: str, config: Optional[Dict] = None) -> bool:
     """Check whether the given provider has credentials available."""
-    if provider.lower() == "ollama":
+    provider_name = provider.lower()
+
+    if provider_name in ("ollama", "llamacpp", "mlx"):
         return True  # Ollama doesn't need an API key
 
+    if provider_name in ("apple", "apple-fm", "foundationmodels"):
+        try:
+            from castor.providers.apple_preflight import is_apple_ready
+
+            return is_apple_ready()
+        except Exception:
+            return False
+
     # Check OpenCastor's own token store for Anthropic
-    if provider.lower() == "anthropic":
+    if provider_name == "anthropic":
         token_path = os.path.expanduser("~/.opencastor/anthropic-token")
         if os.path.exists(token_path):
             try:
@@ -160,11 +174,11 @@ def check_provider_ready(provider: str, config: Optional[Dict] = None) -> bool:
                 pass
 
     google_auth_mode = os.getenv("GOOGLE_AUTH_MODE", "").lower()
-    if provider.lower() == "google" and google_auth_mode == "adc":
+    if provider_name == "google" and google_auth_mode == "adc":
         return True
 
     hf_auth_mode = os.getenv("HF_AUTH_MODE", "").lower()
-    if provider.lower() == "huggingface" and hf_auth_mode == "cli":
+    if provider_name == "huggingface" and hf_auth_mode == "cli":
         return True
 
     return resolve_provider_key(provider, config) is not None

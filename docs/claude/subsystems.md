@@ -39,6 +39,7 @@ All LLM adapters subclass `BaseProvider`. Key methods:
 | HuggingFace Hub | `huggingface_provider.py` | HF CLI auth |
 | llama.cpp | `llamacpp_provider.py` | Local binary |
 | Apple MLX | `mlx_provider.py` | Local (macOS only) |
+| Apple Foundation Models | `apple_provider.py` | none (on-device preflight) |
 | Google Vertex AI | `vertex_provider.py` | `VERTEX_PROJECT` |
 | OpenRouter (100+ models) | `openrouter_provider.py` | `OPENROUTER_API_KEY` |
 | Groq LPU | `groq_provider.py` | `GROQ_API_KEY` |
@@ -50,6 +51,35 @@ All LLM adapters subclass `BaseProvider`. Key methods:
 | Qwen3 (via Ollama) | `qwen_provider.py` | `OLLAMA_BASE_URL` |
 
 Factory: `get_provider(config)` in `castor/providers/__init__.py`.
+
+Apple-specific setup/runtime notes:
+- `castor/providers/apple_preflight.py` checks OS/version/arch, SDK import, Xcode, and model readiness.
+- Normalized preflight reasons: `APPLE_INTELLIGENCE_NOT_ENABLED`, `DEVICE_NOT_ELIGIBLE`, `MODEL_NOT_READY`, `UNKNOWN`.
+- `castor/providers/apple_provider.py` maps setup profile IDs (`apple-balanced`, `apple-creative`, `apple-tagging`) to Foundation Models use-case/guardrail enums.
+
+---
+
+## Setup V2 (`castor/setup_catalog.py`, `castor/setup_service.py`)
+
+CLI wizard and web wizard now share one setup decision engine.
+
+### `setup_catalog.py`
+
+- Single source of truth for:
+  - provider specs and display order
+  - model profiles per provider
+  - curated stack profiles (`apple_native`, `mlx_local_vision`, `ollama_universal_local`)
+  - hardware preset labels
+- Exposes helper APIs used by wizard/auth/configure/conformance/lint layers.
+
+### `setup_service.py`
+
+- Powers setup API v2 endpoints:
+  - `GET /setup/api/catalog`
+  - `POST /setup/api/preflight`
+  - `POST /setup/api/generate-config`
+- Keeps compatibility routes (`/setup/api/save-config`, `/setup/api/test-provider`) but routes through shared logic.
+- Handles Apple SDK auto-install (explicit opt-in), preflight rerun, and fallback recommendations.
 
 ---
 
@@ -267,7 +297,7 @@ Transparent fallback on quota/credit errors.
 ```yaml
 provider_fallback:
   enabled: true
-  provider: ollama          # ollama | google | openai | anthropic | llamacpp | mlx
+  provider: ollama          # ollama | google | openai | anthropic | llamacpp | mlx | apple
   model: llama3.2:3b
   quota_cooldown_s: 3600
   alert_channel: telegram   # Optional: notify on switch
@@ -288,7 +318,7 @@ Auto-switches to local inference on connectivity loss.
 | Feature | Detail |
 |---------|--------|
 | Monitor | `ConnectivityMonitor` checks internet reachability |
-| Local providers | Ollama, llama.cpp, MLX |
+| Local providers | Ollama, llama.cpp, MLX, Apple Foundation Models |
 | Alert | Notifies via configured channel when switching |
 
 ### RCAN Config Block
@@ -820,7 +850,7 @@ Reads voltage, current, and state-of-charge from an INA219 I2C sensor.
 Zero-cloud-egress enforcement mode. When active:
 
 - All outbound LLM API calls are blocked
-- Only local providers (Ollama, llama.cpp, MLX, ONNX) are allowed
+- Only local providers (Ollama, llama.cpp, MLX, Apple Foundation Models, ONNX) are allowed
 - Camera frames are never transmitted externally
 - Audit log records every blocked egress attempt
 

@@ -11,14 +11,16 @@ INSTALL_DIR="${OPENCASTOR_DIR:-$HOME/opencastor}"
 DRY_RUN=false
 NO_RPI=false
 SKIP_WIZARD=false
+WITH_APPLE_SDK=false
 
 for arg in "$@"; do
   case "$arg" in
     --dry-run)   DRY_RUN=true ;;
     --no-rpi)    NO_RPI=true ;;
     --skip-wizard) SKIP_WIZARD=true ;;
+    --with-apple-sdk) WITH_APPLE_SDK=true ;;
     --help|-h)
-      echo "Usage: install.sh [--dry-run] [--no-rpi] [--skip-wizard]"
+      echo "Usage: install.sh [--dry-run] [--no-rpi] [--skip-wizard] [--with-apple-sdk]"
       exit 0 ;;
   esac
 done
@@ -280,7 +282,15 @@ if [ "$DRY_RUN" = false ]; then
       pip install --quiet -e "."
     }
   else
-    pip install --quiet -e ".[core]" 2>/dev/null || pip install --quiet -e "."
+    if [ "$OS" = "macos" ] && [ "$WITH_APPLE_SDK" = true ]; then
+      pip install --quiet -e ".[core,apple]" 2>/dev/null || pip install --quiet -e "."
+    else
+      pip install --quiet -e ".[core]" 2>/dev/null || pip install --quiet -e "."
+    fi
+  fi
+  if [ "$OS" = "macos" ] && [ "$WITH_APPLE_SDK" = false ]; then
+    info "Apple Foundation Models SDK is optional."
+    info "Install later with: pip install -e '.[apple]'"
   fi
   ok "Python packages installed"
 else

@@ -241,6 +241,25 @@ def _check_env_vars(config: dict) -> list:
                     )
                 )
 
+    if provider in ("apple", "apple-fm", "foundationmodels"):
+        try:
+            from castor.providers.apple_preflight import run_apple_preflight
+
+            preflight = run_apple_preflight(
+                model_profile_id=config.get("agent", {}).get("model", "apple-balanced")
+            )
+            if not preflight.get("ok", False):
+                reason = preflight.get("reason", "UNKNOWN")
+                issues.append(
+                    (
+                        "warning",
+                        f"Provider '{provider}' is not currently ready ({reason}); "
+                        "setup wizard can guide fallback stack selection",
+                    )
+                )
+        except Exception as exc:
+            issues.append(("warning", f"Apple provider readiness check failed: {exc}"))
+
     return issues
 
 

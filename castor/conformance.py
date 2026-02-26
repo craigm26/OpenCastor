@@ -18,26 +18,13 @@ import os
 import re
 from dataclasses import dataclass, field
 
+from castor.setup_catalog import get_known_provider_names, get_provider_env_var_map
+
 # ---------------------------------------------------------------------------
 # Data types
 # ---------------------------------------------------------------------------
 
-KNOWN_PROVIDERS = frozenset(
-    {
-        "anthropic",
-        "google",
-        "openai",
-        "huggingface",
-        "ollama",
-        "llamacpp",
-        "llama.cpp",
-        "llama-cpp",
-        "mlx",
-        "mlx-lm",
-        "claude_oauth",
-        "openrouter",
-    }
-)
+KNOWN_PROVIDERS = frozenset(get_known_provider_names())
 
 KNOWN_PHYSICS_TYPES = frozenset(
     {
@@ -55,19 +42,13 @@ KNOWN_PHYSICS_TYPES = frozenset(
 )
 
 PROVIDER_ENV_VARS: dict[str, list[str]] = {
-    "anthropic": ["ANTHROPIC_API_KEY"],
-    "claude_oauth": ["ANTHROPIC_API_KEY"],
-    "google": ["GOOGLE_API_KEY"],
-    "openai": ["OPENAI_API_KEY"],
-    "huggingface": ["HF_TOKEN", "HUGGINGFACE_TOKEN"],
-    "openrouter": ["OPENROUTER_API_KEY"],
-    "ollama": [],  # no key needed
-    "llamacpp": [],
-    "llama.cpp": [],
-    "llama-cpp": [],
-    "mlx": [],
-    "mlx-lm": [],
+    name: ([env_var] if env_var else [])
+    for name, env_var in get_provider_env_var_map().items()
 }
+PROVIDER_ENV_VARS.setdefault("claude_oauth", ["ANTHROPIC_API_KEY"])
+PROVIDER_ENV_VARS.setdefault("huggingface", ["HF_TOKEN"])
+if "HUGGINGFACE_TOKEN" not in PROVIDER_ENV_VARS.get("huggingface", []):
+    PROVIDER_ENV_VARS["huggingface"].append("HUGGINGFACE_TOKEN")
 
 _UUID4_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",

@@ -99,6 +99,7 @@
             "mlx",
             "mlx-lm",
             "vllm-mlx",
+            "apple",
             "claude_oauth",
             "groq"
           ]

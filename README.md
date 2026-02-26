@@ -158,6 +158,7 @@ OpenCastor doesn't send every decision to a $0.015/request cloud API. Instead, i
 | **Ollama** | `llava:13b`, any local model | Varies | Privacy, offline, zero cost |
 | **llama.cpp** | GGUF models | ~200ms | Edge inference, Raspberry Pi |
 | **MLX** | Apple Silicon native (mlx-lm, vLLM-MLX) | ~50ms | Mac M1–M4, 400+ tok/s |
+| **Apple Foundation Models** | `apple-balanced`, `apple-creative`, `apple-tagging` | ~50-300ms | Apple Intelligence on eligible Macs |
 | **Groq** | `llama-3.3-70b`, `mixtral-8x7b` | ~100ms | LPU-accelerated, fastest API |
 | **VLA** | OpenVLA, Octo, pi0 | Varies | End-to-end robot action models |
 | **Sentence Transformers** | `all-MiniLM-L6-v2`, others | ~10ms | Semantic search, RAG, embeddings |
@@ -235,7 +236,30 @@ curl -sL opencastor.com/install | bash
 castor wizard
 ```
 
-The wizard walks you through provider selection, API keys, hardware config, and optional messaging setup (WhatsApp/Telegram). It remembers your previous choices.
+The wizard now uses a shared CLI/web setup-v2 flow: device probe, stack selection, model profiles, provider preflight, guided fallback, hardware preset, and optional messaging setup (WhatsApp/Telegram). It remembers your previous choices.
+
+Setup now includes device-aware stack profiles:
+
+<!-- SETUP_CATALOG:BEGIN -->
+- `apple_native` — Apple Native (Recommended on eligible Mac)
+- `mlx_local_vision` — MLX Local Vision
+- `ollama_universal_local` — Ollama Universal Local
+
+| Apple Profile | Meaning |
+|---|---|
+| `apple-balanced` | Apple Balanced |
+| `apple-creative` | Apple Creative |
+| `apple-tagging` | Apple Tagging |
+<!-- SETUP_CATALOG:END -->
+
+If Apple Foundation Models are unavailable, setup shows guided fallback choices automatically.
+
+### Apple Foundation Models Troubleshooting
+
+- Apple Intelligence disabled: enable it in macOS System Settings and wait for model assets.
+- Device not eligible: use MLX or Ollama fallback stack.
+- Model not ready: keep device online and retry setup later.
+- Xcode requirement: install Xcode 26+ and ensure `xcodebuild` is available.
 
 ### 2. Run
 

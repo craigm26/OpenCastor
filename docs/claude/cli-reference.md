@@ -40,7 +40,9 @@ castor gateway --config robot.rcan.yaml --wizard  # Run wizard first
 ```
 
 ### castor wizard
-Interactive setup wizard. Configures API keys, hardware, and channels.
+Interactive setup wizard (CLI or web) backed by the same setup-v2 service.
+Flow includes device probe, stack selection, model profile, preflight/remediation,
+hardware preset, and optional channels.
 
 ```bash
 castor wizard              # Full interactive wizard
@@ -101,7 +103,7 @@ Performance profiling of providers and hardware.
 
 ```bash
 castor benchmark
-castor benchmark --providers google,openai,anthropic
+castor benchmark --providers apple,google,openai,anthropic
 ```
 
 ---

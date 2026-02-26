@@ -95,7 +95,7 @@ def validate_rcan_config(config: dict) -> Tuple[bool, List[str]]:
             errors.append("'offline_fallback' must be a mapping (dict), not a scalar")
         elif offline_fb.get("enabled"):
             provider = str(offline_fb.get("provider", "")).lower().strip()
-            _VALID_FALLBACK_PROVIDERS = {"ollama", "llamacpp", "mlx"}
+            _VALID_FALLBACK_PROVIDERS = {"ollama", "llamacpp", "mlx", "apple"}
             if provider not in _VALID_FALLBACK_PROVIDERS:
                 errors.append(
                     f"offline_fallback.provider must be one of: "

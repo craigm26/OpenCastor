@@ -18,6 +18,8 @@ OpenCastor/
 │   ├── auth.py                       # Unified auth manager (providers + channels)
 │   ├── wizard.py                     # Interactive setup wizard
 │   ├── web_wizard.py                 # Web-based configuration wizard
+│   ├── setup_catalog.py              # Shared setup metadata (providers/profiles/stacks/presets)
+│   ├── setup_service.py              # Shared setup orchestration (CLI + web APIs)
 │   ├── dashboard.py                  # Streamlit web UI
 │   ├── dashboard_tui.py              # Terminal UI dashboard (tmux-based, preferred)
 │   ├── config_validation.py          # RCAN config validation (fail-fast on startup)
@@ -115,6 +117,8 @@ OpenCastor/
 │   │   ├── huggingface_provider.py   # HuggingFace Hub
 │   │   ├── llamacpp_provider.py      # llama.cpp local inference
 │   │   ├── mlx_provider.py           # Apple MLX acceleration
+│   │   ├── apple_provider.py         # Apple Foundation Models provider (on-device)
+│   │   ├── apple_preflight.py        # Apple platform/SDK/model readiness checks
 │   │   ├── vertex_provider.py        # Google Vertex AI (google-genai SDK)
 │   │   ├── openrouter_provider.py    # OpenRouter (100+ models, OPENROUTER_API_KEY)
 │   │   ├── groq_provider.py          # Groq LPU-accelerated inference (GROQ_API_KEY)
@@ -299,7 +303,7 @@ OpenCastor/
 
 | Subsystem | Path | Purpose |
 |-----------|------|---------|
-| Providers | `castor/providers/` | 16 LLM adapters (Gemini, GPT-4.1, Claude, Ollama, HuggingFace, llama.cpp, MLX, Vertex, OpenRouter, Groq, VLA, ONNX, Kimi, MiniMax, Qwen, SentenceTransformers); `_caps`+`_robot_name` injected by api.py for prompt context |
+| Providers | `castor/providers/` | 17 LLM adapters (Gemini, GPT-4.1, Claude, Ollama, HuggingFace, llama.cpp, MLX, Apple Foundation Models, Vertex, OpenRouter, Groq, VLA, ONNX, Kimi, MiniMax, Qwen, SentenceTransformers); `_caps`+`_robot_name` injected by api.py for prompt context |
 | Drivers | `castor/drivers/` | Hardware: PCA9685, Dynamixel, CompositeDriver, ROS2 bridge |
 | Channels | `castor/channels/` | Messaging: WhatsApp (neonize/Twilio, `group_jids`/`group_name_filter` routing), Telegram, Discord, Slack, MQTT, Home Assistant |
 | VFS | `castor/fs/` | Unix-inspired virtual filesystem with capabilities, memory tiers, e-stop |

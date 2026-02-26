@@ -136,6 +136,14 @@ class TestCheckProviderReady:
     def test_ollama_always_ready(self):
         assert check_provider_ready("ollama") is True
 
+    @patch("castor.providers.apple_preflight.is_apple_ready", return_value=True)
+    def test_apple_ready_when_preflight_passes(self, _):
+        assert check_provider_ready("apple") is True
+
+    @patch("castor.providers.apple_preflight.is_apple_ready", return_value=False)
+    def test_apple_not_ready_when_preflight_fails(self, _):
+        assert check_provider_ready("apple") is False
+
     @patch.dict(os.environ, {}, clear=True)
     def test_ready_with_config_key(self):
         assert check_provider_ready("google", {"api_key": "key"}) is True

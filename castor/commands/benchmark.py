@@ -49,6 +49,7 @@ _DEFAULT_MODELS: Dict[str, str] = {
     "ollama": "llava:13b",
     "llamacpp": "default-model",
     "mlx": "default-model",
+    "apple": "apple-balanced",
     "vertex_ai": "gemini-2.0-flash",
 }
 

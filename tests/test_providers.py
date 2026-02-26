@@ -136,6 +136,14 @@ class TestCleanJson:
 # get_provider factory tests
 # =====================================================================
 class TestGetProvider:
+    @patch("castor.providers.AppleProvider")
+    def test_apple_provider(self, mock_cls):
+        from castor.providers import get_provider
+
+        config = {"provider": "apple", "model": "apple-balanced"}
+        get_provider(config)
+        mock_cls.assert_called_once_with(config)
+
     @patch("castor.providers.GoogleProvider")
     def test_google_provider(self, mock_cls):
         from castor.providers import get_provider

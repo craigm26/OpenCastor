@@ -451,9 +451,9 @@
             <div class="step-body">
               <h3>Run the setup wizard</h3>
               <div class="step-code">castor wizard</div>
-              <p>The wizard asks you a few plain-English questions: what AI model to use, what hardware you have, and
-                how you'd like to connect. It sets everything up automatically. You don't need to edit any config files
-                by hand.</p>
+              <p>The wizard now probes your device, suggests a compatible software stack, runs preflight checks, and
+                guides fallback options if needed. You still answer plain-English questions and do not need to edit RCAN
+                files by hand.</p>
             </div>
           </div>
 
@@ -464,6 +464,8 @@
               <p>We recommend starting with the free <strong style="color:var(--text);">Hugging Face</strong> tier — no
                 credit card needed. The wizard will walk you through creating a free account and getting an API key in
                 about 3 minutes.</p>
+              <p>If you have an eligible Apple Intelligence Mac, pick <strong style="color:var(--text);">Apple
+                  Foundation Models</strong> for on-device inference with no API key.</p>
               <p>If you already have a Claude, ChatGPT, or Gemini subscription, those work too — just paste your API key
                 when asked.</p>
             </div>
@@ -533,8 +535,8 @@
           <div class="faq-item reveal">
             <div class="faq-q">Is it free?</div>
             <div class="faq-a">OpenCastor itself is free and open source (Apache 2.0). The AI model you choose may have
-              costs, but we'll show you free options to start. Most beginners run for months on the free Hugging Face
-              tier without spending anything.</div>
+              costs, but setup shows free options first (Apple Foundation Models on eligible Macs, plus local
+              Ollama/llama.cpp and Hugging Face free tier). Most beginners run for months without spending anything.</div>
           </div>
           <div class="faq-item reveal">
             <div class="faq-q">What if something breaks or stops working?</div>

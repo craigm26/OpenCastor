@@ -1542,3 +1542,116 @@ class TestIntentEndpoints:
 
         resp = client.post('/api/intents/pause', json={'intent_id': 'missing', 'paused': True})
         assert resp.status_code == 404
+
+
+class TestSetupV2Endpoints:
+    def test_setup_catalog_endpoint(self, client):
+        resp = client.get("/setup/api/catalog")
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert "providers" in payload
+        assert "stack_profiles" in payload
+        assert any(p["key"] == "apple" for p in payload["providers"])
+
+    def test_setup_preflight_non_apple(self, client):
+        resp = client.post(
+            "/setup/api/preflight",
+            json={"provider": "ollama", "model_profile": "llava:13b"},
+        )
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["ok"] is True
+        assert payload["provider"] == "ollama"
+
+    def test_setup_generate_config(self, client, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        resp = client.post(
+            "/setup/api/generate-config",
+            json={
+                "robot_name": "AppleBot",
+                "provider": "apple",
+                "model": "apple-balanced",
+                "preset": "rpi_rc_car",
+            },
+        )
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["ok"] is True
+        assert payload["filename"].endswith(".rcan.yaml")
+        assert (tmp_path / payload["filename"]).exists()
+
+    def test_setup_session_lifecycle(self, client):
+        start = client.post("/setup/api/session/start", json={"robot_name": "ResumeBot"})
+        assert start.status_code == 200
+        session = start.json()
+        sid = session["session_id"]
+        assert session["stage"] == "probe"
+
+        fetched = client.get(f"/setup/api/session/{sid}")
+        assert fetched.status_code == 200
+        assert fetched.json()["session_id"] == sid
+
+        selected = client.post(
+            f"/setup/api/session/{sid}/select",
+            json={"stage": "stack", "values": {"stack_id": "ollama_universal_local"}},
+        )
+        assert selected.status_code == 200
+        assert selected.json()["stage"] == "stack"
+        assert selected.json()["selections"]["stack_id"] == "ollama_universal_local"
+
+        resumed = client.post(f"/setup/api/session/{sid}/resume")
+        assert resumed.status_code == 200
+        assert resumed.json()["session_id"] == sid
+
+    def test_setup_preflight_includes_typed_checks(self, client):
+        resp = client.post(
+            "/setup/api/preflight",
+            json={
+                "provider": "ollama",
+                "stack_id": "ollama_universal_local",
+                "model_profile": "llava:13b",
+            },
+        )
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert "checks" in payload
+        assert isinstance(payload["checks"], list)
+        assert payload["checks"]
+        first = payload["checks"][0]
+        for key in ("id", "category", "severity", "ok", "reason_code", "evidence", "retryable"):
+            assert key in first
+
+    def test_setup_remediate_requires_consent_for_command_actions(self, client):
+        resp = client.post(
+            "/setup/api/remediate",
+            json={"remediation_id": "install_apple_sdk", "consent": False},
+        )
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["ok"] is False
+        assert payload["requires_consent"] is True
+
+    def test_setup_verify_config_endpoint(self, client):
+        with patch(
+            "castor.api.verify_setup_config",
+            return_value={"ok": True, "blocking_errors": [], "warnings": [], "checks": []},
+        ):
+            resp = client.post(
+                "/setup/api/verify-config",
+                json={
+                    "robot_name": "VerifyBot",
+                    "provider": "ollama",
+                    "model": "llava:13b",
+                    "preset": "rpi_rc_car",
+                    "stack_id": "ollama_universal_local",
+                },
+            )
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+
+    def test_setup_metrics_endpoint(self, client):
+        resp = client.get("/setup/api/metrics")
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert "total_runs" in payload
+        assert "first_run_success_rate" in payload

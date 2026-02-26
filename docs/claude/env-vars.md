@@ -14,6 +14,7 @@ Copy `.env.example` to `.env` and fill in what you need.
 | `MOONSHOT_API_KEY` | Kimi (Moonshot AI) | Chinese LLM |
 | `MINIMAX_API_KEY` | MiniMax | Chinese LLM |
 | `OLLAMA_BASE_URL` | Local Ollama | No key needed; default `http://localhost:11434` |
+| *(none)* | Apple Foundation Models | On-device only; macOS Apple Silicon + Apple Intelligence + SDK preflight |
 | `ONNX_MODEL_PATH` | ONNX Runtime | Path to `.onnx` model file; `pip install opencastor[onnx]` |
 | `PORCUPINE_ACCESS_KEY` | Wake-word (pvporcupine) | Required for `castor/voice_loop.py` |
 | `GOOGLE_AUTH_MODE=adc` | Google ADC | Application Default Credentials |
@@ -122,7 +123,8 @@ Copy `.env.example` to `.env` and fill in what you need.
 | Extra | Packages | Use Case |
 |-------|---------|---------|
 | `rpi` | adafruit-circuitpython-pca9685, picamera2, neonize | Raspberry Pi full stack |
-| `whatsapp` | `neonize==0.3.10` | WhatsApp QR code scan |
+| `apple` | `apple-fm-sdk @ git+https://github.com/apple/python-apple-fm-sdk.git@3204b7ee892131a5d2c940d95caaabc90b4a40c9` (darwin only) | Apple Foundation Models integration |
+| `whatsapp` | `neonize==0.3.13.post0` | WhatsApp QR code scan |
 | `whatsapp-twilio` | `twilio` | WhatsApp via Twilio (legacy) |
 | `telegram` | `python-telegram-bot>=21.0` | Telegram Bot |
 | `discord` | `discord.py>=2.3.0` | Discord Bot |

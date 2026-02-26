@@ -25,7 +25,7 @@ from castor.connectivity import ConnectivityMonitor, is_online
 logger = logging.getLogger("OpenCastor.OfflineFallback")
 
 # Providers that work fully offline (local inference)
-_LOCAL_PROVIDERS = {"ollama", "llamacpp", "mlx"}
+_LOCAL_PROVIDERS = {"ollama", "llamacpp", "mlx", "apple"}
 
 
 class OfflineFallbackManager:

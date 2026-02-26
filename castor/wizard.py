@@ -15,6 +15,7 @@ Features:
 """
 
 import argparse
+import contextlib
 import os
 import sys
 import uuid
@@ -22,6 +23,24 @@ from datetime import datetime, timezone
 from urllib.request import Request, urlopen
 
 from castor import __version__
+from castor.providers.apple_preflight import detect_device_info
+from castor.setup_catalog import (
+    get_hardware_preset_map,
+    get_provider_auth_map,
+    get_provider_models,
+    get_provider_order,
+    get_secondary_models,
+    get_stack_profiles,
+)
+from castor.setup_service import (
+    APPLE_SDK_GIT_URL,
+    finalize_setup_session,
+    find_resumable_setup_session,
+    resume_setup_session,
+    run_preflight,
+    select_setup_session,
+    start_setup_session,
+)
 
 try:
     import yaml
@@ -126,8 +145,14 @@ PROVIDERS = {
         "label": "MLX (Apple Silicon — 400+ tok/s)",
         "env_var": None,
     },
-    # ── Chinese models (OpenAI-compatible APIs) ──────────────────────────────
     "9": {
+        "provider": "apple",
+        "model": "apple-balanced",
+        "label": "Apple Foundation Models (On-device)",
+        "env_var": None,
+    },
+    # ── Chinese models (OpenAI-compatible APIs) ──────────────────────────────
+    "10": {
         "provider": "openai",
         "model": "moonshot-v1-8k",
         "label": "Kimi k2.5 (Moonshot AI — 中文友好)",
@@ -135,7 +160,7 @@ PROVIDERS = {
         "base_url": "https://api.moonshot.cn/v1",
         "note": "Get key: platform.moonshot.cn | Supports Chinese & English",
     },
-    "10": {
+    "11": {
         "provider": "openai",
         "model": "MiniMax-Text-01",
         "label": "MiniMax M2.5 (MiniMax AI — 中文友好)",
@@ -143,7 +168,7 @@ PROVIDERS = {
         "base_url": "https://api.minimax.chat/v1",
         "note": "Get key: platform.minimax.io | Supports Chinese & English",
     },
-    "11": {
+    "12": {
         "provider": "ollama",
         "model": "qwen3:8b",
         "label": "Qwen 3 Local (Ollama — 中文 · 免费 · 离线)",
@@ -153,288 +178,13 @@ PROVIDERS = {
 }
 
 # ---------------------------------------------------------------------------
-# New data model: providers separated from models
+# New data model: providers/models/stacks shared through setup_catalog
 # ---------------------------------------------------------------------------
-PROVIDER_AUTH = {
-    "anthropic": {
-        "env_var": "ANTHROPIC_API_KEY",
-        "label": "Anthropic (Claude)",
-        "desc": "Best reasoning & safety",
-        "has_oauth": True,
-    },
-    "google": {
-        "env_var": "GOOGLE_API_KEY",
-        "label": "Google (Gemini)",
-        "desc": "Fast, multimodal, robotics",
-        "has_oauth": True,
-    },
-    "openai": {
-        "env_var": "OPENAI_API_KEY",
-        "label": "OpenAI (GPT)",
-        "desc": "Widely supported",
-    },
-    "huggingface": {
-        "env_var": "HF_TOKEN",
-        "label": "Hugging Face",
-        "desc": "Open-source models",
-        "has_cli_login": True,
-    },
-    "ollama": {
-        "env_var": None,
-        "label": "Ollama (Local)",
-        "desc": "Free, private, no API needed",
-    },
-    "llamacpp": {
-        "env_var": None,
-        "label": "llama.cpp (Local)",
-        "desc": "Bare-metal GGUF inference",
-    },
-    "mlx": {
-        "env_var": None,
-        "label": "MLX (Apple Silicon)",
-        "desc": "Native GPU, 400+ tok/s on Mac",
-    },
-    "groq": {
-        "env_var": "GROQ_API_KEY",
-        "label": "Groq (Ultra-Fast)",
-        "desc": "Sub-second LLM inference · console.groq.com",
-    },
-    # ── Chinese models (OpenAI-compatible APIs) ────────────────────────────
-    "moonshot": {
-        "env_var": "MOONSHOT_API_KEY",
-        "label": "Kimi / Moonshot AI (中文)",
-        "desc": "Chinese & English · platform.moonshot.cn",
-        "base_url": "https://api.moonshot.cn/v1",
-        "openai_compat": True,
-    },
-    "minimax": {
-        "env_var": "MINIMAX_API_KEY",
-        "label": "MiniMax M2.5 (中文)",
-        "desc": "Chinese & English · platform.minimax.io",
-        "base_url": "https://api.minimax.chat/v1",
-        "openai_compat": True,
-    },
-}
-
-# Ordered list for menu display
-PROVIDER_ORDER = [
-    "anthropic",
-    "google",
-    "openai",
-    "huggingface",
-    "ollama",
-    "llamacpp",
-    "mlx",
-    "groq",
-    "moonshot",
-    "minimax",
-]
-
-MODELS = {
-    "anthropic": [
-        {
-            "id": "claude-opus-4-6",
-            "label": "Claude Opus 4.6",
-            "desc": "Best reasoning",
-            "tags": ["reasoning", "safety"],
-            "recommended": True,
-        },
-        {
-            "id": "claude-sonnet-4-5-20250929",
-            "label": "Claude Sonnet 4.5",
-            "desc": "Fast, great balance",
-            "tags": ["balanced"],
-        },
-        {
-            "id": "claude-haiku-3-5-20241022",
-            "label": "Claude Haiku 3.5",
-            "desc": "Fastest, most affordable",
-            "tags": ["fast"],
-        },
-    ],
-    "google": [
-        {
-            "id": "gemini-2.5-flash",
-            "label": "Gemini 2.5 Flash",
-            "desc": "Fast & multimodal",
-            "tags": ["fast", "multimodal"],
-            "recommended": True,
-        },
-        {
-            "id": "gemini-2.5-pro",
-            "label": "Gemini 2.5 Pro",
-            "desc": "Deep reasoning",
-            "tags": ["reasoning"],
-        },
-        {
-            "id": "gemini-3-flash-preview",
-            "label": "Gemini 3 Flash — Agentic Vision (Preview)",
-            "desc": "Think→Act→Observe loop: zooms in on obstacles, annotates images, "
-            "grounds decisions in visual evidence. 5-10% vision benchmark boost "
-            "via code execution. Best for: fine-grained object ID, hazard labels, "
-            "navigation in cluttered scenes.",
-            "tags": ["preview", "agentic", "vision", "code-execution"],
-            "recommended": False,
-            "agentic_vision": True,
-        },
-    ],
-    "openai": [
-        {
-            "id": "gpt-4.1",
-            "label": "GPT-4.1",
-            "desc": "Latest, most capable",
-            "tags": ["reasoning"],
-            "recommended": True,
-        },
-        {
-            "id": "gpt-4.1-mini",
-            "label": "GPT-4.1 Mini",
-            "desc": "Fast & affordable",
-            "tags": ["fast"],
-        },
-        {
-            "id": "gpt-4o",
-            "label": "GPT-4o",
-            "desc": "Vision & tool use",
-            "tags": ["multimodal"],
-        },
-    ],
-    "huggingface": [
-        {
-            "id": "meta-llama/Llama-3.3-70B-Instruct",
-            "label": "Llama 3.3 70B",
-            "desc": "Best open-source",
-            "tags": ["open-source"],
-            "recommended": True,
-        },
-        {
-            "id": "Qwen/Qwen2.5-72B-Instruct",
-            "label": "Qwen 2.5 72B",
-            "desc": "Strong multilingual",
-            "tags": ["multilingual"],
-        },
-        {
-            "id": "mistralai/Mistral-Large-Instruct-2407",
-            "label": "Mistral Large",
-            "desc": "European, fast",
-            "tags": ["fast"],
-        },
-    ],
-    "ollama": [],  # dynamically populated or user enters name
-    "llamacpp": [],  # user enters model name or GGUF path
-    "mlx": [
-        {
-            "id": "mlx-community/Qwen2.5-VL-7B-Instruct-4bit",
-            "label": "Qwen 2.5 VL 7B (4-bit)",
-            "desc": "Vision + language, recommended",
-            "tags": ["vision", "recommended"],
-            "recommended": True,
-        },
-        {
-            "id": "mlx-community/Llama-3.3-8B-Instruct-4bit",
-            "label": "Llama 3.3 8B (4-bit)",
-            "desc": "Fast general purpose",
-            "tags": ["fast"],
-        },
-        {
-            "id": "mlx-community/Mistral-Small-3.1-24B-Instruct-2503-4bit",
-            "label": "Mistral Small 3.1 24B (4-bit)",
-            "desc": "Strong reasoning",
-            "tags": ["reasoning"],
-        },
-    ],
-    # ── Chinese models ──────────────────────────────────────────────────────
-    "moonshot": [
-        {
-            "id": "moonshot-v1-8k",
-            "label": "Kimi k2.5 (8K context)",
-            "desc": "Fast, bilingual Chinese/English",
-            "tags": ["fast", "bilingual"],
-            "recommended": True,
-        },
-        {
-            "id": "moonshot-v1-32k",
-            "label": "Kimi k2.5 (32K context)",
-            "desc": "Longer context, bilingual",
-            "tags": ["long-context", "bilingual"],
-        },
-    ],
-    "groq": [
-        {
-            "id": "llama-3.3-70b-versatile",
-            "label": "Llama 3.3 70B Versatile",
-            "desc": "Best quality, ultra-fast Groq inference",
-            "tags": ["fast", "reasoning"],
-            "recommended": True,
-        },
-        {
-            "id": "llama-3.1-8b-instant",
-            "label": "Llama 3.1 8B Instant",
-            "desc": "Smallest, fastest, lowest cost",
-            "tags": ["fast", "lightweight"],
-        },
-        {
-            "id": "gemma2-9b-it",
-            "label": "Gemma 2 9B",
-            "desc": "Google Gemma on Groq hardware",
-            "tags": ["fast", "google"],
-        },
-        {
-            "id": "mixtral-8x7b-32768",
-            "label": "Mixtral 8x7B",
-            "desc": "MoE model, 32K context",
-            "tags": ["fast", "long-context"],
-        },
-    ],
-    "minimax": [
-        {
-            "id": "MiniMax-Text-01",
-            "label": "MiniMax M2.5 Text",
-            "desc": "Strong Chinese & English reasoning",
-            "tags": ["reasoning", "bilingual"],
-            "recommended": True,
-        },
-        {
-            "id": "abab6.5s-chat",
-            "label": "MiniMax ABAB 6.5s",
-            "desc": "Fast, cost-effective",
-            "tags": ["fast", "bilingual"],
-        },
-    ],
-}
-
-SECONDARY_MODELS = [
-    {
-        "provider": "google",
-        "id": "gemini-er-1.5",
-        "label": "Google Gemini Robotics ER 1.5",
-        "desc": "Physical AI for robot control",
-        "tags": ["robotics", "physical-ai"],
-    },
-    {
-        "provider": "google",
-        "id": "gemini-2.5-flash",
-        "label": "Google Gemini 2.5 Flash",
-        "desc": "Fast vision & multimodal",
-        "tags": ["vision", "multimodal"],
-    },
-    {
-        "provider": "openai",
-        "id": "gpt-4o",
-        "label": "OpenAI GPT-4o",
-        "desc": "Vision & tool use",
-        "tags": ["vision", "multimodal"],
-    },
-]
-
-PRESETS = {
-    "1": None,  # Custom
-    "2": "rpi_rc_car",
-    "3": "waveshare_alpha",
-    "4": "adeept_generic",
-    "5": "freenove_4wd",
-    "6": "sunfounder_picar",
-}
+PROVIDER_AUTH = get_provider_auth_map()
+PROVIDER_ORDER = get_provider_order()
+MODELS = get_provider_models()
+SECONDARY_MODELS = get_secondary_models()
+PRESETS = get_hardware_preset_map()
 
 CHANNELS = {
     "1": {
@@ -474,6 +224,124 @@ def input_secret(prompt):
     """Read a secret value (API key / token). Masks nothing but labels it clearly."""
     value = input(f"  {prompt}: ").strip()
     return value if value else None
+
+
+def print_device_probe_summary():
+    """Print a concise device summary for stack selection."""
+    info = detect_device_info()
+    platform_name = info.get("platform", "unknown")
+    arch = info.get("architecture", "unknown")
+    py = info.get("python_version", "unknown")
+    mac_ver = info.get("macos_version", "")
+
+    print(f"\n{Colors.GREEN}--- DEVICE PROBE ---{Colors.ENDC}")
+    print(f"  Platform: {platform_name}")
+    if mac_ver:
+        print(f"  macOS: {mac_ver}")
+    print(f"  Arch: {arch}")
+    print(f"  Python: {py}")
+    return info
+
+
+def choose_stack_profile(device_info):
+    """Choose one of the curated stack profiles."""
+    stacks = get_stack_profiles(device_info)
+    if not stacks:
+        return None
+
+    print(f"\n{Colors.GREEN}--- STACK PROFILE ---{Colors.ENDC}")
+    print("Choose the software stack to start from:\n")
+    for idx, stack in enumerate(stacks, 1):
+        print(f"  [{idx}] {stack.label:<42s} {stack.desc}")
+
+    choice = input_default("\nSelection", "1").strip()
+    try:
+        selected = stacks[int(choice) - 1]
+    except Exception:
+        selected = stacks[0]
+    return selected
+
+
+def _select_model_default(provider_key: str, model_id: str):
+    models = MODELS.get(provider_key, [])
+    for item in models:
+        if item.get("id") == model_id:
+            return item
+    return {"id": model_id, "label": model_id, "desc": "Default from stack", "tags": []}
+
+
+def ensure_provider_preflight(provider_key, model_info, stack_id=None, session_id=None):
+    """Run provider preflight and optionally guide install/fallback."""
+    if provider_key != "apple":
+        return provider_key, model_info, False, stack_id
+
+    active_stack_id = stack_id or "apple_native"
+    preflight = run_preflight(
+        "apple",
+        model_profile=model_info["id"],
+        auto_install=False,
+        stack_id=active_stack_id,
+        session_id=session_id,
+    )
+    if preflight.get("ok", False):
+        return provider_key, model_info, False, active_stack_id
+
+    print(f"\n{Colors.WARNING}--- APPLE PREFLIGHT ---{Colors.ENDC}")
+    print("  Apple Foundation Models is not ready on this device.")
+    for issue in preflight.get("issues", []):
+        print(f"  - {issue}")
+    for action in preflight.get("actions", []):
+        print(f"  -> {action}")
+
+    missing_sdk = any(
+        check.get("name") == "apple_fm_sdk_import" and not check.get("ok")
+        for check in preflight.get("checks", [])
+    )
+    if missing_sdk:
+        print("\n  The Apple SDK is not installed in this environment.")
+        print(f"  Install source: {APPLE_SDK_GIT_URL}")
+        consent = input_default("  Install now? (y/n)", "y").strip().lower()
+        if consent in ("y", "yes", ""):
+            preflight = run_preflight(
+                "apple",
+                model_profile=model_info["id"],
+                auto_install=True,
+                stack_id=active_stack_id,
+                session_id=session_id,
+            )
+            if preflight.get("auto_install", {}).get("attempted"):
+                if preflight.get("auto_install", {}).get("ok"):
+                    print(f"  {Colors.GREEN}[OK]{Colors.ENDC} Apple SDK installed.")
+                else:
+                    print(
+                        f"  {Colors.WARNING}[WARN]{Colors.ENDC} "
+                        f"SDK install failed: {preflight['auto_install'].get('detail', 'unknown')}"
+                    )
+            if preflight.get("ok", False):
+                return provider_key, model_info, False, active_stack_id
+
+    # Guided fallback chooser
+    available_stacks = get_stack_profiles(preflight.get("device") or detect_device_info())
+    fallback_ids = preflight.get("fallback_stacks", [])
+    fallback_stacks = [stack for stack in available_stacks if stack.id in fallback_ids]
+    if not fallback_stacks:
+        return provider_key, model_info, False, active_stack_id
+
+    print(f"\n{Colors.WARNING}Apple is unavailable. Choose a fallback stack:{Colors.ENDC}\n")
+    for idx, stack in enumerate(fallback_stacks, 1):
+        print(f"  [{idx}] {stack.label:<32s} {stack.desc}")
+    choice = input_default("\nSelection", "1").strip()
+    try:
+        selected = fallback_stacks[int(choice) - 1]
+    except Exception:
+        selected = fallback_stacks[0]
+
+    fallback_provider = selected.provider
+    fallback_model = _select_model_default(fallback_provider, selected.model_profile_id)
+    print(
+        f"\n  Switching to fallback: {Colors.BOLD}{fallback_provider}/{fallback_model['id']}{Colors.ENDC}"
+    )
+    return fallback_provider, fallback_model, True, selected.id
 
 
 # ---------------------------------------------------------------------------
@@ -529,10 +397,21 @@ def authenticate_provider(provider_key, *, already_authed=None):
     env_var = info.get("env_var")
 
     if not env_var:
-        # Ollama — check connection
+        # Local providers (Ollama, llama.cpp, MLX, Apple) need no API key.
         print(f"\n{Colors.GREEN}--- AUTHENTICATION ({info['label']}) ---{Colors.ENDC}")
-        print(f"  {Colors.GREEN}[OK]{Colors.ENDC} No API key needed for Ollama.")
-        _check_ollama_connection()
+        print(f"  {Colors.GREEN}[OK]{Colors.ENDC} No API key needed for {info['label']}.")
+        if provider_key == "ollama":
+            _check_ollama_connection()
+        elif provider_key == "apple":
+            preflight = run_preflight("apple", model_profile="apple-balanced", auto_install=False)
+            if preflight.get("ok", False):
+                print(f"  {Colors.GREEN}[OK]{Colors.ENDC} Apple model is available.")
+            else:
+                reason = preflight.get("reason", "UNKNOWN")
+                print(
+                    f"  {Colors.WARNING}[WARN]{Colors.ENDC} "
+                    f"Apple model not ready ({reason})."
+                )
         already_authed.add(provider_key)
         return True
 
@@ -952,7 +831,7 @@ def _huggingface_auth_flow(env_var):
 # ---------------------------------------------------------------------------
 # Model selection (Step 4)
 # ---------------------------------------------------------------------------
-def choose_model(provider_key):
+def choose_model(provider_key, default_model_id=None):
     """Choose primary model for the selected provider."""
     if provider_key == "ollama":
         return _choose_ollama_model()
@@ -969,17 +848,24 @@ def choose_model(provider_key):
         name = input_default("Enter model name/ID", "")
         return {"id": name, "label": name, "desc": "", "tags": []}
 
-    return _present_model_menu(models)
+    return _present_model_menu(models, default_model_id=default_model_id)
 
 
-def _present_model_menu(models, show_expand=False):
+def _present_model_menu(models, show_expand=False, default_model_id=None):
     """Display a model selection menu and return the chosen model."""
     print(f"\n{Colors.GREEN}--- PRIMARY MODEL (Chat & Reasoning) ---{Colors.ENDC}")
+    default_idx = "1"
+    if default_model_id:
+        for i, m in enumerate(models, 1):
+            if m.get("id") == default_model_id:
+                default_idx = str(i)
+                break
+
     for i, m in enumerate(models, 1):
         rec = " (Recommended)" if m.get("recommended") else ""
         print(f"  [{i}] {m['label']:<28s} ({m['desc']}){rec}")
 
-    choice = input_default("\nSelection", "1").strip()
+    choice = input_default("\nSelection", default_idx).strip()
     try:
         idx = int(choice) - 1
         if 0 <= idx < len(models):
@@ -1259,7 +1145,7 @@ def choose_secondary_models(primary_provider, already_authed):
 
 def _add_custom_secondary(already_authed):
     """Prompt for a custom secondary model."""
-    print("\n  Available providers: anthropic, google, openai, huggingface, ollama")
+    print(f"\n  Available providers: {', '.join(PROVIDER_ORDER)}")
     provider = input_default("  Provider", "google").strip().lower()
     model_id = input_default("  Model ID", "").strip()
     if not model_id:
@@ -1520,7 +1406,7 @@ def choose_learner_setup(primary_provider, already_authed):
     preset = LEARNER_PRESETS[idx]
 
     # Auth the learner provider if needed
-    if preset["provider"] not in ("ollama", "llamacpp", "mlx"):
+    if preset["provider"] not in ("ollama", "llamacpp", "mlx", "apple"):
         if preset["provider"] not in already_authed and preset["provider"] != primary_provider:
             print(f"\n  Authenticating {preset['provider']} for learner...")
             authenticate_provider(preset["provider"], already_authed=already_authed)
@@ -2043,6 +1929,7 @@ def choose_hardware():
     print("  [4] Adeept RaspTank ($55)")
     print("  [5] Freenove 4WD Car ($49)")
     print("  [6] SunFounder PiCar-X ($60)")
+    print("  [7] Dynamixel Arm")
 
     choice = input_default("Selection", "2")
     return PRESETS.get(choice)
@@ -2115,6 +2002,8 @@ def _build_agent_config(provider_key, model_info):
     }
     if info.get("base_url"):
         config["base_url"] = info["base_url"]
+    if provider_key == "apple":
+        config["apple_profile"] = model_info["id"]
     return config
 
 
@@ -2136,6 +2025,8 @@ def generate_preset_config(preset_name, robot_name, agent_config, secondary_mode
         config["agent"]["model"] = agent_config["model"]
         if agent_config.get("base_url"):
             config["agent"]["base_url"] = agent_config["base_url"]
+        if agent_config.get("apple_profile"):
+            config["agent"]["apple_profile"] = agent_config["apple_profile"]
     else:
         config = {
             "rcan_version": "1.0.0-alpha",
@@ -2150,6 +2041,11 @@ def generate_preset_config(preset_name, robot_name, agent_config, secondary_mode
             "agent": {
                 "provider": agent_config["provider"],
                 "model": agent_config["model"],
+                **(
+                    {"apple_profile": agent_config["apple_profile"]}
+                    if agent_config.get("apple_profile")
+                    else {}
+                ),
                 "vision_enabled": True,
                 "latency_budget_ms": 200,
                 "safety_stop": True,
@@ -2215,6 +2111,11 @@ def generate_custom_config(robot_name, agent_config, links, drivers):
             "provider": agent_config["provider"],
             "model": agent_config["model"],
             **({"base_url": agent_config["base_url"]} if agent_config.get("base_url") else {}),
+            **(
+                {"apple_profile": agent_config["apple_profile"]}
+                if agent_config.get("apple_profile")
+                else {}
+            ),
             "vision_enabled": True,
             "latency_budget_ms": 200,
             "safety_stop": True,
@@ -2397,33 +2298,118 @@ def main():
             f"  {Colors.GREEN}[RECALL]{Colors.ENDC} Found previous config — values shown as defaults."
         )
 
+    setup_session_id = None
+    if quickstart:
+        resumable = find_resumable_setup_session()
+        if resumable:
+            resume_default = input_default(
+                "Resume previous interrupted setup session? (y/n)",
+                "y",
+            ).strip().lower()
+            if resume_default in ("y", "yes", ""):
+                resumed = resume_setup_session(resumable["session_id"])
+                setup_session_id = resumed["session_id"]
+                selections = resumed.get("selections", {})
+                if selections.get("robot_name"):
+                    prev["robot_name"] = selections["robot_name"]
+                if selections.get("provider"):
+                    prev["provider"] = selections["provider"]
+
     # --- Step 1: Project Name ---
     robot_name = input_default("Project Name", prev.get("robot_name", "MyRobot"))
 
     if quickstart:
         # -- QuickStart: New multi-step flow --
         already_authed = set()
+        if setup_session_id is None:
+            started = start_setup_session(robot_name=robot_name, wizard_context=True)
+            setup_session_id = started["session_id"]
+        else:
+            select_setup_session(setup_session_id, "probe", {"robot_name": robot_name})
 
-        # Step 2: Provider
-        provider_key = choose_provider_step(default=prev.get("provider"))
+        # Step 2: Device probe
+        device_info = print_device_probe_summary()
+        select_setup_session(
+            setup_session_id,
+            "probe",
+            {
+                "platform": device_info.get("platform"),
+                "architecture": device_info.get("architecture"),
+            },
+        )
 
-        # Step 3: Authentication
+        # Step 3: Curated stack profile
+        selected_stack = choose_stack_profile(device_info)
+        stack_provider = selected_stack.provider if selected_stack else "anthropic"
+        stack_model = selected_stack.model_profile_id if selected_stack else None
+        active_stack_id = selected_stack.id if selected_stack else None
+        if active_stack_id:
+            select_setup_session(
+                setup_session_id,
+                "stack",
+                {
+                    "stack_id": active_stack_id,
+                    "provider": stack_provider,
+                    "model": stack_model,
+                },
+            )
+
+        # Step 4: Provider
+        provider_key = stack_provider
+        if selected_stack:
+            use_stack_provider = input_default(
+                f"Use stack provider '{stack_provider}'? (y/n)",
+                "y",
+            ).strip().lower()
+            if use_stack_provider not in ("y", "yes", ""):
+                provider_key = choose_provider_step(default=stack_provider)
+        else:
+            provider_key = choose_provider_step(default=prev.get("provider"))
+        select_setup_session(setup_session_id, "profile", {"provider": provider_key})
+
+        # Step 5: Authentication
         authenticate_provider(provider_key, already_authed=already_authed)
 
-        # Step 4: Primary model
-        model_info = choose_model(provider_key)
+        # Step 6: Primary model/profile
+        model_info = choose_model(provider_key, default_model_id=stack_model)
+        select_setup_session(
+            setup_session_id,
+            "profile",
+            {"provider": provider_key, "model": model_info["id"]},
+        )
+
+        # Step 7: Provider preflight + guided fallback if required
+        provider_key, model_info, used_fallback, active_stack_id = ensure_provider_preflight(
+            provider_key,
+            model_info,
+            stack_id=active_stack_id,
+            session_id=setup_session_id,
+        )
+        select_setup_session(
+            setup_session_id,
+            "preflight",
+            {
+                "provider": provider_key,
+                "model": model_info["id"],
+                "stack_id": active_stack_id,
+                "used_fallback": used_fallback,
+            },
+        )
+        if provider_key not in already_authed:
+            authenticate_provider(provider_key, already_authed=already_authed)
+
         agent_config = _build_agent_config(provider_key, model_info)
 
-        # Step 5: Secondary models
+        # Step 8: Secondary models
         secondary_models = choose_secondary_models(provider_key, already_authed)
 
-        # Step 6: Brain Architecture
+        # Step 9: Brain Architecture
         tiered_config = choose_brain_architecture(provider_key, secondary_models, already_authed)
 
-        # Step 7: Self-Improving Loop (optional, disabled by default)
+        # Step 10: Self-Improving Loop (optional, disabled by default)
         learner_config = choose_learner_setup(provider_key, already_authed)
 
-        # Step 8: Messaging channel (optional)
+        # Step 11: Messaging channel (optional)
         print(f"\n{Colors.GREEN}--- MESSAGING (optional) ---{Colors.ENDC}")
         print("  Connect a messaging app to talk to your robot.")
         print("  [0] Skip for now")
@@ -2438,7 +2424,13 @@ def main():
         if selected_channels:
             collect_channel_credentials(selected_channels)
 
-        preset = "rpi_rc_car"
+        # Step 12: Hardware preset (explicit even in QuickStart)
+        preset = choose_hardware() or "rpi_rc_car"
+        select_setup_session(
+            setup_session_id,
+            "save",
+            {"preset": preset, "provider": provider_key, "model": model_info["id"]},
+        )
         rcan_data = generate_preset_config(
             preset, robot_name, agent_config, secondary_models=secondary_models
         )
@@ -2514,6 +2506,10 @@ def main():
     else:
         with open(filename, "w") as f:
             yaml.dump(rcan_data, f, sort_keys=False, default_flow_style=False)
+
+    if setup_session_id:
+        with contextlib.suppress(Exception):
+            finalize_setup_session(setup_session_id, success=True, reason_code="READY")
 
     # --- Auto-detect RCAN capabilities ---
     try:

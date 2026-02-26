@@ -85,7 +85,7 @@ And you get a tested config for a PiCar-X home patrol bot. I've seeded 7 recipes
 **Numbers:**
 - 99K+ lines of Python
 - 3,431 tests
-- 12+ AI providers (Anthropic, Google, OpenAI, HuggingFace, Ollama, llama.cpp, MLX, Claude OAuth, OpenRouter, Groq, Vertex AI, VLA)
+- 12+ AI providers (Apple Foundation Models, Anthropic, Google, OpenAI, HuggingFace, Ollama, llama.cpp, MLX, Claude OAuth, OpenRouter, Groq, Vertex AI, VLA)
 - Primary brain is free forever (HuggingFace free inference API or local models)
 
 **Quick start:**

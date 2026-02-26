@@ -1,4 +1,5 @@
 from .anthropic_provider import AnthropicProvider
+from .apple_provider import AppleProvider
 from .google_provider import GoogleProvider
 from .groq_provider import GroqProvider
 from .huggingface_provider import HuggingFaceProvider
@@ -10,6 +11,7 @@ from .openai_provider import OpenAIProvider
 __all__ = [
     "get_provider",
     "AnthropicProvider",
+    "AppleProvider",
     "GoogleProvider",
     "GroqProvider",
     "HuggingFaceProvider",
@@ -33,6 +35,8 @@ def _builtin_get_provider(config: dict):
 
     if provider_name == "google":
         return GoogleProvider(config)
+    elif provider_name in ("apple", "apple-fm", "foundationmodels"):
+        return AppleProvider(config)
     elif provider_name == "openai":
         return OpenAIProvider(config)
     elif provider_name == "anthropic":

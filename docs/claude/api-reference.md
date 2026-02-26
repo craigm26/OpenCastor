@@ -380,11 +380,113 @@ Response: `{"username": "operator1", "role": "operator"}`
 ### GET /setup
 Serve the web-based configuration wizard UI (HTML page).
 
+### POST /setup/api/session/start
+Start a setup-v3 resumable session. Returns `session_id`, stage, device probe, and timeline.
+
+### GET /setup/api/session/{session_id}
+Fetch current session state (selections, stage, checks, timeline).
+
+### POST /setup/api/session/{session_id}/select
+Persist stage selections.
+
+Request example:
+```json
+{"stage":"stack","values":{"stack_id":"ollama_universal_local","provider":"ollama"}}
+```
+
+### POST /setup/api/session/{session_id}/resume
+Resume a previously interrupted session.
+
+### GET /setup/api/catalog
+Return setup catalog data shared by CLI/web flows:
+- provider list + order
+- model/profile menus
+- curated stack profiles
+- hardware presets
+- detected device info
+- Apple profile presets
+
+<!-- SETUP_CATALOG:BEGIN -->
+- Stack IDs: `apple_native`, `mlx_local_vision`, `ollama_universal_local`
+- Apple profile IDs: `apple-balanced`, `apple-creative`, `apple-tagging`
+<!-- SETUP_CATALOG:END -->
+
+Response highlights:
+```json
+{
+  "stack_profiles": [
+    {"id":"apple_native","provider":"apple","model_profile_id":"apple-balanced"},
+    {"id":"mlx_local_vision","provider":"mlx","model_profile_id":"mlx-community/Qwen2.5-VL-7B-Instruct-4bit"},
+    {"id":"ollama_universal_local","provider":"ollama","model_profile_id":"llava:13b"}
+  ]
+}
+```
+
+### POST /setup/api/preflight
+Run provider preflight checks before config generation.
+
+Request example:
+```json
+{"provider":"apple","model_profile":"apple-balanced","auto_install":true}
+```
+
+Response includes:
+- `ok`
+- `reason`
+- `issues`
+- `actions`
+- `checks`
+- `fallback_stacks`
+- `auto_install` (when attempted)
+
+### POST /setup/api/remediate
+Execute one remediation action (explicit consent required for command execution actions).
+
+Request example:
+```json
+{"remediation_id":"install_apple_sdk","consent":true,"session_id":"..."}
+```
+
+### POST /setup/api/verify-config
+Dry-run verification gate before saving config:
+- provider init + `health_check`
+- driver viability checks
+- channel credential sanity
+
+Request example:
+```json
+{"robot_name":"MyRobot","provider":"apple","model":"apple-balanced","preset":"rpi_rc_car","allow_warnings":false}
+```
+
+### POST /setup/api/generate-config
+Generate and save RCAN config from setup selections.
+
+Request example:
+```json
+{"robot_name":"MyRobot","provider":"apple","model":"apple-balanced","preset":"rpi_rc_car","stack_id":"apple_native"}
+```
+
+Notes:
+- `stack_id` is optional metadata from setup-v2 stack selection.
+- For Apple, `model` should be one of the Apple profile IDs.
+- Endpoint writes both config file and provider key env var (when key-backed provider + `api_key` provided).
+
 ### POST /setup/api/test-provider
-Test an API key before saving.
+Compatibility endpoint for provider health checks.
+- Apple path: runs preflight and returns normalized reason when unavailable.
+- Key-backed providers: probes via provider `health_check()`.
 
 ### POST /setup/api/save-config
-Write the RCAN config and `.env` file based on wizard form submission.
+Compatibility endpoint to write raw RCAN YAML and `.env` values.
+Internally routes through setup-v2 save helpers for consistency.
+
+### GET /setup/api/metrics
+Return aggregated local setup reliability metrics:
+- first-run success rate
+- median time-to-remediation
+- fallback success rate
+- abandonment rate
+- top reason codes
 
 ---
 

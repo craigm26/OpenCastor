@@ -113,12 +113,15 @@ def _input_default(prompt, default):
 
 def _edit_provider(config: dict) -> bool:
     """Edit AI provider and model."""
+    from castor.setup_catalog import get_provider_specs
+
     agent = config.setdefault("agent", {})
     current_provider = agent.get("provider", "?")
     current_model = agent.get("model", "?")
+    provider_names = ", ".join(sorted(get_provider_specs(include_hidden=True).keys()))
 
     print(f"\n  Current: {current_provider} / {current_model}")
-    print("  Available providers: google, openai, anthropic, openrouter, ollama")
+    print(f"  Available providers: {provider_names}")
 
     new_provider = _input_default("Provider", current_provider)
     new_model = _input_default("Model", current_model)

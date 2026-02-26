@@ -135,7 +135,7 @@ The manifest is the metadata file for your recipe. It's used by `castor hub brow
 | `category` | string | ✅ | One of: `home`, `agriculture`, `outdoor`, `industrial`, `education`, `research`, `service` |
 | `difficulty` | string | ✅ | One of: `beginner`, `intermediate`, `advanced` |
 | `hardware` | array | ✅ | Exact model names of all hardware components |
-| `ai.provider` | string | ✅ | One of: `anthropic`, `google`, `openai`, `huggingface`, `ollama`, `llamacpp`, `mlx` |
+| `ai.provider` | string | ✅ | One of: `anthropic`, `google`, `openai`, `huggingface`, `ollama`, `llamacpp`, `mlx`, `apple` |
 | `ai.model` | string | ✅ | Exact model ID (e.g. `gemini-2.5-flash`, `claude-haiku-4`) |
 | `tags` | array | ✅ | 2–8 lowercase tags for search |
 | `budget` | string | ✅ | Approximate total hardware cost (e.g. `"$120"`) |

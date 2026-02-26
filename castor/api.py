@@ -12,6 +12,7 @@ Run with:
 import argparse
 import asyncio
 import collections
+import contextlib
 import hashlib
 import hmac
 import logging
@@ -37,7 +38,7 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from castor.api_errors import register_error_handlers
 from castor.auth import (
@@ -48,6 +49,24 @@ from castor.auth import (
 from castor.fs import CastorFS
 from castor.secret_provider import get_jwt_secret_provider
 from castor.security_posture import publish_attestation
+from castor.setup_service import (
+    finalize_setup_session,
+    generate_setup_config,
+    get_setup_catalog,
+    get_setup_metrics,
+    get_setup_session,
+    resolve_provider_env_var,
+    resume_setup_session,
+    run_remediation,
+    save_config_file,
+    save_env_vars,
+    select_setup_session,
+    start_setup_session,
+    verify_setup_config,
+)
+from castor.setup_service import (
+    run_preflight as run_setup_preflight,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -3557,22 +3576,227 @@ class _SetupTestProviderRequest(BaseModel):
     model: Optional[str] = None
 
 
+class _SetupPreflightRequest(BaseModel):
+    provider: str
+    model_profile: Optional[str] = None
+    auto_install: bool = False
+    stack_id: Optional[str] = None
+    session_id: Optional[str] = None
+
+
+class _SetupGenerateConfigRequest(BaseModel):
+    robot_name: str
+    provider: str
+    model: str
+    preset: str = "rpi_rc_car"
+    stack_id: Optional[str] = None
+    api_key: Optional[str] = None
+    session_id: Optional[str] = None
+
+
+class _SetupSessionStartRequest(BaseModel):
+    robot_name: Optional[str] = None
+
+
+class _SetupSessionSelectRequest(BaseModel):
+    stage: str
+    values: Dict[str, Any] = Field(default_factory=dict)
+
+
+class _SetupRemediationRequest(BaseModel):
+    remediation_id: str
+    consent: bool = False
+    session_id: Optional[str] = None
+    context: Optional[Dict[str, Any]] = None
+
+
+class _SetupVerifyConfigRequest(BaseModel):
+    robot_name: str
+    provider: str
+    model: str
+    preset: str = "rpi_rc_car"
+    stack_id: Optional[str] = None
+    api_key: Optional[str] = None
+    allow_warnings: bool = False
+    session_id: Optional[str] = None
+
+
+@app.post("/setup/api/session/start")
+async def setup_session_start(body: _SetupSessionStartRequest):
+    """Start a resumable setup-v3 session."""
+    try:
+        return start_setup_session(robot_name=body.robot_name, wizard_context=True)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
+
+
+@app.get("/setup/api/session/{session_id}")
+async def setup_session_get(session_id: str):
+    """Return setup session state."""
+    try:
+        return get_setup_session(session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail={"error": str(exc)}) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
+
+
+@app.post("/setup/api/session/{session_id}/select")
+async def setup_session_select(session_id: str, body: _SetupSessionSelectRequest):
+    """Update setup session selections for a specific stage."""
+    try:
+        return select_setup_session(session_id, stage=body.stage, values=body.values)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"error": str(exc)}) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
+
+
+@app.post("/setup/api/session/{session_id}/resume")
+async def setup_session_resume(session_id: str):
+    """Resume an existing setup session."""
+    try:
+        return resume_setup_session(session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail={"error": str(exc)}) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
+
+
+@app.post("/setup/api/remediate")
+async def setup_remediate(body: _SetupRemediationRequest):
+    """Execute a guided remediation action."""
+    try:
+        return run_remediation(
+            body.remediation_id,
+            consent=body.consent,
+            session_id=body.session_id,
+            context=body.context,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"error": str(exc)}) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
+
+
+@app.post("/setup/api/verify-config")
+async def setup_verify_config(body: _SetupVerifyConfigRequest):
+    """Dry-run verification before writing config."""
+    try:
+        return verify_setup_config(
+            robot_name=body.robot_name,
+            provider=body.provider,
+            model=body.model,
+            preset=body.preset,
+            stack_id=body.stack_id,
+            api_key=body.api_key,
+            allow_warnings=body.allow_warnings,
+            session_id=body.session_id,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
+
+
+@app.get("/setup/api/metrics")
+async def setup_metrics():
+    """Local setup reliability metrics aggregation."""
+    try:
+        return get_setup_metrics()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
+
+
+@app.get("/setup/api/catalog")
+async def setup_catalog():
+    """Return setup catalog used by web and CLI setup flows."""
+    try:
+        return get_setup_catalog(wizard_context=True)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
+
+
+@app.post("/setup/api/preflight")
+async def setup_preflight(body: _SetupPreflightRequest):
+    """Run setup preflight checks for a provider/model profile."""
+    try:
+        return run_setup_preflight(
+            provider=body.provider,
+            model_profile=body.model_profile,
+            auto_install=body.auto_install,
+            stack_id=body.stack_id,
+            session_id=body.session_id,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
+
+
+@app.post("/setup/api/generate-config")
+async def setup_generate_config(body: _SetupGenerateConfigRequest):
+    """Generate and save RCAN config from setup selections."""
+    try:
+        payload = generate_setup_config(
+            robot_name=body.robot_name,
+            provider=body.provider,
+            model=body.model,
+            preset=body.preset,
+        )
+        env_var = payload["agent_config"].get("env_var")
+        if body.api_key and env_var:
+            save_env_vars({env_var: body.api_key})
+        save_config_file(payload["config"], payload["filename"])
+        if body.session_id:
+            try:
+                select_setup_session(
+                    body.session_id,
+                    stage="save",
+                    values={
+                        "robot_name": body.robot_name,
+                        "provider": body.provider,
+                        "model": body.model,
+                        "preset": body.preset,
+                        "stack_id": body.stack_id,
+                    },
+                )
+                finalize_setup_session(
+                    body.session_id,
+                    success=True,
+                    reason_code="READY",
+                )
+            except Exception:
+                # Non-fatal: config has already been generated/saved.
+                pass
+        return {
+            "ok": True,
+            "filename": payload["filename"],
+            "provider": payload["agent_config"]["provider"],
+            "model": payload["agent_config"]["model"],
+            "preset": body.preset,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
+
+
 @app.post("/setup/api/test-provider")
 async def setup_test_provider(body: _SetupTestProviderRequest):
     """Test an API key without saving it (used by the web wizard)."""
     try:
-        # Temporarily set the key in env for testing
-        env_map = {
-            "google": "GOOGLE_API_KEY",
-            "openai": "OPENAI_API_KEY",
-            "anthropic": "ANTHROPIC_API_KEY",
-            "ollama": "OLLAMA_BASE_URL",
-        }
-        env_var = env_map.get(body.provider.lower())
-        if not env_var:
-            raise HTTPException(
-                status_code=400, detail={"error": f"Unknown provider: {body.provider}"}
+        provider_name = body.provider.lower().strip()
+        if provider_name == "apple":
+            preflight = run_setup_preflight(
+                provider="apple",
+                model_profile=body.model or "apple-balanced",
+                auto_install=False,
             )
+            return {
+                "ok": preflight.get("ok", False),
+                "latency_ms": None,
+                "error": None if preflight.get("ok") else preflight.get("reason", "UNKNOWN"),
+                "details": preflight,
+            }
+
+        env_var = resolve_provider_env_var(provider_name)
+        if not env_var:
+            raise HTTPException(status_code=400, detail={"error": f"Unknown provider: {body.provider}"})
 
         # Test by importing the provider and calling health_check
         import os as _os
@@ -3581,7 +3805,8 @@ async def setup_test_provider(body: _SetupTestProviderRequest):
         try:
             from castor.providers import get_provider
 
-            cfg = {"provider": body.provider, env_var.lower(): body.api_key}
+            cfg = {"provider": provider_name, "model": body.model or "default-model"}
+            cfg["api_key"] = body.api_key
             provider = get_provider(cfg)
             health = provider.health_check()
             return {
@@ -3601,6 +3826,7 @@ async def setup_test_provider(body: _SetupTestProviderRequest):
 class _SetupSaveConfigRequest(BaseModel):
     rcan_yaml: str
     env_vars: Optional[dict] = None
+    session_id: Optional[str] = None
 
 
 @app.post("/setup/api/save-config")
@@ -3611,19 +3837,11 @@ async def setup_save_config(body: _SetupSaveConfigRequest):
         Path(config_path).write_text(body.rcan_yaml)
 
         if body.env_vars:
-            env_path = Path(".env")
-            existing = env_path.read_text() if env_path.exists() else ""
-            lines = existing.splitlines()
-            for key, val in body.env_vars.items():
-                updated = False
-                for i, line in enumerate(lines):
-                    if line.startswith(f"{key}="):
-                        lines[i] = f"{key}={val}"
-                        updated = True
-                        break
-                if not updated:
-                    lines.append(f"{key}={val}")
-            env_path.write_text("\n".join(lines) + "\n")
+            save_env_vars(body.env_vars)
+
+        if body.session_id:
+            with contextlib.suppress(Exception):
+                finalize_setup_session(body.session_id, success=True, reason_code="READY")
 
         return {"ok": True, "config_path": config_path}
     except Exception as exc:
