@@ -223,16 +223,37 @@ class TestConsensusThink:
 
 
 class TestConsensusStream:
-    def test_stream_delegates_to_primary(self):
-        """think_stream() yields from primary provider only."""
+    def test_stream_yields_quorum_winner_text(self):
+        """think_stream() runs parallel think() calls, applies quorum, streams winner chunks."""
+        # Both providers return "stop" (non-merged) — quorum=2 reached
         providers = [
-            _mock_provider({"type": "move", "linear": 0.5, "angular": 0.0}),
-            _mock_provider({"type": "stop"}),
+            _mock_provider({"type": "stop"}, raw_text="stopping now"),
+            _mock_provider({"type": "stop"}, raw_text="stopping now"),
         ]
-        providers[0].think_stream.return_value = iter(["hello ", "world"])
         cp = _make_consensus(providers, quorum=2)
         tokens = list(cp.think_stream(b"", "forward"))
-        assert "".join(tokens) == "hello world"
+        full = "".join(tokens)
+        # Winner's raw_text is "stopping now" (first agreeing thought, non-move type)
+        assert full == "stopping now"
+
+    def test_stream_no_quorum_falls_back_to_primary(self):
+        """When quorum is not reached, primary provider's text is streamed."""
+        providers = [
+            _mock_provider({"type": "move", "linear": 0.5, "angular": 0.0}, raw_text="primary text"),
+            _mock_provider({"type": "stop"}, raw_text="secondary text"),
+        ]
+        cp = _make_consensus(providers, quorum=2)  # move:1, stop:1 → no quorum
+        tokens = list(cp.think_stream(b"", "forward"))
+        # Falls back to primary (idx 0), streaming its raw_text
+        assert "".join(tokens) == "primary text"
+
+    def test_stream_uses_think_not_think_stream(self):
+        """think_stream() calls think() on children, not think_stream()."""
+        providers = [_mock_provider({"type": "stop"})]
+        cp = _make_consensus(providers, quorum=1)
+        list(cp.think_stream(b"", "forward"))
+        providers[0].think.assert_called_once()
+        providers[0].think_stream.assert_not_called()
 
     def test_stream_safety_block(self):
         blocked = Thought("Blocked!", {"type": "stop"})
@@ -241,7 +262,7 @@ class TestConsensusStream:
         with patch.object(cp, "_check_instruction_safety", return_value=blocked):
             tokens = list(cp.think_stream(b"", "injected"))
         assert tokens == ["Blocked!"]
-        providers[0].think_stream.assert_not_called()
+        providers[0].think.assert_not_called()
 
 
 # ── health_check ──────────────────────────────────────────────────────────────

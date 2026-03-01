@@ -56,6 +56,9 @@ class MissionRunner:
         config:  Full RCAN config dict; passed through to :class:`WaypointNav`.
     """
 
+    #: Maximum number of completed jobs to keep in history.
+    MAX_HISTORY = 50
+
     def __init__(self, driver: Any, config: Dict[str, Any]) -> None:
         self._driver = driver
         self._config = config
@@ -73,6 +76,8 @@ class MissionRunner:
             "results": [],
             "error": None,
         }
+        # job_id → {"waypoints": [...], "loop": bool} — capped at MAX_HISTORY entries
+        self._history: Dict[str, Dict[str, Any]] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -121,6 +126,12 @@ class MissionRunner:
                 "error": None,
             }
 
+        # Persist to history for later replay (FIFO eviction)
+        self._history[job_id] = {"waypoints": list(waypoints), "loop": loop}
+        if len(self._history) > self.MAX_HISTORY:
+            oldest = next(iter(self._history))
+            del self._history[oldest]
+
         self._thread = threading.Thread(
             target=self._run,
             args=(waypoints, loop, job_id),
@@ -130,6 +141,27 @@ class MissionRunner:
         self._thread.start()
         logger.info("Mission %s started: %d waypoints, loop=%s", job_id[:8], len(waypoints), loop)
         return job_id
+
+    def get_waypoints(self, job_id: str) -> Optional[List[Dict[str, Any]]]:
+        """Return the waypoints for a past or current mission by *job_id*.
+
+        Returns ``None`` if the job_id is not found in history.
+        """
+        entry = self._history.get(job_id)
+        if entry is None:
+            # Also check the currently-running job
+            with self._lock:
+                if self._status.get("job_id") == job_id:
+                    return list(self._status["waypoints"])
+            return None
+        return list(entry["waypoints"])
+
+    def list_history(self) -> List[Dict[str, Any]]:
+        """Return a list of ``{job_id, total, loop}`` summaries for past missions."""
+        return [
+            {"job_id": jid, "total": len(v["waypoints"]), "loop": v["loop"]}
+            for jid, v in self._history.items()
+        ]
 
     def stop(self) -> None:
         """Cancel the running mission and wait for the thread to finish."""

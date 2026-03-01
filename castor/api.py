@@ -1957,6 +1957,7 @@ class _MissionGenerateRequest(BaseModel):
     description: str
     steps_hint: int = 3
     loop: bool = False
+    execute: bool = False  # if True, immediately start the generated mission
 
 
 @app.post("/api/nav/mission/generate", dependencies=[Depends(verify_token)])
@@ -2024,7 +2025,15 @@ async def nav_mission_generate(req: _MissionGenerateRequest):
                 }
             )
 
-        return {"waypoints": normalised, "loop": req.loop, "job_id": None}
+        job_id = None
+        if req.execute:
+            if state.mission_runner is None:
+                from castor.mission import MissionRunner
+
+                state.mission_runner = MissionRunner(state.driver, state.config or {})
+            job_id = await asyncio.to_thread(state.mission_runner.start, normalised, loop=req.loop)
+
+        return {"waypoints": normalised, "loop": req.loop, "job_id": job_id}
 
     except (_json.JSONDecodeError, ValueError) as exc:
         logger.warning("Mission generation parse error: %s", exc)
@@ -2207,6 +2216,118 @@ async def behavior_generate(req: _BehaviorGenerateRequest):
     except Exception as exc:
         logger.error("Behavior generation error: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+# ---------------------------------------------------------------------------
+# Mission replay endpoint (issue #243)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/nav/mission/replay/{job_id}", dependencies=[Depends(verify_token)])
+async def nav_mission_replay(job_id: str):
+    """Re-run a previously executed mission identified by *job_id*.
+
+    Looks up the waypoints stored when the original mission was launched and
+    starts a new mission with the same waypoints and loop setting.
+
+    Returns:
+        200: ``{"ok": true, "new_job_id": str, "waypoints": int}``
+        404: job_id not found in history
+        503: no driver configured
+    """
+    if state.driver is None:
+        raise HTTPException(status_code=503, detail="No hardware driver configured")
+
+    if state.mission_runner is None:
+        from castor.mission import MissionRunner
+
+        state.mission_runner = MissionRunner(state.driver, state.config or {})
+
+    waypoints = state.mission_runner.get_waypoints(job_id)
+    if waypoints is None:
+        raise HTTPException(status_code=404, detail=f"Mission job_id not found: {job_id}")
+
+    loop = state.mission_runner._history.get(job_id, {}).get("loop", False)
+    new_job_id = await asyncio.to_thread(state.mission_runner.start, waypoints, loop=loop)
+    logger.info(
+        "Mission replay: %s → %s (%d waypoints)", job_id[:8], new_job_id[:8], len(waypoints)
+    )
+    return {"ok": True, "new_job_id": new_job_id, "waypoints": len(waypoints)}
+
+
+@app.get("/api/nav/mission/history", dependencies=[Depends(verify_token)])
+async def nav_mission_history():
+    """Return a list of past mission summaries (job_id, waypoint count, loop flag).
+
+    Returns:
+        200: ``{"history": [{job_id, total, loop}, ...]}``
+    """
+    if state.mission_runner is None:
+        return {"history": []}
+    return {"history": state.mission_runner.list_history()}
+
+
+# ---------------------------------------------------------------------------
+# Arduino sensor + servo endpoints (issues #242, #244)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/arduino/sensor/{sensor_id}", dependencies=[Depends(verify_token)])
+async def arduino_sensor_read(sensor_id: str):
+    """Query an Arduino-attached sensor by its ID (e.g. ``hcsr04``).
+
+    Requires an ``ArduinoSerialDriver`` (protocol ``arduino_serial_json``) as
+    the active driver.  In mock mode the driver returns ``None`` and this
+    endpoint returns ``{"available": false}``.
+
+    Returns:
+        200: sensor data dict from the Arduino, or ``{"available": false}``
+        503: no driver, or driver does not support ``query_sensor()``
+    """
+    if state.driver is None:
+        raise HTTPException(status_code=503, detail="No hardware driver configured")
+    if not hasattr(state.driver, "query_sensor"):
+        raise HTTPException(
+            status_code=503,
+            detail="Active driver does not support sensor queries (requires ArduinoSerialDriver)",
+        )
+    result = await asyncio.to_thread(state.driver.query_sensor, sensor_id)
+    if result is None:
+        return {"available": False, "sensor_id": sensor_id}
+    return {"available": True, "sensor_id": sensor_id, "data": result}
+
+
+class _ServoRequest(BaseModel):
+    pin: int
+    angle: int  # 0–180 degrees
+
+
+@app.post("/api/arduino/servo", dependencies=[Depends(verify_token)])
+async def arduino_servo_set(req: _ServoRequest):
+    """Set an Arduino servo to a given angle (0–180 degrees).
+
+    Requires an ``ArduinoSerialDriver`` as the active driver.
+
+    Body (JSON)::
+
+        {"pin": 9, "angle": 90}
+
+    Returns:
+        200: ``{"ok": true, "pin": int, "angle": int, "response": dict|null}``
+        422: angle out of range
+        503: no driver, or driver does not support ``set_servo()``
+    """
+    if not (0 <= req.angle <= 180):
+        raise HTTPException(status_code=422, detail=f"Angle must be 0–180, got {req.angle}")
+    if state.driver is None:
+        raise HTTPException(status_code=503, detail="No hardware driver configured")
+    if not hasattr(state.driver, "set_servo"):
+        raise HTTPException(
+            status_code=503,
+            detail="Active driver does not support servo control (requires ArduinoSerialDriver)",
+        )
+    response = await asyncio.to_thread(state.driver.set_servo, req.pin, req.angle)
+    return {"ok": True, "pin": req.pin, "angle": req.angle, "response": response}
 
 
 # ---------------------------------------------------------------------------

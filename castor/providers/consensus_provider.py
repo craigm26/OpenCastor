@@ -305,9 +305,15 @@ class ConsensusProvider(BaseProvider):
         self,
         image_bytes: bytes,
         instruction: str,
-        surface: str = "whatsapp",
+        surface: str = "chat",
     ) -> Iterator[str]:
-        """Stream tokens from the primary provider only (consensus is non-streaming)."""
+        """Run quorum consensus across all children, then stream the winning response in chunks.
+
+        All child providers' ``think()`` calls are dispatched in parallel (same as
+        ``think()``).  Once quorum is resolved the winner's ``raw_text`` is yielded
+        in 20-character chunks with a small inter-chunk delay to produce a realistic
+        streaming feel for callers that render tokens progressively.
+        """
         safety_block = self._check_instruction_safety(instruction)
         if safety_block is not None:
             if safety_block.raw_text:
@@ -315,8 +321,44 @@ class ConsensusProvider(BaseProvider):
             return
 
         self._propagate_caps()
-        primary = self._children[self._primary_idx]
-        yield from primary.think_stream(image_bytes, instruction, surface)
+
+        results: List[Tuple[int, Thought]] = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(self._children)) as executor:
+            futures = {
+                executor.submit(
+                    self._query_child, idx, child, image_bytes, instruction, surface
+                ): idx
+                for idx, child in enumerate(self._children)
+            }
+            deadline = time.monotonic() + self._timeout_s
+            for future in concurrent.futures.as_completed(
+                futures, timeout=max(0.1, deadline - time.monotonic())
+            ):
+                try:
+                    results.append(future.result(timeout=0.1))
+                except Exception as exc:
+                    idx = futures[future]
+                    logger.warning("Consensus stream child[%d] future error: %s", idx, exc)
+
+        if not results:
+            logger.error("ConsensusProvider.think_stream: all children timed out")
+            yield "[consensus: all providers timed out]"
+            return
+
+        winner, reason = _pick_winner(results, self._quorum, self._primary_idx)
+        logger.debug(
+            "ConsensusProvider.think_stream: winner action=%s reason=%s (%d/%d responses)",
+            _action_type(winner),
+            reason,
+            len(results),
+            len(self._children),
+        )
+
+        text = winner.raw_text
+        chunk_size = 20
+        for i in range(0, len(text), chunk_size):
+            yield text[i : i + chunk_size]
+            time.sleep(0.02)
 
     def health_check(self) -> dict:
         """Return aggregated health status across all children."""

@@ -493,3 +493,212 @@ class TestMissionGenerateAPI:
         assert wp["speed"] == 0.6
         assert wp["dwell_s"] == 0.0
         assert wp["label"] == "step-1"
+
+
+# ===========================================================================
+# Issue #238 — mission/generate execute=true flag
+# ===========================================================================
+
+
+class TestMissionGenerateExecute:
+    _wps_json = (
+        '[{"distance_m":0.5,"heading_deg":0,"speed":0.6,"dwell_s":0,"label":"fwd"}]'
+    )
+
+    def test_execute_false_returns_null_job_id(self, mission_client):
+        """execute=false (default) returns job_id=null and does not start a runner."""
+        import castor.api as api_mod
+
+        mock_brain = MagicMock()
+        mock_brain.think.return_value = MagicMock(raw_text=self._wps_json)
+        api_mod.state.brain = mock_brain
+
+        resp = mission_client.post(
+            "/api/nav/mission/generate",
+            json={"description": "go forward", "steps_hint": 1, "execute": False},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["job_id"] is None
+
+    def test_execute_true_returns_job_id_and_starts_mission(self, mission_client):
+        """execute=true starts the mission and returns a non-null job_id."""
+        import castor.api as api_mod
+
+        mock_brain = MagicMock()
+        mock_brain.think.return_value = MagicMock(raw_text=self._wps_json)
+        api_mod.state.brain = mock_brain
+
+        with patch("castor.mission.WaypointNav") as MockNav:
+            MockNav.return_value.execute.return_value = {"ok": True, "duration_s": 0.01}
+            resp = mission_client.post(
+                "/api/nav/mission/generate",
+                json={"description": "go forward", "steps_hint": 1, "execute": True},
+            )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["job_id"] is not None
+        assert len(body["job_id"]) == 36  # UUID4
+
+
+# ===========================================================================
+# Issue #243 — mission replay by job_id
+# ===========================================================================
+
+
+class TestMissionReplay:
+    def test_replay_known_job_starts_new_mission(self, mission_client):
+        """Replaying a known job_id launches a new mission and returns new_job_id."""
+        import castor.api as api_mod
+        from castor.mission import MissionRunner
+
+        driver = _make_driver()
+        api_mod.state.driver = driver
+
+        runner = MissionRunner(driver, _make_config())
+        api_mod.state.mission_runner = runner
+
+        waypoints = [{"distance_m": 0.3, "heading_deg": 0, "speed": 0.5, "dwell_s": 0, "label": "x"}]
+
+        with patch("castor.mission.WaypointNav") as MockNav:
+            MockNav.return_value.execute.return_value = {"ok": True, "duration_s": 0.01}
+            original_job = runner.start(waypoints)
+            # Wait for completion
+            for _ in range(50):
+                if not runner.status()["running"]:
+                    break
+                time.sleep(0.05)
+
+            resp = mission_client.post(f"/api/nav/mission/replay/{original_job}")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["ok"] is True
+        assert body["new_job_id"] != original_job
+        assert body["waypoints"] == 1
+
+    def test_replay_unknown_job_returns_404(self, mission_client):
+        """Replaying an unknown job_id returns 404."""
+        resp = mission_client.post("/api/nav/mission/replay/nonexistent-job-id")
+        assert resp.status_code == 404
+
+    def test_history_endpoint_returns_past_missions(self, mission_client):
+        """GET /api/nav/mission/history lists completed missions."""
+        import castor.api as api_mod
+        from castor.mission import MissionRunner
+
+        driver = _make_driver()
+        api_mod.state.driver = driver
+        runner = MissionRunner(driver, _make_config())
+        api_mod.state.mission_runner = runner
+
+        waypoints = [{"distance_m": 0.2, "heading_deg": 0}]
+        with patch("castor.mission.WaypointNav") as MockNav:
+            MockNav.return_value.execute.return_value = {"ok": True, "duration_s": 0.01}
+            job_id = runner.start(waypoints)
+            for _ in range(50):
+                if not runner.status()["running"]:
+                    break
+                time.sleep(0.05)
+
+        resp = mission_client.get("/api/nav/mission/history")
+        assert resp.status_code == 200
+        history = resp.json()["history"]
+        assert any(h["job_id"] == job_id for h in history)
+
+    def test_history_empty_when_no_runner(self, mission_client):
+        """GET /api/nav/mission/history returns empty list when no runner exists."""
+        import castor.api as api_mod
+
+        api_mod.state.mission_runner = None
+        resp = mission_client.get("/api/nav/mission/history")
+        assert resp.status_code == 200
+        assert resp.json()["history"] == []
+
+
+# ===========================================================================
+# Issues #242 + #244 — Arduino sensor and servo endpoints
+# ===========================================================================
+
+
+class TestArduinoEndpoints:
+    def _arduino_driver(self):
+        """Mock driver that looks like ArduinoSerialDriver."""
+        d = MagicMock()
+        d.query_sensor = MagicMock(return_value={"distance_cm": 42.0})
+        d.set_servo = MagicMock(return_value={"ok": True})
+        return d
+
+    def test_sensor_read_returns_data(self, mission_client):
+        """GET /api/arduino/sensor/{id} returns data dict from driver."""
+        import castor.api as api_mod
+
+        api_mod.state.driver = self._arduino_driver()
+        resp = mission_client.get("/api/arduino/sensor/hcsr04")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["available"] is True
+        assert body["sensor_id"] == "hcsr04"
+        assert body["data"]["distance_cm"] == 42.0
+
+    def test_sensor_read_none_returns_unavailable(self, mission_client):
+        """When driver.query_sensor() returns None, endpoint returns available=false."""
+        import castor.api as api_mod
+
+        d = self._arduino_driver()
+        d.query_sensor.return_value = None
+        api_mod.state.driver = d
+
+        resp = mission_client.get("/api/arduino/sensor/hcsr04")
+        assert resp.status_code == 200
+        assert resp.json()["available"] is False
+
+    def test_sensor_no_driver_returns_503(self, mission_client):
+        import castor.api as api_mod
+
+        api_mod.state.driver = None
+        resp = mission_client.get("/api/arduino/sensor/hcsr04")
+        assert resp.status_code == 503
+
+    def test_sensor_driver_without_method_returns_503(self, mission_client):
+        import castor.api as api_mod
+
+        d = MagicMock(spec=[])  # no methods
+        api_mod.state.driver = d
+        resp = mission_client.get("/api/arduino/sensor/hcsr04")
+        assert resp.status_code == 503
+
+    def test_servo_set_returns_ok(self, mission_client):
+        """POST /api/arduino/servo sets the servo and returns ok."""
+        import castor.api as api_mod
+
+        api_mod.state.driver = self._arduino_driver()
+        resp = mission_client.post("/api/arduino/servo", json={"pin": 9, "angle": 90})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["ok"] is True
+        assert body["pin"] == 9
+        assert body["angle"] == 90
+
+    def test_servo_angle_out_of_range_returns_422(self, mission_client):
+        import castor.api as api_mod
+
+        api_mod.state.driver = self._arduino_driver()
+        resp = mission_client.post("/api/arduino/servo", json={"pin": 9, "angle": 200})
+        assert resp.status_code == 422
+
+    def test_servo_no_driver_returns_503(self, mission_client):
+        import castor.api as api_mod
+
+        api_mod.state.driver = None
+        resp = mission_client.post("/api/arduino/servo", json={"pin": 9, "angle": 45})
+        assert resp.status_code == 503
+
+    def test_servo_driver_without_method_returns_503(self, mission_client):
+        import castor.api as api_mod
+
+        d = MagicMock(spec=[])
+        api_mod.state.driver = d
+        resp = mission_client.post("/api/arduino/servo", json={"pin": 9, "angle": 45})
+        assert resp.status_code == 503

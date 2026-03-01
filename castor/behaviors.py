@@ -28,6 +28,7 @@ Usage::
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -75,6 +76,7 @@ class BehaviorRunner:
             "speak": self._step_speak,
             "stop": self._step_stop,
             "command": self._step_think,  # alias for think
+            "nav_mission": self._step_nav_mission,
         }
 
     # ------------------------------------------------------------------
@@ -258,3 +260,62 @@ class BehaviorRunner:
             self.driver.stop()
         else:
             logger.debug("Stop step: no driver available")
+
+    def _step_nav_mission(self, step: dict) -> None:
+        """Execute an inline waypoint sequence using :class:`castor.mission.MissionRunner`.
+
+        The step dict must contain a ``waypoints`` key — a list of dicts with at
+        least ``distance_m``.  Optional per-waypoint keys: ``heading_deg``,
+        ``speed``, ``dwell_s``, ``label``.
+
+        An optional ``loop`` key (default ``False``) causes the waypoint list to
+        repeat until this behavior is stopped.
+
+        Example step::
+
+            - type: nav_mission
+              waypoints:
+                - {distance_m: 0.5, heading_deg: 0, speed: 0.6, dwell_s: 0, label: forward}
+                - {distance_m: 0.3, heading_deg: 90, speed: 0.5, dwell_s: 1.0, label: turn}
+              loop: false
+        """
+        from castor.mission import MissionRunner  # lazy import to avoid circular deps
+
+        waypoints = step.get("waypoints")
+        if not waypoints:
+            logger.warning("nav_mission step: 'waypoints' is missing or empty — skipping")
+            return
+
+        loop: bool = bool(step.get("loop", False))
+
+        logger.info(
+            "nav_mission step: starting mission with %d waypoint(s), loop=%s",
+            len(waypoints),
+            loop,
+        )
+
+        runner = MissionRunner(self.driver, self.config)
+        runner.start(waypoints, loop=loop)
+
+        done_event = threading.Event()
+
+        def _wait_for_finish() -> None:
+            while True:
+                if not self._running or runner.status()["running"] is False:
+                    done_event.set()
+                    return
+                time.sleep(0.1)
+
+        watcher = threading.Thread(target=_wait_for_finish, daemon=True, name="nav-mission-watcher")
+        watcher.start()
+
+        while self._running and runner.status()["running"]:
+            time.sleep(0.1)
+
+        runner.stop()
+        done_event.set()
+
+        logger.info(
+            "nav_mission step: mission finished (running=%s)",
+            runner.status()["running"],
+        )
