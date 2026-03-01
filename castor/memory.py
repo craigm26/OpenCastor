@@ -920,8 +920,7 @@ class EpisodeMemory:
         for _ in range(k - 1):
             # For each vector, compute its distance to the nearest existing centroid
             distances = [
-                min(self._kmeans_distance_sq(vec, c) for c in centroids)
-                for vec in vectors
+                min(self._kmeans_distance_sq(vec, c) for c in centroids) for vec in vectors
             ]
             # Pick the point with the maximum distance (deterministic k-means++)
             next_idx = max(range(len(distances)), key=lambda i: distances[i])
