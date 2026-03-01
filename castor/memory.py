@@ -906,12 +906,26 @@ class EpisodeMemory:
         # Clamp n_clusters to the number of episodes
         k = min(n_clusters, len(vectors))
 
-        # Initialise centroids via k-means++ style: pick k distinct random episodes
+        # Initialise centroids via k-means++ (distance-weighted seeding).
+        # This guarantees diverse initial centroids, preventing degenerate
+        # clusters where all seeds map to the same feature vector.
         import random as _random
 
         rng = _random.Random(random_seed)
-        centroid_indices = rng.sample(range(len(vectors)), k)
-        centroids: List[List[float]] = [vectors[i][:] for i in centroid_indices]
+
+        # Pick first centroid at random
+        first_idx = rng.randint(0, len(vectors) - 1)
+        centroids: List[List[float]] = [vectors[first_idx][:]]
+
+        for _ in range(k - 1):
+            # For each vector, compute its distance to the nearest existing centroid
+            distances = [
+                min(self._kmeans_distance_sq(vec, c) for c in centroids)
+                for vec in vectors
+            ]
+            # Pick the point with the maximum distance (deterministic k-means++)
+            next_idx = max(range(len(distances)), key=lambda i: distances[i])
+            centroids.append(vectors[next_idx][:])
 
         labels = [0] * len(vectors)
 

@@ -740,6 +740,56 @@ class LidarDriver:
         con.commit()
         return con
 
+    def occupancy_grid(
+        self,
+        size_m: float = 5.0,
+        resolution_m: float = 0.05,
+    ) -> Dict[str, Any]:
+        """Build a 2-D occupancy grid from the current scan history.
+
+        In mock mode returns an empty grid of the requested dimensions.
+        In hardware mode populates cells from the most recent scan.
+
+        Args:
+            size_m:       Physical extent of the square grid in metres.
+            resolution_m: Cell size in metres.
+
+        Returns:
+            Dict with keys ``grid`` (list[list[float]]), ``origin``
+            ([x_m, y_m] of the grid's lower-left corner), ``size_m``,
+            ``resolution_m``, ``cells`` (grid dimension), and ``mode``.
+        """
+        import math
+
+        cells = max(1, int(size_m / resolution_m))
+        grid: List[List[float]] = [[0.0] * cells for _ in range(cells)]
+        origin = [-size_m / 2.0, -size_m / 2.0]
+
+        if self._mode == "hardware":
+            with self._lock:
+                scan = list(self._last_scan)
+            for point in scan:
+                angle_deg = float(point.get("angle", 0.0))
+                dist_m = float(point.get("distance", 0.0)) / 1000.0  # mm → m
+                if dist_m <= 0.0:
+                    continue
+                rad = math.radians(angle_deg)
+                x = dist_m * math.cos(rad) - origin[0]
+                y = dist_m * math.sin(rad) - origin[1]
+                col = int(x / resolution_m)
+                row = int(y / resolution_m)
+                if 0 <= row < cells and 0 <= col < cells:
+                    grid[row][col] = 1.0
+
+        return {
+            "grid": grid,
+            "origin": origin,
+            "size_m": size_m,
+            "resolution_m": resolution_m,
+            "cells": cells,
+            "mode": self._mode,
+        }
+
     def save_map(
         self,
         path: str,
