@@ -51,7 +51,7 @@ Supports **Linux, macOS (Apple Silicon & Intel), Windows 11, Raspberry Pi, Docke
 Installer flags: `--dry-run`, `--no-rpi`, `--skip-wizard`
 </details>
 
-## ✨ What's New in v2026.3.1.15
+## ✨ What's New in v2026.3.1.16
 
 - **Metrics p50/p95/p99 percentiles (#347)** — `ProviderLatencyTracker` now stores exact sorted samples and exposes `opencastor_provider_latency_p50/p95/p99_ms` Prometheus gauge per provider
 - **BehaviorRunner event_wait step (#346)** — new `event_wait` step type polls a sensor until a threshold condition is met or timeout expires

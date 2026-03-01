@@ -1596,12 +1596,49 @@ def cmd_plugins(args) -> None:
     subcmd = getattr(args, "plugin_subcmd", None)
     if subcmd == "install":
         _cmd_plugin_install(args)
+    elif subcmd == "list-entry-points":
+        _cmd_plugin_list_entry_points()
     else:
         from castor.plugins import list_plugins, load_plugins, print_plugins
 
         load_plugins()
         plugins = list_plugins()
         print_plugins(plugins)
+        # Also show entry-point plugins
+        _cmd_plugin_list_entry_points()
+
+
+def _cmd_plugin_list_entry_points() -> None:
+    """Show all installed entry-point plugins discovered via importlib.metadata."""
+    from castor.registry import get_registry
+
+    registry = get_registry()
+    entries = registry.discover_plugins()
+
+    try:
+        from rich.console import Console
+        from rich.table import Table
+
+        console = Console()
+        if not entries:
+            console.print("  [dim]No entry-point plugins discovered.[/]")
+            return
+        table = Table(title="Entry-Point Plugins", show_header=True)
+        table.add_column("Group", style="cyan")
+        table.add_column("Name", style="bold")
+        table.add_column("Package", style="dim")
+        for e in sorted(entries, key=lambda x: (x.group, x.name)):
+            table.add_row(e.group, e.name, e.package)
+        console.print(table)
+    except ImportError:
+        if not entries:
+            print("  No entry-point plugins discovered.")
+            return
+        print("\n  Entry-Point Plugins:")
+        print(f"  {'Group':<35}  {'Name':<20}  Package")
+        print(f"  {'-'*35}  {'-'*20}  -------")
+        for e in sorted(entries, key=lambda x: (x.group, x.name)):
+            print(f"  {e.group:<35}  {e.name:<20}  {e.package}")
 
 
 def _cmd_plugin_install(args) -> None:

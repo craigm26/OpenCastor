@@ -22,7 +22,7 @@ from castor.generate_sdk import (
 
 MINIMAL_SCHEMA = {
     "openapi": "3.1.0",
-    "info": {"title": "OpenCastor", "version": "2026.3.1.15"},
+    "info": {"title": "OpenCastor", "version": "2026.3.1.16"},
     "paths": {
         "/api/health": {
             "get": {

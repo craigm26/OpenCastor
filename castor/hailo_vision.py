@@ -217,3 +217,201 @@ class HailoVision:
     def close(self):
         """No persistent resources to release with per-call approach."""
         self.available = False
+
+
+# ---------------------------------------------------------------------------
+# Issue #201 — Hailo-8 NPU acceleration with TFLite / EdgeTPU fallback
+# ---------------------------------------------------------------------------
+
+# Optional SDK guards
+HAS_HAILO: bool = False
+try:
+    import hailo_platform  # noqa: F401  # type: ignore[import]
+
+    HAS_HAILO = True
+except ImportError:
+    pass
+
+HAS_TFLITE: bool = False
+try:
+    import importlib.util
+
+    if importlib.util.find_spec("tflite_runtime") is not None:
+        HAS_TFLITE = True
+    elif importlib.util.find_spec("tensorflow") is not None:
+        import tensorflow as _tf  # type: ignore[import]
+
+        HAS_TFLITE = hasattr(_tf, "lite")
+except Exception:
+    pass
+
+# Track whether EdgeTPU delegate is available
+HAS_EDGETPU: bool = False
+try:
+    import importlib.util as _iu
+
+    HAS_EDGETPU = _iu.find_spec("pycoral") is not None
+except Exception:
+    pass
+
+
+class TFLiteDetector:
+    """TFLite object detector with optional EdgeTPU delegate fallback.
+
+    Falls back to CPU TFLite when the EdgeTPU delegate is unavailable.
+
+    Args:
+        model_path:       Path to the TFLite ``.tflite`` model file.
+        conf_threshold:   Minimum confidence score (0.0–1.0).
+        use_edgetpu:      Attempt EdgeTPU delegate first.
+        num_threads:      CPU inference threads (ignored with EdgeTPU).
+    """
+
+    def __init__(
+        self,
+        model_path: str,
+        conf_threshold: float = 0.5,
+        use_edgetpu: bool = True,
+        num_threads: int = 4,
+    ) -> None:
+        self.model_path = model_path
+        self.conf_threshold = conf_threshold
+        self._interpreter = None
+        self._input_details = None
+        self._output_details = None
+        self.backend = "none"
+
+        if not HAS_TFLITE:
+            logger.info(
+                "TFLite runtime not installed — detector unavailable. "
+                "Install: pip install tflite-runtime"
+            )
+            return
+
+        self._load(use_edgetpu, num_threads)
+
+    def _load(self, use_edgetpu: bool, num_threads: int) -> None:
+        """Load the TFLite interpreter, preferring EdgeTPU when available."""
+        try:
+            if use_edgetpu and HAS_EDGETPU:
+                from pycoral.utils.edgetpu import make_interpreter
+
+                self._interpreter = make_interpreter(self.model_path)
+                self.backend = "edgetpu"
+                logger.info("TFLite interpreter loaded with EdgeTPU delegate")
+            elif HAS_TFLITE:
+                try:
+                    import tflite_runtime.interpreter as tflite
+
+                    self._interpreter = tflite.Interpreter(
+                        model_path=self.model_path, num_threads=num_threads
+                    )
+                except ImportError:
+                    import tensorflow as tf
+
+                    self._interpreter = tf.lite.Interpreter(
+                        model_path=self.model_path, num_threads=num_threads
+                    )
+                self.backend = "tflite-cpu"
+                logger.info("TFLite interpreter loaded on CPU")
+
+            if self._interpreter:
+                self._interpreter.allocate_tensors()
+                self._input_details = self._interpreter.get_input_details()
+                self._output_details = self._interpreter.get_output_details()
+        except Exception as exc:
+            logger.warning("TFLite load failed: %s", exc)
+            self._interpreter = None
+
+    @property
+    def available(self) -> bool:
+        """True if the interpreter loaded successfully."""
+        return self._interpreter is not None
+
+    def detect(self, frame: "np.ndarray") -> list:
+        """Run inference on *frame* and return :class:`HailoDetection` objects.
+
+        Args:
+            frame: BGR or RGB ``uint8`` numpy array (H×W×3).
+
+        Returns:
+            List of :class:`HailoDetection` sorted by confidence (descending).
+        """
+        if not self.available:
+            return []
+
+        try:
+            import cv2
+            import numpy as np
+
+            ih = self._input_details[0]["shape"][1]
+            iw = self._input_details[0]["shape"][2]
+            resized = cv2.resize(frame, (iw, ih))
+            input_data = np.expand_dims(resized, axis=0)
+            if self._input_details[0]["dtype"] is float:
+                input_data = input_data.astype("float32") / 255.0
+
+            self._interpreter.set_tensor(self._input_details[0]["index"], input_data)
+            self._interpreter.invoke()
+
+            boxes = self._interpreter.get_tensor(self._output_details[0]["index"])[0]
+            class_ids = self._interpreter.get_tensor(self._output_details[1]["index"])[0]
+            scores = self._interpreter.get_tensor(self._output_details[2]["index"])[0]
+
+            detections = []
+            for i, score in enumerate(scores):
+                if float(score) >= self.conf_threshold:
+                    cls_id = int(class_ids[i])
+                    y1, x1, y2, x2 = boxes[i]
+                    detections.append(
+                        HailoDetection(
+                            cls_id, float(score), [float(x1), float(y1), float(x2), float(y2)]
+                        )
+                    )
+            return sorted(detections, key=lambda d: d.score, reverse=True)
+        except Exception as exc:
+            logger.debug("TFLite inference error: %s", exc)
+            return []
+
+
+def detect_objects(
+    frame: "np.ndarray",
+    conf_threshold: float = 0.5,
+    hailo_model: str = DEFAULT_MODEL,
+    tflite_model: str = "",
+) -> list:
+    """Route object detection to the best available backend.
+
+    Priority: Hailo-8 NPU → TFLite (EdgeTPU) → TFLite CPU → mock empty.
+
+    Args:
+        frame:          Input ``uint8`` numpy array (H×W×3).
+        conf_threshold: Minimum confidence score to return.
+        hailo_model:    Path to the Hailo .hef model file.
+        tflite_model:   Path to the TFLite .tflite model file.
+
+    Returns:
+        List of :class:`HailoDetection` sorted by confidence descending.
+        Returns an empty list when no backend is available.
+    """
+    # Try Hailo-8 NPU first
+    if HAS_HAILO:
+        try:
+            hv = HailoVision(model_path=hailo_model, confidence=conf_threshold)
+            if hv.available:
+                return hv.detect(frame)
+        except Exception as exc:
+            logger.debug("Hailo backend failed, falling back: %s", exc)
+
+    # Try TFLite (EdgeTPU > CPU)
+    if HAS_TFLITE and tflite_model:
+        try:
+            det = TFLiteDetector(model_path=tflite_model, conf_threshold=conf_threshold)
+            if det.available:
+                return det.detect(frame)
+        except Exception as exc:
+            logger.debug("TFLite backend failed: %s", exc)
+
+    # Mock fallback
+    logger.debug("No vision backend available — returning empty detections")
+    return []

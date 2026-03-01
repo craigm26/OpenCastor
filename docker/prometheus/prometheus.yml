@@ -1,0 +1,39 @@
+# docker/prometheus/prometheus.yml
+# Prometheus scrape configuration for OpenCastor monitoring stack.
+# Issue #217 — Prometheus + Grafana monitoring stack.
+#
+# Enable with: docker compose --profile monitoring up
+
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # Main OpenCastor gateway
+  - job_name: "opencastor"
+    static_configs:
+      - targets: ["opencastor:8000"]
+    metrics_path: "/api/metrics"
+    scrape_interval: 5s
+
+  # Swarm node: alex (adjust host as needed)
+  - job_name: "opencastor_node_alex"
+    static_configs:
+      - targets: ["alex.local:8000"]
+    metrics_path: "/api/metrics"
+    scrape_interval: 10s
+    # Uncomment to add auth:
+    # authorization:
+    #   credentials: YOUR_API_TOKEN
+
+  # Swarm node: bob
+  - job_name: "opencastor_node_bob"
+    static_configs:
+      - targets: ["bob.local:8000"]
+    metrics_path: "/api/metrics"
+    scrape_interval: 10s
+
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

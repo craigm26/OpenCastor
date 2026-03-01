@@ -206,3 +206,209 @@ def get_telemetry() -> CastorTelemetry:
     if _global_telemetry is None:
         _global_telemetry = CastorTelemetry()
     return _global_telemetry
+
+
+# ---------------------------------------------------------------------------
+# Issue #230 — Distributed Tracing via OpenTelemetry
+# ---------------------------------------------------------------------------
+
+# Public guard for downstream callers
+HAS_OTEL: bool = _HAS_OTEL
+
+# Tracing-specific imports (separate from metrics above)
+_HAS_OTEL_TRACE = False
+try:
+    from opentelemetry import trace as _otel_trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+
+    _HAS_OTEL_TRACE = True
+except ImportError:
+    pass
+
+# Singleton TracerProvider
+_tracer_provider: Optional[object] = None
+_tracer: Optional[object] = None
+
+
+class _NoopSpan:
+    """No-op span context manager for when OTEL SDK is not installed."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        pass
+
+    def set_attribute(self, key: str, value: object) -> None:
+        pass
+
+    def record_exception(self, exc: Exception) -> None:
+        pass
+
+    def set_status(self, status: object) -> None:
+        pass
+
+
+def init_otel(
+    service_name: Optional[str] = None,
+    endpoint: Optional[str] = None,
+    exporter: str = "auto",
+) -> bool:
+    """Initialise the OpenTelemetry TracerProvider and OTLP exporter.
+
+    Reads configuration from environment variables when parameters are not
+    supplied:
+      - ``OTEL_SERVICE_NAME``
+      - ``OTEL_EXPORTER_OTLP_ENDPOINT``
+
+    Args:
+        service_name: Service name attribute (default: ``$OTEL_SERVICE_NAME``
+                      or ``"opencastor"``).
+        endpoint:     OTLP gRPC endpoint (default: ``$OTEL_EXPORTER_OTLP_ENDPOINT``
+                      or ``"http://localhost:4317"``).
+        exporter:     ``"auto"`` reads ``OPENCASTOR_OTEL_EXPORTER``; otherwise
+                      ``"otlp"`` or ``"console"`` or ``"none"``.
+
+    Returns:
+        ``True`` if the TracerProvider was initialised successfully.
+    """
+    global _tracer_provider, _tracer
+
+    if not _HAS_OTEL_TRACE:
+        logger.info(
+            "OpenTelemetry SDK not installed — tracing disabled. "
+            "Install: pip install opentelemetry-sdk opentelemetry-exporter-otlp"
+        )
+        return False
+
+    svc = service_name or os.getenv("OTEL_SERVICE_NAME", "opencastor")
+    ep = endpoint or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+
+    if exporter == "auto":
+        exporter = os.getenv("OPENCASTOR_OTEL_EXPORTER", "none")
+
+    if exporter == "none":
+        return False
+
+    try:
+        from opentelemetry.sdk.resources import Resource as _Resource
+    except ImportError:
+        logger.warning("opentelemetry.sdk.resources not available — tracing disabled")
+        return False
+
+    resource = _Resource.create({"service.name": svc})
+    provider = TracerProvider(resource=resource)
+
+    if exporter == "otlp":
+        try:
+            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
+            span_exporter = OTLPSpanExporter(endpoint=ep)
+        except ImportError:
+            logger.warning(
+                "OTLP gRPC trace exporter not installed. "
+                "Install: pip install opentelemetry-exporter-otlp-proto-grpc"
+            )
+            return False
+        provider.add_span_processor(BatchSpanProcessor(span_exporter))
+    elif exporter == "console":
+        provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+    else:
+        logger.warning("Unknown OTEL exporter: %r", exporter)
+        return False
+
+    _otel_trace.set_tracer_provider(provider)
+    _tracer_provider = provider
+    _tracer = _otel_trace.get_tracer("opencastor", version="1.0")
+    logger.info("OpenTelemetry tracing enabled (exporter=%s, service=%s)", exporter, svc)
+    return True
+
+
+def get_tracer() -> object:
+    """Return the global OpenTelemetry tracer, or a no-op if not initialised.
+
+    Returns:
+        An OTEL tracer or a :class:`_NoopTracer` shim.
+    """
+    if _tracer is not None:
+        return _tracer
+    if _HAS_OTEL_TRACE:
+        return _otel_trace.get_tracer("opencastor")
+    return _NoopTracer()
+
+
+class _NoopTracer:
+    """No-op tracer shim for when OTEL is not initialised."""
+
+    def start_as_current_span(self, name: str, **kwargs) -> _NoopSpan:
+        """Return a no-op span context manager."""
+        return _NoopSpan()
+
+    def start_span(self, name: str, **kwargs) -> _NoopSpan:
+        """Return a no-op span."""
+        return _NoopSpan()
+
+
+def trace_think(
+    provider: str = "unknown",
+    model: str = "unknown",
+    latency_ms: float = 0.0,
+    tokens: int = 0,
+) -> _NoopSpan:
+    """Create a span for a ``think()`` call.
+
+    Attributes recorded:
+      - ``ai.provider``
+      - ``ai.model``
+      - ``ai.latency_ms``
+      - ``ai.tokens``
+
+    Args:
+        provider:   Provider name (e.g. ``"google"``).
+        model:      Model name (e.g. ``"gemini-1.5-flash"``).
+        latency_ms: Time taken for the think call in milliseconds.
+        tokens:     Number of tokens consumed (if available).
+
+    Returns:
+        A context-manager span (real OTEL span or no-op).
+    """
+    tracer = get_tracer()
+    if _HAS_OTEL_TRACE and _tracer is not None:
+        span = tracer.start_span("opencastor.think")
+        span.set_attribute("ai.provider", provider)
+        span.set_attribute("ai.model", model)
+        span.set_attribute("ai.latency_ms", latency_ms)
+        span.set_attribute("ai.tokens", tokens)
+        return span
+    return _NoopSpan()
+
+
+def trace_move(
+    linear: float = 0.0,
+    angular: float = 0.0,
+    driver_mode: str = "unknown",
+) -> _NoopSpan:
+    """Create a span for a ``driver.move()`` call.
+
+    Attributes recorded:
+      - ``robot.linear``
+      - ``robot.angular``
+      - ``robot.driver_mode``
+
+    Args:
+        linear:      Linear velocity component.
+        angular:     Angular velocity component.
+        driver_mode: Active driver mode string.
+
+    Returns:
+        A context-manager span (real OTEL span or no-op).
+    """
+    tracer = get_tracer()
+    if _HAS_OTEL_TRACE and _tracer is not None:
+        span = tracer.start_span("opencastor.move")
+        span.set_attribute("robot.linear", linear)
+        span.set_attribute("robot.angular", angular)
+        span.set_attribute("robot.driver_mode", driver_mode)
+        return span
+    return _NoopSpan()

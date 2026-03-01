@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenCastor — Geofence Editor</title>
+
+<!-- Leaflet CSS -->
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+  crossorigin="anonymous"
+/>
+<!-- Leaflet Draw CSS -->
+<link
+  rel="stylesheet"
+  href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"
+  crossorigin="anonymous"
+/>
+
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #181c24;
+    --border: #2d3442;
+    --text: #e8edf7;
+    --muted: #98a3ba;
+    --accent: #66d9a3;
+    --warn: #e9c46a;
+    --err: #ef476f;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* Header */
+  header {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 1.1rem; color: var(--accent); }
+  header p  { font-size: 0.8rem; color: var(--muted); }
+
+  /* Layout */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 280px;
+    background: var(--card);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    gap: 10px;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+  .sidebar label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .sidebar input, .sidebar select {
+    width: 100%;
+    background: #0f131b;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 7px;
+    font-size: 0.9rem;
+  }
+  button {
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 14px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    width: 100%;
+  }
+  .btn-primary { background: linear-gradient(135deg, #66d9a3, #53b78a); color: #04120a; }
+  .btn-danger  { background: var(--err); color: #fff; }
+  .btn-secondary { background: #1d2432; color: var(--text); border: 1px solid var(--border); }
+
+  /* Map */
+  #map { flex: 1; }
+
+  /* Zone list */
+  .zone-list { font-size: 0.8rem; }
+  .zone-item {
+    background: #0f131b;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .zone-name { color: var(--accent); font-weight: 600; }
+  .zone-action { color: var(--muted); font-size: 0.75rem; }
+  .zone-del { background: none; border: none; color: var(--err); cursor: pointer;
+              width: auto; padding: 2px 6px; font-size: 0.8rem; }
+
+  /* Status bar */
+  #status {
+    background: #101622;
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    padding: 8px;
+    font-family: monospace;
+    font-size: 0.78rem;
+    color: var(--muted);
+    min-height: 40px;
+    word-break: break-all;
+  }
+  .ok   { color: var(--accent); }
+  .warn { color: var(--warn); }
+  .err  { color: var(--err); }
+
+  /* Divider */
+  hr { border: none; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🗺 OpenCastor Geofence Editor</h1>
+    <p>Draw polygon zones on the map, then save them to your RCAN config.</p>
+  </div>
+</header>
+
+<div class="main">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div>
+      <label>Zone Name</label>
+      <input id="zone-name" value="my-zone" placeholder="e.g. backyard" />
+    </div>
+    <div>
+      <label>Action when outside zone</label>
+      <select id="zone-action">
+        <option value="stop">Stop</option>
+        <option value="warn">Warn only</option>
+      </select>
+    </div>
+
+    <button class="btn-primary" id="draw-btn">Draw Polygon</button>
+    <button class="btn-secondary" id="clear-btn">Clear Current</button>
+
+    <hr />
+
+    <div>
+      <label>Config file path</label>
+      <input id="config-path" value="robot.rcan.yaml" placeholder="path/to/robot.rcan.yaml" />
+    </div>
+
+    <button class="btn-primary" id="save-btn">💾 Save to Config</button>
+    <button class="btn-secondary" id="load-btn">📂 Load Polygons</button>
+
+    <hr />
+
+    <div class="zone-list" id="zone-list">
+      <div style="color: var(--muted); font-size: 0.8rem;">No zones loaded.</div>
+    </div>
+
+    <hr />
+    <div id="status">Ready — draw a polygon on the map.</div>
+  </div>
+
+  <!-- Map -->
+  <div id="map"></div>
+</div>
+
+<!-- Leaflet JS -->
+<script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN/WLs="
+  crossorigin="anonymous"
+></script>
+<!-- Leaflet Draw -->
+<script
+  src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"
+  crossorigin="anonymous"
+></script>
+
+<script>
+/* ─── Map init ─────────────────────────────────────────────────────────── */
+const map = L.map('map').setView([51.505, -0.09], 15);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  maxZoom: 21,
+}).addTo(map);
+
+/* ─── Leaflet Draw ─────────────────────────────────────────────────────── */
+const drawnItems = new L.FeatureGroup().addTo(map);
+let drawControl = null;
+
+function startDraw() {
+  if (drawControl) { map.removeControl(drawControl); drawControl = null; }
+  drawControl = new L.Control.Draw({
+    draw: {
+      polygon: { showArea: true, shapeOptions: { color: '#66d9a3', weight: 2 } },
+      polyline: false, rectangle: false, circle: false, marker: false, circlemarker: false,
+    },
+    edit: { featureGroup: drawnItems },
+  });
+  map.addControl(drawControl);
+  status('Drawing mode active — click to add points, double-click to finish.', 'ok');
+}
+
+map.on(L.Draw.Event.CREATED, e => {
+  drawnItems.clearLayers();
+  drawnItems.addLayer(e.layer);
+  const pts = e.layer.getLatLngs()[0].map(p => [p.lat, p.lng]);
+  status(`Polygon drawn (${pts.length} points). Fill in name and click Save.`, 'ok');
+});
+
+/* ─── UI helpers ────────────────────────────────────────────────────────── */
+function status(msg, cls = '') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = cls;
+}
+
+function getPoints() {
+  const layers = drawnItems.getLayers();
+  if (!layers.length) return null;
+  return layers[0].getLatLngs()[0].map(p => [
+    parseFloat(p.lat.toFixed(7)),
+    parseFloat(p.lng.toFixed(7)),
+  ]);
+}
+
+/* ─── Zone list ─────────────────────────────────────────────────────────── */
+let savedZones = [];
+
+function renderZoneList() {
+  const el = document.getElementById('zone-list');
+  if (!savedZones.length) {
+    el.innerHTML = '<div style="color: var(--muted); font-size: 0.8rem;">No zones loaded.</div>';
+    return;
+  }
+  el.innerHTML = savedZones.map((z, i) => `
+    <div class="zone-item">
+      <div>
+        <span class="zone-name">${z.name}</span><br/>
+        <span class="zone-action">${z.points.length} pts · ${z.action}</span>
+      </div>
+      <button class="zone-del" onclick="deleteZone(${i})">✕</button>
+    </div>
+  `).join('');
+}
+
+function deleteZone(idx) {
+  const z = savedZones[idx];
+  const configPath = document.getElementById('config-path').value.trim();
+  fetch('/api/geofence/polygon', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ config_path: configPath, name: z.name }),
+  })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        savedZones.splice(idx, 1);
+        renderZoneList();
+        status(`Zone '${z.name}' deleted.`, 'ok');
+      } else {
+        status(`Delete failed: ${d.error}`, 'err');
+      }
+    })
+    .catch(e => status(`Network error: ${e}`, 'err'));
+}
+
+/* ─── Save ───────────────────────────────────────────────────────────────── */
+document.getElementById('save-btn').addEventListener('click', () => {
+  const pts = getPoints();
+  if (!pts) { status('Draw a polygon first!', 'warn'); return; }
+  const name = document.getElementById('zone-name').value.trim() || 'unnamed';
+  const action = document.getElementById('zone-action').value;
+  const configPath = document.getElementById('config-path').value.trim();
+
+  fetch('/api/geofence/polygon', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ config_path: configPath, name, action, points: pts }),
+  })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        status(`Zone '${name}' saved to ${configPath}`, 'ok');
+        loadPolygons();
+      } else {
+        status(`Save failed: ${d.error}`, 'err');
+      }
+    })
+    .catch(e => status(`Network error: ${e}`, 'err'));
+});
+
+/* ─── Load ───────────────────────────────────────────────────────────────── */
+function loadPolygons() {
+  const configPath = document.getElementById('config-path').value.trim();
+  fetch(`/api/geofence/polygons?config_path=${encodeURIComponent(configPath)}`)
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        savedZones = d.polygons || [];
+        renderZoneList();
+
+        // Draw loaded zones on the map (dimmed)
+        d.polygons.forEach(z => {
+          const latlngs = z.points.map(p => L.latLng(p[0], p[1]));
+          L.polygon(latlngs, { color: '#e9c46a', weight: 1, dashArray: '4', fillOpacity: 0.08 })
+            .bindTooltip(z.name)
+            .addTo(map);
+        });
+
+        status(`Loaded ${d.polygons.length} polygon(s) from ${configPath}`, 'ok');
+      } else {
+        status(`Load failed: ${d.error}`, 'err');
+      }
+    })
+    .catch(e => status(`Could not reach API: ${e}`, 'warn'));
+}
+
+/* ─── Buttons ────────────────────────────────────────────────────────────── */
+document.getElementById('draw-btn').addEventListener('click', startDraw);
+document.getElementById('clear-btn').addEventListener('click', () => {
+  drawnItems.clearLayers();
+  status('Cleared. Draw a new polygon.', '');
+});
+document.getElementById('load-btn').addEventListener('click', loadPolygons);
+
+/* ─── Auto-locate ────────────────────────────────────────────────────────── */
+if (navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(
+    pos => map.setView([pos.coords.latitude, pos.coords.longitude], 17),
+    () => {}
+  );
+}
+</script>
+</body>
+</html>

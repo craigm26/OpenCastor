@@ -5,6 +5,34 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.3.1.16] - 2026-03-01 🚀 Release: NPU Vision, Mesh Networking, Geofence Editor & More
+
+### Added
+- **Fleet dashboard with real-time telemetry** (#200) — `FleetAggregator` polls all peers; Chart.js live latency graphs; `GET /api/fleet/telemetry` + `GET /api/fleet/dashboard`
+- **Hailo-8 NPU vision acceleration** (#201) — TFLite runtime fallback (EdgeTPU → CPU); `detect_objects()` routes Hailo > TFLite > mock; `HAS_HAILO` / `HAS_TFLITE` / `HAS_EDGETPU` guards
+- **Visual geofence editor** (#203) — `castor/templates/geofence.html` with Leaflet.js + Leaflet.Draw; `GeofencePolygon` class with point-in-polygon; `save_polygon_to_config()` + `delete_polygon_from_config()` to RCAN YAML
+- **Prometheus + Grafana monitoring stack** (#217) — `docker/prometheus/prometheus.yml`; Grafana datasource + 6-panel dashboard JSON; Jaeger `otel` Docker Compose profile; `push_to_gateway()` with `CASTOR_PROMETHEUS_PUSHGATEWAY` env var; `docs/monitoring.md`
+- **Robot-to-robot mesh networking** (#220) — `castor/mesh.py`; `MeshNode`, `PeerConfig`, `PeerStatus`, `RelayResult`; `route_to_peer()` LLM tool; `GET /api/mesh/peers` + `POST /api/mesh/relay`
+- **OpenTelemetry distributed tracing** (#230) — `init_otel()` with OTLP + console exporters; `trace_think()` + `trace_move()` spans; `HAS_OTEL` public guard; env-var driven (`OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`)
+- **Servo/gripper calibration wizard** (#235) — `calibrate_servo()` with sweep + centre detection; `HAS_PCA9685` guard; `servo_pulse_duty()` + `validate_servo_config()` helpers; gripper open/close mode
+- **Runtime plugin system via entry points** (#237) — `discover_plugins()` scans `opencastor.{providers,drivers,channels}` entry-point groups; `PluginEntry` dataclass; `castor plugin list` extended; `list_all_plugins()`
+- **Firmware OTA flash** (#247) — `OTAFlasher` compiles `.ino` via arduino-cli, SCP hex to target, flashes via avrdude; `HAS_ARDUINO_CLI` guard; `--dry-run` mode; `flash_arduino_ota()` convenience function
+
+### Changed
+- `docker-compose.yml` — monitoring profile now mounts `docker/prometheus/` and `docker/grafana/provisioning/`; new `otel` profile adds Jaeger all-in-one
+- `castor/telemetry.py` — extended with `HAS_OTEL`, tracing `TracerProvider`, `_NoopSpan` + `_NoopTracer` shims
+- `castor/geofence.py` — extended with `GeofencePolygon`, `load_polygons()`, `save_polygon_to_config()`, `delete_polygon_from_config()`
+- `castor/registry.py` — extended with `PluginEntry`, `discover_plugins()`, `list_all_plugins()`, `_EP_GROUP_*` constants
+- `castor/calibrate.py` — extended with servo calibration wizard
+- `castor/metrics.py` — added `push_to_gateway()` with Pushgateway support
+- `castor/hailo_vision.py` — added `TFLiteDetector`, `detect_objects()` routing, `HAS_HAILO`/`HAS_TFLITE`/`HAS_EDGETPU` guards
+- Ruff format pass across codebase — 0 lint errors
+- Version bumped to 2026.3.1.16 everywhere
+
+### Validation
+- pytest → all tests pass; 204 new tests (≥12 per issue); 0 new failures
+- ruff check → 0 errors
+
 ## [2026.3.1.15] - 2026-03-01 🚀 Release: 9-Feature Drop
 
 ### Added

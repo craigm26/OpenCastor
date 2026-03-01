@@ -1,0 +1,33 @@
+# docker/grafana/provisioning/datasources/prometheus.yaml
+# Grafana auto-provisioning: Prometheus datasource for OpenCastor.
+# Issue #217 — Prometheus + Grafana monitoring stack.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: opencastor-prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      httpMethod: POST
+      manageAlerts: true
+      prometheusType: Prometheus
+      prometheusVersion: "2.51.0"
+      exemplarTraceIdDestinations:
+        - name: traceID
+          datasourceUid: jaeger
+    editable: true
+
+  - name: Jaeger
+    type: jaeger
+    uid: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    isDefault: false
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: ""
+    editable: true

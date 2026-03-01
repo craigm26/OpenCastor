@@ -247,3 +247,120 @@ class TestReactiveLayerHailo:
         assert action is not None
         assert action["type"] == "move"
         assert action["linear"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Issue #201 — TFLite fallback + HAS_* guards + detect_objects routing
+# ---------------------------------------------------------------------------
+
+
+class TestHASGuards:
+    """HAS_HAILO and HAS_TFLITE should be bool flags."""
+
+    def test_has_hailo_is_bool(self):
+        from castor.hailo_vision import HAS_HAILO
+
+        assert isinstance(HAS_HAILO, bool)
+
+    def test_has_tflite_is_bool(self):
+        from castor.hailo_vision import HAS_TFLITE
+
+        assert isinstance(HAS_TFLITE, bool)
+
+    def test_has_edgetpu_is_bool(self):
+        from castor.hailo_vision import HAS_EDGETPU
+
+        assert isinstance(HAS_EDGETPU, bool)
+
+
+class TestTFLiteDetector:
+    def test_not_available_without_tflite(self):
+        from castor.hailo_vision import TFLiteDetector
+
+        with patch("castor.hailo_vision.HAS_TFLITE", False):
+            det = TFLiteDetector.__new__(TFLiteDetector)
+            det.model_path = "/tmp/fake.tflite"
+            det.conf_threshold = 0.5
+            det._interpreter = None
+            det._input_details = None
+            det._output_details = None
+            det.backend = "none"
+        assert not det.available
+
+    def test_detect_returns_empty_when_unavailable(self):
+        from castor.hailo_vision import TFLiteDetector
+
+        det = TFLiteDetector.__new__(TFLiteDetector)
+        det._interpreter = None
+        det._input_details = None
+        det._output_details = None
+        det.conf_threshold = 0.5
+        result = det.detect(np.zeros((480, 640, 3), dtype=np.uint8))
+        assert result == []
+
+    def test_backend_none_when_not_loaded(self):
+        from castor.hailo_vision import TFLiteDetector
+
+        det = TFLiteDetector.__new__(TFLiteDetector)
+        det._interpreter = None
+        det.backend = "none"
+        assert det.backend == "none"
+
+    def test_available_property_false(self):
+        from castor.hailo_vision import TFLiteDetector
+
+        det = TFLiteDetector.__new__(TFLiteDetector)
+        det._interpreter = None
+        assert det.available is False
+
+    def test_available_property_true_with_mock(self):
+        from castor.hailo_vision import TFLiteDetector
+
+        det = TFLiteDetector.__new__(TFLiteDetector)
+        det._interpreter = MagicMock()
+        assert det.available is True
+
+
+class TestDetectObjectsRouting:
+    def test_returns_empty_when_no_backends(self):
+        from castor.hailo_vision import detect_objects
+
+        with patch("castor.hailo_vision.HAS_HAILO", False):
+            with patch("castor.hailo_vision.HAS_TFLITE", False):
+                result = detect_objects(np.zeros((480, 640, 3), dtype=np.uint8))
+        assert result == []
+
+    def test_calls_hailo_when_available(self):
+        from castor.hailo_vision import detect_objects
+
+        mock_hv = MagicMock()
+        mock_hv.available = True
+        mock_hv.detect.return_value = []
+        with patch("castor.hailo_vision.HAS_HAILO", True):
+            with patch("castor.hailo_vision.HailoVision", return_value=mock_hv):
+                detect_objects(np.zeros((480, 640, 3), dtype=np.uint8))
+        mock_hv.detect.assert_called_once()
+
+    def test_falls_back_to_tflite_when_hailo_unavailable(self):
+        from castor.hailo_vision import detect_objects
+
+        mock_det = MagicMock()
+        mock_det.available = True
+        mock_det.detect.return_value = []
+
+        with patch("castor.hailo_vision.HAS_HAILO", False):
+            with patch("castor.hailo_vision.HAS_TFLITE", True):
+                with patch("castor.hailo_vision.TFLiteDetector", return_value=mock_det):
+                    detect_objects(
+                        np.zeros((480, 640, 3), dtype=np.uint8),
+                        tflite_model="/tmp/model.tflite",
+                    )
+        mock_det.detect.assert_called_once()
+
+    def test_returns_list(self):
+        from castor.hailo_vision import detect_objects
+
+        with patch("castor.hailo_vision.HAS_HAILO", False):
+            with patch("castor.hailo_vision.HAS_TFLITE", False):
+                result = detect_objects(np.zeros((480, 640, 3), dtype=np.uint8))
+        assert isinstance(result, list)

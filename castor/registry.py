@@ -14,12 +14,58 @@ Plugins can extend the registry by calling::
 Built-in implementations are still resolved through the existing factory
 functions in their respective modules (``castor.providers``, ``castor.main``,
 ``castor.channels``) so that existing test patches continue to work.
+
+Entry-point plugin discovery (Issue #237)
+-----------------------------------------
+Third-party packages can register plugins by declaring entry points in their
+``pyproject.toml``::
+
+    [project.entry-points."opencastor.providers"]
+    my-provider = "mypkg.provider:MyProvider"
+
+    [project.entry-points."opencastor.drivers"]
+    my-driver = "mypkg.driver:MyDriver"
+
+    [project.entry-points."opencastor.channels"]
+    my-channel = "mypkg.channel:MyChannel"
+
+Call ``get_registry().discover_plugins()`` at startup to auto-load all
+installed entry points.  ``castor plugin list`` shows the result.
 """
 
 import logging
+from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional
 
+try:
+    from importlib.metadata import entry_points
+except ImportError:  # Python < 3.9 fallback
+    entry_points = None  # type: ignore[assignment]
+
 logger = logging.getLogger("OpenCastor.Registry")
+
+# Entry-point group names for the three extension categories
+_EP_GROUP_PROVIDERS = "opencastor.providers"
+_EP_GROUP_DRIVERS = "opencastor.drivers"
+_EP_GROUP_CHANNELS = "opencastor.channels"
+
+
+@dataclass
+class PluginEntry:
+    """Metadata for a single discovered entry-point plugin.
+
+    Attributes:
+        name:    Plugin name (entry-point key).
+        group:   Entry-point group (``opencastor.providers`` etc.).
+        package: Installed package that declares this entry point.
+        cls:     Resolved class (loaded lazily on first use).
+    """
+
+    name: str
+    group: str
+    package: str
+    cls: Optional[type] = field(default=None, repr=False)
+
 
 # Built-in names used for introspection (list_* methods).
 _BUILTIN_PROVIDER_NAMES: List[str] = [
@@ -71,6 +117,8 @@ class ComponentRegistry:
         self._providers: Dict[str, type] = {}
         self._drivers: Dict[str, type] = {}
         self._channels: Dict[str, type] = {}
+        # Discovered entry-point plugins (populated by discover_plugins())
+        self._plugin_entries: List[PluginEntry] = []
 
     # ------------------------------------------------------------------
     # Registration (used by plugins and other external callers)
@@ -197,6 +245,79 @@ class ComponentRegistry:
         from castor.channels import _builtin_create_channel
 
         return _builtin_create_channel(name, config, on_message)
+
+    # ------------------------------------------------------------------
+    # Entry-point plugin discovery  (Issue #237)
+    # ------------------------------------------------------------------
+
+    def discover_plugins(self) -> List[PluginEntry]:
+        """Scan installed entry points and register discovered plugins.
+
+        Reads three entry-point groups:
+          - ``opencastor.providers``
+          - ``opencastor.drivers``
+          - ``opencastor.channels``
+
+        Each discovered entry point is instantiated lazily (the class is
+        stored but not instantiated until first use).
+
+        Returns:
+            List of :class:`PluginEntry` objects for all newly discovered
+            plugins.  Already-registered names are skipped to avoid
+            duplicate registration.
+
+        Example::
+
+            registry = get_registry()
+            entries = registry.discover_plugins()
+            for e in entries:
+                print(f"  {e.group}  {e.name}  ({e.package})")
+        """
+        if entry_points is None:
+            logger.warning("importlib.metadata unavailable — plugin discovery skipped")
+            return []
+
+        discovered: List[PluginEntry] = []
+
+        group_map = {
+            _EP_GROUP_PROVIDERS: (self._providers, self.add_provider),
+            _EP_GROUP_DRIVERS: (self._drivers, self.add_driver),
+            _EP_GROUP_CHANNELS: (self._channels, self.add_channel),
+        }
+
+        for group, (registry_dict, register_fn) in group_map.items():
+            try:
+                eps = entry_points(group=group)
+            except Exception as exc:
+                logger.debug("entry_points(%s) error: %s", group, exc)
+                continue
+
+            for ep in eps:
+                name = ep.name.lower()
+                if name in registry_dict:
+                    logger.debug("Plugin %s/%s already registered — skipped", group, name)
+                    continue
+                try:
+                    cls = ep.load()
+                    register_fn(name, cls)
+                    pkg = getattr(ep, "dist", None)
+                    pkg_name = pkg.metadata["Name"] if pkg else "unknown"
+                    entry = PluginEntry(name=name, group=group, package=pkg_name, cls=cls)
+                    self._plugin_entries.append(entry)
+                    discovered.append(entry)
+                    logger.info("Plugin discovered: %s/%s from %s", group, name, pkg_name)
+                except Exception as exc:
+                    logger.warning("Failed to load entry point %s/%s: %s", group, name, exc)
+
+        return discovered
+
+    def list_all_plugins(self) -> List[PluginEntry]:
+        """Return a copy of all discovered entry-point plugin entries.
+
+        Returns:
+            List of :class:`PluginEntry` sorted by (group, name).
+        """
+        return sorted(self._plugin_entries, key=lambda e: (e.group, e.name))
 
     # ------------------------------------------------------------------
     # Introspection

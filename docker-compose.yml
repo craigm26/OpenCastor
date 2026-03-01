@@ -32,7 +32,8 @@ services:
     image: prom/prometheus:v2.51.2
     container_name: opencastor_prometheus
     volumes:
-      - ./config/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./config/monitoring/prometheus.yml:/etc/prometheus/extra.yml:ro
       - prometheus_data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -60,11 +61,32 @@ services:
       - GF_INSTALL_PLUGINS=
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./config/monitoring/grafana_dashboard.json:/etc/grafana/provisioning/dashboards/opencastor.json:ro
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - prometheus
     restart: unless-stopped
     profiles:
+      - monitoring
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # Jaeger all-in-one for OpenTelemetry traces (enable with --profile otel)
+  jaeger:
+    image: jaegertracing/all-in-one:1.56
+    container_name: opencastor_jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+      - "14268:14268"   # Jaeger HTTP
+    restart: unless-stopped
+    profiles:
+      - otel
       - monitoring
     logging:
       driver: json-file

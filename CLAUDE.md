@@ -4,7 +4,7 @@
 
 OpenCastor is a universal runtime for embodied AI. It connects LLM "brains" (Gemini, GPT-4.1, Claude, Ollama, HuggingFace, llama.cpp, MLX, OpenRouter, Groq, VLA, ONNX, Kimi, MiniMax, Qwen) to robot "bodies" (Raspberry Pi, Jetson, Arduino, ESP32, LEGO) through a plug-and-play architecture, and exposes them to messaging platforms (WhatsApp, Telegram, Discord, Slack, Home Assistant) for remote control. New peripherals: RPLidar 2D LiDAR, IMU (MPU6050/BNO055), OAK-4 Pro depth+IMU. Reactive obstacle avoidance, LLM response cache, JS/TS SDK, fine-tune export, personality profiles, voice loop, workspace isolation. Configuration is driven by YAML files compliant with the [RCAN Standard](https://rcan.dev/spec/).
 
-**Version**: 2026.3.1.15 | **License**: Apache 2.0 | **Python**: 3.10+
+**Version**: 2026.3.1.16 | **License**: Apache 2.0 | **Python**: 3.10+
 
 > **Reference docs**: [`docs/claude/structure.md`](docs/claude/structure.md) · [`docs/claude/api-reference.md`](docs/claude/api-reference.md) · [`docs/claude/env-vars.md`](docs/claude/env-vars.md) · [`docs/claude/cli-reference.md`](docs/claude/cli-reference.md) · [`docs/claude/subsystems.md`](docs/claude/subsystems.md)
 

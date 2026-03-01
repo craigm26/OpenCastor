@@ -1,0 +1,15 @@
+# docker/grafana/provisioning/dashboards/dashboards.yaml
+# Grafana auto-provisioning: dashboard folder.
+
+apiVersion: 1
+
+providers:
+  - name: OpenCastor
+    orgId: 1
+    folder: OpenCastor
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards

@@ -586,3 +586,54 @@ def get_registry() -> MetricsRegistry:
             if _registry is None:
                 _registry = MetricsRegistry()
     return _registry
+
+
+# ---------------------------------------------------------------------------
+# Issue #217 — Prometheus Pushgateway support
+# ---------------------------------------------------------------------------
+
+
+def push_to_gateway(
+    gateway_url: Optional[str] = None,
+    job: str = "opencastor",
+    registry: Optional[MetricsRegistry] = None,
+    timeout: float = 5.0,
+) -> bool:
+    """Push metrics to a Prometheus Pushgateway.
+
+    Reads the gateway URL from the ``CASTOR_PROMETHEUS_PUSHGATEWAY``
+    environment variable when *gateway_url* is not given.
+
+    Args:
+        gateway_url: Pushgateway URL, e.g. ``"http://localhost:9091"``.
+                     Falls back to ``CASTOR_PROMETHEUS_PUSHGATEWAY`` env var.
+        job:         Prometheus job label.
+        registry:    :class:`MetricsRegistry` to push (default: global singleton).
+        timeout:     HTTP request timeout in seconds.
+
+    Returns:
+        ``True`` on success, ``False`` on any error.
+    """
+    import urllib.request as _req
+
+    url = gateway_url or os.getenv("CASTOR_PROMETHEUS_PUSHGATEWAY", "")
+    if not url:
+        return False
+
+    reg = registry or get_registry()
+    payload = reg.render().encode()
+    push_url = f"{url.rstrip('/')}/metrics/job/{job}"
+
+    try:
+        req = _req.Request(push_url, data=payload, method="PUT")
+        req.add_header("Content-Type", "text/plain; version=0.0.4")
+        with _req.urlopen(req, timeout=timeout) as resp:
+            return resp.status < 300
+    except Exception as exc:
+        import logging
+
+        logging.getLogger("OpenCastor.Metrics").warning("Pushgateway push failed: %s", exc)
+        return False
+
+
+import os  # noqa: E402 (appended after module body)
