@@ -1907,9 +1907,7 @@ async def nav_mission_start(body: _MissionRequest):
         state.mission_runner = MissionRunner(state.driver, state.config or {})
 
     waypoints = [wp.model_dump() for wp in body.waypoints]
-    job_id = await asyncio.to_thread(
-        state.mission_runner.start, waypoints, loop=body.loop
-    )
+    job_id = await asyncio.to_thread(state.mission_runner.start, waypoints, loop=body.loop)
     return {"job_id": job_id, "running": True, "total": len(waypoints)}
 
 
@@ -1948,6 +1946,95 @@ async def nav_mission_stop():
     elif state.driver is not None:
         state.driver.stop()
     return {"ok": True, "was_running": was_running}
+
+
+# ---------------------------------------------------------------------------
+# Mission generator endpoint (issue #234)
+# ---------------------------------------------------------------------------
+
+
+class _MissionGenerateRequest(BaseModel):
+    description: str
+    steps_hint: int = 3
+    loop: bool = False
+
+
+@app.post("/api/nav/mission/generate", dependencies=[Depends(verify_token)])
+async def nav_mission_generate(req: _MissionGenerateRequest):
+    """Generate a waypoint mission from a natural language description.
+
+    Uses the active LLM brain to produce a structured list of waypoints that
+    can be immediately passed to ``POST /api/nav/mission``.
+
+    Body (JSON)::
+
+        {"description": "circle the room", "steps_hint": 4, "loop": false}
+
+    Returns:
+        200: ``{"waypoints": [...], "loop": bool, "job_id": str|null}``
+             where each waypoint has keys: ``distance_m``, ``heading_deg``,
+             ``speed``, ``dwell_s``, ``label``.
+    """
+    import json as _json
+
+    brain = _get_active_brain()
+    if brain is None:
+        raise HTTPException(status_code=503, detail="No AI brain configured")
+    if state.driver is None:
+        raise HTTPException(status_code=503, detail="No hardware driver configured")
+
+    prompt = (
+        f"Generate a robot waypoint mission with exactly {req.steps_hint} waypoints for: "
+        f"{req.description}. "
+        "Output ONLY a valid JSON array — no explanation, no markdown fences. "
+        "Each element must have these keys: "
+        '"distance_m" (float, metres to drive, negative = reverse), '
+        '"heading_deg" (float, relative turn in degrees before driving, 0 = straight), '
+        '"speed" (float 0.0–1.0), '
+        '"dwell_s" (float, pause after waypoint in seconds), '
+        '"label" (short string). '
+        "Example: "
+        '[{"distance_m":0.5,"heading_deg":0,"speed":0.6,"dwell_s":0,"label":"forward"},'
+        '{"distance_m":0.3,"heading_deg":90,"speed":0.5,"dwell_s":1.0,"label":"turn right"}]'
+    )
+
+    try:
+        thought = await asyncio.to_thread(brain.think, b"", prompt)
+        raw = thought.raw_text.strip()
+
+        # Strip markdown fences if the model wraps the JSON
+        if raw.startswith("```"):
+            lines = raw.splitlines()
+            raw = "\n".join(line for line in lines if not line.startswith("```")).strip()
+
+        waypoints = _json.loads(raw)
+        if not isinstance(waypoints, list) or len(waypoints) == 0:
+            raise ValueError("Brain did not return a JSON array of waypoints")
+
+        # Normalise each waypoint — fill defaults and coerce types
+        normalised = []
+        for i, wp in enumerate(waypoints):
+            normalised.append(
+                {
+                    "distance_m": float(wp.get("distance_m", 0.5)),
+                    "heading_deg": float(wp.get("heading_deg", 0.0)),
+                    "speed": float(wp.get("speed", 0.6)),
+                    "dwell_s": float(wp.get("dwell_s", 0.0)),
+                    "label": str(wp.get("label", f"step-{i + 1}")),
+                }
+            )
+
+        return {"waypoints": normalised, "loop": req.loop, "job_id": None}
+
+    except (_json.JSONDecodeError, ValueError) as exc:
+        logger.warning("Mission generation parse error: %s", exc)
+        raise HTTPException(
+            status_code=422,
+            detail=f"Brain output could not be parsed as waypoints: {exc}",
+        ) from exc
+    except Exception as exc:
+        logger.error("Mission generation error: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------

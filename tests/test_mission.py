@@ -366,3 +366,130 @@ class TestMissionAPI:
         assert call_kwargs.kwargs.get("loop") is True or (
             len(call_kwargs.args) > 1 and call_kwargs.args[1] is True
         )
+
+
+# ── /api/nav/mission/generate endpoint tests ─────────────────────────────────
+
+
+class TestMissionGenerateAPI:
+    def _waypoints_json(self):
+        return (
+            '[{"distance_m":0.5,"heading_deg":0,"speed":0.6,"dwell_s":0,"label":"forward"},'
+            '{"distance_m":0.3,"heading_deg":90,"speed":0.5,"dwell_s":1.0,"label":"turn right"},'
+            '{"distance_m":0.5,"heading_deg":-90,"speed":0.6,"dwell_s":0,"label":"return"}]'
+        )
+
+    def test_generate_returns_waypoints(self, mission_client):
+        import castor.api as api_mod
+
+        mock_brain = MagicMock()
+        mock_brain.think.return_value = MagicMock(raw_text=self._waypoints_json())
+        api_mod.state.brain = mock_brain
+
+        resp = mission_client.post(
+            "/api/nav/mission/generate",
+            json={"description": "patrol the room", "steps_hint": 3},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert isinstance(body["waypoints"], list)
+        assert len(body["waypoints"]) == 3
+        assert body["waypoints"][0]["distance_m"] == 0.5
+        assert body["loop"] is False
+
+    def test_generate_loop_flag_forwarded(self, mission_client):
+        import castor.api as api_mod
+
+        mock_brain = MagicMock()
+        mock_brain.think.return_value = MagicMock(raw_text=self._waypoints_json())
+        api_mod.state.brain = mock_brain
+
+        resp = mission_client.post(
+            "/api/nav/mission/generate",
+            json={"description": "circle", "steps_hint": 3, "loop": True},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["loop"] is True
+
+    def test_generate_strips_markdown_fences(self, mission_client):
+        import castor.api as api_mod
+
+        fenced = "```json\n" + self._waypoints_json() + "\n```"
+        mock_brain = MagicMock()
+        mock_brain.think.return_value = MagicMock(raw_text=fenced)
+        api_mod.state.brain = mock_brain
+
+        resp = mission_client.post(
+            "/api/nav/mission/generate",
+            json={"description": "patrol", "steps_hint": 3},
+        )
+        assert resp.status_code == 200
+        assert len(resp.json()["waypoints"]) == 3
+
+    def test_generate_no_brain_returns_503(self, mission_client):
+        import castor.api as api_mod
+
+        api_mod.state.brain = None
+        resp = mission_client.post(
+            "/api/nav/mission/generate",
+            json={"description": "patrol", "steps_hint": 3},
+        )
+        assert resp.status_code == 503
+
+    def test_generate_no_driver_returns_503(self, mission_client):
+        import castor.api as api_mod
+
+        api_mod.state.brain = MagicMock()
+        api_mod.state.driver = None
+        resp = mission_client.post(
+            "/api/nav/mission/generate",
+            json={"description": "patrol", "steps_hint": 3},
+        )
+        assert resp.status_code == 503
+
+    def test_generate_bad_json_returns_422(self, mission_client):
+        import castor.api as api_mod
+
+        mock_brain = MagicMock()
+        mock_brain.think.return_value = MagicMock(raw_text="not valid json at all")
+        api_mod.state.brain = mock_brain
+
+        resp = mission_client.post(
+            "/api/nav/mission/generate",
+            json={"description": "patrol", "steps_hint": 3},
+        )
+        assert resp.status_code == 422
+
+    def test_generate_empty_array_returns_422(self, mission_client):
+        import castor.api as api_mod
+
+        mock_brain = MagicMock()
+        mock_brain.think.return_value = MagicMock(raw_text="[]")
+        api_mod.state.brain = mock_brain
+
+        resp = mission_client.post(
+            "/api/nav/mission/generate",
+            json={"description": "patrol", "steps_hint": 3},
+        )
+        assert resp.status_code == 422
+
+    def test_generate_normalises_missing_keys(self, mission_client):
+        """Waypoints with missing optional keys get sensible defaults."""
+        import castor.api as api_mod
+
+        sparse = '[{"distance_m": 1.0}]'
+        mock_brain = MagicMock()
+        mock_brain.think.return_value = MagicMock(raw_text=sparse)
+        api_mod.state.brain = mock_brain
+
+        resp = mission_client.post(
+            "/api/nav/mission/generate",
+            json={"description": "straight", "steps_hint": 1},
+        )
+        assert resp.status_code == 200
+        wp = resp.json()["waypoints"][0]
+        assert wp["distance_m"] == 1.0
+        assert wp["heading_deg"] == 0.0
+        assert wp["speed"] == 0.6
+        assert wp["dwell_s"] == 0.0
+        assert wp["label"] == "step-1"
