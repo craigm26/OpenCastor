@@ -143,7 +143,11 @@ class WakeWordDetector:
             import pyaudio
             from openwakeword.model import Model
 
-            model = Model(inference_framework="onnx")
+            # openwakeword 0.4.x compat: Model() without inference_framework
+            try:
+                model = Model(inference_framework="onnx")
+            except TypeError:
+                model = Model()
             pa = pyaudio.PyAudio()
             stream = pa.open(
                 format=pyaudio.paInt16,
