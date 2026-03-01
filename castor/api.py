@@ -185,6 +185,7 @@ class AppState:
     usage_tracker = None  # UsageTracker singleton (lazy-init)
     listener = None  # Listener instance for STT (issue #119)
     nav_job = None  # Current nav job dict or None (issue #120)
+    mission_runner = None  # MissionRunner for sequential waypoints (issue #210)
     behavior_runner = None  # BehaviorRunner instance (issue #121)
     behavior_job = None  # Current behavior job dict or None (issue #121)
     personality_registry = None  # PersonalityRegistry singleton (lazy-init)
@@ -1853,6 +1854,100 @@ async def nav_status():
         "job_id": state.nav_job.get("job_id"),
         "result": state.nav_job.get("result"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Mission planner endpoints (issue #210)
+# ---------------------------------------------------------------------------
+
+
+class _MissionWaypoint(BaseModel):
+    distance_m: float
+    heading_deg: float = 0.0
+    speed: float = 0.6
+    dwell_s: float = 0.0
+    label: Optional[str] = None
+
+
+class _MissionRequest(BaseModel):
+    waypoints: List[_MissionWaypoint]
+    loop: bool = False
+
+
+@app.post("/api/nav/mission", dependencies=[Depends(verify_token)])
+async def nav_mission_start(body: _MissionRequest):
+    """Start a sequential waypoint mission in the background.
+
+    Cancels any currently running mission first.
+
+    Body::
+
+        {
+          "waypoints": [
+            {"distance_m": 0.5, "heading_deg": 0, "speed": 0.6},
+            {"distance_m": 0.3, "heading_deg": 90, "dwell_s": 1.0},
+            {"distance_m": 0.5, "heading_deg": 180}
+          ],
+          "loop": false
+        }
+
+    Returns:
+        200: {"job_id": "...", "running": true, "total": N}
+        400: if waypoints list is empty
+        503: if no driver is loaded
+    """
+    if state.driver is None:
+        raise HTTPException(status_code=503, detail="No driver loaded")
+    if not body.waypoints:
+        raise HTTPException(status_code=400, detail="waypoints list must not be empty")
+
+    from castor.mission import MissionRunner
+
+    if state.mission_runner is None:
+        state.mission_runner = MissionRunner(state.driver, state.config or {})
+
+    waypoints = [wp.model_dump() for wp in body.waypoints]
+    job_id = await asyncio.to_thread(
+        state.mission_runner.start, waypoints, loop=body.loop
+    )
+    return {"job_id": job_id, "running": True, "total": len(waypoints)}
+
+
+@app.get("/api/nav/mission", dependencies=[Depends(verify_token)])
+async def nav_mission_status():
+    """Return current (or last) mission status.
+
+    Returns:
+        200: {running, job_id, step, total, loop, loop_count, results, error}
+    """
+    if state.mission_runner is None:
+        return {
+            "running": False,
+            "job_id": None,
+            "step": 0,
+            "total": 0,
+            "loop": False,
+            "loop_count": 0,
+            "results": [],
+            "error": None,
+        }
+    return state.mission_runner.status()
+
+
+@app.post("/api/nav/mission/stop", dependencies=[Depends(verify_token)])
+async def nav_mission_stop():
+    """Cancel the running mission and stop the robot.
+
+    Returns:
+        200: {"ok": true, "was_running": bool}
+    """
+    was_running = False
+    if state.mission_runner is not None:
+        was_running = state.mission_runner.status().get("running", False)
+        await asyncio.to_thread(state.mission_runner.stop)
+    elif state.driver is not None:
+        state.driver.stop()
+    return {"ok": True, "was_running": was_running}
 
 
 # ---------------------------------------------------------------------------

@@ -100,6 +100,7 @@ def _reset_state_and_env(monkeypatch):
     api_mod.state.offline_fallback = None
     api_mod.state.thought_history = collections.deque(maxlen=50)
     api_mod.state.learner = None
+    api_mod.state.mission_runner = None
 
     # Reset the module-level API_TOKEN
     api_mod.API_TOKEN = None
