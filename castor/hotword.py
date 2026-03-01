@@ -148,19 +148,35 @@ class WakeWordDetector:
                 model = Model(inference_framework="onnx")
             except TypeError:
                 model = Model()
+            import audioop
+
             pa = pyaudio.PyAudio()
+            # Use device's native rate; downsample to 16 kHz for openwakeword
+            dev_info = pa.get_default_input_device_info()
+            native_rate = int(dev_info.get("defaultSampleRate", 44100))
+            target_rate = 16000
+            chunk_native = int(1280 * native_rate / target_rate)
             stream = pa.open(
                 format=pyaudio.paInt16,
                 channels=1,
-                rate=16000,
+                rate=native_rate,
                 input=True,
-                frames_per_buffer=1280,
+                frames_per_buffer=chunk_native,
             )
+            _resample_state = None
 
-            logger.info("Hotword: microphone open, listening for %r", self._wake_phrase)
+            logger.info(
+                "Hotword: microphone open at %dHz → %dHz, listening for %r",
+                native_rate, target_rate, self._wake_phrase,
+            )
             while not self._stop_event.is_set():
                 try:
-                    audio_chunk = stream.read(1280, exception_on_overflow=False)
+                    audio_chunk = stream.read(chunk_native, exception_on_overflow=False)
+                    # Downsample to 16 kHz
+                    if native_rate != target_rate:
+                        audio_chunk, _resample_state = audioop.ratecv(
+                            audio_chunk, 2, 1, native_rate, target_rate, _resample_state
+                        )
                     audio_data = np.frombuffer(audio_chunk, dtype=np.int16)
                     prediction = model.predict(audio_data)
                     # Check any model score above threshold
