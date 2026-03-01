@@ -4,8 +4,9 @@ castor/voice.py — Shared audio transcription module.
 Provides a tiered transcription pipeline:
     1. OpenAI Whisper API (if OPENAI_API_KEY set)
     2. Local openai-whisper package (if installed)
-    3. Google SpeechRecognition (always available as fallback)
-    4. Returns None if all engines fail or none are available
+    3. whisper.cpp CLI binary (if WHISPER_CPP_BIN is set or whisper-cpp is on PATH)
+    4. Google SpeechRecognition (always available as fallback)
+    5. Returns None if all engines fail or none are available
 
 Usage::
 
@@ -17,7 +18,7 @@ Usage::
 
 The preferred engine can be forced via the ``engine`` parameter or the
 ``CASTOR_VOICE_ENGINE`` environment variable ("whisper_api", "whisper_local",
-"google", "auto").
+"whisper_cpp", "google", "auto").
 """
 
 from __future__ import annotations
@@ -25,6 +26,8 @@ from __future__ import annotations
 import io
 import logging
 import os
+import shutil
+import subprocess
 import tempfile
 import time
 from typing import Optional
@@ -37,6 +40,7 @@ logger = logging.getLogger("OpenCastor.Voice")
 
 _HAS_OPENAI: Optional[bool] = None
 _HAS_WHISPER_LOCAL: Optional[bool] = None
+_HAS_WHISPER_CPP: Optional[bool] = None
 _HAS_SPEECH_RECOGNITION: Optional[bool] = None
 
 
@@ -62,6 +66,33 @@ def _probe_whisper_local() -> bool:
         except ImportError:
             _HAS_WHISPER_LOCAL = False
     return _HAS_WHISPER_LOCAL
+
+
+def _probe_whisper_cpp() -> bool:
+    """Check whether the whisper.cpp CLI binary is available."""
+    global _HAS_WHISPER_CPP
+    if _HAS_WHISPER_CPP is None:
+        bin_path = os.getenv("WHISPER_CPP_BIN", "whisper-cpp")
+        if bin_path == "mock":
+            _HAS_WHISPER_CPP = True
+            return _HAS_WHISPER_CPP
+        # shutil.which covers both absolute paths and PATH lookup
+        if shutil.which(bin_path) is not None:
+            _HAS_WHISPER_CPP = True
+        else:
+            # Fallback: try --version to confirm binary runs
+            try:
+                subprocess.run(
+                    [bin_path, "--version"],
+                    capture_output=True,
+                    timeout=5,
+                    check=False,
+                )
+                _HAS_WHISPER_CPP = True
+            except (FileNotFoundError, OSError):
+                _HAS_WHISPER_CPP = False
+        logger.debug("whisper.cpp probe: available=%s (bin=%s)", _HAS_WHISPER_CPP, bin_path)
+    return _HAS_WHISPER_CPP
 
 
 def _probe_speech_recognition() -> bool:
@@ -138,6 +169,79 @@ def _transcribe_whisper_local(audio_bytes: bytes, hint_format: str = "ogg") -> O
         return None
 
 
+def _transcribe_whisper_cpp(audio_bytes: bytes) -> Optional[str]:
+    """Transcribe via the whisper.cpp CLI binary.
+
+    Writes audio to a temporary WAV file, invokes the binary with
+    ``--output-txt``, reads the resulting ``<tmp>.txt`` file, then
+    cleans up both temp files.
+
+    Environment variables:
+        WHISPER_CPP_BIN   — path to the whisper.cpp binary (default: "whisper-cpp").
+                            Set to "mock" to return a fixed string without running anything.
+        WHISPER_CPP_MODEL — optional model file path, passed as ``--model <path>``.
+    """
+    bin_path = os.getenv("WHISPER_CPP_BIN", "whisper-cpp")
+    model_path = os.getenv("WHISPER_CPP_MODEL", "")
+
+    # Mock mode — useful for testing without an actual binary installed
+    if bin_path == "mock":
+        logger.debug("whisper.cpp: mock mode — returning fixed transcription")
+        return "mock transcription"
+
+    tmp_wav_path: Optional[str] = None
+    txt_path: Optional[str] = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp.write(audio_bytes)
+            tmp_wav_path = tmp.name
+
+        txt_path = tmp_wav_path + ".txt"
+
+        cmd = [bin_path]
+        if model_path:
+            cmd += ["--model", model_path]
+        cmd += ["--output-txt", tmp_wav_path]
+
+        logger.debug("whisper.cpp: running %s", cmd)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=60,
+            check=False,
+        )
+        if result.returncode != 0:
+            logger.warning(
+                "whisper.cpp exited with code %d: %s",
+                result.returncode,
+                result.stderr.decode(errors="replace").strip(),
+            )
+            return None
+
+        with open(txt_path, encoding="utf-8", errors="replace") as fh:
+            text = fh.read().strip()
+
+        logger.debug("whisper.cpp transcription: %d chars", len(text))
+        return text or None
+
+    except FileNotFoundError:
+        logger.warning("whisper.cpp binary not found: %s — skipping engine", bin_path)
+        return None
+    except subprocess.TimeoutExpired:
+        logger.warning("whisper.cpp timed out after 60s")
+        return None
+    except Exception as exc:
+        logger.warning("whisper.cpp transcription failed: %s", exc)
+        return None
+    finally:
+        for path in (tmp_wav_path, txt_path):
+            if path:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+
+
 def _transcribe_google_sr(audio_bytes: bytes, hint_format: str = "ogg") -> Optional[str]:
     """Transcribe via Google SpeechRecognition (free, no API key required)."""
     try:
@@ -185,7 +289,7 @@ def _convert_to_wav(audio_bytes: bytes, src_format: str) -> Optional[bytes]:
 # Public API
 # ---------------------------------------------------------------------------
 
-_VALID_ENGINES = ("auto", "whisper_api", "whisper_local", "google")
+_VALID_ENGINES = ("auto", "whisper_api", "whisper_local", "whisper_cpp", "google")
 
 
 def transcribe_bytes(
@@ -200,8 +304,9 @@ def transcribe_bytes(
         audio_bytes: Raw audio file bytes (any common format).
         hint_format: File extension hint for the audio format, e.g. "ogg", "mp3", "wav".
         engine: Transcription engine override. One of "auto", "whisper_api",
-                "whisper_local", "google". Defaults to the ``CASTOR_VOICE_ENGINE``
-                env var, then "auto" (tries in order: whisper_api → whisper_local → google).
+                "whisper_local", "whisper_cpp", "google". Defaults to the
+                ``CASTOR_VOICE_ENGINE`` env var, then "auto" (tries in order:
+                whisper_api → whisper_local → whisper_cpp → google).
         language: Language code hint (currently used by Google SR; Whisper auto-detects).
 
     Returns:
@@ -222,6 +327,8 @@ def transcribe_bytes(
         text = _transcribe_whisper_api(audio_bytes, hint_format)
     elif resolved_engine == "whisper_local":
         text = _transcribe_whisper_local(audio_bytes, hint_format)
+    elif resolved_engine == "whisper_cpp":
+        text = _transcribe_whisper_cpp(audio_bytes)
     elif resolved_engine == "google":
         text = _transcribe_google_sr(audio_bytes, hint_format)
     else:
@@ -232,6 +339,9 @@ def transcribe_bytes(
         if text is None and _probe_whisper_local():
             logger.debug("voice: trying local Whisper")
             text = _transcribe_whisper_local(audio_bytes, hint_format)
+        if text is None and _probe_whisper_cpp():
+            logger.debug("voice: trying whisper.cpp")
+            text = _transcribe_whisper_cpp(audio_bytes)
         if text is None and _probe_speech_recognition():
             logger.debug("voice: trying Google SR")
             text = _transcribe_google_sr(audio_bytes, hint_format)
@@ -263,6 +373,8 @@ def available_engines() -> list[str]:
         engines.append("whisper_api")
     if _probe_whisper_local():
         engines.append("whisper_local")
+    if _probe_whisper_cpp():
+        engines.append("whisper_cpp")
     if _probe_speech_recognition():
         engines.append("google")
     return engines

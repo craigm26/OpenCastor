@@ -81,6 +81,7 @@ class BehaviorRunner:
             "loop": self._step_loop,
             "condition": self._step_condition,
             "waypoint_mission": self._step_waypoint_mission,
+            "repeat_until": self._step_repeat_until,
         }
 
     # ------------------------------------------------------------------
@@ -465,6 +466,147 @@ class BehaviorRunner:
 
         logger.info("loop step: done after %d iteration(s)", iteration - 1)
 
+    # ------------------------------------------------------------------
+    # Shared sensor/condition helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _read_sensor(sensor: str) -> dict:
+        """Query a named sensor and return its data dict.
+
+        Parameters
+        ----------
+        sensor:
+            ``"lidar"``, ``"thermal"``, ``"imu"``, or ``"none"``.
+
+        Returns
+        -------
+        dict
+            The sensor reading dict, or ``{}`` on failure / unknown sensor.
+        """
+        sensor_data: dict = {}
+        if sensor == "lidar":
+            try:
+                from castor.drivers.lidar_driver import get_lidar  # type: ignore
+
+                sensor_data = get_lidar().obstacles()
+            except (ImportError, Exception) as exc:
+                logger.warning("sensor read: lidar query failed (%s) — using {}", exc)
+        elif sensor == "thermal":
+            try:
+                from castor.drivers.thermal_driver import get_thermal  # type: ignore
+
+                sensor_data = get_thermal().get_hotspot()
+            except (ImportError, Exception) as exc:
+                logger.warning("sensor read: thermal query failed (%s) — using {}", exc)
+        elif sensor == "imu":
+            try:
+                from castor.drivers.imu_driver import get_imu  # type: ignore
+
+                sensor_data = get_imu().read()
+            except (ImportError, Exception) as exc:
+                logger.warning("sensor read: imu query failed (%s) — using {}", exc)
+        elif sensor != "none":
+            logger.warning("sensor read: unknown sensor '%s' — using {}", sensor)
+        return sensor_data
+
+    @staticmethod
+    def _eval_condition(sensor: str, field: Optional[str], op: str, value: Any) -> bool:
+        """Read *sensor*, extract *field* via dot-path, and evaluate *op* against *value*.
+
+        Parameters
+        ----------
+        sensor:
+            Sensor name: ``"lidar"``, ``"thermal"``, ``"imu"``, or ``"none"``.
+        field:
+            Dot-separated key path into the sensor reading dict
+            (e.g. ``"sectors.front"``).  ``None`` always returns ``False``.
+        op:
+            Comparison operator: ``"lt"``, ``"gt"``, ``"lte"``, ``"gte"``,
+            ``"eq"``, ``"neq"``.
+        value:
+            The threshold value to compare against.
+
+        Returns
+        -------
+        bool
+            Result of the comparison, or ``False`` if the field is missing /
+            the operator is unknown.
+        """
+        _OPS = {
+            "lt": lambda a, b: a < b,
+            "gt": lambda a, b: a > b,
+            "lte": lambda a, b: a <= b,
+            "gte": lambda a, b: a >= b,
+            "eq": lambda a, b: a == b,
+            "neq": lambda a, b: a != b,
+        }
+
+        if field is None:
+            return False
+
+        sensor_data = BehaviorRunner._read_sensor(sensor)
+
+        # Support dot-path traversal (e.g. "sectors.front")
+        actual: Any = sensor_data
+        for part in field.split("."):
+            if not isinstance(actual, dict):
+                actual = None
+                break
+            actual = actual.get(part)
+
+        if actual is None:
+            logger.warning(
+                "_eval_condition: field '%s' not found in sensor '%s' data — returning False",
+                field,
+                sensor,
+            )
+            return False
+
+        op_fn = _OPS.get(op)
+        if op_fn is None:
+            logger.warning("_eval_condition: unknown op '%s' — returning False", op)
+            return False
+
+        result = bool(op_fn(actual, value))
+        logger.debug(
+            "_eval_condition: sensor=%s field=%s actual=%s op=%s value=%s → %s",
+            sensor,
+            field,
+            actual,
+            op,
+            value,
+            result,
+        )
+        return result
+
+    def _run_step_list(self, inner_steps: list, context: str) -> None:
+        """Execute a list of steps with the standard per-step try/except pattern.
+
+        Parameters
+        ----------
+        inner_steps:
+            List of step dicts to execute sequentially.
+        context:
+            Label used in warning/error log messages (e.g. ``"loop step"``).
+        """
+        for inner_step in inner_steps:
+            if not self._running:
+                break
+            step_type = inner_step.get("type", "")
+            handler = self._step_handlers.get(step_type)
+            if handler is None:
+                logger.warning("%s: unknown inner step type '%s' — skipping", context, step_type)
+                continue
+            try:
+                handler(inner_step)
+            except Exception as exc:
+                logger.warning("%s: inner step '%s' raised: %s", context, step_type, exc)
+
+    # ------------------------------------------------------------------
+    # Step handlers (continued)
+    # ------------------------------------------------------------------
+
     def _step_condition(self, step: dict) -> None:
         """Evaluate a sensor condition and branch into ``then_steps`` or ``else_steps``.
 
@@ -509,33 +651,11 @@ class BehaviorRunner:
         then_steps: list = step.get("then_steps") or []
         else_steps: list = step.get("else_steps") or []
 
-        # --- Query sensor ------------------------------------------------
-        sensor_data: dict = {}
-        if sensor == "lidar":
-            try:
-                from castor.drivers.lidar_driver import get_lidar  # type: ignore
+        # Delegate to shared helper; unknown sensor/field → actual=None → else_steps
+        sensor_data = self._read_sensor(sensor)
 
-                sensor_data = get_lidar().obstacles()
-            except (ImportError, Exception) as exc:
-                logger.warning("condition step: lidar query failed (%s) — using {}", exc)
-        elif sensor == "thermal":
-            try:
-                from castor.drivers.thermal_driver import get_thermal  # type: ignore
-
-                sensor_data = get_thermal().get_hotspot()
-            except (ImportError, Exception) as exc:
-                logger.warning("condition step: thermal query failed (%s) — using {}", exc)
-        elif sensor == "imu":
-            try:
-                from castor.drivers.imu_driver import get_imu  # type: ignore
-
-                sensor_data = get_imu().read()
-            except (ImportError, Exception) as exc:
-                logger.warning("condition step: imu query failed (%s) — using {}", exc)
-        elif sensor != "none":
-            logger.warning("condition step: unknown sensor '%s' — using {}", sensor)
-
-        # --- Extract field -----------------------------------------------
+        # Single-level field lookup (legacy behaviour — no dot-path here so
+        # that existing tests that pass plain field names continue to work).
         actual = sensor_data.get(field) if field is not None else None
         if actual is None:
             if sensor != "none" or field is not None:
@@ -545,8 +665,8 @@ class BehaviorRunner:
                     sensor,
                 )
             branch = else_steps
+            result = False
         else:
-            # --- Evaluate operator -------------------------------------------
             _OPS = {
                 "lt": lambda a, b: a < b,
                 "gt": lambda a, b: a > b,
@@ -580,18 +700,117 @@ class BehaviorRunner:
             branch_name,
             len(branch),
         )
-        for inner_step in branch:
-            if not self._running:
+        self._run_step_list(branch, "condition step")
+
+    def _step_repeat_until(self, step: dict) -> None:
+        """Repeat ``inner_steps`` in a loop until a sensor condition becomes true.
+
+        Each iteration executes all steps in ``inner_steps`` sequentially, then
+        evaluates the condition.  The loop stops when:
+
+        * The condition evaluates to ``True``, **or**
+        * ``_running`` is ``False`` (behavior was stopped externally), **or**
+        * The iteration count reaches ``max_count`` (when ``max_count != -1``).
+
+        Supported sensors (``sensor`` key): ``"lidar"``, ``"thermal"``,
+        ``"imu"``, ``"none"`` (default).  Condition evaluation uses
+        :meth:`_eval_condition`.
+
+        Example step::
+
+            - type: repeat_until
+              sensor: lidar
+              field: sectors.front
+              op: lt
+              value: 300
+              max_count: 10
+              dwell_s: 0.5
+              inner_steps:
+                - type: wait
+                  seconds: 0.2
+                - type: speak
+                  text: "Scanning"
+
+        Parameters
+        ----------
+        step:
+            The step dict.
+
+            ``inner_steps`` (list, required):
+                Steps to execute each iteration.
+            ``sensor`` (str, default ``"none"``):
+                Sensor to query for the exit condition.
+            ``field`` (str, default ``None``):
+                Dot-path key into the sensor reading (e.g. ``"sectors.front"``).
+            ``op`` (str, default ``"lt"``):
+                Comparison operator: ``"lt"``, ``"gt"``, ``"lte"``, ``"gte"``,
+                ``"eq"``, ``"neq"``.
+            ``value`` (any, default ``0``):
+                Threshold value.
+            ``max_count`` (int, default ``100``):
+                Maximum iterations before the loop exits regardless of the
+                condition.  Pass ``-1`` for unlimited.
+            ``dwell_s`` (float, default ``0``):
+                Pause between iterations (seconds).  Checked against
+                ``_running`` every 50 ms so that a stop request is honoured
+                promptly.
+        """
+        inner_steps: list = step.get("inner_steps") or []
+        if not inner_steps:
+            logger.warning("repeat_until step: 'inner_steps' is missing or empty — skipping")
+            return
+
+        sensor: str = step.get("sensor", "none")
+        field: Optional[str] = step.get("field")
+        op: str = step.get("op", "lt")
+        value: Any = step.get("value", 0)
+        max_count: int = int(step.get("max_count", 100))
+        dwell_s: float = float(step.get("dwell_s", 0))
+
+        logger.info(
+            "repeat_until step: starting loop max_count=%s sensor=%s field=%s op=%s value=%s"
+            " dwell_s=%.2f with %d inner step(s)",
+            "unlimited" if max_count == -1 else max_count,
+            sensor,
+            field,
+            op,
+            value,
+            dwell_s,
+            len(inner_steps),
+        )
+
+        iteration = 1
+        while self._running:
+            if max_count != -1 and iteration > max_count:
+                logger.info("repeat_until step: max_count=%d reached — exiting loop", max_count)
                 break
-            step_type = inner_step.get("type", "")
-            handler = self._step_handlers.get(step_type)
-            if handler is None:
-                logger.warning("condition step: unknown inner step type '%s' — skipping", step_type)
-                continue
-            try:
-                handler(inner_step)
-            except Exception as exc:
-                logger.warning("condition step: inner step '%s' raised: %s", step_type, exc)
+
+            # Execute all inner steps for this iteration.
+            self._run_step_list(inner_steps, "repeat_until step")
+
+            # Check exit condition.
+            condition_met = self._eval_condition(sensor, field, op, value)
+            logger.info(
+                "repeat_until step: iteration %d/%s (condition=%s)",
+                iteration,
+                "unlimited" if max_count == -1 else max_count,
+                condition_met,
+            )
+
+            if condition_met:
+                break
+
+            # Optional dwell between iterations, checked at 50 ms granularity.
+            if dwell_s > 0:
+                elapsed = 0.0
+                while self._running and elapsed < dwell_s:
+                    sleep_chunk = min(0.05, dwell_s - elapsed)
+                    time.sleep(sleep_chunk)
+                    elapsed += sleep_chunk
+
+            iteration += 1
+
+        logger.info("repeat_until step: done after %d iteration(s)", iteration)
 
     def _step_waypoint_mission(self, step: dict) -> None:
         """Execute an inline waypoint mission using :class:`castor.mission.MissionRunner`.

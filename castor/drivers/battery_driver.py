@@ -13,10 +13,14 @@ INA219 register map (used here):
   0x05 — Calibration    (write 0x1000: 1 mA/LSB at 0.1 Ω shunt)
 
 Env:
-  BATTERY_I2C_BUS     — I2C bus number (default 1)
-  BATTERY_I2C_ADDRESS — hex string or int address (default 0x40)
-  BATTERY_MOCK        — force mock mode ("1" or "true")
-  BATTERY_CELL_TYPE   — "lipo" (default) or "lipo3s"
+  BATTERY_I2C_BUS       — I2C bus number (default 1)
+  BATTERY_I2C_ADDRESS   — hex string or int address (default 0x40)
+  BATTERY_MOCK          — force mock mode ("1" or "true")
+  BATTERY_CELL_TYPE     — "lipo" (default) or "lipo3s"
+  BATTERY_HISTORY_DB    — SQLite path for charge/discharge history
+                          (default ~/.castor/battery_history.db; set to ""
+                          or "none" to disable)
+  BATTERY_HISTORY_WINDOW_S — retention window in seconds (default 86400.0)
 
 REST API (wired in castor/api.py):
   GET /api/battery/read   — {voltage_v, current_ma, power_mw, percent, mode}
@@ -30,8 +34,10 @@ from __future__ import annotations
 import logging
 import os
 import random
+import sqlite3
 import threading
-from typing import Any, Dict, Optional
+import time
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("OpenCastor.BatteryDriver")
 
@@ -62,6 +68,23 @@ _SHUNT_VOLTAGE_LSB_UV = 10  # 10 µV per LSB
 _CURRENT_LSB_MA = 1.0  # 1 mA per LSB (with _CALIB_VALUE)
 _POWER_LSB_MW = 20.0  # 20 mW per LSB
 
+# ── History constants ──────────────────────────────────────────────────────────
+_HISTORY_PRUNE_INTERVAL = 1000  # prune every N inserts
+_HISTORY_DEFAULT_WINDOW_S = 86400.0  # 24 hours
+
+_HISTORY_CREATE_TABLE = """
+CREATE TABLE IF NOT EXISTS readings (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts         REAL NOT NULL,
+    voltage_v  REAL,
+    current_ma REAL,
+    power_mw   REAL,
+    percent    REAL,
+    mode       TEXT
+);
+"""
+_HISTORY_CREATE_INDEX = "CREATE INDEX IF NOT EXISTS idx_ts ON readings (ts DESC);"
+
 # ── Singleton ─────────────────────────────────────────────────────────────────
 _singleton: Optional[BatteryDriver] = None
 _singleton_lock = threading.Lock()
@@ -87,6 +110,20 @@ def _estimate_percent(voltage_v: float, cell_type: str) -> float:
     return max(0.0, min(100.0, (voltage_v - 3.0) / (4.2 - 3.0) * 100.0))
 
 
+def _resolve_history_db_path() -> Optional[str]:
+    """Resolve the history DB path from env or default.
+
+    Returns None when logging is disabled (empty string or "none").
+    """
+    raw = os.getenv("BATTERY_HISTORY_DB", "").strip()
+    if raw == "":
+        # Use default path
+        raw = os.path.join(os.path.expanduser("~"), ".castor", "battery_history.db")
+    if raw.lower() == "none":
+        return None
+    return raw
+
+
 class BatteryDriver:
     """INA219 I2C power-monitor driver.
 
@@ -94,10 +131,12 @@ class BatteryDriver:
     hardware is unavailable or when explicitly requested.
 
     Env:
-      BATTERY_I2C_BUS     — I2C bus number (default 1)
-      BATTERY_I2C_ADDRESS — hex or int address (default 0x40)
-      BATTERY_MOCK        — force mock mode ("1"/"true")
-      BATTERY_CELL_TYPE   — "lipo" (default) or "lipo3s"
+      BATTERY_I2C_BUS       — I2C bus number (default 1)
+      BATTERY_I2C_ADDRESS   — hex or int address (default 0x40)
+      BATTERY_MOCK          — force mock mode ("1"/"true")
+      BATTERY_CELL_TYPE     — "lipo" (default) or "lipo3s"
+      BATTERY_HISTORY_DB    — SQLite path for history; "" = default; "none" = disabled
+      BATTERY_HISTORY_WINDOW_S — history retention window in seconds (default 86400.0)
     """
 
     def __init__(self, config: Dict[str, Any] | None = None) -> None:
@@ -125,6 +164,14 @@ class BatteryDriver:
         self._lock = threading.Lock()
         self._read_count: int = 0
         self._last_error: Optional[str] = None
+
+        # ── History DB ────────────────────────────────────────────────────────
+        self._history_db_path: Optional[str] = _resolve_history_db_path()
+        self._history_con: Optional[Any] = None  # sqlite3.Connection
+        self._history_insert_count: int = 0
+        self._history_window_s: float = float(
+            os.getenv("BATTERY_HISTORY_WINDOW_S", str(_HISTORY_DEFAULT_WINDOW_S))
+        )
 
         if force_mock or not HAS_SMBUS:
             reason = "mock=True in config" if force_mock else "smbus2 not installed"
@@ -207,6 +254,71 @@ class BatteryDriver:
             "power_mw": power_mw,
         }
 
+    def _ensure_history_db(self) -> bool:
+        """Open and initialise the history SQLite DB if not already done.
+
+        Returns True when the connection is ready, False on any error.
+        """
+        if self._history_con is not None:
+            return True
+        if self._history_db_path is None:
+            return False
+        try:
+            db_dir = os.path.dirname(self._history_db_path)
+            if db_dir:
+                os.makedirs(db_dir, exist_ok=True)
+            con = sqlite3.connect(self._history_db_path, check_same_thread=False)
+            con.execute(_HISTORY_CREATE_TABLE)
+            con.execute(_HISTORY_CREATE_INDEX)
+            con.commit()
+            self._history_con = con
+            logger.debug("BatteryDriver: history DB opened at %s", self._history_db_path)
+            return True
+        except Exception as exc:
+            logger.warning("BatteryDriver: could not open history DB: %s", exc)
+            return False
+
+    def _log_history(self, data: Dict[str, Any]) -> None:
+        """Append one reading to the history DB.
+
+        Silently swallows all exceptions so that a DB failure never
+        propagates into ``read()``.
+        """
+        if self._history_db_path is None:
+            return
+        try:
+            if not self._ensure_history_db():
+                return
+            ts = time.time()
+            self._history_con.execute(  # type: ignore[union-attr]
+                "INSERT INTO readings (ts, voltage_v, current_ma, power_mw, percent, mode) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    ts,
+                    data.get("voltage_v"),
+                    data.get("current_ma"),
+                    data.get("power_mw"),
+                    data.get("percent"),
+                    data.get("mode"),
+                ),
+            )
+            self._history_con.commit()  # type: ignore[union-attr]
+            self._history_insert_count += 1
+
+            # Auto-prune every _HISTORY_PRUNE_INTERVAL inserts
+            if self._history_insert_count % _HISTORY_PRUNE_INTERVAL == 0:
+                cutoff = ts - self._history_window_s * 2
+                self._history_con.execute(  # type: ignore[union-attr]
+                    "DELETE FROM readings WHERE ts < ?", (cutoff,)
+                )
+                self._history_con.commit()  # type: ignore[union-attr]
+                logger.debug(
+                    "BatteryDriver: pruned history rows older than %.0f s",
+                    self._history_window_s * 2,
+                )
+        except Exception as exc:
+            logger.warning("BatteryDriver: history log error: %s", exc)
+
     # ── Public API ────────────────────────────────────────────────────────────
 
     def read(self) -> Dict[str, Any]:
@@ -226,6 +338,7 @@ class BatteryDriver:
             self._read_count += 1
             data["percent"] = round(_estimate_percent(data["voltage_v"], self._cell_type), 1)
             data["mode"] = self._mode
+            self._log_history(data)
             return data
 
         with self._lock:
@@ -241,7 +354,46 @@ class BatteryDriver:
 
         data["percent"] = round(_estimate_percent(data["voltage_v"], self._cell_type), 1)
         data["mode"] = self._mode
+        self._log_history(data)
         return data
+
+    def get_history(self, window_s: float = 86400.0, limit: int = 1000) -> List[Dict[str, Any]]:
+        """Return recent battery readings from the history DB.
+
+        Args:
+            window_s: Time window in seconds to look back (default 24 h).
+            limit:    Maximum number of rows to return (default 1000).
+
+        Returns:
+            List of dicts with keys ``{ts, voltage_v, current_ma, power_mw, percent, mode}``,
+            ordered newest-first. Returns an empty list when history is disabled or on error.
+        """
+        if self._history_db_path is None:
+            return []
+        try:
+            if not self._ensure_history_db():
+                return []
+            cutoff = time.time() - window_s
+            cur = self._history_con.execute(  # type: ignore[union-attr]
+                "SELECT ts, voltage_v, current_ma, power_mw, percent, mode "
+                "FROM readings WHERE ts >= ? ORDER BY ts DESC LIMIT ?",
+                (cutoff, limit),
+            )
+            rows = cur.fetchall()
+            return [
+                {
+                    "ts": row[0],
+                    "voltage_v": row[1],
+                    "current_ma": row[2],
+                    "power_mw": row[3],
+                    "percent": row[4],
+                    "mode": row[5],
+                }
+                for row in rows
+            ]
+        except Exception as exc:
+            logger.warning("BatteryDriver: get_history error: %s", exc)
+            return []
 
     def health_check(self) -> Dict[str, Any]:
         """Return driver health information.
@@ -266,7 +418,7 @@ class BatteryDriver:
         }
 
     def close(self) -> None:
-        """Close the smbus connection if open."""
+        """Close the smbus connection and history DB if open."""
         if self._bus is not None:
             try:
                 self._bus.close()
@@ -274,6 +426,12 @@ class BatteryDriver:
                 pass
             self._bus = None
         self._mode = "mock"
+        if self._history_con is not None:
+            try:
+                self._history_con.close()
+            except Exception:
+                pass
+            self._history_con = None
         logger.info(
             "BatteryDriver: closed (bus=%d, addr=0x%02x)",
             self._bus_num,

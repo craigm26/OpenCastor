@@ -379,6 +379,39 @@ class EpisodeMemory:
             )
         return result
 
+    def search(self, query: str, limit: int = 20) -> List[Dict]:
+        """Full-text keyword search across instruction, raw_thought, and action_json.
+
+        Uses SQLite LIKE for broad compatibility (no extra dependencies).
+        Results are ordered newest-first.
+
+        Args:
+            query: Keyword or phrase to search for.  Case-insensitive.
+                   Leading/trailing whitespace is stripped.
+            limit: Maximum number of results (capped at 500).
+
+        Returns:
+            List of episode dicts (same format as :meth:`query_recent`).
+        """
+        query = (query or "").strip()
+        if not query:
+            return []
+        limit = min(max(1, limit), 500)
+        pattern = f"%{query}%"
+        with self._conn() as con:
+            rows = con.execute(
+                """
+                SELECT * FROM episodes
+                WHERE  instruction  LIKE ?
+                    OR raw_thought  LIKE ?
+                    OR action_json  LIKE ?
+                ORDER  BY ts DESC
+                LIMIT  ?
+                """,
+                (pattern, pattern, pattern, limit),
+            ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
     def count(self) -> int:
         """Return the total number of stored episodes."""
         with self._conn() as con:

@@ -940,19 +940,29 @@ async def replay_episode(episode_id: str):
 
 
 @app.get("/api/memory/search", dependencies=[Depends(verify_token)])
-async def memory_search(q: str, limit: int = 10):
-    """GET /api/memory/search — Find episodes by semantic similarity (TF-IDF).
+async def memory_search(q: str, limit: int = 10, mode: str = "keyword"):
+    """GET /api/memory/search — Search episodes by keyword or semantic similarity.
 
     Query params:
-        q: Search query text.
-        limit: Max results (default 10).
+        q:     Search query text.
+        limit: Max results (default 10, max 100).
+        mode:  "keyword" (SQL LIKE across instruction/thought/action, default) or
+               "semantic" (TF-IDF cosine similarity).
     """
-    from castor.episode_search import get_searcher
-
     if not q.strip():
         raise HTTPException(status_code=422, detail="Query 'q' must not be empty")
-    results = get_searcher().search(q, limit=min(limit, 100))
-    return {"query": q, "results": results, "count": len(results)}
+    cap = min(limit, 100)
+    if mode == "semantic":
+        from castor.episode_search import get_searcher
+
+        results = get_searcher().search(q, limit=cap)
+    else:
+        # keyword mode: SQL LIKE search via EpisodeMemory.search()
+        from castor.memory import EpisodeMemory
+
+        mem = EpisodeMemory()
+        results = mem.search(q, limit=cap)
+    return {"query": q, "mode": mode, "results": results, "count": len(results)}
 
 
 # ---------------------------------------------------------------------------
@@ -3453,6 +3463,21 @@ async def battery_health():
 
     battery = get_battery()
     return battery.health_check()
+
+
+@app.get("/api/battery/history", dependencies=[Depends(verify_token)])
+async def battery_history(window_s: float = 86400.0, limit: int = 1000):
+    """GET /api/battery/history — Time-series battery readings from SQLite log.
+
+    Query params:
+        window_s: Time window in seconds (default 86400 = 24h).
+        limit:    Max readings to return (default 1000).
+    """
+    from castor.drivers.battery_driver import get_battery
+
+    battery = get_battery()
+    readings = battery.get_history(window_s=window_s, limit=limit)
+    return {"window_s": window_s, "count": len(readings), "readings": readings}
 
 
 # ---------------------------------------------------------------------------
