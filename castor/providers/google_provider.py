@@ -116,17 +116,29 @@ class GoogleProvider(BaseProvider):
             return safety_block
 
         is_blank = not image_bytes or image_bytes == b"\x00" * len(image_bytes)
+        _MESSAGING_SURFACES = {"whatsapp", "terminal", "dashboard", "voice"}
+        is_messaging = surface in _MESSAGING_SURFACES
 
         try:
-            if is_blank:
-                # Text-only: prepend messaging prompt (Gemini system_instruction is
-                # set at model init, so we inject it as a leading text part here)
+            if is_blank or is_messaging:
+                # Conversational path: always use the messaging prompt so the
+                # brain responds in natural language (not strict JSON).
                 messaging_ctx = self.build_messaging_prompt(
                     robot_name=self._robot_name,
                     capabilities=self._caps,
                     surface=surface,
                 )
-                response = self.model.generate_content([f"{messaging_ctx}\n\nUser: {instruction}"])
+                if is_blank or not image_bytes:
+                    response = self.model.generate_content(
+                        [f"{messaging_ctx}\n\nUser: {instruction}"]
+                    )
+                else:
+                    # Has image but is a messaging surface — include the frame
+                    # as visual context while keeping the conversational tone.
+                    image_part = {"mime_type": "image/jpeg", "data": image_bytes}
+                    response = self.model.generate_content(
+                        [f"{messaging_ctx}\n\nUser: {instruction}", image_part]
+                    )
             else:
                 image_part = {"mime_type": "image/jpeg", "data": image_bytes}
                 response = self.model.generate_content([instruction, image_part])
