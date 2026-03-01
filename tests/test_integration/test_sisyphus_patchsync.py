@@ -6,16 +6,12 @@ and that it does nothing when disabled or unconfigured.
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from castor.learner.apply_stage import ApplyStage
 from castor.learner.patches import BehaviorPatch, ConfigPatch
 from castor.learner.qa_stage import QAResult
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -120,7 +116,6 @@ class TestBroadcastEnabled:
         stage = ApplyStage(config_dir=tmp_path)
         stage.set_swarm_config(self._swarm_cfg(tmp_path))
 
-        from castor.swarm.shared_memory import SharedMemory
         from castor.swarm.patch_sync import PatchSync
 
         published = []
@@ -185,9 +180,7 @@ class TestApplyCallsBroadcast:
     def test_apply_calls_broadcast_when_enabled(self, tmp_path):
         """apply() must call _broadcast_to_swarm after successful patch application."""
         stage = ApplyStage(config_dir=tmp_path)
-        stage.set_swarm_config(
-            {"enabled": True, "patch_sync": True, "robot_id": "bot-1"}
-        )
+        stage.set_swarm_config({"enabled": True, "patch_sync": True, "robot_id": "bot-1"})
 
         with patch.object(stage, "_broadcast_to_swarm") as mock_broadcast:
             p = _make_config_patch()
@@ -200,9 +193,7 @@ class TestApplyCallsBroadcast:
     def test_apply_no_broadcast_when_qa_rejected(self, tmp_path):
         """apply() must NOT call _broadcast_to_swarm when QA rejects the patch."""
         stage = ApplyStage(config_dir=tmp_path)
-        stage.set_swarm_config(
-            {"enabled": True, "patch_sync": True, "robot_id": "bot-1"}
-        )
+        stage.set_swarm_config({"enabled": True, "patch_sync": True, "robot_id": "bot-1"})
 
         with patch.object(stage, "_broadcast_to_swarm") as mock_broadcast:
             p = _make_config_patch()
@@ -215,11 +206,11 @@ class TestApplyCallsBroadcast:
     def test_apply_broadcast_not_called_when_swarm_disabled(self, tmp_path):
         """apply() calls _broadcast_to_swarm but broadcast does nothing if disabled."""
         stage = ApplyStage(config_dir=tmp_path)
-        stage.set_swarm_config(
-            {"enabled": False, "patch_sync": False, "robot_id": "bot-1"}
-        )
+        stage.set_swarm_config({"enabled": False, "patch_sync": False, "robot_id": "bot-1"})
 
-        with patch.object(stage, "_broadcast_to_swarm", wraps=stage._broadcast_to_swarm) as mock_bcast:
+        with patch.object(
+            stage, "_broadcast_to_swarm", wraps=stage._broadcast_to_swarm
+        ) as mock_bcast:
             with patch("castor.swarm.patch_sync.PatchSync") as mock_ps:
                 p = _make_config_patch()
                 qa = _make_qa_approved()

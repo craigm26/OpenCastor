@@ -9,7 +9,6 @@ import pytest
 from castor.providers.base import Thought
 from castor.providers.pool_provider import ProviderPool
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -67,9 +66,7 @@ def test_partial_failures_accepted():
         return p1
 
     with patch("castor.providers.get_provider", side_effect=_get):
-        pool = ProviderPool(
-            {"provider": "pool", "pool": [{"provider": "a"}, {"provider": "b"}]}
-        )
+        pool = ProviderPool({"provider": "pool", "pool": [{"provider": "a"}, {"provider": "b"}]})
     assert len(pool._providers) == 1
 
 
@@ -252,9 +249,7 @@ def test_health_check_contains_init_errors():
         return _make_provider("px")
 
     with patch("castor.providers.get_provider", side_effect=_get):
-        pool = ProviderPool(
-            {"provider": "pool", "pool": [{"provider": "a"}, {"provider": "b"}]}
-        )
+        pool = ProviderPool({"provider": "pool", "pool": [{"provider": "a"}, {"provider": "b"}]})
     h = pool.health_check()
     assert len(h["init_errors"]) == 1
 
@@ -278,7 +273,5 @@ def test_builtin_get_provider_pool_alias():
 
     p = _make_provider("px")
     with patch("castor.providers.get_provider", return_value=p):
-        pool = _builtin_get_provider(
-            {"provider": "provider_pool", "pool": [{"provider": "mock"}]}
-        )
+        pool = _builtin_get_provider({"provider": "provider_pool", "pool": [{"provider": "mock"}]})
     assert isinstance(pool, ProviderPool)

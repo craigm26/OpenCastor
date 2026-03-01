@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import tempfile
 import uuid
 
 import pytest
@@ -12,7 +11,6 @@ from castor.memory import EpisodeMemory, _probe_pyarrow
 
 pyarrow = pytest.importorskip("pyarrow")
 import pyarrow.parquet as pq  # noqa: E402  (only runs when pyarrow present)
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

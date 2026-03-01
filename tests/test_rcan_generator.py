@@ -93,7 +93,9 @@ class TestGenerateRcanConfig:
         assert "agent" in yaml
 
     def test_llm_fallback_on_bad_output(self):
-        brain = type("B", (), {"think": lambda self, *a, **k: type("T", (), {"raw_text": "bad yaml"})()})()
+        brain = type(
+            "B", (), {"think": lambda self, *a, **k: type("T", (), {"raw_text": "bad yaml"})()}
+        )()
         yaml = generate_rcan_config("test rover", brain=brain)
         assert "rcan_version" in yaml
 

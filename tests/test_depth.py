@@ -2,7 +2,6 @@
 Tests for castor.depth — OAK-D depth overlay and obstacle zone detection.
 """
 
-import io
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -10,10 +9,10 @@ import pytest
 
 from castor.depth import get_depth_overlay, get_obstacle_zones
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_depth_array(h: int = 48, w: int = 64, fill: int = 1000) -> np.ndarray:
     """Create a simple uint16 depth array with a constant fill value (millimetres)."""
@@ -23,6 +22,7 @@ def _make_depth_array(h: int = 48, w: int = 64, fill: int = 1000) -> np.ndarray:
 def _make_rgb_jpeg(h: int = 48, w: int = 64) -> bytes:
     """Return a minimal JPEG of the requested size using OpenCV."""
     import cv2
+
     img = np.zeros((h, w, 3), dtype=np.uint8)
     img[:, :] = (64, 128, 192)  # BGR fill so it's not all black
     _, buf = cv2.imencode(".jpg", img)
@@ -32,6 +32,7 @@ def _make_rgb_jpeg(h: int = 48, w: int = 64) -> bytes:
 # ---------------------------------------------------------------------------
 # get_obstacle_zones
 # ---------------------------------------------------------------------------
+
 
 class TestObstacleZones:
     def test_no_depth_returns_unavailable(self):
@@ -43,24 +44,24 @@ class TestObstacleZones:
         """Known depth array: left third = 500 mm, center = 800 mm, right = 1200 mm."""
         h, w = 30, 90
         arr = np.zeros((h, w), dtype=np.uint16)
-        arr[:, :30]  = 500   # left third  →  50.0 cm
+        arr[:, :30] = 500  # left third  →  50.0 cm
         arr[:, 30:60] = 800  # center third →  80.0 cm
-        arr[:, 60:]  = 1200  # right third  → 120.0 cm
+        arr[:, 60:] = 1200  # right third  → 120.0 cm
 
         result = get_obstacle_zones(arr)
 
         assert result["available"] is True
-        assert result["left_cm"]   == pytest.approx(50.0, abs=0.2)
+        assert result["left_cm"] == pytest.approx(50.0, abs=0.2)
         assert result["center_cm"] == pytest.approx(80.0, abs=0.2)
-        assert result["right_cm"]  == pytest.approx(120.0, abs=0.2)
+        assert result["right_cm"] == pytest.approx(120.0, abs=0.2)
 
     def test_nearest_cm_is_minimum_across_sectors(self):
         """nearest_cm must equal the smallest of left/center/right."""
         h, w = 30, 90
         arr = np.zeros((h, w), dtype=np.uint16)
-        arr[:, :30]  = 2000   # 200 cm
-        arr[:, 30:60] = 300   # 30 cm   ← nearest
-        arr[:, 60:]  = 1500   # 150 cm
+        arr[:, :30] = 2000  # 200 cm
+        arr[:, 30:60] = 300  # 30 cm   ← nearest
+        arr[:, 60:] = 1500  # 150 cm
 
         result = get_obstacle_zones(arr)
 
@@ -76,19 +77,19 @@ class TestObstacleZones:
         h, w = 10, 30
         arr = np.zeros((h, w), dtype=np.uint16)
         # Left third: all zeros (invalid)
-        arr[:, :10]  = 0
+        arr[:, :10] = 0
         # Center: mix of zeros and valid
         arr[:, 10:20] = 0
-        arr[0, 15] = 700   # one valid pixel at 70 cm
+        arr[0, 15] = 700  # one valid pixel at 70 cm
         # Right: all valid
-        arr[:, 20:]  = 1000  # 100 cm
+        arr[:, 20:] = 1000  # 100 cm
 
         result = get_obstacle_zones(arr)
 
         assert result["available"] is True
-        assert result["left_cm"]   == 0.0   # no valid pixels
+        assert result["left_cm"] == 0.0  # no valid pixels
         assert result["center_cm"] == pytest.approx(70.0, abs=0.2)
-        assert result["right_cm"]  == pytest.approx(100.0, abs=0.2)
+        assert result["right_cm"] == pytest.approx(100.0, abs=0.2)
 
     def test_getframe_interface(self):
         """Objects with .getFrame() method should work like numpy arrays."""
@@ -99,9 +100,9 @@ class TestObstacleZones:
         result = get_obstacle_zones(mock_frame)
 
         assert result["available"] is True
-        assert result["left_cm"]   == pytest.approx(60.0, abs=0.2)
+        assert result["left_cm"] == pytest.approx(60.0, abs=0.2)
         assert result["center_cm"] == pytest.approx(60.0, abs=0.2)
-        assert result["right_cm"]  == pytest.approx(60.0, abs=0.2)
+        assert result["right_cm"] == pytest.approx(60.0, abs=0.2)
         assert result["nearest_cm"] == pytest.approx(60.0, abs=0.2)
 
     def test_all_zero_depth_frame(self):
@@ -115,6 +116,7 @@ class TestObstacleZones:
 # ---------------------------------------------------------------------------
 # get_depth_overlay
 # ---------------------------------------------------------------------------
+
 
 class TestDepthOverlay:
     def test_returns_bytes(self):
@@ -162,6 +164,7 @@ class TestDepthOverlay:
 # API endpoint tests (using FastAPI TestClient)
 # ---------------------------------------------------------------------------
 
+
 def _make_client_and_reset(monkeypatch):
     """Create a TestClient with lifecycle events cleared."""
     import collections
@@ -185,8 +188,9 @@ def _make_client_and_reset(monkeypatch):
     api_mod.state.thought_history = collections.deque(maxlen=50)
     api_mod.API_TOKEN = None
 
-    from castor.api import app
     from starlette.testclient import TestClient
+
+    from castor.api import app
 
     app.router.on_startup.clear()
     app.router.on_shutdown.clear()

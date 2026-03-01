@@ -5,12 +5,11 @@ from __future__ import annotations
 import pytest
 
 from castor.action_validator import (
-    ActionValidator,
     _ACTION_SCHEMAS,
+    ActionValidator,
     get_validator,
     init_from_config,
 )
-
 
 # ── schema_source_for ──────────────────────────────────────────────────────────
 

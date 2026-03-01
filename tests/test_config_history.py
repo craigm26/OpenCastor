@@ -11,12 +11,10 @@ Covers:
 from __future__ import annotations
 
 import os
-import tempfile
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 import yaml
-
 
 _SAMPLE_CONFIG_A = {
     "rcan_version": "1.1.0",
@@ -169,9 +167,7 @@ def test_api_config_history_after_record(api_client):
 
 
 def test_api_config_rollback_unknown(api_client):
-    resp = api_client.post(
-        "/api/config/rollback", json={"version_id": "v_does_not_exist"}
-    )
+    resp = api_client.post("/api/config/rollback", json={"version_id": "v_does_not_exist"})
     assert resp.status_code == 404
 
 
@@ -181,9 +177,7 @@ def test_api_config_rollback_ok(api_client, tmp_path):
     config_path = str(tmp_path / "r.rcan.yaml")
     with patch.dict(os.environ, {"OPENCASTOR_CONFIG": config_path}):
         vid = get_history().record(_SAMPLE_CONFIG_A, config_path=config_path)
-        resp = api_client.post(
-            "/api/config/rollback", json={"version_id": vid}
-        )
+        resp = api_client.post("/api/config/rollback", json={"version_id": vid})
         assert resp.status_code == 200
         data = resp.json()
         assert data["version_id"] == vid

@@ -13,14 +13,9 @@ Covers:
 from __future__ import annotations
 
 import argparse
-import sys
-from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
-import pytest
 import yaml
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -59,6 +54,7 @@ class TestCmdUpdateDryRun:
             patch("castor.commands.update.subprocess.run") as mock_sub,
         ):
             from castor.commands.update import cmd_update
+
             cmd_update(_make_args(dry_run=True))
 
         mock_sub.assert_not_called()
@@ -87,6 +83,7 @@ class TestCmdUpdateGit:
             patch("castor.commands.update.subprocess.run", side_effect=_mock_run),
         ):
             from castor.commands.update import cmd_update
+
             cmd_update(_make_args(dry_run=False))
 
         # At least one command should contain "git" and "pull"
@@ -111,6 +108,7 @@ class TestCmdUpdateGit:
             patch("castor.commands.update.subprocess.run", side_effect=_mock_run),
         ):
             from castor.commands.update import cmd_update
+
             cmd_update(_make_args(dry_run=False))
 
         pip_calls = [c for c in captured_cmds if "pip" in " ".join(c) and "-e" in c]
@@ -133,9 +131,12 @@ class TestCmdUpdatePip:
             patch("castor.commands.update.subprocess.run", side_effect=_mock_run),
         ):
             from castor.commands.update import cmd_update
+
             cmd_update(_make_args(dry_run=False))
 
-        upgrade_calls = [c for c in captured_cmds if "--upgrade" in c and "opencastor" in " ".join(c)]
+        upgrade_calls = [
+            c for c in captured_cmds if "--upgrade" in c and "opencastor" in " ".join(c)
+        ]
         assert upgrade_calls, f"No pip upgrade call found in: {captured_cmds}"
 
 
@@ -160,11 +161,11 @@ class TestCmdUpdateVersionFlag:
             patch("castor.commands.update.subprocess.run", side_effect=_mock_run),
         ):
             from castor.commands.update import cmd_update
+
             cmd_update(_make_args(dry_run=False, version="2026.2.0"))
 
         checkout_calls = [
-            c for c in captured_cmds
-            if "git" in c and "checkout" in c and "v2026.2.0" in c
+            c for c in captured_cmds if "git" in c and "checkout" in c and "v2026.2.0" in c
         ]
         assert checkout_calls, f"No git checkout v2026.2.0 found in: {captured_cmds}"
 
@@ -181,12 +182,10 @@ class TestCmdUpdateVersionFlag:
             patch("castor.commands.update.subprocess.run", side_effect=_mock_run),
         ):
             from castor.commands.update import cmd_update
+
             cmd_update(_make_args(dry_run=False, version="2026.1.0"))
 
-        version_calls = [
-            c for c in captured_cmds
-            if "opencastor==2026.1.0" in " ".join(c)
-        ]
+        version_calls = [c for c in captured_cmds if "opencastor==2026.1.0" in " ".join(c)]
         assert version_calls, f"No versioned pip call found in: {captured_cmds}"
 
 
@@ -222,6 +221,7 @@ class TestSwarmUpdate:
             patch("castor.commands.update.shutil.which", return_value=None),  # no sshpass
         ):
             from castor.commands.update import cmd_swarm_update
+
             cmd_swarm_update(_make_args(dry_run=False, swarm_config=swarm_path))
 
         # An SSH command targeting 192.168.1.10 should have been issued
@@ -236,6 +236,7 @@ class TestSwarmUpdate:
         )
         with patch("castor.commands.update.subprocess.run") as mock_sub:
             from castor.commands.update import cmd_swarm_update
+
             cmd_swarm_update(_make_args(dry_run=True, swarm_config=swarm_path))
 
         mock_sub.assert_not_called()
@@ -250,6 +251,7 @@ class TestSwarmUpdate:
         )
         with patch("castor.commands.update.shutil.which", return_value=None):  # no sshpass
             from castor.commands.update import cmd_swarm_update
+
             cmd_swarm_update(_make_args(dry_run=False, swarm_config=swarm_path))
 
         out = capsys.readouterr().out
@@ -260,6 +262,7 @@ class TestSwarmUpdate:
         """Empty swarm.yaml prints a helpful message and exits cleanly."""
         swarm_path = self._make_swarm_yaml(tmp_path, [])
         from castor.commands.update import cmd_swarm_update
+
         cmd_swarm_update(_make_args(dry_run=False, swarm_config=swarm_path))
         out = capsys.readouterr().out
         assert "nothing" in out.lower() or "no nodes" in out.lower()

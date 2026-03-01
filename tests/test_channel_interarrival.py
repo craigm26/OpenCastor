@@ -8,7 +8,6 @@ import pytest
 
 from castor.metrics import ChannelInterArrivalTracker, MetricsRegistry
 
-
 # ── ChannelInterArrivalTracker unit tests ─────────────────────────────────────
 
 
@@ -125,7 +124,6 @@ def test_tracker_thread_safe_no_crash():
 @pytest.fixture()
 def fresh_registry():
     """Return a fresh MetricsRegistry (not the singleton)."""
-    from castor.metrics import MetricsRegistry
 
     return MetricsRegistry()
 

@@ -6,16 +6,19 @@ import time
 
 import pytest
 
+
 # Reset stats before every test so they don't bleed between tests.
 @pytest.fixture(autouse=True)
 def fresh_stats():
     from castor import runtime_stats as rs
+
     rs.reset()
     yield
     rs.reset()
 
 
 # ── record_api_call ────────────────────────────────────────────────────────
+
 
 def test_record_api_call_accumulates_tokens():
     from castor import runtime_stats as rs
@@ -68,6 +71,7 @@ def test_record_api_call_empty_model_does_not_overwrite():
 
 # ── record_tick ───────────────────────────────────────────────────────────
 
+
 def test_record_tick_updates_tick_and_action():
     from castor import runtime_stats as rs
 
@@ -97,6 +101,7 @@ def test_record_tick_does_not_affect_token_counts():
 
 # ── reset ─────────────────────────────────────────────────────────────────
 
+
 def test_reset_clears_all_counters():
     from castor import runtime_stats as rs
 
@@ -123,6 +128,7 @@ def test_reset_refreshes_session_start():
 
 
 # ── file persistence ───────────────────────────────────────────────────────
+
 
 def test_stats_written_to_json_file(tmp_path, monkeypatch):
     from castor import runtime_stats as rs
@@ -152,6 +158,7 @@ def test_status_bar_file_written(tmp_path, monkeypatch):
 
 
 # ── formatting helpers ────────────────────────────────────────────────────
+
 
 @pytest.mark.parametrize(
     "n, expected",
@@ -204,6 +211,7 @@ def test_fmt_uptime(secs, expected):
 
 # ── short_model ───────────────────────────────────────────────────────────
 
+
 @pytest.mark.parametrize(
     "raw, expected_part",
     [
@@ -223,6 +231,7 @@ def test_short_model(raw, expected_part):
 
 # ── get_status_bar_string fallback ────────────────────────────────────────
 
+
 def test_get_status_bar_string_returns_fallback_when_no_file(tmp_path, monkeypatch):
     from castor import runtime_stats as rs
 
@@ -234,8 +243,10 @@ def test_get_status_bar_string_returns_fallback_when_no_file(tmp_path, monkeypat
 
 # ── thread safety ─────────────────────────────────────────────────────────
 
+
 def test_concurrent_record_calls_dont_corrupt_state():
     import threading
+
     from castor import runtime_stats as rs
 
     def worker():

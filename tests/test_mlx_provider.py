@@ -128,9 +128,7 @@ class TestMLXProviderStreaming:
     def test_stream_returns_thought_via_stopiteration(self):
         p = self._make_provider()
         mock_resp = MagicMock()
-        mock_resp.__iter__ = lambda s: iter(
-            self._sse_lines(['{"type":"stop"}'])
-        )
+        mock_resp.__iter__ = lambda s: iter(self._sse_lines(['{"type":"stop"}']))
         mock_resp.__enter__ = lambda s: s
         mock_resp.__exit__ = MagicMock(return_value=False)
 

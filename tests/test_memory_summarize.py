@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import sqlite3
 from unittest.mock import MagicMock
 
 import pytest
 
 from castor.memory import EpisodeMemory
 from castor.providers.base import Thought
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

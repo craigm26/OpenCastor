@@ -13,10 +13,9 @@ Covers:
 from __future__ import annotations
 
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Unit tests
@@ -153,6 +152,7 @@ def test_api_snapshot_latest(api_client):
 
 def test_api_snapshot_latest_404_when_empty(api_client):
     import castor.snapshot as m
+
     m._manager = None  # fresh manager, no snapshots
     resp = api_client.get("/api/snapshot/latest")
     assert resp.status_code == 404

@@ -3,8 +3,6 @@
 import sys
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 class TestGPIODriverMockMode:
     """Tests that run without any GPIO hardware library."""

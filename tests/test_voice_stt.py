@@ -9,10 +9,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from starlette.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_listener_config(enabled: bool = True, **kwargs) -> dict:
     audio = {"stt_enabled": enabled}
@@ -215,6 +215,7 @@ def client():
 @pytest.fixture()
 def api_mod():
     import castor.api as mod
+
     return mod
 
 

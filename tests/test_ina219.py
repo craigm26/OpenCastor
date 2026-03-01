@@ -2,7 +2,7 @@
 
 import threading
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -89,7 +89,7 @@ class TestBatteryMonitorMockMode:
 
         mon = BatteryMonitor()
         mock_sensor = MagicMock()
-        type(mock_sensor).bus_voltage = PropertyMock(side_effect=IOError("i2c error"))
+        type(mock_sensor).bus_voltage = PropertyMock(side_effect=OSError("i2c error"))
         mon._sensor = mock_sensor
         mon._mode = "hardware"
         reading = mon.read()

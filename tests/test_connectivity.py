@@ -1,11 +1,7 @@
 """Tests for castor.connectivity — internet and provider reachability checks."""
 
-import socket
-import threading
 import time
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from castor.connectivity import (
     ConnectivityMonitor,

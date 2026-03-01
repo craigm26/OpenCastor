@@ -5,7 +5,6 @@ import time
 
 from castor.agents.base import AgentStatus, BaseAgent
 
-
 # ---------------------------------------------------------------------------
 # Minimal concrete implementations used across tests
 # ---------------------------------------------------------------------------

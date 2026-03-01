@@ -54,7 +54,12 @@ def test_driver_factory_resolves_new_protocols(monkeypatch: pytest.MonkeyPatch):
     spike = get_driver(
         {
             "drivers": [
-                {"id": "left_motor", "protocol": "spike_hub_serial", "port": "A", "device": "motor"},
+                {
+                    "id": "left_motor",
+                    "protocol": "spike_hub_serial",
+                    "port": "A",
+                    "device": "motor",
+                },
                 {
                     "id": "right_motor",
                     "protocol": "spike_hub_serial",
@@ -93,7 +98,12 @@ def test_new_drivers_support_move_stop_close_and_health(monkeypatch: pytest.Monk
         SpikeHubDriver(
             {
                 "drivers": [
-                    {"id": "left_motor", "protocol": "spike_hub_serial", "port": "A", "device": "motor"},
+                    {
+                        "id": "left_motor",
+                        "protocol": "spike_hub_serial",
+                        "port": "A",
+                        "device": "motor",
+                    },
                     {
                         "id": "right_motor",
                         "protocol": "spike_hub_serial",
@@ -120,9 +130,7 @@ def test_new_drivers_support_move_stop_close_and_health(monkeypatch: pytest.Monk
     "preset_name",
     ["esp32_generic", "lego_mindstorms_ev3", "lego_spike_prime"],
 )
-def test_test_hardware_runs_for_new_presets(
-    monkeypatch: pytest.MonkeyPatch, preset_name: str
-):
+def test_test_hardware_runs_for_new_presets(monkeypatch: pytest.MonkeyPatch, preset_name: str):
     import castor.test_hardware as test_hw
     from castor.drivers.esp32_websocket import ESP32WebsocketDriver
 

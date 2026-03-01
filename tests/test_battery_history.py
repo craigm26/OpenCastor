@@ -152,14 +152,22 @@ def test_history_does_not_crash_read_on_db_error(monkeypatch, tmp_path):
 
 @pytest.fixture()
 def client():
-    from fastapi.testclient import TestClient
     from unittest.mock import MagicMock
+
+    from fastapi.testclient import TestClient
 
     import castor.api as _api
 
     mock_battery = MagicMock()
     mock_battery.get_history.return_value = [
-        {"ts": 1000.0, "voltage_v": 12.1, "current_ma": 500.0, "power_mw": 6050.0, "percent": 70.0, "mode": "mock"}
+        {
+            "ts": 1000.0,
+            "voltage_v": 12.1,
+            "current_ma": 500.0,
+            "power_mw": 6050.0,
+            "percent": 70.0,
+            "mode": "mock",
+        }
     ]
 
     with patch("castor.drivers.battery_driver.get_battery", return_value=mock_battery):

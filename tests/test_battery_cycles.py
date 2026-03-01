@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 import time
 
 import pytest
@@ -75,10 +74,7 @@ def test_single_reading_returns_empty_list(driver):
 def test_all_positive_current_one_charge_cycle(driver):
     """Consecutive charging readings → exactly one 'charge' cycle."""
     now = time.time()
-    rows = [
-        (now + i, 12.0, 600.0, 7200.0, 60.0 + i, "mock")
-        for i in range(5)
-    ]
+    rows = [(now + i, 12.0, 600.0, 7200.0, 60.0 + i, "mock") for i in range(5)]
     _insert_rows(driver, rows)
     cycles = driver.get_charge_cycles()
     assert len(cycles) == 1
@@ -88,10 +84,7 @@ def test_all_positive_current_one_charge_cycle(driver):
 def test_all_negative_current_one_discharge_cycle(driver):
     """Consecutive discharging readings → exactly one 'discharge' cycle."""
     now = time.time()
-    rows = [
-        (now + i, 12.0, -600.0, 7200.0, 80.0 - i * 2, "mock")
-        for i in range(4)
-    ]
+    rows = [(now + i, 12.0, -600.0, 7200.0, 80.0 - i * 2, "mock") for i in range(4)]
     _insert_rows(driver, rows)
     cycles = driver.get_charge_cycles()
     assert len(cycles) == 1
@@ -101,10 +94,7 @@ def test_all_negative_current_one_discharge_cycle(driver):
 def test_all_idle_current_one_idle_cycle(driver):
     """Near-zero current (within ±50 mA) → exactly one 'idle' cycle."""
     now = time.time()
-    rows = [
-        (now + i, 12.0, 10.0, 120.0, 75.0, "mock")
-        for i in range(4)
-    ]
+    rows = [(now + i, 12.0, 10.0, 120.0, 75.0, "mock") for i in range(4)]
     _insert_rows(driver, rows)
     cycles = driver.get_charge_cycles()
     assert len(cycles) == 1
@@ -134,14 +124,14 @@ def test_multiple_transitions(driver):
     """charge → discharge → idle → charge should yield 4 cycles."""
     now = time.time()
     rows = [
-        (now + 0, 12.0, 600.0, 7200.0, 40.0, "mock"),   # charge
-        (now + 1, 12.0, 600.0, 7200.0, 45.0, "mock"),   # charge
+        (now + 0, 12.0, 600.0, 7200.0, 40.0, "mock"),  # charge
+        (now + 1, 12.0, 600.0, 7200.0, 45.0, "mock"),  # charge
         (now + 2, 12.0, -600.0, 7200.0, 44.0, "mock"),  # discharge
         (now + 3, 12.0, -600.0, 7200.0, 40.0, "mock"),  # discharge
-        (now + 4, 12.0, 5.0, 60.0, 40.0, "mock"),       # idle
-        (now + 5, 12.0, 5.0, 60.0, 40.0, "mock"),       # idle
-        (now + 6, 12.0, 700.0, 8400.0, 42.0, "mock"),   # charge
-        (now + 7, 12.0, 700.0, 8400.0, 46.0, "mock"),   # charge
+        (now + 4, 12.0, 5.0, 60.0, 40.0, "mock"),  # idle
+        (now + 5, 12.0, 5.0, 60.0, 40.0, "mock"),  # idle
+        (now + 6, 12.0, 700.0, 8400.0, 42.0, "mock"),  # charge
+        (now + 7, 12.0, 700.0, 8400.0, 46.0, "mock"),  # charge
     ]
     _insert_rows(driver, rows)
     cycles = driver.get_charge_cycles()

@@ -6,15 +6,15 @@ credentials or network access required.
 
 import sys
 import types
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers: build a minimal fake google.genai module tree so that importing
 # VertexAIProvider succeeds even when the real SDK is not installed.
 # ---------------------------------------------------------------------------
+
 
 def _make_genai_mock():
     """Return a MagicMock that looks like the google.genai package."""
@@ -47,6 +47,7 @@ def _install_fake_genai(genai_mock=None):
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def _reset_vertex_module():
     """Remove vertex_provider from sys.modules before each test so that
@@ -66,6 +67,7 @@ def fake_genai():
 # Test: missing VERTEX_PROJECT raises ValueError
 # ---------------------------------------------------------------------------
 
+
 class TestVertexProviderMissingProject:
     def test_vertex_provider_missing_project(self, fake_genai, monkeypatch):
         """VertexAIProvider should raise ValueError when VERTEX_PROJECT is unset."""
@@ -73,6 +75,7 @@ class TestVertexProviderMissingProject:
 
         # Import fresh (module was cleared by autouse fixture)
         import castor.providers.vertex_provider as vmod
+
         vmod.HAS_VERTEX = True
 
         with pytest.raises(ValueError, match="VERTEX_PROJECT"):
@@ -82,6 +85,7 @@ class TestVertexProviderMissingProject:
 # ---------------------------------------------------------------------------
 # Test: think() returns a Thought with parsed action
 # ---------------------------------------------------------------------------
+
 
 class TestVertexProviderThink:
     def test_vertex_provider_think(self, fake_genai, monkeypatch):
@@ -97,6 +101,7 @@ class TestVertexProviderThink:
         fake_genai.Client.return_value = fake_client
 
         import castor.providers.vertex_provider as vmod
+
         vmod.HAS_VERTEX = True
 
         provider = vmod.VertexAIProvider({"provider": "vertex_ai"})
@@ -126,6 +131,7 @@ class TestVertexProviderThink:
         fake_genai.Client.return_value = fake_client
 
         import castor.providers.vertex_provider as vmod
+
         vmod.HAS_VERTEX = True
 
         provider = vmod.VertexAIProvider({"provider": "vertex_ai"})
@@ -149,6 +155,7 @@ class TestVertexProviderThink:
         fake_genai.Client.return_value = fake_client
 
         import castor.providers.vertex_provider as vmod
+
         vmod.HAS_VERTEX = True
 
         provider = vmod.VertexAIProvider({"provider": "vertex_ai"})
@@ -163,6 +170,7 @@ class TestVertexProviderThink:
 # Test: health_check()
 # ---------------------------------------------------------------------------
 
+
 class TestVertexProviderHealthCheck:
     def test_vertex_provider_health_check_ok(self, fake_genai, monkeypatch):
         """health_check() should return ok=True when models.list() succeeds."""
@@ -174,6 +182,7 @@ class TestVertexProviderHealthCheck:
         fake_genai.Client.return_value = fake_client
 
         import castor.providers.vertex_provider as vmod
+
         vmod.HAS_VERTEX = True
 
         provider = vmod.VertexAIProvider({"provider": "vertex_ai"})
@@ -192,6 +201,7 @@ class TestVertexProviderHealthCheck:
         fake_genai.Client.return_value = fake_client
 
         import castor.providers.vertex_provider as vmod
+
         vmod.HAS_VERTEX = True
 
         provider = vmod.VertexAIProvider({"provider": "vertex_ai"})
@@ -206,6 +216,7 @@ class TestVertexProviderHealthCheck:
 # Test: get_provider() factory returns VertexAIProvider
 # ---------------------------------------------------------------------------
 
+
 class TestGetProviderVertexAI:
     def test_get_provider_vertex_ai(self, fake_genai, monkeypatch):
         """get_provider({'provider': 'vertex_ai'}) should return VertexAIProvider."""
@@ -216,6 +227,7 @@ class TestGetProviderVertexAI:
 
         # Patch VertexAIProvider inside the factory lookup path
         import castor.providers.vertex_provider as vmod
+
         vmod.HAS_VERTEX = True
 
         from castor.providers import get_provider
@@ -231,6 +243,7 @@ class TestGetProviderVertexAI:
         fake_genai.Client.return_value = fake_client
 
         import castor.providers.vertex_provider as vmod
+
         vmod.HAS_VERTEX = True
 
         from castor.providers import get_provider
@@ -246,6 +259,7 @@ class TestGetProviderVertexAI:
         fake_genai.Client.return_value = fake_client
 
         import castor.providers.vertex_provider as vmod
+
         vmod.HAS_VERTEX = True
 
         from castor.providers import get_provider
@@ -258,6 +272,7 @@ class TestGetProviderVertexAI:
 # Test: SDK not installed raises helpful ValueError
 # ---------------------------------------------------------------------------
 
+
 class TestVertexProviderSdkNotInstalled:
     def test_raises_when_has_vertex_false(self, monkeypatch):
         """If HAS_VERTEX is False, __init__ should raise a helpful ValueError."""
@@ -266,6 +281,7 @@ class TestVertexProviderSdkNotInstalled:
         # Ensure module is loaded then force HAS_VERTEX=False
         _install_fake_genai()
         import castor.providers.vertex_provider as vmod
+
         vmod.HAS_VERTEX = False
 
         with pytest.raises(ValueError, match="google-genai"):
@@ -276,6 +292,7 @@ class TestVertexProviderSdkNotInstalled:
 # Test: default model name and location
 # ---------------------------------------------------------------------------
 
+
 class TestVertexProviderDefaults:
     def test_default_model_name(self, fake_genai, monkeypatch):
         monkeypatch.setenv("VERTEX_PROJECT", "my-gcp-project")
@@ -285,6 +302,7 @@ class TestVertexProviderDefaults:
         fake_genai.Client.return_value = fake_client
 
         import castor.providers.vertex_provider as vmod
+
         vmod.HAS_VERTEX = True
 
         provider = vmod.VertexAIProvider({"provider": "vertex_ai"})
@@ -298,6 +316,7 @@ class TestVertexProviderDefaults:
         fake_genai.Client.return_value = fake_client
 
         import castor.providers.vertex_provider as vmod
+
         vmod.HAS_VERTEX = True
 
         provider = vmod.VertexAIProvider({"provider": "vertex_ai"})
@@ -310,11 +329,10 @@ class TestVertexProviderDefaults:
         fake_genai.Client.return_value = fake_client
 
         import castor.providers.vertex_provider as vmod
+
         vmod.HAS_VERTEX = True
 
-        provider = vmod.VertexAIProvider(
-            {"provider": "vertex_ai", "model": "gemini-1.5-pro-001"}
-        )
+        provider = vmod.VertexAIProvider({"provider": "vertex_ai", "model": "gemini-1.5-pro-001"})
         assert provider.model_name == "gemini-1.5-pro-001"
 
     def test_custom_location_from_env(self, fake_genai, monkeypatch):
@@ -325,6 +343,7 @@ class TestVertexProviderDefaults:
         fake_genai.Client.return_value = fake_client
 
         import castor.providers.vertex_provider as vmod
+
         vmod.HAS_VERTEX = True
 
         provider = vmod.VertexAIProvider({"provider": "vertex_ai"})
@@ -338,17 +357,17 @@ class TestVertexProviderDefaults:
         fake_genai.Client.return_value = fake_client
 
         import castor.providers.vertex_provider as vmod
+
         vmod.HAS_VERTEX = True
 
-        provider = vmod.VertexAIProvider(
-            {"provider": "vertex_ai", "vertex_project": "cfg-project"}
-        )
+        provider = vmod.VertexAIProvider({"provider": "vertex_ai", "vertex_project": "cfg-project"})
         assert provider.project == "cfg-project"
 
 
 # ---------------------------------------------------------------------------
 # Test: think_stream()
 # ---------------------------------------------------------------------------
+
 
 class TestVertexProviderThinkStream:
     def test_think_stream_yields_chunks(self, fake_genai, monkeypatch):
@@ -365,6 +384,7 @@ class TestVertexProviderThinkStream:
         fake_genai.Client.return_value = fake_client
 
         import castor.providers.vertex_provider as vmod
+
         vmod.HAS_VERTEX = True
 
         provider = vmod.VertexAIProvider({"provider": "vertex_ai"})
@@ -381,6 +401,7 @@ class TestVertexProviderThinkStream:
         fake_genai.Client.return_value = fake_client
 
         import castor.providers.vertex_provider as vmod
+
         vmod.HAS_VERTEX = True
 
         provider = vmod.VertexAIProvider({"provider": "vertex_ai"})

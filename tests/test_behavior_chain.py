@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import logging
-import os
-import textwrap
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -92,7 +89,10 @@ def test_chain_nonexistent_file_warns_and_skips(caplog, tmp_path):
             }
         )
     assert executed == []
-    assert any("failed to load" in r.message.lower() or "not found" in r.message.lower() for r in caplog.records)
+    assert any(
+        "failed to load" in r.message.lower() or "not found" in r.message.lower()
+        for r in caplog.records
+    )
 
 
 def test_chain_behavior_name_not_found_warns_and_skips(caplog, tmp_path):
@@ -128,15 +128,12 @@ def test_chain_executes_steps_from_named_behavior(tmp_path):
     executed_contexts: list = []
     runner._run_step_list = lambda steps, ctx: executed_contexts.append(ctx)  # type: ignore[method-assign]
 
-    runner._step_chain(
-        {"type": "chain", "behavior_file": ypath, "behavior_name": "patrol_loop"}
-    )
+    runner._step_chain({"type": "chain", "behavior_file": ypath, "behavior_name": "patrol_loop"})
     assert any("chain:patrol_loop" in ctx for ctx in executed_contexts)
 
 
 def test_chain_passes_correct_steps_to_run_step_list(tmp_path):
     """The steps passed to ``_run_step_list`` must match those in the YAML."""
-    import yaml  # noqa: PLC0415
 
     steps = [{"type": "wait", "seconds": 1}, {"type": "wait", "seconds": 2}]
     ypath = _write_behavior_yaml(tmp_path / "b.yaml", name="my_behavior", steps=steps)
@@ -190,9 +187,7 @@ def test_chain_max_depth_logs_warning_and_skips(caplog, tmp_path):
 
     ypath = _write_behavior_yaml(tmp_path / "b.yaml", name="foo")
     with caplog.at_level(logging.WARNING, logger="OpenCastor.Behaviors"):
-        runner._step_chain(
-            {"type": "chain", "behavior_file": ypath, "behavior_name": "foo"}
-        )
+        runner._step_chain({"type": "chain", "behavior_file": ypath, "behavior_name": "foo"})
     assert executed == []
     assert any("max chain depth" in r.message.lower() for r in caplog.records)
 

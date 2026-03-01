@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -18,6 +17,7 @@ def _make_provider(extra=None):
         with patch("openai.OpenAI") as mock_openai_cls:
             mock_openai_cls.return_value = MagicMock()
             from castor.providers.openrouter_provider import OpenRouterProvider
+
             provider = OpenRouterProvider(cfg)
     return provider
 
@@ -50,6 +50,7 @@ class TestOpenRouterProviderInit:
         with patch.dict(os.environ, {}, clear=True):
             with patch("openai.OpenAI"):
                 from castor.providers.openrouter_provider import OpenRouterProvider
+
                 with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
                     OpenRouterProvider({"provider": "openrouter", "model": "x/y"})
 
@@ -62,11 +63,14 @@ class TestOpenRouterProviderInit:
             with patch("openai.OpenAI") as mock_cls:
                 mock_cls.return_value = MagicMock()
                 from castor.providers.openrouter_provider import OpenRouterProvider
-                p = OpenRouterProvider({
-                    "provider": "openrouter",
-                    "model": "openai/gpt-4o",
-                    "api_key": "cfg-key",
-                })
+
+                p = OpenRouterProvider(
+                    {
+                        "provider": "openrouter",
+                        "model": "openai/gpt-4o",
+                        "api_key": "cfg-key",
+                    }
+                )
         assert p is not None
 
     def test_model_name_from_config(self):
@@ -74,13 +78,18 @@ class TestOpenRouterProviderInit:
         assert p.model_name == "anthropic/claude-3.5-haiku"
 
     def test_model_name_from_env(self):
-        with patch.dict(os.environ, {
-            "OPENROUTER_API_KEY": "k",
-            "OPENROUTER_MODEL": "openai/gpt-4o-mini",
-        }, clear=False):
+        with patch.dict(
+            os.environ,
+            {
+                "OPENROUTER_API_KEY": "k",
+                "OPENROUTER_MODEL": "openai/gpt-4o-mini",
+            },
+            clear=False,
+        ):
             with patch("openai.OpenAI") as mock_cls:
                 mock_cls.return_value = MagicMock()
                 from castor.providers.openrouter_provider import OpenRouterProvider
+
                 p = OpenRouterProvider({"provider": "openrouter", "model": "x/y"})
         assert p.model_name == "openai/gpt-4o-mini"
 

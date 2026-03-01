@@ -96,6 +96,19 @@ class ProviderPool(BaseProvider):
         # A/B test config (#338) — split fraction for provider 0 vs provider 1
         self._ab_split: float = float(config.get("pool_ab_split", 0.5))
 
+        # Issue #345: Cost tracking — per-provider cumulative token/USD accounting
+        # Config: pool_cost_per_1k_tokens — dict mapping provider name to USD per 1k tokens
+        self._cost_per_1k: Dict[str, float] = dict(config.get("pool_cost_per_1k_tokens", {}))
+        # provider_index → {tokens_total, cost_usd_total, calls}
+        self._cost_tracker: Dict[int, Dict[str, float]] = {}
+
+        # Issue #340: Shadow mode — forward every request to a secondary provider in parallel,
+        # log the response for comparison, but always return the primary's response.
+        # Config keys: pool_shadow_provider, pool_shadow_log_path
+        self._shadow_provider_name: Optional[str] = config.get("pool_shadow_provider")
+        self._shadow_log_path: Optional[str] = config.get("pool_shadow_log_path")
+        self._shadow_provider: Optional[BaseProvider] = None
+
         if not pool_configs:
             raise ValueError("ProviderPool: 'pool' list must contain at least one entry")
 
@@ -164,6 +177,31 @@ class ProviderPool(BaseProvider):
             self._strategy,
             self._fallback,
         )
+
+        # Initialise cost tracker entries for each provider (#345)
+        for i in range(len(self._providers)):
+            self._cost_tracker[i] = {"tokens_total": 0.0, "cost_usd_total": 0.0, "calls": 0.0}
+
+        # Initialise shadow provider if configured (#340)
+        if self._shadow_provider_name:
+            try:
+                shadow_cfg = {"provider": self._shadow_provider_name}
+                # Inherit any explicit shadow-provider-specific keys from config
+                for k, v in config.items():
+                    if k.startswith("pool_shadow_") and k != "pool_shadow_provider":
+                        shadow_cfg[k.replace("pool_shadow_", "", 1)] = v
+                shadow_cfg.update(config.get("pool_shadow_config", {}))
+                self._shadow_provider = get_provider(shadow_cfg)
+                logger.info(
+                    "ProviderPool: shadow mode enabled — secondary provider=%s, log=%s",
+                    self._shadow_provider_name,
+                    self._shadow_log_path,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "ProviderPool: shadow provider init failed: %s — shadow disabled", exc
+                )
+                self._shadow_provider = None
 
         # Load replay map if configured (#326)
         if self._replay_path:
@@ -433,6 +471,123 @@ class ProviderPool(BaseProvider):
                 self._ab_stats[group]["fail"] += 1
 
     # ------------------------------------------------------------------
+    # Issue #345: Cost tracking helpers
+    # ------------------------------------------------------------------
+
+    def _record_cost(self, idx: int, thought: Thought) -> None:
+        """Record token usage and estimated cost for a successful think() call.
+
+        Tokens are extracted from ``thought.action`` when available (field
+        ``"tokens_used"``), or estimated as 1/4 of the raw_text character
+        count as a rough fallback.
+
+        Args:
+            idx:    Index of the provider in ``_providers``.
+            thought: The ``Thought`` returned by the provider.
+        """
+        try:
+            action = thought.action or {}
+            tokens = float(
+                action.get("tokens_used", 0)
+                or (len(thought.raw_text) / 4 if thought.raw_text else 0)
+            )
+            provider_name = getattr(self._providers[idx], "model_name", "") or ""
+            # Look up cost per 1k tokens — try provider name, then numeric index key
+            cost_rate = self._cost_per_1k.get(provider_name, self._cost_per_1k.get(str(idx), 0.0))
+            cost = (tokens / 1000.0) * float(cost_rate)
+            with self._lock:
+                ct = self._cost_tracker.setdefault(
+                    idx, {"tokens_total": 0.0, "cost_usd_total": 0.0, "calls": 0.0}
+                )
+                ct["tokens_total"] += tokens
+                ct["cost_usd_total"] += cost
+                ct["calls"] += 1
+        except Exception as exc:
+            logger.debug("ProviderPool._record_cost: %s", exc)
+
+    def cost_summary(self) -> Dict[str, Any]:
+        """Return cumulative token usage and USD cost per pool provider.
+
+        Returns:
+            Dict mapping pool index (str) to ``{"tokens_total", "cost_usd_total", "calls",
+            "provider_name"}``, plus a ``"total"`` entry summing all providers.
+        """
+        summary: Dict[str, Any] = {}
+        total_tokens = 0.0
+        total_cost = 0.0
+        total_calls = 0.0
+        with self._lock:
+            for i in range(len(self._providers)):
+                ct = self._cost_tracker.get(i, {})
+                provider_name = (
+                    getattr(self._providers[i], "model_name", f"pool[{i}]") or f"pool[{i}]"
+                )
+                tokens = ct.get("tokens_total", 0.0)
+                cost = ct.get("cost_usd_total", 0.0)
+                calls = ct.get("calls", 0.0)
+                summary[str(i)] = {
+                    "provider_name": provider_name,
+                    "tokens_total": tokens,
+                    "cost_usd_total": round(cost, 6),
+                    "calls": int(calls),
+                }
+                total_tokens += tokens
+                total_cost += cost
+                total_calls += calls
+        summary["total"] = {
+            "tokens_total": total_tokens,
+            "cost_usd_total": round(total_cost, 6),
+            "calls": int(total_calls),
+        }
+        return summary
+
+    # ------------------------------------------------------------------
+    # Issue #340: Shadow mode helpers
+    # ------------------------------------------------------------------
+
+    def _shadow_call(self, image_bytes: bytes, instruction: str, primary_thought: Thought) -> None:
+        """Fire a shadow think() to the secondary provider and log the comparison.
+
+        This runs in a background thread so the primary response is never delayed.
+
+        Args:
+            image_bytes:     Raw image bytes forwarded to the shadow provider.
+            instruction:     The instruction forwarded to the shadow provider.
+            primary_thought: The primary provider's ``Thought`` for comparison.
+        """
+        if self._shadow_provider is None:
+            return
+        try:
+            shadow_thought = self._shadow_provider.think(image_bytes, instruction)
+            if self._shadow_log_path:
+                try:
+                    rec = {
+                        "ts": time.time(),
+                        "instruction": instruction[:200],
+                        "primary_action": primary_thought.action,
+                        "shadow_action": shadow_thought.action,
+                        "primary_raw": primary_thought.raw_text[:300]
+                        if primary_thought.raw_text
+                        else "",
+                        "shadow_raw": shadow_thought.raw_text[:300]
+                        if shadow_thought.raw_text
+                        else "",
+                        "match": primary_thought.action == shadow_thought.action,
+                    }
+                    with open(self._shadow_log_path, "a") as f:
+                        f.write(json.dumps(rec) + "\n")
+                except Exception as log_exc:
+                    logger.debug("ProviderPool shadow: log write failed: %s", log_exc)
+            logger.debug(
+                "ProviderPool shadow: primary=%r shadow=%r match=%s",
+                primary_thought.action,
+                shadow_thought.action,
+                primary_thought.action == shadow_thought.action,
+            )
+        except Exception as exc:
+            logger.debug("ProviderPool shadow: secondary provider failed: %s", exc)
+
+    # ------------------------------------------------------------------
     # Request replay helpers (#326)
     # ------------------------------------------------------------------
 
@@ -599,6 +754,17 @@ class ProviderPool(BaseProvider):
                 if ab_group is not None:
                     self._ab_record(ab_group, success=True)
                 self._record_thought(instruction, result)
+                # Issue #345: record cost for this provider
+                self._record_cost(start_idx, result)
+                # Issue #340: fire shadow call in background thread
+                if self._shadow_provider is not None:
+                    import threading as _threading
+
+                    _threading.Thread(
+                        target=self._shadow_call,
+                        args=(image_bytes, instruction, result),
+                        daemon=True,
+                    ).start()
                 return result
             except Exception:
                 self._cb_on_failure(start_idx)
@@ -621,6 +787,17 @@ class ProviderPool(BaseProvider):
                 if ab_group is not None:
                     self._ab_record(ab_group, success=True)
                 self._record_thought(instruction, result)
+                # Issue #345: record cost for this provider
+                self._record_cost(idx, result)
+                # Issue #340: fire shadow call in background thread
+                if self._shadow_provider is not None:
+                    import threading as _threading
+
+                    _threading.Thread(
+                        target=self._shadow_call,
+                        args=(image_bytes, instruction, result),
+                        daemon=True,
+                    ).start()
                 return result
             except Exception as exc:
                 self._cb_on_failure(idx)
@@ -761,6 +938,20 @@ class ProviderPool(BaseProvider):
                     "split": self._ab_split,
                     "groups": dict(self._ab_stats),
                 }
+        # Issue #345: cost tracking state
+        cost = self.cost_summary()
+        for i, member in enumerate(results):
+            ct_entry = cost.get(str(i), {})
+            member["cost_usd"] = ct_entry.get("cost_usd_total", 0.0)
+            member["tokens_total"] = ct_entry.get("tokens_total", 0.0)
+            member["calls"] = ct_entry.get("calls", 0)
+        health["cost_summary"] = cost
+        # Issue #340: shadow mode state
+        health["shadow"] = {
+            "enabled": self._shadow_provider is not None,
+            "provider": self._shadow_provider_name,
+            "log_path": self._shadow_log_path,
+        }
         return health
 
     def stop(self) -> None:

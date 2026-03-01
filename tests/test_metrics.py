@@ -1,11 +1,9 @@
 """Tests for castor/metrics.py — Prometheus metrics registry (issue #99)."""
 
-import pytest
-
 from castor.metrics import Counter, Gauge, Histogram, MetricsRegistry, get_registry
 
-
 # ── Counter ───────────────────────────────────────────────────────────────────
+
 
 def test_counter_inc():
     c = Counter("my_counter", "test counter", ("robot",))
@@ -26,6 +24,7 @@ def test_counter_render_type_line():
 
 # ── Gauge ─────────────────────────────────────────────────────────────────────
 
+
 def test_gauge_set_and_inc():
     g = Gauge("my_gauge", "test gauge")
     g.set(3.14, robot="bob")
@@ -42,6 +41,7 @@ def test_gauge_starts_empty():
 
 
 # ── Histogram ─────────────────────────────────────────────────────────────────
+
 
 def test_histogram_observe():
     h = Histogram("my_histogram", "test histogram")
@@ -63,6 +63,7 @@ def test_histogram_buckets():
 
 
 # ── MetricsRegistry ───────────────────────────────────────────────────────────
+
 
 def test_registry_standard_metrics():
     reg = MetricsRegistry()
@@ -94,7 +95,9 @@ def test_registry_record_error():
 
 def test_registry_update_status():
     reg = MetricsRegistry()
-    reg.update_status(robot="testbot", brain_up=True, driver_up=False, active_channels=2, uptime_s=42.5)
+    reg.update_status(
+        robot="testbot", brain_up=True, driver_up=False, active_channels=2, uptime_s=42.5
+    )
     r = reg.render()
     assert "opencastor_brain_up" in r
     assert "opencastor_active_channels" in r
@@ -106,6 +109,7 @@ def test_render_ends_with_newline():
 
 
 # ── Singleton ─────────────────────────────────────────────────────────────────
+
 
 def test_get_registry_singleton():
     r1 = get_registry()

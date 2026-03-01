@@ -63,7 +63,15 @@ def test_history_row_has_required_keys(driver):
     hist = driver.get_scan_history()
     assert len(hist) == 1
     row = hist[0]
-    for key in ("ts", "min_distance_mm", "front_mm", "left_mm", "right_mm", "rear_mm", "point_count"):
+    for key in (
+        "ts",
+        "min_distance_mm",
+        "front_mm",
+        "left_mm",
+        "right_mm",
+        "rear_mm",
+        "point_count",
+    ):
         assert key in row, f"missing key: {key}"
 
 

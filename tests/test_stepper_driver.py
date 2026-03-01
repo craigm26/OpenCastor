@@ -1,9 +1,6 @@
 """Tests for castor.drivers.stepper_driver."""
 
-import threading
 import time
-
-import pytest
 
 from castor.drivers.stepper_driver import StepperDriver, _StepperMotor
 

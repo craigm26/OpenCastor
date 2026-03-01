@@ -51,6 +51,24 @@ Supports **Linux, macOS (Apple Silicon & Intel), Windows 11, Raspberry Pi, Docke
 Installer flags: `--dry-run`, `--no-rpi`, `--skip-wizard`
 </details>
 
+## ✨ What's New in v2026.3.1.14
+
+- **Metrics p50/p95/p99 percentiles (#347)** — `ProviderLatencyTracker` now stores exact sorted samples and exposes `opencastor_provider_latency_p50/p95/p99_ms` Prometheus gauge per provider
+- **BehaviorRunner event_wait step (#346)** — new `event_wait` step type polls a sensor until a threshold condition is met or timeout expires
+- **BehaviorRunner foreach_file step (#341)** — new `foreach_file` step type iterates JSONL rows substituting `$item` placeholders into nested steps
+- **EpisodeMemory k-means clustering (#342)** — `cluster_episodes()` groups episodes by action-type frequency using stdlib-only k-means (no sklearn)
+- **IMUDriver Madgwick filter (#343)** — `MadgwickFilter` class fuses accel+gyro with configurable beta gain; enabled via `imu_filter: madgwick` config key
+- **LidarDriver map persistence (#344)** — `save_map()` and `load_map()` persist occupancy grids to SQLite (JSON-encoded BLOB)
+- **ProviderPool cost tracking (#345)** — per-provider token usage and USD cost accounting via `cost_summary()`; per-1k-token rate configurable
+- **ProviderPool shadow mode (#340)** — parallel shadow provider fires in background thread, logs primary vs shadow action comparison to JSONL
+- **ESP32 BLE driver (#287)** — `ESP32BLEDriver` sends JSON commands over BLE GATT characteristic via bleak (HAS_BLEAK guard)
+- **Signal Messenger channel (#285)** — `SignalChannel` polls signal-cli REST API for messages; supports send and receive
+- **castor snapshot CLI (#348)** — `castor snapshot take/latest/history` captures and displays system diagnostic snapshots
+- **Dashboard memory timeline (#349)** — `MemoryTimeline` class buckets episodes by time for trend charts; p50/p95/p99 latency per window
+- **Dashboard Mission Control panel (#283)** — new expandable Mission Control panel in CastorDash with launch/stop mission, outcome metrics, and latency KPIs
+- **WhatsApp mission trigger (#282)** — `!mission <name>` keyword in any channel triggers named behavior launch; handled in `BaseChannel`
+- **castor doctor improvements (#280)** — new checks: memory DB size, BLE (bleak) availability, Signal channel import status
+
 ## ✨ What's New in v2026.2.28.0
 
 - **DeepSeek provider** — `provider: deepseek` unlocks `deepseek-chat`, `deepseek-reasoner` (R1), and `deepseek-coder` via the OpenAI-compatible API. Set `DEEPSEEK_API_KEY`. Vision input supported for `deepseek-vl2` models.

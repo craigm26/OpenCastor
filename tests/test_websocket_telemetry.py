@@ -6,17 +6,16 @@ WebSocket testing without a real async runtime.
 """
 
 import collections
-import json
 import time
 from unittest.mock import MagicMock, patch
 
 import pytest
 from starlette.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # Shared setup helpers
 # ---------------------------------------------------------------------------
+
 
 def _reset_state(monkeypatch, api_mod):
     """Reset AppState to clean defaults."""
@@ -43,9 +42,11 @@ def clean_client(monkeypatch):
     monkeypatch.delenv("OPENCASTOR_JWT_SECRET", raising=False)
 
     import castor.api as api_mod
+
     _reset_state(monkeypatch, api_mod)
 
     from castor.api import app
+
     app.router.on_startup.clear()
     app.router.on_shutdown.clear()
 
@@ -56,6 +57,7 @@ def clean_client(monkeypatch):
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestWebSocketTelemetry:
     def test_telemetry_connects_and_receives(self, clean_client):
@@ -68,8 +70,17 @@ class TestWebSocketTelemetry:
     def test_telemetry_has_required_fields(self, clean_client):
         """Every telemetry frame must contain the required fields."""
         client, _ = clean_client
-        required = {"ts", "robot", "loop_count", "avg_latency_ms", "camera", "driver",
-                    "depth", "provider", "using_fallback"}
+        required = {
+            "ts",
+            "robot",
+            "loop_count",
+            "avg_latency_ms",
+            "camera",
+            "driver",
+            "depth",
+            "provider",
+            "using_fallback",
+        }
         with client.websocket_connect("/ws/telemetry") as ws:
             frame = ws.receive_json()
         missing = required - set(frame.keys())
@@ -105,15 +116,17 @@ class TestWebSocketTelemetry:
         monkeypatch.delenv("OPENCASTOR_JWT_SECRET", raising=False)
 
         import castor.api as api_mod
+
         _reset_state(monkeypatch, api_mod)
         api_mod.API_TOKEN = "correct-secret-token"
 
         from castor.api import app
+
         app.router.on_startup.clear()
         app.router.on_shutdown.clear()
 
         with TestClient(app, raise_server_exceptions=False) as client:
-            with pytest.raises(Exception):
+            with pytest.raises(Exception):  # noqa: B017
                 # Wrong token — server must reject
                 with client.websocket_connect("/ws/telemetry?token=wrong") as ws:
                     ws.receive_json()  # Should raise (connection closed / rejected)
@@ -124,10 +137,12 @@ class TestWebSocketTelemetry:
         monkeypatch.delenv("OPENCASTOR_JWT_SECRET", raising=False)
 
         import castor.api as api_mod
+
         _reset_state(monkeypatch, api_mod)
         api_mod.API_TOKEN = "my-secret"
 
         from castor.api import app
+
         app.router.on_startup.clear()
         app.router.on_shutdown.clear()
 
@@ -148,6 +163,7 @@ class TestWebSocketTelemetry:
     def test_telemetry_depth_included(self, clean_client):
         """When depth data is available the 'depth' field must contain sector info."""
         import numpy as np
+
         client, api_mod = clean_client
 
         arr = np.full((30, 90), 800, dtype=np.uint16)  # 80 cm everywhere

@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Singleton reset
 # ---------------------------------------------------------------------------
@@ -14,6 +13,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def _reset_cache_singleton():
     import castor.response_cache as mod
+
     mod._singleton = None
     yield
     mod._singleton = None
@@ -26,6 +26,7 @@ def _reset_cache_singleton():
 
 def _make_cache(tmp_path, max_age_s=3600, max_size=100):
     from castor.response_cache import ResponseCache
+
     db = str(tmp_path / "cache.db")
     return ResponseCache(db_path=db, max_age_s=max_age_s, max_size=max_size)
 
@@ -126,13 +127,21 @@ class TestResponseCacheStats:
     def test_stats_has_required_keys(self, tmp_path):
         cache = _make_cache(tmp_path)
         s = cache.stats()
-        for key in ("entries", "hits", "misses", "hit_rate_pct", "enabled", "max_age_s", "max_size"):
+        for key in (
+            "entries",
+            "hits",
+            "misses",
+            "hit_rate_pct",
+            "enabled",
+            "max_age_s",
+            "max_size",
+        ):
             assert key in s, f"missing stats key: {key}"
 
     def test_hit_rate_increments(self, tmp_path):
         cache = _make_cache(tmp_path)
         cache.put("q", "ans", None)
-        cache.get("q")      # hit
+        cache.get("q")  # hit
         cache.get("missing")  # miss
         s = cache.stats()
         assert s["hits"] == 1
@@ -202,6 +211,7 @@ class TestResponseCacheEnableDisable:
 class TestCachedProvider:
     def _make_mock_provider(self, text="response"):
         from castor.providers.base import Thought
+
         provider = MagicMock()
         provider.think.return_value = Thought(raw_text=text, action={"move": True})
         provider.think_stream.return_value = iter([text])
@@ -211,6 +221,7 @@ class TestCachedProvider:
 
     def test_cache_miss_calls_provider(self, tmp_path):
         from castor.response_cache import CachedProvider
+
         cache = _make_cache(tmp_path)
         provider = self._make_mock_provider("forward")
         cp = CachedProvider(provider, cache)
@@ -220,17 +231,19 @@ class TestCachedProvider:
 
     def test_cache_hit_skips_provider(self, tmp_path):
         from castor.response_cache import CachedProvider
+
         cache = _make_cache(tmp_path)
         provider = self._make_mock_provider("from cache")
         cp = CachedProvider(provider, cache)
-        cp.think(b"", "go forward")         # miss → calls provider, stores
+        cp.think(b"", "go forward")  # miss → calls provider, stores
         provider.think.reset_mock()
-        thought = cp.think(b"", "go forward")   # hit → skips provider
+        thought = cp.think(b"", "go forward")  # hit → skips provider
         provider.think.assert_not_called()
         assert thought.raw_text == "from cache"
 
     def test_think_stream_hit_yields_full_text(self, tmp_path):
         from castor.response_cache import CachedProvider
+
         cache = _make_cache(tmp_path)
         provider = self._make_mock_provider("stream text")
         cp = CachedProvider(provider, cache)
@@ -245,15 +258,17 @@ class TestCachedProvider:
     def test_health_check_delegates_to_provider(self, tmp_path):
         """CachedProvider.health_check() delegates to the wrapped provider."""
         from castor.response_cache import CachedProvider
+
         cache = _make_cache(tmp_path)
         provider = self._make_mock_provider()
-        cp = CachedProvider(provider, cache)
+        CachedProvider(provider, cache)
         # Access underlying provider health_check — CachedProvider proxies ok=True
         h = provider.health_check()
         assert h["ok"] is True
 
     def test_getattr_delegates_to_provider(self, tmp_path):
         from castor.response_cache import CachedProvider
+
         cache = _make_cache(tmp_path)
         provider = self._make_mock_provider()
         provider.model_name = "test-model"
@@ -262,11 +277,12 @@ class TestCachedProvider:
 
     def test_cache_stats_hit_rate_after_two_calls(self, tmp_path):
         from castor.response_cache import CachedProvider
+
         cache = _make_cache(tmp_path)
         provider = self._make_mock_provider("answer")
         cp = CachedProvider(provider, cache)
-        cp.think(b"", "same question")   # miss
-        cp.think(b"", "same question")   # hit
+        cp.think(b"", "same question")  # miss
+        cp.think(b"", "same question")  # hit
         s = cache.stats()
         assert s["hits"] == 1
         assert s["misses"] == 1
@@ -279,6 +295,7 @@ class TestCachedProvider:
 
 def test_make_key_same_instruction_same_key():
     from castor.response_cache import ResponseCache
+
     k1 = ResponseCache.make_key("hello world")
     k2 = ResponseCache.make_key("hello world")
     assert k1 == k2
@@ -286,6 +303,7 @@ def test_make_key_same_instruction_same_key():
 
 def test_make_key_different_instruction_different_key():
     from castor.response_cache import ResponseCache
+
     k1 = ResponseCache.make_key("go forward")
     k2 = ResponseCache.make_key("turn left")
     assert k1 != k2
@@ -293,6 +311,7 @@ def test_make_key_different_instruction_different_key():
 
 def test_make_key_image_changes_key():
     from castor.response_cache import ResponseCache
+
     k_no_img = ResponseCache.make_key("cmd")
     k_img = ResponseCache.make_key("cmd", image_bytes=b"\xff\xd8")
     assert k_no_img != k_img

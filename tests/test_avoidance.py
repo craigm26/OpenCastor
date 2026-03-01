@@ -1,10 +1,8 @@
 """Tests for castor.avoidance (ReactiveAvoider)."""
 
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Singleton reset
@@ -14,6 +12,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def _reset_avoider_singleton():
     import castor.avoidance as mod
+
     mod._singleton = None
     yield
     mod._singleton = None
@@ -33,6 +32,7 @@ def _fresh_avoider(driver=None, estop_cb=None, estop_mm=200, slow_mm=500, slow_f
     All obstacle-zone assertions are made via _sample_sensors patching.
     """
     import castor.drivers.lidar_driver as lidar_mod
+
     orig_singleton = lidar_mod._singleton
     lidar_mod._singleton = None
 
@@ -42,6 +42,7 @@ def _fresh_avoider(driver=None, estop_cb=None, estop_mm=200, slow_mm=500, slow_f
     try:
         with patch("castor.drivers.lidar_driver.get_lidar", return_value=bad_lidar):
             from castor.avoidance import ReactiveAvoider
+
             avoider = ReactiveAvoider(
                 driver=driver,
                 estop_callback=estop_cb,
@@ -208,6 +209,7 @@ class TestReactiveAvoiderMove:
 
 def test_get_avoider_singleton():
     import castor.drivers.lidar_driver as lidar_mod
+
     orig = lidar_mod._singleton
     lidar_mod._singleton = None
 
@@ -216,6 +218,7 @@ def test_get_avoider_singleton():
     try:
         with patch("castor.drivers.lidar_driver.get_lidar", return_value=bad_lidar):
             from castor.avoidance import get_avoider
+
             a1 = get_avoider()
             a2 = get_avoider()
     finally:

@@ -1,6 +1,5 @@
 """Tests for castor improve --enable / --disable CLI shortcuts."""
 
-import os
 import types
 
 import yaml
@@ -57,9 +56,7 @@ def test_enable_preserves_existing_learner(tmp_path):
 
 def test_disable(tmp_path):
     cfg = tmp_path / "bot.rcan.yaml"
-    cfg.write_text(
-        yaml.dump({"learner": {"enabled": True, "provider": "huggingface"}})
-    )
+    cfg.write_text(yaml.dump({"learner": {"enabled": True, "provider": "huggingface"}}))
     args = _make_args(disable=True, config=str(cfg))
     assert _improve_toggle(args) is True
 

@@ -10,11 +10,9 @@ Covers:
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 _MOCK_RECORDINGS = [
     {"id": "rec1", "path": "/fake/rec1.mp4", "duration_s": 10.0},
@@ -42,7 +40,7 @@ def gen(tmp_path):
 def mock_recorder():
     recorder = MagicMock()
     recorder.list_recordings.return_value = _MOCK_RECORDINGS
-    with patch("castor.timelapse.TimelapseGenerator.generate") as p:
+    with patch("castor.timelapse.TimelapseGenerator.generate") as _p:
         yield recorder
 
 

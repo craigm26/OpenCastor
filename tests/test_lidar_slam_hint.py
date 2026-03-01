@@ -4,25 +4,22 @@ from __future__ import annotations
 
 import os
 import sys
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 # Ensure project root on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from castor.drivers.lidar_driver import LidarDriver
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_points(angles_dists: list) -> list:
     """Build a scan-point list from (angle_deg_0_360, distance_mm) pairs."""
     return [
-        {"angle_deg": float(a), "distance_mm": float(d), "quality": 15}
-        for a, d in angles_dists
+        {"angle_deg": float(a), "distance_mm": float(d), "quality": 15} for a, d in angles_dists
     ]
 
 
@@ -45,6 +42,7 @@ def _driver_with_mock_scan(points: list) -> LidarDriver:
 # Test 1 — slam_hint() returns a dict
 # ---------------------------------------------------------------------------
 
+
 def test_slam_hint_returns_dict():
     drv = LidarDriver.__new__(LidarDriver)
     drv._mode = "mock"
@@ -63,6 +61,7 @@ def test_slam_hint_returns_dict():
 # Test 2 — result has "available" and "walls" keys
 # ---------------------------------------------------------------------------
 
+
 def test_slam_hint_has_required_keys():
     drv = _driver_with_mock_scan([])
     result = drv.slam_hint()
@@ -73,6 +72,7 @@ def test_slam_hint_has_required_keys():
 # ---------------------------------------------------------------------------
 # Test 3 — available=False when scan raises
 # ---------------------------------------------------------------------------
+
 
 def test_slam_hint_available_false_on_scan_exception():
     drv = LidarDriver.__new__(LidarDriver)
@@ -93,6 +93,7 @@ def test_slam_hint_available_false_on_scan_exception():
 # Test 4 — walls is a list
 # ---------------------------------------------------------------------------
 
+
 def test_slam_hint_walls_is_list():
     drv = _driver_with_mock_scan([])
     result = drv.slam_hint()
@@ -102,6 +103,7 @@ def test_slam_hint_walls_is_list():
 # ---------------------------------------------------------------------------
 # Test 5 — each wall entry has sector, distance_m, angle_deg, confidence
 # ---------------------------------------------------------------------------
+
 
 def test_slam_hint_wall_entry_keys():
     # Provide ≥3 front points (angles near 0°)
@@ -119,6 +121,7 @@ def test_slam_hint_wall_entry_keys():
 # Test 6 — confidence is between 0.0 and 1.0
 # ---------------------------------------------------------------------------
 
+
 def test_slam_hint_confidence_range():
     # 10 front points → confidence = 1.0; 3 left points → 0.3
     front_pts = _make_points([(a, 1000) for a in range(0, 10)])
@@ -132,6 +135,7 @@ def test_slam_hint_confidence_range():
 # ---------------------------------------------------------------------------
 # Test 7 — distance_m is in metres (not mm)
 # ---------------------------------------------------------------------------
+
 
 def test_slam_hint_distance_in_metres():
     # 5 front points all at 2000 mm = 2.0 m
@@ -149,10 +153,11 @@ def test_slam_hint_distance_in_metres():
 # Test 8 — sector values are one of front/left/right
 # ---------------------------------------------------------------------------
 
+
 def test_slam_hint_sector_values():
     # Points covering all three sectors
     pts = (
-        _make_points([(a, 1000) for a in [-10, 0, 10, 20, -20]])   # front
+        _make_points([(a, 1000) for a in [-10, 0, 10, 20, -20]])  # front
         + _make_points([(a, 1500) for a in [45, 90, 135, 60, 120]])  # left
         + _make_points([(a, 2000) for a in [200, 210, 220, 230, 240]])  # right (signed -160..-120)
     )
@@ -167,6 +172,7 @@ def test_slam_hint_sector_values():
 # Test 9 — sector with fewer than 3 points is excluded
 # ---------------------------------------------------------------------------
 
+
 def test_slam_hint_excludes_sector_with_fewer_than_3_points():
     # Only 2 front points — should be excluded
     points = _make_points([(0, 1000), (5, 1100)])
@@ -179,6 +185,7 @@ def test_slam_hint_excludes_sector_with_fewer_than_3_points():
 # ---------------------------------------------------------------------------
 # Test 10 — points only in front → only front wall detected
 # ---------------------------------------------------------------------------
+
 
 def test_slam_hint_only_front_sector():
     # 5 front points, nothing in left/right
@@ -194,6 +201,7 @@ def test_slam_hint_only_front_sector():
 # Test 11 — empty scan → walls=[]
 # ---------------------------------------------------------------------------
 
+
 def test_slam_hint_empty_scan_gives_empty_walls():
     drv = _driver_with_mock_scan([])
     result = drv.slam_hint()
@@ -205,6 +213,7 @@ def test_slam_hint_empty_scan_gives_empty_walls():
 # Test 12 — available=True when scan succeeds with points
 # ---------------------------------------------------------------------------
 
+
 def test_slam_hint_available_true_with_points():
     points = _make_points([(a, 1000) for a in [-15, -5, 0, 5, 15]])
     drv = _driver_with_mock_scan(points)
@@ -215,6 +224,7 @@ def test_slam_hint_available_true_with_points():
 # ---------------------------------------------------------------------------
 # Test 13 — confidence capped at 1.0 for many points
 # ---------------------------------------------------------------------------
+
 
 def test_slam_hint_confidence_capped_at_one():
     # 20 front points → confidence = min(1.0, 20/10) = 1.0
@@ -230,12 +240,11 @@ def test_slam_hint_confidence_capped_at_one():
 # Test 14 — distance_m uses median (not mean) — outlier robustness
 # ---------------------------------------------------------------------------
 
+
 def test_slam_hint_uses_median_distance():
     # 5 front points: 1000, 1000, 1000, 5000, 5000 mm
     # median = 1000 mm = 1.0 m; mean would be 2600 mm
-    points = _make_points([
-        (-10, 1000), (-5, 1000), (0, 1000), (5, 5000), (10, 5000)
-    ])
+    points = _make_points([(-10, 1000), (-5, 1000), (0, 1000), (5, 5000), (10, 5000)])
     drv = _driver_with_mock_scan(points)
     result = drv.slam_hint()
     front = [w for w in result["walls"] if w["sector"] == "front"]
@@ -247,6 +256,7 @@ def test_slam_hint_uses_median_distance():
 # ---------------------------------------------------------------------------
 # Test 15 — exactly 3 points in left sector → included
 # ---------------------------------------------------------------------------
+
 
 def test_slam_hint_exactly_3_points_included():
     points = _make_points([(45, 1000), (90, 1000), (135, 1000)])

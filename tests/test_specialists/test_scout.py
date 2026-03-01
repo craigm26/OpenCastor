@@ -8,9 +8,9 @@ import pytest
 
 from castor.specialists.base_specialist import Task, TaskStatus
 from castor.specialists.scout import (
-    ScoutSpecialist,
     _GRID_SIZE,
     _ROBOT_START,
+    ScoutSpecialist,
     _build_initial_grid,
     _cell_to_world,
     _find_frontiers,

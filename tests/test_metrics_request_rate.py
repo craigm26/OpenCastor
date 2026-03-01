@@ -5,13 +5,11 @@ Issue #334 — MetricsRegistry sliding window rate.
 
 from __future__ import annotations
 
-import time
 import threading
 
 import pytest
 
-from castor.metrics import MetricsRegistry, RequestRateTracker, get_registry
-
+from castor.metrics import MetricsRegistry, RequestRateTracker
 
 # ---------------------------------------------------------------------------
 # Fixtures

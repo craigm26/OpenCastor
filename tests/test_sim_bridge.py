@@ -16,11 +16,9 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Module-level fixtures
@@ -31,6 +29,7 @@ import pytest
 def _reset_sim_singleton():
     """Reset singleton between tests to avoid cross-test contamination."""
     import castor.sim_bridge as sb_mod
+
     sb_mod._singleton = None
     yield
     sb_mod._singleton = None

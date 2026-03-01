@@ -1,13 +1,10 @@
 """Tests for castor/workspace.py (issue #134)."""
 
-import json
 import time
-from pathlib import Path
 
 import pytest
 
 from castor.workspace import WorkspaceManager
-
 
 # ---------------------------------------------------------------------------
 # Fixture

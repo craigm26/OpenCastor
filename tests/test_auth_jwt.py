@@ -1,7 +1,7 @@
 """Tests for multi-user JWT authentication (Issue #124)."""
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -30,7 +30,7 @@ class TestParseUsersEnv:
 
         assert "admin" in result
         assert result["admin"]["role"] == "admin"
-        expected_hash = hashlib.sha256("secret123".encode()).hexdigest()
+        expected_hash = hashlib.sha256(b"secret123").hexdigest()
         assert result["admin"]["password_hash"] == expected_hash
 
     def test_parse_users_env_multiple(self):
@@ -60,11 +60,11 @@ class TestCreateDecodeToken:
 
     def test_expired_token_raises(self):
         """An expired token should raise jwt.ExpiredSignatureError."""
-        from castor.auth_jwt import create_token, decode_token
-
         # Create a token with expires_h=0 is not directly possible,
         # so create one in the past using a manual payload
         import datetime
+
+        from castor.auth_jwt import decode_token
 
         past = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=2)
         payload = {

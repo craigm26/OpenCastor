@@ -2,12 +2,7 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
-import time
-
 import pytest
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -118,8 +113,9 @@ class TestSessionTotals:
 
     def test_session_totals_excludes_other_session(self, tmp_path):
         """Two trackers with different session IDs should not see each other's data."""
-        from castor.usage import UsageTracker
         import uuid
+
+        from castor.usage import UsageTracker
 
         db = str(tmp_path / "usage.db")
 
@@ -180,8 +176,9 @@ class TestAllTimeTotals:
         assert totals["cost_usd"] == 0.0
 
     def test_all_time_accumulates_multiple_sessions(self, tmp_path):
-        from castor.usage import UsageTracker
         import uuid
+
+        from castor.usage import UsageTracker
 
         db = str(tmp_path / "usage.db")
 

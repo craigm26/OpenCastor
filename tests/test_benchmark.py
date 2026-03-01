@@ -6,9 +6,6 @@ import json
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 
@@ -29,12 +26,11 @@ class TestBenchmarkSingleProvider:
 
     def test_metrics_collected_for_happy_path(self):
         """Mock one provider and verify metrics are populated."""
-        from castor.commands.benchmark import _run_single_provider
 
         mock_provider = MagicMock()
         mock_provider.think.return_value = _mock_thought()
 
-        with patch("castor.commands.benchmark._run_single_provider") as mocked:
+        with patch("castor.commands.benchmark._run_single_provider") as _:
             # Simulate a successful run manually to test _compute_metrics
             from castor.commands.benchmark import _compute_metrics
 
@@ -205,7 +201,7 @@ class TestCmdProviderBenchmark:
 
     def test_all_known_providers_when_none_specified(self):
         """Passing providers=None benchmarks all known providers."""
-        from castor.commands.benchmark import _DEFAULT_MODELS, cmd_provider_benchmark
+        from castor.commands.benchmark import cmd_provider_benchmark
 
         mock_provider = MagicMock()
         mock_provider.think.return_value = _mock_thought()
@@ -279,7 +275,7 @@ class TestBenchmarkPersistence:
         _persist_benchmark_results([{"provider": "google", "model": "gemini", "status": "ok"}])
         bench_path = tmp_path / ".castor" / "benchmarks.jsonl"
         assert bench_path.exists()
-        lines = [l for l in bench_path.read_text().splitlines() if l.strip()]
+        lines = [ln for ln in bench_path.read_text().splitlines() if ln.strip()]
         assert len(lines) == 1
         data = json.loads(lines[0])
         assert "timestamp" in data
@@ -293,13 +289,15 @@ class TestBenchmarkPersistence:
         _persist_benchmark_results([{"provider": "p1"}])
         _persist_benchmark_results([{"provider": "p2"}])
         bench_path = tmp_path / ".castor" / "benchmarks.jsonl"
-        lines = [l for l in bench_path.read_text().splitlines() if l.strip()]
+        lines = [ln for ln in bench_path.read_text().splitlines() if ln.strip()]
         assert len(lines) == 2
 
     def test_api_benchmark_results_empty(self, tmp_path, monkeypatch):
         """GET /api/benchmark/results returns empty list when no file exists."""
         import pathlib
+
         from fastapi.testclient import TestClient
+
         from castor.api import app
 
         monkeypatch.setattr(pathlib.Path, "home", staticmethod(lambda: tmp_path))
@@ -316,7 +314,9 @@ class TestBenchmarkPersistence:
         """GET /api/benchmark/results returns persisted runs."""
         import json as _json
         import pathlib
+
         from fastapi.testclient import TestClient
+
         from castor.api import app
 
         monkeypatch.setattr(pathlib.Path, "home", staticmethod(lambda: tmp_path))

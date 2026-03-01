@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import time
 
-import pytest
-
 from castor.swarm.patch_sync import PatchSync, SyncedPatch
 from castor.swarm.shared_memory import SharedMemory
 

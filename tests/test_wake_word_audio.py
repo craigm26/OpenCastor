@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 import castor.voice as _voice
 from castor.voice import MockAudioStream, get_audio_config, stream_audio_source
-
 
 # ---------------------------------------------------------------------------
 # Helpers

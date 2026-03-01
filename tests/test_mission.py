@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import threading
 import time
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 from starlette.testclient import TestClient
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -125,18 +124,16 @@ class TestMissionRunner:
         release_event = threading.Event()
 
         def slow_execute(*args, **kwargs):
-            executing_event.set()       # signal: we are inside execute
+            executing_event.set()  # signal: we are inside execute
             release_event.wait(timeout=3)  # wait until test says go
             return {"ok": True, "duration_s": 0.05}
 
         with patch("castor.mission.WaypointNav") as MockNav:
             MockNav.return_value.execute.side_effect = slow_execute
-            r.start(
-                [{"distance_m": 0.5}, {"distance_m": 0.5}, {"distance_m": 0.5}]
-            )
+            r.start([{"distance_m": 0.5}, {"distance_m": 0.5}, {"distance_m": 0.5}])
             executing_event.wait(timeout=3)  # wait until first step is running
             r.stop()
-            release_event.set()          # unblock the slow execute
+            release_event.set()  # unblock the slow execute
 
         assert r.status()["running"] is False
 
@@ -212,9 +209,7 @@ class TestMissionRunner:
 
         with patch("castor.mission.WaypointNav") as MockNav:
             MockNav.return_value.execute.side_effect = recording_execute
-            r.start(
-                [{"distance_m": 0.1, "dwell_s": 0.2}, {"distance_m": 0.1}]
-            )
+            r.start([{"distance_m": 0.1, "dwell_s": 0.2}, {"distance_m": 0.1}])
             deadline = time.monotonic() + 3.0
             while time.monotonic() < deadline:
                 if not r.status()["running"]:
@@ -237,6 +232,7 @@ def mission_client():
     loading, hardware init, and channel startup.
     """
     import collections
+
     import castor.api as api_mod
     from castor.api import app
 
@@ -501,9 +497,7 @@ class TestMissionGenerateAPI:
 
 
 class TestMissionGenerateExecute:
-    _wps_json = (
-        '[{"distance_m":0.5,"heading_deg":0,"speed":0.6,"dwell_s":0,"label":"fwd"}]'
-    )
+    _wps_json = '[{"distance_m":0.5,"heading_deg":0,"speed":0.6,"dwell_s":0,"label":"fwd"}]'
 
     def test_execute_false_returns_null_job_id(self, mission_client):
         """execute=false (default) returns job_id=null and does not start a runner."""
@@ -559,7 +553,9 @@ class TestMissionReplay:
         runner = MissionRunner(driver, _make_config())
         api_mod.state.mission_runner = runner
 
-        waypoints = [{"distance_m": 0.3, "heading_deg": 0, "speed": 0.5, "dwell_s": 0, "label": "x"}]
+        waypoints = [
+            {"distance_m": 0.3, "heading_deg": 0, "speed": 0.5, "dwell_s": 0, "label": "x"}
+        ]
 
         with patch("castor.mission.WaypointNav") as MockNav:
             MockNav.return_value.execute.return_value = {"ok": True, "duration_s": 0.01}

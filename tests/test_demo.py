@@ -6,10 +6,10 @@ import asyncio
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helper: import demo with NO_COLOR so rich is bypassed in CI
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _force_no_color(monkeypatch):
@@ -17,6 +17,7 @@ def _force_no_color(monkeypatch):
     monkeypatch.setenv("NO_COLOR", "1")
     # Also patch the module-level flag so already-imported module is affected
     import castor.demo as demo_mod
+
     monkeypatch.setattr(demo_mod, "_RICH", False, raising=False)
     monkeypatch.setattr(demo_mod, "_console", None, raising=False)
     monkeypatch.setattr(demo_mod, "_NO_COLOR", True, raising=False)
@@ -25,6 +26,7 @@ def _force_no_color(monkeypatch):
 # ---------------------------------------------------------------------------
 # test_run_demo_completes
 # ---------------------------------------------------------------------------
+
 
 def test_run_demo_completes():
     """run_demo(steps=2, delay=0) must complete without raising."""
@@ -38,6 +40,7 @@ def test_run_demo_completes():
 # test_run_demo_minimal
 # ---------------------------------------------------------------------------
 
+
 def test_run_demo_minimal():
     """run_demo with layout='minimal' must complete (skips Acts 3 & 4)."""
     from castor.demo import run_demo
@@ -48,6 +51,7 @@ def test_run_demo_minimal():
 # ---------------------------------------------------------------------------
 # test_run_demo_returns_summary
 # ---------------------------------------------------------------------------
+
 
 def test_run_demo_returns_summary():
     """run_demo must return a dict with the expected summary keys."""
@@ -78,6 +82,7 @@ def test_run_demo_returns_summary():
 # test_mock_sensor_data_generation
 # ---------------------------------------------------------------------------
 
+
 def test_mock_sensor_data_generation():
     """_generate_mock_sensor_data must return a dict with required keys."""
     from castor.demo import _generate_mock_sensor_data
@@ -107,6 +112,7 @@ def test_mock_sensor_data_generation():
 # ---------------------------------------------------------------------------
 # test_observer_processes_demo_data
 # ---------------------------------------------------------------------------
+
 
 def test_observer_processes_demo_data():
     """ObserverAgent.observe() must process demo sensor data without errors."""

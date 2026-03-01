@@ -1,12 +1,9 @@
 """Tests for castor/slam.py (issue #136)."""
 
-import math
 import time
 from unittest.mock import patch
 
-import numpy as np
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # OccupancyGrid
@@ -14,7 +11,7 @@ import pytest
 
 
 def _fresh_grid(rows=10, cols=10):
-    from castor.slam import OccupancyGrid, _OCC_UNKNOWN
+    from castor.slam import _OCC_UNKNOWN, OccupancyGrid
 
     return OccupancyGrid(rows=rows, cols=cols), _OCC_UNKNOWN
 
@@ -27,7 +24,7 @@ def test_grid_initialized_unknown():
 
 
 def test_mark_free_sets_value():
-    from castor.slam import _OCC_FREE, _OCC_UNKNOWN
+    from castor.slam import _OCC_FREE
 
     grid, _ = _fresh_grid()
     grid.mark_free(3, 4)
@@ -109,7 +106,7 @@ def test_mapper_start_stop_mock():
         mapper.start_mapping()
         assert mapper._mapping is True
         time.sleep(0.15)  # let mock loop run briefly
-        path = mapper.stop_mapping()
+        mapper.stop_mapping()
         assert mapper._mapping is False
 
 

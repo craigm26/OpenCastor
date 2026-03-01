@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import logging
-from unittest.mock import MagicMock, patch
-
-import pytest
-
+from unittest.mock import MagicMock
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -48,7 +45,9 @@ def test_for_each_empty_items_logs_warning_and_skips(caplog):
     runner = _make_runner()
     with caplog.at_level(logging.WARNING, logger="OpenCastor.Behaviors"):
         runner._step_for_each({"type": "for_each", "items": [], "inner_steps": []})
-    assert any("empty" in r.message.lower() or "missing" in r.message.lower() for r in caplog.records)
+    assert any(
+        "empty" in r.message.lower() or "missing" in r.message.lower() for r in caplog.records
+    )
 
 
 def test_for_each_missing_items_key_logs_warning(caplog):
@@ -56,7 +55,9 @@ def test_for_each_missing_items_key_logs_warning(caplog):
     runner = _make_runner()
     with caplog.at_level(logging.WARNING, logger="OpenCastor.Behaviors"):
         runner._step_for_each({"type": "for_each", "inner_steps": []})
-    assert any("empty" in r.message.lower() or "missing" in r.message.lower() for r in caplog.records)
+    assert any(
+        "empty" in r.message.lower() or "missing" in r.message.lower() for r in caplog.records
+    )
 
 
 # ---------------------------------------------------------------------------

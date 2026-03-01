@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 def _make_runner():
     from castor.behaviors import BehaviorRunner
@@ -200,8 +198,8 @@ def test_condition_ops_all_supported():
     for op, actual, threshold, expected_then in ops_and_expected:
         results = []
         runner = _make_runner()
-        runner._step_handlers["wait"] = lambda step, label="then": results.append(label)
-        runner._step_handlers["stop"] = lambda step, label="else": results.append(label)
+        runner._step_handlers["wait"] = lambda step, label="then", _r=results: _r.append(label)
+        runner._step_handlers["stop"] = lambda step, label="else", _r=results: _r.append(label)
 
         with mock.patch("castor.drivers.lidar_driver.get_lidar") as mock_lidar:
             mock_lidar.return_value.obstacles.return_value = {"val": actual}
@@ -222,4 +220,6 @@ def test_condition_ops_all_supported():
             runner.run(behavior)
 
         if expected_then:
-            assert "then" in results, f"Expected 'then' for op={op} actual={actual} threshold={threshold}"
+            assert "then" in results, (
+                f"Expected 'then' for op={op} actual={actual} threshold={threshold}"
+            )

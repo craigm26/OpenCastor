@@ -6,7 +6,6 @@ import pytest
 
 from castor.agents.shared_state import SharedState
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -137,9 +136,7 @@ class TestGuardianObserveAct:
 
         state = SharedState()
         state.set("swarm.nav_action", {"type": "move", "speed": 0.4})
-        a = GuardianAgent(
-            config={"monitored_keys": ["swarm.nav_action"]}, shared_state=state
-        )
+        a = GuardianAgent(config={"monitored_keys": ["swarm.nav_action"]}, shared_state=state)
         ctx = run(a.observe({}))
         assert "swarm.nav_action" in ctx["pending_actions"]
 
@@ -148,9 +145,7 @@ class TestGuardianObserveAct:
         state.set("swarm.nav_action", {"type": "move", "speed": 0.3})
         from castor.agents.guardian import GuardianAgent
 
-        a = GuardianAgent(
-            config={"monitored_keys": ["swarm.nav_action"]}, shared_state=state
-        )
+        a = GuardianAgent(config={"monitored_keys": ["swarm.nav_action"]}, shared_state=state)
         ctx = run(a.observe({}))
         result = run(a.act(ctx))
         assert result["action"] == "approve"
@@ -160,9 +155,7 @@ class TestGuardianObserveAct:
         state.set("swarm.nav_action", {"type": "unsafe_move"})
         from castor.agents.guardian import GuardianAgent
 
-        a = GuardianAgent(
-            config={"monitored_keys": ["swarm.nav_action"]}, shared_state=state
-        )
+        a = GuardianAgent(config={"monitored_keys": ["swarm.nav_action"]}, shared_state=state)
         ctx = run(a.observe({}))
         result = run(a.act(ctx))
         assert result["action"] == "veto"
@@ -181,9 +174,7 @@ class TestGuardianObserveAct:
         state.set("swarm.nav_action", {"type": "self_destruct"})
         from castor.agents.guardian import GuardianAgent
 
-        a = GuardianAgent(
-            config={"monitored_keys": ["swarm.nav_action"]}, shared_state=state
-        )
+        a = GuardianAgent(config={"monitored_keys": ["swarm.nav_action"]}, shared_state=state)
         for _ in range(3):
             state.set("swarm.nav_action", {"type": "self_destruct"})
             ctx = run(a.observe({}))

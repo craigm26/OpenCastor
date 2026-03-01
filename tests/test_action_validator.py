@@ -9,7 +9,6 @@ import pytest
 import castor.action_validator as _mod
 from castor.action_validator import ActionValidator, ValidationResult, validate_action
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -192,7 +191,6 @@ def test_known_types_sorted():
 
 def test_validate_without_jsonschema_returns_valid_with_warning():
     import builtins
-    import sys
 
     real_import = builtins.__import__
 

@@ -5,6 +5,53 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.3.1.14] - 2026-03-01 🚀 Release: 15-Feature Mega Release — BLE, Signal, Madgwick, Clustering, Shadow Mode & More
+
+### Added
+
+#### Metrics & Observability
+- **ProviderLatencyTracker p50/p95/p99 percentiles (#347)** — stores exact sorted samples (up to 10k per provider) for precise percentile computation; new `render_percentiles()` emits `opencastor_provider_latency_p50/p95/p99_ms` Prometheus gauges; `MetricsRegistry.provider_latency_percentile(provider, pct)` for direct access.
+
+#### BehaviorRunner Steps
+- **`event_wait` step (#346)** — suspends behavior execution until a `driver.field` sensor crosses a threshold (`gt/lt/gte/lte/eq/ne`); configurable `timeout_s`; polls at 100 ms intervals; respects `stop()`.
+- **`foreach_file` step (#341)** — iterates JSONL file rows (one JSON object per line), substituting `$item` and `$item.<key>` placeholders into nested steps; supports `limit` and comment (`#`) lines.
+
+#### Memory
+- **EpisodeMemory k-means clustering (#342)** — `cluster_episodes(n_clusters, by, limit)` groups recent episodes using action-type frequency vectors; pure stdlib k-means (no sklearn); returns labels, centroids, representative episode IDs.
+
+#### Drivers
+- **IMUDriver Madgwick filter (#343)** — `MadgwickFilter` class implements IMU-only Madgwick AHRS (accel+gyro, no magnetometer); quaternion stays unit-normalised; enabled with `imu_filter: madgwick` + `imu_beta: 0.1`; `reset()` returns to identity.
+- **LidarDriver map persistence (#344)** — `save_map(path, label)` captures occupancy grid to SQLite JSON BLOB; `load_map(path, map_id)` retrieves by ID or most-recent; metadata column stores resolution/origin/mode.
+- **ESP32 BLE driver (#287)** — `castor/drivers/esp32_ble_driver.py`; sends JSON commands (`move`, `stop`, `grip`) over GATT characteristic via `bleak`; `HAS_BLEAK` guard; mock mode when library absent or no address configured.
+
+#### Channels
+- **Signal Messenger channel (#285)** — `castor/channels/signal_channel.py`; polls signal-cli JSON-RPC REST API for incoming messages; `send_message()` with per-recipient or group-ID targets; registered in `channels.__init__`.
+
+#### ProviderPool
+- **Cost tracking (#345)** — per-provider token usage and USD cost accumulation in `_cost_tracker`; configurable `pool_cost_per_1k_tokens` rate dict; `cost_summary()` returns per-provider and aggregate totals; health_check includes per-member `cost_usd`, `tokens_total`, `calls`.
+- **Shadow mode (#340)** — `pool_shadow_provider` + `pool_shadow_log_path` config; secondary provider fires in a daemon thread on each successful think(); logs primary vs shadow action comparison (with `match` flag) to JSONL; primary response is always returned; shadow failures are logged and silently ignored.
+
+#### CLI
+- **`castor snapshot` command (#348)** — `castor snapshot take | latest | history [N]` sub-commands; delegates to `castor.snapshot.get_manager()`; formatted JSON output.
+
+#### Dashboard
+- **Memory timeline module (#349)** — `castor/dashboard_memory_timeline.py`; `MemoryTimeline` class: `get_timeline()` (bucketed counts/latency/outcomes), `get_outcome_summary()` (ok-rate), `get_latency_percentiles()` (p50/p95/p99 from DB).
+- **Mission Control panel (#283)** — new expandable Mission Control section in `dashboard.py`; shows active mission status, launch/stop buttons via `/api/behavior/run` and `/api/behavior/stop`; episode outcome KPIs from `MemoryTimeline`.
+
+#### Channels (Base)
+- **Mission trigger (#282)** — `BaseChannel.parse_mission_trigger(text)` detects `!mission <name>` / `/mission <name>` patterns; `handle_mission_trigger(name, chat_id)` launches named behavior in background thread; intercepts before normal on_message callback in `handle_message()`.
+
+#### Doctor
+- **castor doctor improvements (#280)** — three new checks: `check_memory_db_size()` warns when DB exceeds 100 MB; `check_ble_driver()` reports bleak availability; `check_signal_channel()` verifies Signal channel import.
+
+### Tests
+- 215 new tests across 15 test files (≥12 per issue); all passing.
+- Pre-existing ruff errors in 6 test files fixed (ambiguous `l` variables, unused imports, B017/B023/B018 patterns).
+
+### Validation
+- `python -m ruff check castor/ tests/` — **0 errors**
+- `python -m pytest tests/ --ignore=tests/test_deepseek_provider.py -q` — **1533+ passed** (pre-existing `test_deepseek_provider` skipped: `openai` not installed)
+
 ## [2026.2.26.3] - 2026-02-26 🚀 Release: Google Setup Hardening + Catalog Expansion Follow-up
 
 ### Added

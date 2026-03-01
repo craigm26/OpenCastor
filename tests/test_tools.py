@@ -2,12 +2,10 @@
 
 import json
 
-import pytest
-
 from castor.tools import ToolDefinition, ToolRegistry, ToolResult
 
-
 # ── ToolDefinition ────────────────────────────────────────────────────────────
+
 
 def test_to_openai_schema():
     td = ToolDefinition(
@@ -40,6 +38,7 @@ def test_to_anthropic_schema():
 
 # ── ToolResult ────────────────────────────────────────────────────────────────
 
+
 def test_tool_result_ok():
     r = ToolResult("ping", "pong")
     assert r.ok is True
@@ -63,10 +62,15 @@ def test_tool_result_to_dict():
 
 # ── ToolRegistry ──────────────────────────────────────────────────────────────
 
+
 def test_register_and_call():
     reg = ToolRegistry()
-    reg.register("double", fn=lambda x: x * 2, description="double x",
-                 parameters={"x": {"type": "number", "description": "input"}})
+    reg.register(
+        "double",
+        fn=lambda x: x * 2,
+        description="double x",
+        parameters={"x": {"type": "number", "description": "input"}},
+    )
     result = reg.call("double", x=5)
     assert result.ok
     assert result.result == 10
@@ -89,23 +93,35 @@ def test_call_raises_gracefully():
 
 def test_call_from_dict_openai_style():
     reg = ToolRegistry()
-    reg.register("add", fn=lambda a, b: a + b, description="add two numbers",
-                 parameters={"a": {"type": "number"}, "b": {"type": "number"}})
-    result = reg.call_from_dict({
-        "name": "add",
-        "arguments": json.dumps({"a": 3, "b": 4}),
-    })
+    reg.register(
+        "add",
+        fn=lambda a, b: a + b,
+        description="add two numbers",
+        parameters={"a": {"type": "number"}, "b": {"type": "number"}},
+    )
+    result = reg.call_from_dict(
+        {
+            "name": "add",
+            "arguments": json.dumps({"a": 3, "b": 4}),
+        }
+    )
     assert result.result == 7
 
 
 def test_call_from_dict_anthropic_style():
     reg = ToolRegistry()
-    reg.register("greet", fn=lambda name: f"hello {name}", description="greet",
-                 parameters={"name": {"type": "string"}})
-    result = reg.call_from_dict({
-        "name": "greet",
-        "input": {"name": "world"},
-    })
+    reg.register(
+        "greet",
+        fn=lambda name: f"hello {name}",
+        description="greet",
+        parameters={"name": {"type": "string"}},
+    )
+    result = reg.call_from_dict(
+        {
+            "name": "greet",
+            "input": {"name": "world"},
+        }
+    )
     assert result.result == "hello world"
 
 

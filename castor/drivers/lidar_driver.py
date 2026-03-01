@@ -17,6 +17,7 @@ Install: pip install rplidar-roboticia
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import os
@@ -718,6 +719,180 @@ class LidarDriver:
             "scan_count": self._scan_count,
             "error": None,
         }
+
+    # ── Issue #344: Map persistence ───────────────────────────────────────────
+
+    _MAP_CREATE_DDL = """
+    CREATE TABLE IF NOT EXISTS lidar_maps (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts        REAL NOT NULL,
+        label     TEXT,
+        metadata  TEXT,
+        map_blob  BLOB NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_lidar_maps_ts ON lidar_maps (ts DESC);
+    """
+
+    def _open_map_db(self, path: str) -> sqlite3.Connection:
+        """Open (and initialise) the map SQLite database at *path*."""
+        con = sqlite3.connect(path, check_same_thread=False)
+        con.executescript(self._MAP_CREATE_DDL)
+        con.commit()
+        return con
+
+    def occupancy_grid(
+        self,
+        size_m: float = 5.0,
+        resolution_m: float = 0.05,
+    ) -> Dict[str, Any]:
+        """Build a 2-D occupancy grid from the current scan history.
+
+        In mock mode returns an empty grid of the requested dimensions.
+        In hardware mode populates cells from the most recent scan.
+
+        Args:
+            size_m:       Physical extent of the square grid in metres.
+            resolution_m: Cell size in metres.
+
+        Returns:
+            Dict with keys ``grid`` (list[list[float]]), ``origin``
+            ([x_m, y_m] of the grid's lower-left corner), ``size_m``,
+            ``resolution_m``, ``cells`` (grid dimension), and ``mode``.
+        """
+        import math
+
+        cells = max(1, int(size_m / resolution_m))
+        grid: List[List[float]] = [[0.0] * cells for _ in range(cells)]
+        origin = [-size_m / 2.0, -size_m / 2.0]
+
+        if self._mode == "hardware":
+            with self._lock:
+                scan = list(self._last_scan)
+            for point in scan:
+                angle_deg = float(point.get("angle", 0.0))
+                dist_m = float(point.get("distance", 0.0)) / 1000.0  # mm → m
+                if dist_m <= 0.0:
+                    continue
+                rad = math.radians(angle_deg)
+                x = dist_m * math.cos(rad) - origin[0]
+                y = dist_m * math.sin(rad) - origin[1]
+                col = int(x / resolution_m)
+                row = int(y / resolution_m)
+                if 0 <= row < cells and 0 <= col < cells:
+                    grid[row][col] = 1.0
+
+        return {
+            "grid": grid,
+            "origin": origin,
+            "size_m": size_m,
+            "resolution_m": resolution_m,
+            "cells": cells,
+            "mode": self._mode,
+        }
+
+    def save_map(
+        self,
+        path: str,
+        label: Optional[str] = None,
+        size_m: float = 5.0,
+        resolution_m: float = 0.05,
+    ) -> dict:
+        """Capture the current occupancy grid and persist it to a SQLite file.
+
+        The grid is serialised as a JSON-encoded BLOB so that it can be loaded
+        without any special binary codec.  Metadata (timestamp, resolution, label)
+        is stored in a companion ``metadata`` column.
+
+        Args:
+            path:         File path for the SQLite map database.
+            label:        Human-readable label for the map snapshot (optional).
+            size_m:       Physical extent of the occupancy grid in metres
+                          (passed through to :meth:`occupancy_grid`).
+            resolution_m: Grid cell size in metres.
+
+        Returns:
+            Dict with ``ok``, ``map_id`` (row ID), ``ts``, and ``label``.
+        """
+        try:
+            grid_result = self.occupancy_grid(size_m=size_m, resolution_m=resolution_m)
+            ts = time.time()
+            metadata = json.dumps(
+                {
+                    "ts": ts,
+                    "label": label,
+                    "size_m": size_m,
+                    "resolution_m": resolution_m,
+                    "rows": len(grid_result.get("grid", [])),
+                    "origin": grid_result.get("origin"),
+                    "mode": self._mode,
+                }
+            )
+            map_blob = json.dumps(grid_result.get("grid", [])).encode("utf-8")
+
+            con = self._open_map_db(path)
+            try:
+                cur = con.execute(
+                    "INSERT INTO lidar_maps (ts, label, metadata, map_blob) VALUES (?, ?, ?, ?)",
+                    (ts, label, metadata, map_blob),
+                )
+                con.commit()
+                map_id = cur.lastrowid
+            finally:
+                con.close()
+
+            logger.info("LidarDriver.save_map: saved map_id=%d to %s", map_id, path)
+            return {"ok": True, "map_id": map_id, "ts": ts, "label": label}
+        except Exception as exc:
+            logger.error("LidarDriver.save_map error: %s", exc)
+            return {"ok": False, "error": str(exc)}
+
+    def load_map(self, path: str, map_id: Optional[int] = None) -> dict:
+        """Load an occupancy grid from a SQLite map file.
+
+        Args:
+            path:   File path of the SQLite map database written by :meth:`save_map`.
+            map_id: Row ID to load.  When ``None``, the most recent map is loaded.
+
+        Returns:
+            Dict with ``ok``, ``map_id``, ``ts``, ``label``, ``metadata``, and
+            ``grid`` (the 2-D occupancy grid list).  On error returns
+            ``{"ok": False, "error": "<message>"}``.
+        """
+        try:
+            con = self._open_map_db(path)
+            try:
+                if map_id is not None:
+                    row = con.execute(
+                        "SELECT id, ts, label, metadata, map_blob FROM lidar_maps WHERE id = ?",
+                        (map_id,),
+                    ).fetchone()
+                else:
+                    row = con.execute(
+                        "SELECT id, ts, label, metadata, map_blob FROM lidar_maps"
+                        " ORDER BY ts DESC LIMIT 1"
+                    ).fetchone()
+            finally:
+                con.close()
+
+            if row is None:
+                return {"ok": False, "error": "map not found"}
+
+            row_id, ts, label, metadata_json, map_blob = row
+            grid = json.loads(map_blob.decode("utf-8") if isinstance(map_blob, bytes) else map_blob)
+            metadata = json.loads(metadata_json) if metadata_json else {}
+
+            logger.info("LidarDriver.load_map: loaded map_id=%d from %s", row_id, path)
+            return {
+                "ok": True,
+                "map_id": row_id,
+                "ts": ts,
+                "label": label,
+                "metadata": metadata,
+                "grid": grid,
+            }
+        except Exception as exc:
+            logger.error("LidarDriver.load_map error: %s", exc)
+            return {"ok": False, "error": str(exc)}
 
 
 # ── Singleton factory ─────────────────────────────────────────────────────────

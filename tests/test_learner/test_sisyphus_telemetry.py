@@ -7,10 +7,10 @@ import pytest
 from castor.learner.episode import Episode
 from castor.learner.sisyphus import ImprovementResult, SisyphusLoop, SisyphusStats
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _failed_episode():
     return Episode(
@@ -44,6 +44,7 @@ def _make_loop(tmp_path, **kwargs):
 # ImprovementResult fields
 # ---------------------------------------------------------------------------
 
+
 class TestImprovementResultFields:
     def test_duration_ms_field_exists(self):
         r = ImprovementResult()
@@ -66,6 +67,7 @@ class TestImprovementResultFields:
 # SisyphusStats
 # ---------------------------------------------------------------------------
 
+
 class TestSisyphusStats:
     def test_avg_duration_ms_zero_when_no_episodes(self):
         stats = SisyphusStats()
@@ -86,6 +88,7 @@ class TestSisyphusStats:
 # ---------------------------------------------------------------------------
 # run_episode timing
 # ---------------------------------------------------------------------------
+
 
 class TestRunEpisodeTiming:
     def test_result_has_duration_ms_set(self, tmp_path):
@@ -127,6 +130,7 @@ class TestRunEpisodeTiming:
 # ---------------------------------------------------------------------------
 # Provider wiring
 # ---------------------------------------------------------------------------
+
 
 class TestProviderWiring:
     def test_provider_passed_to_pm_stage(self):

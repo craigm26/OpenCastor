@@ -32,6 +32,155 @@ except ImportError:
 
 logger = logging.getLogger("OpenCastor.IMU")
 
+
+# ── Madgwick complementary filter (Issue #343) ────────────────────────────────
+
+
+class MadgwickFilter:
+    """Madgwick AHRS complementary filter that fuses accelerometer + gyroscope.
+
+    Reduces heading drift compared to pure gyroscope integration by blending
+    in a gravity-based error correction term at each step.
+
+    Reference: Sebastian O.H. Madgwick, "An efficient orientation filter for
+    inertial and inertial/magnetic sensor arrays", 2010.
+
+    Only the IMU (no magnetometer) variant is implemented here.  The
+    quaternion is stored internally and exposed as Euler angles (yaw/pitch/roll)
+    via :meth:`get_euler`.
+
+    Args:
+        beta:       Filter gain (0.0–1.0).  Higher values trust the
+                    accelerometer more; lower values follow the gyroscope.
+                    Typical value: 0.1.
+        sample_period_s: Expected time between :meth:`update` calls in seconds.
+                    Used when ``dt`` is not supplied to ``update()``.
+    """
+
+    def __init__(self, beta: float = 0.1, sample_period_s: float = 0.01) -> None:
+        self.beta = float(beta)
+        self.sample_period_s = float(sample_period_s)
+        # Quaternion [w, x, y, z] — identity orientation
+        self.q = [1.0, 0.0, 0.0, 0.0]
+
+    def update(
+        self,
+        gx: float,
+        gy: float,
+        gz: float,
+        ax: float,
+        ay: float,
+        az: float,
+        dt: Optional[float] = None,
+    ) -> None:
+        """Update the orientation estimate with a new IMU sample.
+
+        Args:
+            gx, gy, gz: Gyroscope readings in **radians per second**.
+            ax, ay, az: Accelerometer readings in any consistent unit (will
+                        be normalised internally).
+            dt:         Time step in seconds.  Falls back to
+                        :attr:`sample_period_s` when ``None``.
+        """
+        dt = dt if dt is not None else self.sample_period_s
+        q0, q1, q2, q3 = self.q
+
+        # Normalise accelerometer vector; skip gradient step if magnitude is zero
+        norm_a = math.sqrt(ax * ax + ay * ay + az * az)
+        if norm_a < 1e-10:
+            # Only gyro integration
+            self._integrate_gyro(gx, gy, gz, dt)
+            return
+
+        ax /= norm_a
+        ay /= norm_a
+        az /= norm_a
+
+        # Gradient descent error function for gravity (no magnetometer)
+        f1 = 2.0 * (q1 * q3 - q0 * q2) - ax
+        f2 = 2.0 * (q0 * q1 + q2 * q3) - ay
+        f3 = 1.0 - 2.0 * (q1 * q1 + q2 * q2) - az
+
+        # Jacobian transpose * f
+        j11 = 2.0 * q2
+        j12 = 2.0 * q3
+        j13 = 2.0 * q0
+        j14 = 2.0 * q1
+        j32 = 4.0 * q2
+        j33 = 4.0 * q3
+
+        step0 = -j11 * f1 + j13 * f2
+        step1 = j12 * f1 + j14 * f2 - j32 * f3
+        step2 = -j11 * f1 + j14 * f2 - j33 * f3  # sign correction on j11 per paper
+        step3 = j12 * f1 + j13 * f2
+
+        # Normalise step
+        norm_s = math.sqrt(step0 * step0 + step1 * step1 + step2 * step2 + step3 * step3)
+        if norm_s > 1e-10:
+            step0 /= norm_s
+            step1 /= norm_s
+            step2 /= norm_s
+            step3 /= norm_s
+
+        # Rate of change of quaternion — gyro integration + gradient correction
+        qdot0 = 0.5 * (-q1 * gx - q2 * gy - q3 * gz) - self.beta * step0
+        qdot1 = 0.5 * (q0 * gx + q2 * gz - q3 * gy) - self.beta * step1
+        qdot2 = 0.5 * (q0 * gy - q1 * gz + q3 * gx) - self.beta * step2
+        qdot3 = 0.5 * (q0 * gz + q1 * gy - q2 * gx) - self.beta * step3
+
+        q0 += qdot0 * dt
+        q1 += qdot1 * dt
+        q2 += qdot2 * dt
+        q3 += qdot3 * dt
+
+        # Normalise quaternion
+        norm_q = math.sqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3)
+        if norm_q > 1e-10:
+            q0 /= norm_q
+            q1 /= norm_q
+            q2 /= norm_q
+            q3 /= norm_q
+
+        self.q = [q0, q1, q2, q3]
+
+    def _integrate_gyro(self, gx: float, gy: float, gz: float, dt: float) -> None:
+        """Integrate gyro only (no accelerometer correction)."""
+        q0, q1, q2, q3 = self.q
+        qdot0 = 0.5 * (-q1 * gx - q2 * gy - q3 * gz)
+        qdot1 = 0.5 * (q0 * gx + q2 * gz - q3 * gy)
+        qdot2 = 0.5 * (q0 * gy - q1 * gz + q3 * gx)
+        qdot3 = 0.5 * (q0 * gz + q1 * gy - q2 * gx)
+        q0 += qdot0 * dt
+        q1 += qdot1 * dt
+        q2 += qdot2 * dt
+        q3 += qdot3 * dt
+        norm_q = math.sqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3)
+        if norm_q > 1e-10:
+            self.q = [q0 / norm_q, q1 / norm_q, q2 / norm_q, q3 / norm_q]
+
+    def get_euler(self) -> dict:
+        """Convert current quaternion to Euler angles (degrees).
+
+        Returns:
+            Dict with keys ``"yaw_deg"``, ``"pitch_deg"``, ``"roll_deg"``.
+        """
+        q0, q1, q2, q3 = self.q
+        roll = math.atan2(2.0 * (q0 * q1 + q2 * q3), 1.0 - 2.0 * (q1 * q1 + q2 * q2))
+        pitch_sin = 2.0 * (q0 * q2 - q3 * q1)
+        pitch_sin = max(-1.0, min(1.0, pitch_sin))
+        pitch = math.asin(pitch_sin)
+        yaw = math.atan2(2.0 * (q0 * q3 + q1 * q2), 1.0 - 2.0 * (q2 * q2 + q3 * q3))
+        return {
+            "yaw_deg": round(math.degrees(yaw), 4),
+            "pitch_deg": round(math.degrees(pitch), 4),
+            "roll_deg": round(math.degrees(roll), 4),
+        }
+
+    def reset(self) -> None:
+        """Reset the filter to identity orientation."""
+        self.q = [1.0, 0.0, 0.0, 0.0]
+
+
 try:
     import smbus2
 
@@ -111,6 +260,8 @@ class IMUDriver:
         bus: int = 1,
         address: Optional[int] = None,
         model: str = "auto",
+        imu_filter: str = "complementary",
+        imu_beta: float = 0.1,
     ):
         self._bus_num = int(os.getenv("IMU_I2C_BUS", str(bus)))
         self._model = os.getenv("IMU_MODEL", model).lower()
@@ -121,6 +272,14 @@ class IMUDriver:
         self._lock = threading.Lock()
         self._orientation: dict = {"yaw_deg": 0.0, "pitch_deg": 0.0, "roll_deg": 0.0}
         self._last_orient_ts: float = 0.0
+
+        # Issue #343 — Madgwick filter support
+        self._imu_filter: str = os.getenv("IMU_FILTER", imu_filter).lower()
+        self._imu_beta: float = float(os.getenv("IMU_BETA", str(imu_beta)))
+        self._madgwick: Optional[MadgwickFilter] = None
+        if self._imu_filter == "madgwick":
+            self._madgwick = MadgwickFilter(beta=self._imu_beta)
+            logger.info("IMU: Madgwick filter enabled (beta=%.3f)", self._imu_beta)
 
         # ── Pose state ────────────────────────────────────────────────────────
         self._pose_x_m: float = 0.0
@@ -436,6 +595,32 @@ class IMUDriver:
             gy = float(gyro.get("y", 0.0))
             gz = float(gyro.get("z", 0.0))
 
+            accel = data.get("accel_g", {})
+            ax = float(accel.get("x", 0.0))
+            ay = float(accel.get("y", 0.0))
+            az = float(accel.get("z", 0.0))
+
+            # Issue #343: Use Madgwick filter when configured
+            if self._madgwick is not None and dt > 0.0:
+                # Convert gyro from dps to rad/s for Madgwick filter
+                gx_rad = math.radians(gx)
+                gy_rad = math.radians(gy)
+                gz_rad = math.radians(gz)
+                self._madgwick.update(gx_rad, gy_rad, gz_rad, ax, ay, az, dt=dt)
+                euler = self._madgwick.get_euler()
+                self._orientation["yaw_deg"] = euler["yaw_deg"]
+                self._orientation["pitch_deg"] = euler["pitch_deg"]
+                self._orientation["roll_deg"] = euler["roll_deg"]
+                return {
+                    "yaw_deg": euler["yaw_deg"],
+                    "pitch_deg": euler["pitch_deg"],
+                    "roll_deg": euler["roll_deg"],
+                    "confidence": 0.92,
+                    "mode": self._mode,
+                    "filter": "madgwick",
+                }
+
+            # Default: complementary filter (gyro integration + optional mag correction)
             if dt > 0.0:
                 self._orientation["roll_deg"] += gx * dt
                 self._orientation["pitch_deg"] += gy * dt
@@ -474,9 +659,15 @@ class IMUDriver:
             }
 
     def reset_orientation(self) -> None:
-        """Zero out the accumulated orientation estimate."""
+        """Zero out the accumulated orientation estimate.
+
+        Also resets the Madgwick filter quaternion to identity when the
+        Madgwick filter is active (Issue #343).
+        """
         self._orientation = {"yaw_deg": 0.0, "pitch_deg": 0.0, "roll_deg": 0.0}
         self._last_orient_ts = 0.0
+        if self._madgwick is not None:
+            self._madgwick.reset()
 
     def step_count(self, reset: bool = False) -> int:
         """Return the accumulated step count, optionally resetting it.
@@ -746,6 +937,8 @@ class IMUDriver:
             "model": self._detected_model,
             "address": hex(self._address) if self._mode == "hardware" else None,
             "bus": self._bus_num,
+            "filter": self._imu_filter,
+            "madgwick_beta": self._imu_beta if self._madgwick is not None else None,
             "error": None,
         }
 

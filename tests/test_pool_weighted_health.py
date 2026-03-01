@@ -5,11 +5,8 @@ from __future__ import annotations
 import time
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from castor.providers.base import Thought
 from castor.providers.pool_provider import ProviderPool
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -58,7 +55,9 @@ def test_weighted_strategy_uses_random_choices():
         pool.think(b"", "go")
         mock_choices.assert_called_once()
         _, kwargs = mock_choices.call_args
-        weights = kwargs.get("weights", mock_choices.call_args[0][1] if len(mock_choices.call_args[0]) > 1 else None)
+        weights = kwargs.get(
+            "weights", mock_choices.call_args[0][1] if len(mock_choices.call_args[0]) > 1 else None
+        )
         assert weights is not None
 
 
@@ -73,11 +72,13 @@ def test_weighted_strategy_default_weight_is_one():
     p = _make_provider("p0")
     it = iter([p])
     with patch("castor.providers.get_provider", side_effect=lambda c: next(it)):
-        pool = ProviderPool({
-            "provider": "pool",
-            "pool_strategy": "weighted",
-            "pool": [{"provider": "mock"}],  # no weight key
-        })
+        pool = ProviderPool(
+            {
+                "provider": "pool",
+                "pool_strategy": "weighted",
+                "pool": [{"provider": "mock"}],  # no weight key
+            }
+        )
     assert pool._weights == [1.0]
 
 
@@ -132,8 +133,9 @@ def test_degraded_provider_skipped_round_robin():
 
 def test_degraded_provider_cooldown_reenables():
     p0 = _make_provider("p0")
-    pool = _build_pool([(p0, 1.0)], strategy="round_robin", fallback=False,
-                       pool_health_cooldown_s=0.01)
+    pool = _build_pool(
+        [(p0, 1.0)], strategy="round_robin", fallback=False, pool_health_cooldown_s=0.01
+    )
 
     # Mark p0 as degraded far in the past
     pool._degraded[0] = time.time() - 1.0  # 1 second ago, cooldown=0.01s
@@ -164,8 +166,8 @@ def test_health_probe_marks_unhealthy_provider_degraded():
     p_bad.health_check.return_value = {"ok": False}
     pool = _build_pool([(p_bad, 1.0)])
 
-    # Manually trigger one probe cycle
-    pool._health_probe_loop.__func__  # just ensure it's accessible
+    # Manually trigger one probe cycle via direct loop simulation
+    # (pool._health_probe_loop is not directly callable in tests)
     # Call _health_probe_loop content directly (single iteration)
     for i, provider in enumerate(pool._providers):
         result = provider.health_check()

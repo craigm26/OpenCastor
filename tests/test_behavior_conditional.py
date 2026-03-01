@@ -154,9 +154,10 @@ def test_none_sensor_value_skips_both_branches_and_logs_warning():
         "else": [{"type": "wait", "seconds": 1}],
     }
 
-    with patch.object(runner, "_get_sensor_value", return_value=None), patch(
-        "castor.behaviors.logger"
-    ) as mock_log:
+    with (
+        patch.object(runner, "_get_sensor_value", return_value=None),
+        patch("castor.behaviors.logger") as mock_log,
+    ):
         runner._step_conditional(step)
 
     # Neither branch should execute
@@ -188,9 +189,10 @@ def test_unsupported_op_logs_warning_and_skips():
         "else": [{"type": "wait", "seconds": 1}],
     }
 
-    with patch.object(runner, "_get_sensor_value", return_value=3.0), patch(
-        "castor.behaviors.logger"
-    ) as mock_log:
+    with (
+        patch.object(runner, "_get_sensor_value", return_value=3.0),
+        patch("castor.behaviors.logger") as mock_log,
+    ):
         runner._step_conditional(step)
 
     assert executed == []

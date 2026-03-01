@@ -1187,6 +1187,98 @@ with st.expander("🎬 Behaviors", expanded=False):
             except Exception as _bse:
                 st.toast(f"Stop failed: {_bse}", icon="❌")
 
+# ── MISSION CONTROL PANEL (Issue #283) ────────────────────────────────────────
+st.divider()
+with st.expander("🎯 Mission Control", expanded=False):
+    _mc_col1, _mc_col2 = st.columns([2, 1])
+    with _mc_col1:
+        st.markdown("**Mission Control** — Browse, launch, and monitor named missions.")
+    with _mc_col2:
+        _mc_refresh = st.button("↻ Refresh", key="mc_refresh_btn")
+
+    # Current mission status
+    _mc_status = _get("/api/behavior/status")
+    _mc_running = _mc_status.get("running", False)
+    _mc_name = _mc_status.get("name") or "—"
+
+    if _mc_running:
+        st.success(f"🚀 Active mission: **{_mc_name}**")
+    else:
+        st.info("No mission running")
+
+    st.markdown("#### Launch a Mission")
+    _mc_mission_name = st.text_input(
+        "Mission name or behavior file path",
+        placeholder="patrol  or  behaviors/patrol.behavior.yaml",
+        key="mc_mission_name_input",
+    )
+    _mc_lcol, _mc_rcol = st.columns(2)
+    with _mc_lcol:
+        if st.button("▶ Launch Mission", key="mc_launch_btn", type="primary"):
+            _mc_target = (_mc_mission_name or "").strip()
+            if _mc_target:
+                # Resolve to file path if it's a bare mission name
+                import os as _os
+
+                _mc_candidates = [
+                    _mc_target,
+                    f"{_mc_target}.behavior.yaml",
+                    f"behaviors/{_mc_target}.behavior.yaml",
+                    f"missions/{_mc_target}.behavior.yaml",
+                ]
+                _mc_path = (
+                    next((c for c in _mc_candidates if _os.path.exists(c)), None)
+                    or f"{_mc_target}.behavior.yaml"
+                )
+                try:
+                    import requests as _req2  # noqa: F401
+
+                    _mc_r = _req2.post(
+                        f"{GW}/api/behavior/run",
+                        json={"path": _mc_path, "name": _mc_target},
+                        headers=_hdr(),
+                        timeout=5,
+                    )
+                    if _mc_r.ok:
+                        st.toast(f"Mission launched: {_mc_target}", icon="🚀")
+                    else:
+                        st.toast(f"Launch error {_mc_r.status_code}: {_mc_r.text[:80]}", icon="❌")
+                except Exception as _mc_exc:
+                    st.toast(f"Launch failed: {_mc_exc}", icon="❌")
+            else:
+                st.toast("Enter a mission name first", icon="⚠")
+    with _mc_rcol:
+        if st.button("⏹ Stop Mission", key="mc_stop_btn"):
+            try:
+                import requests as _req3  # noqa: F401
+
+                _mc_s = _req3.post(f"{GW}/api/behavior/stop", headers=_hdr(), timeout=5)
+                if _mc_s.ok:
+                    st.toast("Mission stopped", icon="⏹")
+                else:
+                    st.toast(f"Stop error {_mc_s.status_code}", icon="❌")
+            except Exception as _mc_se:
+                st.toast(f"Stop failed: {_mc_se}", icon="❌")
+
+    # Mission history from episode memory
+    st.markdown("#### Mission History")
+    try:
+        from castor.dashboard_memory_timeline import MemoryTimeline as _MLT
+
+        _mc_timeline = _MLT()
+        _mc_outcome = _mc_timeline.get_outcome_summary(window_h=24)
+        _mc_hcol1, _mc_hcol2, _mc_hcol3 = st.columns(3)
+        with _mc_hcol1:
+            st.metric("Episodes (24h)", _mc_outcome.get("total", 0))
+        with _mc_hcol2:
+            _mc_ok_rate = _mc_outcome.get("ok_rate", 0.0)
+            st.metric("Success rate", f"{_mc_ok_rate * 100:.0f}%")
+        with _mc_hcol3:
+            _mc_pct = _mc_timeline.get_latency_percentiles(window_h=24)
+            st.metric("p50 latency", f"{_mc_pct.get('p50_ms') or 0:.0f} ms")
+    except Exception as _mc_e:
+        st.caption(f"Memory timeline unavailable: {_mc_e}")
+
 # ── GAMEPAD PANEL ─────────────────────────────────────────────────────────────
 st.divider()
 with st.expander("🎮 Gamepad / Manual Drive", expanded=False):

@@ -7,7 +7,6 @@ from castor.agents.base import AgentStatus
 from castor.agents.observer import Detection, ObserverAgent, SceneGraph
 from castor.agents.shared_state import SharedState
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -287,7 +286,7 @@ class TestObserverClosestObstacle:
 
     def test_closest_from_depth_map(self):
         try:
-            import numpy as np
+            np = __import__("numpy")
         except ImportError:
             return  # skip if numpy not available
 
@@ -306,7 +305,7 @@ class TestObserverClosestObstacle:
 
     def test_depth_key_in_raw_sensor_keys(self):
         try:
-            import numpy as np
+            import numpy as _np  # noqa: F401
         except ImportError:
             return
 
@@ -321,7 +320,7 @@ class TestObserverClosestObstacle:
 
     def test_multiple_obstacles_closest_wins(self):
         try:
-            import numpy as np
+            import numpy as _np  # noqa: F401
         except ImportError:
             return
 

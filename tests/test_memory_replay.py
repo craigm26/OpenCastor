@@ -19,6 +19,7 @@ from starlette.testclient import TestClient
 # Fixtures (mirror the style used in test_api_endpoints.py)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def _reset_state(monkeypatch):
     """Reset API state and env vars before every test."""
@@ -109,6 +110,7 @@ _EPISODE_NO_ACTION = {
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestReplayEpisodeSuccess:
     def test_replay_returns_200_and_replayed_true(self, client, mock_driver):

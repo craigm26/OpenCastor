@@ -105,8 +105,9 @@ class TestObstacleEvent:
         assert dist == pytest.approx(0.5, rel=0.01)
 
     def test_estimate_distance_zero_area_returns_inf(self):
-        from castor.hailo_vision import HailoDetection
         import math
+
+        from castor.hailo_vision import HailoDetection
 
         d = HailoDetection(0, 0.9, [0.5, 0.5, 0.5, 0.5])  # zero area
         assert math.isinf(d.estimate_distance_m())
@@ -148,14 +149,16 @@ class TestReactiveLayerHailo:
     def test_distance_thresholds_from_config(self):
         from castor.tiered_brain import ReactiveLayer
 
-        layer = ReactiveLayer({
-            "reactive": {
-                "hailo_vision": False,
-                "hailo_stop_distance_m": 0.3,
-                "hailo_warn_distance_m": 1.5,
-                "hailo_calibration": 0.5,
+        layer = ReactiveLayer(
+            {
+                "reactive": {
+                    "hailo_vision": False,
+                    "hailo_stop_distance_m": 0.3,
+                    "hailo_warn_distance_m": 1.5,
+                    "hailo_calibration": 0.5,
+                }
             }
-        })
+        )
         assert layer.hailo_stop_distance_m == pytest.approx(0.3)
         assert layer.hailo_warn_distance_m == pytest.approx(1.5)
         assert layer.hailo_calibration == pytest.approx(0.5)
@@ -173,14 +176,16 @@ class TestReactiveLayerHailo:
         from castor.hailo_vision import HailoDetection
         from castor.tiered_brain import ReactiveLayer
 
-        layer = ReactiveLayer({
-            "reactive": {
-                "hailo_vision": False,
-                "hailo_stop_distance_m": 1.0,
-                "hailo_warn_distance_m": 2.0,
-                "hailo_calibration": 0.25,
+        layer = ReactiveLayer(
+            {
+                "reactive": {
+                    "hailo_vision": False,
+                    "hailo_stop_distance_m": 1.0,
+                    "hailo_warn_distance_m": 2.0,
+                    "hailo_calibration": 0.25,
+                }
             }
-        })
+        )
 
         # Inject a mocked hailo that returns a close obstacle
         mock_hailo = MagicMock()
@@ -195,6 +200,7 @@ class TestReactiveLayerHailo:
         layer._hailo = mock_hailo
 
         import numpy as np
+
         fake_frame = b"\xff" * 200
         with patch("cv2.imdecode", return_value=np.zeros((480, 640, 3), dtype=np.uint8)):
             with patch("numpy.frombuffer", return_value=np.zeros(200, dtype=np.uint8)):
@@ -209,14 +215,16 @@ class TestReactiveLayerHailo:
         from castor.hailo_vision import HailoDetection
         from castor.tiered_brain import ReactiveLayer
 
-        layer = ReactiveLayer({
-            "reactive": {
-                "hailo_vision": False,
-                "hailo_stop_distance_m": 0.3,
-                "hailo_warn_distance_m": 2.0,
-                "hailo_calibration": 0.25,
+        layer = ReactiveLayer(
+            {
+                "reactive": {
+                    "hailo_vision": False,
+                    "hailo_stop_distance_m": 0.3,
+                    "hailo_warn_distance_m": 2.0,
+                    "hailo_calibration": 0.25,
+                }
             }
-        })
+        )
 
         mock_hailo = MagicMock()
         # area=0.5 → distance=0.5m — between stop(0.3) and warn(2.0) → warn
@@ -230,6 +238,7 @@ class TestReactiveLayerHailo:
         layer._hailo = mock_hailo
 
         import numpy as np
+
         fake_frame = b"\xff" * 200
         with patch("cv2.imdecode", return_value=np.zeros((480, 640, 3), dtype=np.uint8)):
             with patch("numpy.frombuffer", return_value=np.zeros(200, dtype=np.uint8)):

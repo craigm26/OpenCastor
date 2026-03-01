@@ -78,7 +78,7 @@ def test_export_delta_since_id_empty_string_exports_all(mem, tmp_path):
 
 def test_export_delta_valid_since_id_exports_only_newer(mem, tmp_path):
     """Only episodes inserted after since_id are exported."""
-    ep1 = mem.log_episode(instruction="old 1", action={"type": "move"})
+    _ = mem.log_episode(instruction="old 1", action={"type": "move"})
     ep2 = mem.log_episode(instruction="old 2", action={"type": "stop"})
     mem.log_episode(instruction="new 1", action={"type": "wait"})
     mem.log_episode(instruction="new 2", action={"type": "grip"})
@@ -86,7 +86,7 @@ def test_export_delta_valid_since_id_exports_only_newer(mem, tmp_path):
     count = mem.export_delta(ep2, out)
     assert count == 2
     with open(out) as fh:
-        lines = [json.loads(l) for l in fh if l.strip()]
+        lines = [json.loads(ln) for ln in fh if ln.strip()]
     instructions = [row["instruction"] for row in lines]
     assert "new 1" in instructions
     assert "new 2" in instructions
@@ -149,7 +149,7 @@ def test_export_delta_returns_correct_count(mem, tmp_path):
     out = str(tmp_path / "count.jsonl")
     count = mem.export_delta(None, out)
     with open(out) as fh:
-        file_lines = [l for l in fh if l.strip()]
+        file_lines = [ln for ln in fh if ln.strip()]
     assert count == len(file_lines)
 
 

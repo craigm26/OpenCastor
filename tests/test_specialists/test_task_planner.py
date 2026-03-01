@@ -5,8 +5,6 @@ from __future__ import annotations
 import asyncio
 import time
 
-import pytest
-
 from castor.specialists.base_specialist import Task, TaskResult, TaskStatus
 from castor.specialists.dock import DockSpecialist
 from castor.specialists.manipulator import ManipulatorSpecialist
@@ -146,7 +144,7 @@ class TestRunNext:
     def test_run_next_result_retrievable(self):
         task = _make_task("home")
         self.planner.submit(task)
-        result = run(self.planner.run_next())
+        run(self.planner.run_next())
         retrieved = self.planner.get_result(task.id)
         assert retrieved is not None
         assert retrieved.task_id == task.id

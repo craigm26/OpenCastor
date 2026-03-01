@@ -5,16 +5,14 @@ Tests use mocking to simulate hardware without requiring physical devices.
 """
 
 import io
-import sys
-import types
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from castor.peripherals import (
-    PeripheralInfo,
     _I2C_DEVICES,
     _USB_DEVICES,
+    PeripheralInfo,
     print_scan_table,
     scan_all,
     scan_i2c,
@@ -54,9 +52,7 @@ LSUSB_UNKNOWN_LINE = (
     "Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub\n"
 )
 
-LSUSB_ARDUINO_LINE = (
-    "Bus 001 Device 007: ID 2341:0043 Arduino SA Uno R3\n"
-)
+LSUSB_ARDUINO_LINE = "Bus 001 Device 007: ID 2341:0043 Arduino SA Uno R3\n"
 
 I2CDETECT_PCA9685_OUTPUT = """\
      0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
@@ -275,7 +271,9 @@ def test_scan_i2c_graceful_failure():
 
 def test_scan_serial_finds_ttyusb():
     """scan_serial should return a PeripheralInfo for /dev/ttyUSB0."""
-    with patch("glob.glob", side_effect=lambda pattern: ["/dev/ttyUSB0"] if "ttyUSB" in pattern else []):
+    with patch(
+        "glob.glob", side_effect=lambda pattern: ["/dev/ttyUSB0"] if "ttyUSB" in pattern else []
+    ):
         with patch("os.path.realpath", return_value="/dev/ttyUSB0"):
             results = scan_serial()
 
@@ -295,6 +293,7 @@ def test_scan_serial_finds_ttyusb():
 def test_scan_npu_hailo_detected():
     """scan_npu should detect Hailo-8 when /dev/hailo0 exists."""
     with patch("glob.glob") as mock_glob:
+
         def glob_side_effect(pattern):
             if "hailo" in pattern:
                 return ["/dev/hailo0"]
@@ -487,19 +486,37 @@ def test_scan_i2c_multiple_addresses():
 def test_scan_all_returns_sorted():
     """scan_all result should be sorted by category priority."""
     depth_p = PeripheralInfo(
-        name="OAK-D", category="depth", interface="usb",
-        device_path=None, usb_id="03e7:2485", i2c_address=None,
-        driver_hint="depthai", rcan_snippet="", confidence="identified",
+        name="OAK-D",
+        category="depth",
+        interface="usb",
+        device_path=None,
+        usb_id="03e7:2485",
+        i2c_address=None,
+        driver_hint="depthai",
+        rcan_snippet="",
+        confidence="identified",
     )
     motor_p = PeripheralInfo(
-        name="PCA9685", category="motor", interface="i2c",
-        device_path="/dev/i2c-1", usb_id=None, i2c_address=0x40,
-        driver_hint="pca9685", rcan_snippet="", confidence="identified",
+        name="PCA9685",
+        category="motor",
+        interface="i2c",
+        device_path="/dev/i2c-1",
+        usb_id=None,
+        i2c_address=0x40,
+        driver_hint="pca9685",
+        rcan_snippet="",
+        confidence="identified",
     )
     serial_p = PeripheralInfo(
-        name="Arduino", category="serial", interface="serial",
-        device_path="/dev/ttyACM0", usb_id=None, i2c_address=None,
-        driver_hint="arduino", rcan_snippet="", confidence="probable",
+        name="Arduino",
+        category="serial",
+        interface="serial",
+        device_path="/dev/ttyACM0",
+        usb_id=None,
+        i2c_address=None,
+        driver_hint="arduino",
+        rcan_snippet="",
+        confidence="probable",
     )
 
     with patch("castor.peripherals.scan_usb", return_value=[serial_p, motor_p, depth_p]):
@@ -526,12 +543,12 @@ def test_scan_all_returns_sorted():
 def test_usb_database_has_required_entries():
     """_USB_DEVICES must contain all required VID:PIDs."""
     required = [
-        "03e7:2485",   # OAK-D
-        "8086:0b3a",   # RealSense D435
-        "2341:0043",   # Arduino Uno
-        "046d:082d",   # Logitech C920
-        "0403:6015",   # FTDI FT231X (RPLiDAR)
-        "1a86:7523",   # CH340 USB-Serial
+        "03e7:2485",  # OAK-D
+        "8086:0b3a",  # RealSense D435
+        "2341:0043",  # Arduino Uno
+        "046d:082d",  # Logitech C920
+        "0403:6015",  # FTDI FT231X (RPLiDAR)
+        "1a86:7523",  # CH340 USB-Serial
     ]
     for vid_pid in required:
         assert vid_pid in _USB_DEVICES, f"Missing required VID:PID: {vid_pid}"

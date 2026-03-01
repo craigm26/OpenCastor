@@ -8,14 +8,12 @@ between them.  All hardware imports are mocked out.
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 from castor.agents import AgentRegistry, SharedState
 from castor.agents.navigator import NavigatorAgent
 from castor.agents.observer import ObserverAgent
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -213,11 +211,14 @@ class TestObserverNavigatorIntegration:
     def test_navigator_stop_on_close_obstacle(self):
         """Navigator should slow/stop when scene has a very-close obstacle."""
         state = SharedState()
-        observer = ObserverAgent(config={}, shared_state=state)
-        navigator = NavigatorAgent(config={"max_speed": 0.6, "min_obstacle_m": 0.4}, shared_state=state)
+        ObserverAgent(config={}, shared_state=state)
+        navigator = NavigatorAgent(
+            config={"max_speed": 0.6, "min_obstacle_m": 0.4}, shared_state=state
+        )
 
         # Simulate hailo detection with known depth via manual state injection
         import time
+
         from castor.agents.observer import Detection, SceneGraph
 
         scene = SceneGraph(

@@ -29,6 +29,7 @@ def _make_config(**overrides):
 # Happy-path
 # ---------------------------------------------------------------------------
 
+
 class TestValidConfig:
     def test_valid_config_returns_true(self):
         ok, errors = validate_rcan_config(_VALID)
@@ -44,6 +45,7 @@ class TestValidConfig:
 # ---------------------------------------------------------------------------
 # Top-level keys
 # ---------------------------------------------------------------------------
+
 
 class TestTopLevelKeys:
     @pytest.mark.parametrize(
@@ -74,6 +76,7 @@ class TestTopLevelKeys:
 # agent block
 # ---------------------------------------------------------------------------
 
+
 class TestAgentBlock:
     def test_missing_model_key(self):
         cfg = _make_config(agent={})
@@ -98,6 +101,7 @@ class TestAgentBlock:
 # metadata block
 # ---------------------------------------------------------------------------
 
+
 class TestMetadataBlock:
     def test_missing_robot_name(self):
         cfg = _make_config(metadata={})
@@ -120,6 +124,7 @@ class TestMetadataBlock:
 # drivers block
 # ---------------------------------------------------------------------------
 
+
 class TestDriversBlock:
     def test_empty_drivers_list(self):
         cfg = _make_config(drivers=[])
@@ -141,6 +146,7 @@ class TestDriversBlock:
 # ---------------------------------------------------------------------------
 # offline_fallback block  (#78)
 # ---------------------------------------------------------------------------
+
 
 class TestOfflineFallbackBlock:
     def test_no_offline_fallback_block_is_valid(self):
@@ -198,6 +204,7 @@ class TestOfflineFallbackBlock:
 # ---------------------------------------------------------------------------
 # log_validation_result helper
 # ---------------------------------------------------------------------------
+
 
 class TestLogValidationResult:
     def test_returns_true_for_valid(self):

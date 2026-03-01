@@ -190,6 +190,64 @@ def check_camera():
         return False, "Camera", str(exc)
 
 
+def check_memory_db_size() -> tuple:
+    """Check the episode memory database size (Issue #280).
+
+    Warns when the database exceeds 100 MB; passes otherwise.
+
+    Returns:
+        (ok, name, detail) tuple where ``ok`` is ``True`` when the DB is
+        absent (no issue) or smaller than 100 MB.
+    """
+    import os
+    from pathlib import Path
+
+    db_path = os.getenv("CASTOR_MEMORY_DB") or str(Path.home() / ".castor" / "memory.db")
+    if not os.path.exists(db_path):
+        return True, "Memory DB", f"not found at {db_path} (will be created on first use)"
+    size_mb = os.path.getsize(db_path) / (1024 * 1024)
+    if size_mb > 100:
+        return (
+            False,
+            "Memory DB",
+            f"large ({size_mb:.1f} MB) — consider running `castor improve --prune` to trim",
+        )
+    return True, "Memory DB", f"ok ({size_mb:.1f} MB)"
+
+
+def check_ble_driver() -> tuple:
+    """Check whether the ESP32 BLE driver dependency (bleak) is installed (Issue #280).
+
+    Returns:
+        (ok, name, detail) tuple. ``ok`` is ``True`` regardless — bleak is
+        optional, but we surface its availability for diagnostics.
+    """
+    try:
+        import bleak  # noqa: F401
+
+        return True, "BLE Driver (bleak)", f"available (v{bleak.__version__})"
+    except ImportError:
+        return (
+            True,  # Not a hard failure — just informational
+            "BLE Driver (bleak)",
+            "not installed (optional — install with: pip install opencastor[ble])",
+        )
+
+
+def check_signal_channel() -> tuple:
+    """Check whether the Signal channel can be imported (Issue #280).
+
+    Returns:
+        (ok, name, detail) tuple.
+    """
+    try:
+        from castor.channels.signal_channel import SignalChannel  # noqa: F401
+
+        return True, "Signal Channel", "importable"
+    except Exception as exc:
+        return False, "Signal Channel", str(exc)
+
+
 # ── Runner functions ──────────────────────────────────────────────────
 
 
@@ -220,6 +278,10 @@ def run_all_checks(config_path=None):
     results.extend(check_hardware_sdks())
     results.append(check_camera())
     results.append(check_mac_seccomp())
+    # Issue #280: additional checks
+    results.append(check_memory_db_size())
+    results.append(check_ble_driver())
+    results.append(check_signal_channel())
 
     return results
 

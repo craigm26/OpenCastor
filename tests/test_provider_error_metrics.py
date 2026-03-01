@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import threading
 
-import pytest
-
 from castor.metrics import MetricsRegistry, get_registry
-
 
 # ── record_provider_error ──────────────────────────────────────────────────────
 
@@ -155,7 +152,7 @@ def test_provider_errors_not_in_render_when_zero():
     # Header lines still present
     assert "opencastor_provider_errors_total" in output
     # But no label-bearing sample line
-    lines = [l for l in output.splitlines() if 'provider="' in l]
+    lines = [ln for ln in output.splitlines() if 'provider="' in ln]
     # Only provider_latency lines should have provider label; error counter has none
     for line in lines:
         assert "opencastor_provider_errors" not in line

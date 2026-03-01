@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 import castor.voice as _voice
 
@@ -64,8 +61,6 @@ def test_missing_binary_returns_none(monkeypatch, tmp_path):
     monkeypatch.setenv("WHISPER_CPP_BIN", "nonexistent_bin_xyz")
     monkeypatch.delenv("WHISPER_CPP_MODEL", raising=False)
 
-    import subprocess
-
     with patch("subprocess.run", side_effect=FileNotFoundError("no binary")):
         result = _voice._transcribe_whisper_cpp(b"fake audio")
     assert result is None
@@ -76,7 +71,9 @@ def test_timeout_returns_none(monkeypatch, tmp_path):
 
     monkeypatch.setenv("WHISPER_CPP_BIN", str(tmp_path / "whisper-cpp"))
     monkeypatch.delenv("WHISPER_CPP_MODEL", raising=False)
-    with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="whisper-cpp", timeout=60)):
+    with patch(
+        "subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="whisper-cpp", timeout=60)
+    ):
         result = _voice._transcribe_whisper_cpp(b"fake audio")
     assert result is None
 
@@ -88,8 +85,6 @@ def test_successful_transcription(monkeypatch, tmp_path):
     monkeypatch.delenv("WHISPER_CPP_MODEL", raising=False)
 
     transcript_text = "hello world from whisper"
-
-    import subprocess
 
     def fake_run(cmd, **kwargs):
         # whisper.cpp writes output to <input_file>.txt

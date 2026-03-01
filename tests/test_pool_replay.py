@@ -7,8 +7,6 @@ import os
 import tempfile
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from castor.providers.base import Thought
 
 
@@ -86,7 +84,7 @@ def test_record_path_writes_valid_jsonl():
         pool, _ = _make_pool(record_path=path)
         pool.think(b"", "spin right")
         with open(path) as fh:
-            lines = [json.loads(l) for l in fh if l.strip()]
+            lines = [json.loads(ln) for ln in fh if ln.strip()]
         assert len(lines) == 1
         rec = lines[0]
         assert "key" in rec
@@ -121,7 +119,7 @@ def test_record_path_multiple_calls_append():
         pool.think(b"", "go forward")
         pool.think(b"", "turn left")
         with open(path) as fh:
-            lines = [json.loads(l) for l in fh if l.strip()]
+            lines = [json.loads(ln) for ln in fh if ln.strip()]
         assert len(lines) == 2
     finally:
         if os.path.exists(path):
@@ -224,7 +222,9 @@ def test_health_check_replay_record_path():
 def test_health_check_replay_entries_count():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
         for i in range(3):
-            f.write(json.dumps({"key": f"key{i:016d}", "instruction": f"i{i}", "raw_text": "r"}) + "\n")
+            f.write(
+                json.dumps({"key": f"key{i:016d}", "instruction": f"i{i}", "raw_text": "r"}) + "\n"
+            )
         path = f.name
     try:
         pool, _ = _make_pool(replay_path=path)

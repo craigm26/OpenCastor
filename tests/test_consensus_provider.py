@@ -5,13 +5,11 @@ All child providers are mocked so no LLM calls are made.
 
 from __future__ import annotations
 
-from typing import Iterator
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from castor.providers.base import Thought
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -239,7 +237,9 @@ class TestConsensusStream:
     def test_stream_no_quorum_falls_back_to_primary(self):
         """When quorum is not reached, primary provider's text is streamed."""
         providers = [
-            _mock_provider({"type": "move", "linear": 0.5, "angular": 0.0}, raw_text="primary text"),
+            _mock_provider(
+                {"type": "move", "linear": 0.5, "angular": 0.0}, raw_text="primary text"
+            ),
             _mock_provider({"type": "stop"}, raw_text="secondary text"),
         ]
         cp = _make_consensus(providers, quorum=2)  # move:1, stop:1 → no quorum

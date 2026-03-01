@@ -6,8 +6,6 @@ import threading
 import time
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 def _make_runner(driver=None):
     from castor.mission import MissionRunner
@@ -85,9 +83,10 @@ def test_eta_is_zero_after_mission_completes():
     mock_driver.stop = MagicMock()
     mock_driver.health_check = MagicMock(return_value={"ok": True, "mode": "mock"})
 
-    runner = MissionRunner(driver=mock_driver, config={
-        "physics": {"wheel_circumference_m": 0.22, "turn_time_per_deg_s": 0.011}
-    })
+    runner = MissionRunner(
+        driver=mock_driver,
+        config={"physics": {"wheel_circumference_m": 0.22, "turn_time_per_deg_s": 0.011}},
+    )
 
     with patch("castor.nav.WaypointNav.execute", return_value=None):
         runner.start([{"distance_m": 0.1, "heading_deg": 0}])
@@ -124,8 +123,9 @@ def test_api_nav_mission_status_idle():
 
 def test_api_nav_mission_status_with_runner():
     """GET /api/nav/mission/status returns runner.status() when runner exists."""
-    from fastapi.testclient import TestClient
     from unittest.mock import MagicMock
+
+    from fastapi.testclient import TestClient
 
     from castor.api import app, state
 

@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import pytest
-
 from castor.prompt_cache import (
     CacheStats,
+    _format_rcan_summary,
     build_cached_system_prompt,
     build_sensor_reminder,
-    _format_rcan_summary,
 )
-
 
 # ── CacheStats ────────────────────────────────────────────────────────────────
 
@@ -82,7 +79,14 @@ def test_cache_stats_hit_rate_calculation():
 def test_cache_stats_to_dict_keys():
     cs = CacheStats()
     d = cs.to_dict()
-    expected_keys = {"hit_rate", "cache_hits", "cache_misses", "total_calls", "tokens_saved", "tokens_spent"}
+    expected_keys = {
+        "hit_rate",
+        "cache_hits",
+        "cache_misses",
+        "total_calls",
+        "tokens_saved",
+        "tokens_spent",
+    }
     assert set(d.keys()) == expected_keys
 
 
@@ -127,7 +131,6 @@ def test_cache_stats_no_alert_when_hit_rate_adequate():
 
 def test_cache_stats_alert_logs_message(caplog):
     import logging
-    import logging
 
     cs = CacheStats()
 
@@ -139,6 +142,7 @@ def test_cache_stats_alert_logs_message(caplog):
         cs.record(M())
 
     import logging as _logging
+
     test_logger = _logging.getLogger("test_cache_logger")
     with caplog.at_level(logging.WARNING, logger="test_cache_logger"):
         result = cs.alert_if_low(threshold=0.5, logger=test_logger)
@@ -158,7 +162,7 @@ def test_cache_stats_tokens_accumulated():
         cs.record(H())
 
     assert cs.total_tokens_saved == 1200  # 4 × 300
-    assert cs.total_tokens_spent == 200   # 4 × 50
+    assert cs.total_tokens_spent == 200  # 4 × 50
 
 
 # ── build_cached_system_prompt ────────────────────────────────────────────────
@@ -256,10 +260,12 @@ def test_build_sensor_reminder_unknown_keys():
 
 def test_build_sensor_reminder_unknown_keys_not_in_handled():
     # Only known keys + extra unknown
-    result = build_sensor_reminder({
-        "front_distance_m": 1.0,
-        "lidar_status": "ok",
-    })
+    result = build_sensor_reminder(
+        {
+            "front_distance_m": 1.0,
+            "lidar_status": "ok",
+        }
+    )
     assert "lidar_status" in result
     assert "1.00m" in result
 

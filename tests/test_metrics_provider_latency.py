@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from castor.metrics import MetricsRegistry, ProviderLatencyTracker, get_registry
-
+from castor.metrics import MetricsRegistry, ProviderLatencyTracker
 
 # ── ProviderLatencyTracker ────────────────────────────────────────────────────
 

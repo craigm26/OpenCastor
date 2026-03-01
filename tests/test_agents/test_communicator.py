@@ -4,7 +4,6 @@ import asyncio
 
 from castor.agents.shared_state import SharedState
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -148,7 +147,6 @@ class TestCommunicatorObserveAct:
         a = make_agent()
         result = run(a.act({"message": None}))
         assert result["action"] == "idle"
-
 
     def test_act_returns_structured_intent(self):
         state = SharedState()

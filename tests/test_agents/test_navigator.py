@@ -8,7 +8,6 @@ from castor.agents.navigator import NavigationPlan, NavigatorAgent, Waypoint
 from castor.agents.observer import Detection, SceneGraph
 from castor.agents.shared_state import SharedState
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -404,7 +403,9 @@ def test_navigator_blocks_when_no_safe_route():
         WorldModel(
             waypoints={
                 "A": WaypointRecord(entity_id="A", kind="waypoint", neighbors=["B"]),
-                "B": WaypointRecord(entity_id="B", kind="waypoint", neighbors=["C"], zone_ids=["child"]),
+                "B": WaypointRecord(
+                    entity_id="B", kind="waypoint", neighbors=["C"], zone_ids=["child"]
+                ),
                 "C": WaypointRecord(entity_id="C", kind="waypoint", neighbors=[]),
             }
         ),

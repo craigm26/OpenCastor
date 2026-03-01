@@ -1,19 +1,14 @@
 """Tests for castor.daemon — systemd service management."""
 
 import os
-import sys
 import textwrap
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from castor.daemon import (
-    SERVICE_NAME,
-    daemon_status,
-    generate_service_file,
-    generate_driver_worker_units,
     daemon_security_status,
+    daemon_status,
+    generate_driver_worker_units,
+    generate_service_file,
 )
 
 
@@ -33,9 +28,7 @@ class TestGenerateServiceFile:
         assert "WantedBy=multi-user.target" in content
 
     def test_restart_policy(self):
-        content = generate_service_file(
-            "/tmp/robot.rcan.yaml", user="robot"
-        )
+        content = generate_service_file("/tmp/robot.rcan.yaml", user="robot")
         assert "Restart=on-failure" in content
         assert "RestartSec=5s" in content
 
@@ -139,7 +132,6 @@ class TestDaemonStatus:
         assert status["installed"] is False
 
 
-
 def test_generate_driver_worker_units(tmp_path):
     cfg = tmp_path / "robot.rcan.yaml"
     cfg.write_text(
@@ -172,7 +164,10 @@ def test_generate_driver_worker_units(tmp_path):
 class TestDaemonSecurityStatus:
     def test_reports_unit_configuration_without_pid(self, tmp_path):
         service_file = tmp_path / "castor-gateway.service"
-        service_file.write_text("AppArmorProfile=opencastor-gateway\nSystemCallFilter=@system-service\n", encoding="utf-8")
+        service_file.write_text(
+            "AppArmorProfile=opencastor-gateway\nSystemCallFilter=@system-service\n",
+            encoding="utf-8",
+        )
 
         with (
             patch("castor.daemon.SECURITY_INSTALL_PATH", tmp_path),

@@ -15,10 +15,9 @@ Covers:
 from __future__ import annotations
 
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Module reset fixture
@@ -41,6 +40,7 @@ def _reset_vla_module():
 def _get_vla_mod():
     """Import vla_provider with transformers unavailable."""
     import castor.providers.vla_provider as vmod
+
     vmod.HAS_TRANSFORMERS = False
     return vmod
 
@@ -74,6 +74,7 @@ def test_vla_provider_default_model():
     # Unset env var to test pure default
     with patch.dict("os.environ", {}, clear=False):
         import os
+
         os.environ.pop("OPENVLA_MODEL_PATH", None)
         p = vmod.VLAProvider({"provider": "vla"})
     assert "openvla" in p._model_id.lower()
@@ -198,7 +199,7 @@ def test_think_stream_yields_strings():
 def test_think_stream_content_matches_think():
     """think_stream() yielded text should match think() raw_text."""
     p = _make_provider()
-    t = p.think(b"", "go left")
+    p.think(b"", "go left")
     streamed = "".join(p.think_stream(b"", "go left"))
     # Both should contain the model name
     assert p._model_id in streamed or "mock" in streamed.lower()

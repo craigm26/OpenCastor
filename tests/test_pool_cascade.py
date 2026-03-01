@@ -96,6 +96,7 @@ def test_cascade_current_index_advances():
 
 def test_cascade_resets_after_timeout():
     import time
+
     p0 = _make_provider("p0")
     p1 = _make_provider("p1")
     pool = _build_cascade([(p0, 0), (p1, 1)], pool_cascade_reset_s=0.01)

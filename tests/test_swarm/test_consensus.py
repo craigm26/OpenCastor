@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import time
 
-import pytest
-
 from castor.swarm.consensus import SwarmConsensus, TaskClaim
 from castor.swarm.peer import SwarmPeer
 from castor.swarm.shared_memory import SharedMemory

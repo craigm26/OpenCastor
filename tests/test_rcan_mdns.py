@@ -201,8 +201,15 @@ class TestParseServiceInfo:
         class _LegacyInfo:
             name = "legacy._rcan._tcp.local."
             port = 8000
-            properties = {b"name": b"Legacy", b"caps": b"", b"status": b"active",
-                          b"ruri": b"rcan://x", b"model": b"m", b"roles": b"G", b"version": b"1"}
+            properties = {
+                b"name": b"Legacy",
+                b"caps": b"",
+                b"status": b"active",
+                b"ruri": b"rcan://x",
+                b"model": b"m",
+                b"roles": b"G",
+                b"version": b"1",
+            }
             addresses = [socket.inet_aton("172.16.0.5")]
 
         peer = _parse_service_info(_LegacyInfo())

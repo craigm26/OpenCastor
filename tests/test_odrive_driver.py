@@ -1,7 +1,5 @@
 """Tests for castor.drivers.odrive_driver."""
 
-import pytest
-
 from castor.drivers.odrive_driver import ODriveDriver
 
 

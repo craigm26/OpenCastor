@@ -8,10 +8,10 @@ import pytest
 
 from castor.specialists.base_specialist import Task, TaskStatus
 from castor.specialists.dock import (
-    DockSpecialist,
     _BATTERY_DOCK_THRESHOLD,
     _DECEL_STEPS,
     _HOME_POSITION,
+    DockSpecialist,
     _generate_approach_path,
 )
 

@@ -307,7 +307,8 @@ class TestAgenticVisionGoogle:
 
     def _make_provider(self, model_name, extra_config=None):
         """Instantiate GoogleProvider with a mocked genai module."""
-        import types, sys
+        import sys
+        import types
 
         # Build a minimal mock for google.generativeai
         mock_genai = types.ModuleType("google.generativeai")
@@ -393,8 +394,11 @@ class TestLlamaCppProvider:
         ):
             with pytest.raises(LlamaCppConnectionError, match="Cannot reach Ollama"):
                 LlamaCppProvider(
-                    {"provider": "llamacpp", "model": "gemma3:1b",
-                     "base_url": "http://localhost:19999/v1"}
+                    {
+                        "provider": "llamacpp",
+                        "model": "gemma3:1b",
+                        "base_url": "http://localhost:19999/v1",
+                    }
                 )
 
     def test_ollama_think_returns_thought(self):
@@ -407,6 +411,7 @@ class TestLlamaCppProvider:
         warmup_resp.__exit__ = MagicMock(return_value=False)
 
         import json as _json
+
         think_payload = _json.dumps(
             {"choices": [{"message": {"content": '{"action":"stop"}'}}]}
         ).encode()

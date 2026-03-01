@@ -11,16 +11,12 @@ Covers:
 
 from __future__ import annotations
 
-import io
-import textwrap
 import threading
 import time
-import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -56,6 +52,7 @@ def mock_speaker():
 @pytest.fixture()
 def runner(mock_driver, mock_brain, mock_speaker):
     from castor.behaviors import BehaviorRunner
+
     return BehaviorRunner(
         driver=mock_driver,
         brain=mock_brain,
@@ -105,7 +102,7 @@ def test_load_invalid_yaml(runner, tmp_path):
     """A file with invalid YAML raises yaml.YAMLError (or subclass)."""
     p = tmp_path / "broken.behavior.yaml"
     p.write_text(": this: is: not: valid\n  yaml: [}")
-    with pytest.raises(Exception):   # yaml.YAMLError or ValueError
+    with pytest.raises(Exception):  # noqa: B017  # yaml.YAMLError or ValueError
         runner.load(str(p))
 
 
@@ -131,9 +128,7 @@ def test_run_wait_step(runner, tmp_path):
 
 def test_run_speak_step(runner, mock_speaker, tmp_path):
     """speak step calls speaker.say() with the correct text."""
-    path = _write_yaml(
-        tmp_path, "talker", [{"type": "speak", "text": "Hello robot world"}]
-    )
+    path = _write_yaml(tmp_path, "talker", [{"type": "speak", "text": "Hello robot world"}])
     behavior = runner.load(path)
     with patch("castor.behaviors.time.sleep"):  # in case stop step also sleeps
         runner.run(behavior)
@@ -182,8 +177,9 @@ def test_run_unknown_step_skipped(runner, tmp_path, caplog):
     )
     behavior = runner.load(path)
     import logging
+
     with caplog.at_level(logging.WARNING, logger="OpenCastor.Behaviors"):
-        runner.run(behavior)   # must not raise
+        runner.run(behavior)  # must not raise
     assert any("teleport" in r.message for r in caplog.records)
 
 
@@ -239,8 +235,6 @@ def test_stop_sets_running_false(mock_driver, mock_brain, mock_speaker):
 
 def test_api_behavior_run_returns_job_id(tmp_path):
     """POST /api/behavior/run returns a job_id and name."""
-    import importlib
-    import sys
 
     # Build a real (minimal) FastAPI test client
     from fastapi.testclient import TestClient
@@ -317,11 +311,11 @@ class TestBehaviorParallelStep:
 
         runner = self._make_runner()
         # Patch _step_wait to record calls
-        original_wait = runner._step_wait
 
         def recording_wait(step):
             results.append(step.get("seconds", 1.0))
             # Don't actually sleep
+
         runner._step_handlers["wait"] = recording_wait
 
         behavior = {
@@ -529,9 +523,7 @@ class TestBehaviorWaypointMissionStep:
         mock_runner.status.return_value = {"running": True}  # never finishes
 
         with patch("castor.mission.MissionRunner", return_value=mock_runner):
-            runner._step_waypoint_mission(
-                {"waypoints": [{"distance_m": 1.0}], "timeout_s": 0.05}
-            )
+            runner._step_waypoint_mission({"waypoints": [{"distance_m": 1.0}], "timeout_s": 0.05})
 
         mock_runner.stop.assert_called()
 
@@ -543,9 +535,7 @@ class TestBehaviorWaypointMissionStep:
         mock_runner.status.return_value = {"running": False}
 
         with patch("castor.mission.MissionRunner", return_value=mock_runner):
-            runner._step_waypoint_mission(
-                {"waypoints": [{"distance_m": 0.5}], "loop": True}
-            )
+            runner._step_waypoint_mission({"waypoints": [{"distance_m": 0.5}], "loop": True})
 
         mock_runner.start.assert_called_once()
         _, kwargs = mock_runner.start.call_args

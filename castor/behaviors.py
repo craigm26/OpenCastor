@@ -88,6 +88,10 @@ class BehaviorRunner:
             "chain": self._step_chain,
             "while_true": self._step_while_true,
             "conditional": self._step_conditional,
+            # Issue #346: pause until a sensor threshold is crossed
+            "event_wait": self._step_event_wait,
+            # Issue #341: iterate JSONL/CSV file rows as $item in nested steps
+            "foreach_file": self._step_foreach_file,
         }
 
         # Chain-recursion depth counter (not thread-local; behaviors run single-threaded)
@@ -1355,3 +1359,223 @@ class BehaviorRunner:
 
         except Exception as exc:  # noqa: BLE001
             logger.warning("conditional step: unexpected error: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Issue #346 — event_wait step
+    # ------------------------------------------------------------------
+
+    def _step_event_wait(self, step: dict) -> None:
+        """Pause behavior execution until a sensor condition is met or a timeout expires.
+
+        Polls ``_get_sensor_value()`` at 100 ms intervals until the condition
+        evaluates to ``True`` or ``timeout_s`` seconds have elapsed.
+
+        Supported sensor format: ``"driver.field"`` (e.g. ``"imu.vibration_rms"``).
+        Supported operators: ``gt``, ``lt``, ``gte``, ``lte``, ``eq``, ``ne``.
+
+        Example step::
+
+            - type: event_wait
+              sensor: "imu.vibration_rms"
+              op: gt
+              value: 0.5
+              timeout_s: 30
+
+        Parameters
+        ----------
+        step:
+            The step dict.
+
+            ``sensor`` (str, required):
+                Dot-separated ``driver.field`` path.
+            ``op`` (str, required):
+                Comparison operator: ``gt``, ``lt``, ``gte``, ``lte``, ``eq``, ``ne``.
+            ``value`` (any, required):
+                Threshold value for the comparison.
+            ``timeout_s`` (float, default 30.0):
+                Maximum seconds to wait.  Returns with a ``timeout`` result when
+                elapsed time exceeds this value.
+
+        Returns
+        -------
+        None
+            Logs ``met`` when the condition is satisfied, ``timeout`` when the
+            deadline is reached, and ``stopped`` when a stop() is requested.
+        """
+
+        sensor_path: str = step.get("sensor", "")
+        op: str = step.get("op", "")
+        threshold = step.get("value")
+        timeout_s: float = float(step.get("timeout_s", 30.0))
+
+        _OPS = {
+            "gt": lambda a, b: a > b,
+            "lt": lambda a, b: a < b,
+            "gte": lambda a, b: a >= b,
+            "lte": lambda a, b: a <= b,
+            "eq": lambda a, b: a == b,
+            "ne": lambda a, b: a != b,
+        }
+
+        if not sensor_path or "." not in sensor_path:
+            logger.warning(
+                "event_wait step: 'sensor' must be 'driver.field' (got %r) — skipping",
+                sensor_path,
+            )
+            return
+
+        op_fn = _OPS.get(op)
+        if op_fn is None:
+            logger.warning("event_wait step: unknown op %r — skipping", op)
+            return
+
+        driver_name, field = sensor_path.split(".", 1)
+        deadline = time.monotonic() + timeout_s
+        poll_interval_s = 0.1
+
+        logger.info(
+            "event_wait step: waiting for %s %s %s (timeout=%.1fs)",
+            sensor_path,
+            op,
+            threshold,
+            timeout_s,
+        )
+
+        while self._running:
+            if time.monotonic() >= deadline:
+                logger.info(
+                    "event_wait step: timeout after %.1f s waiting for %s %s %s",
+                    timeout_s,
+                    sensor_path,
+                    op,
+                    threshold,
+                )
+                return
+
+            try:
+                actual = self._get_sensor_value(driver_name, field)
+                if actual is not None:
+                    try:
+                        if op_fn(actual, threshold):
+                            logger.info(
+                                "event_wait step: condition met — %s=%r %s %r",
+                                sensor_path,
+                                actual,
+                                op,
+                                threshold,
+                            )
+                            return
+                    except TypeError:
+                        pass  # type mismatch — keep polling
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("event_wait step: sensor read error: %s", exc)
+
+            time.sleep(poll_interval_s)
+
+        logger.info("event_wait step: stopped externally before condition met")
+
+    # ------------------------------------------------------------------
+    # Issue #341 — foreach_file step
+    # ------------------------------------------------------------------
+
+    def _step_foreach_file(self, step: dict) -> None:
+        """Iterate over JSONL rows from a file, substituting each row into nested steps.
+
+        Reads the file at ``file`` path line-by-line.  Each non-empty line is
+        parsed as a JSON object and made available as ``$item`` (a dict) in
+        nested steps.  Field values from ``$item`` can be injected into step
+        parameters using ``"$item.<key>"`` placeholders.
+
+        Example step::
+
+            - type: foreach_file
+              file: "/data/waypoints.jsonl"
+              limit: 5
+              steps:
+                - type: waypoint
+                  distance_m: "$item.distance_m"
+                  heading_deg: "$item.heading_deg"
+
+        Parameters
+        ----------
+        step:
+            The step dict.
+
+            ``file`` (str, required):
+                Path to a JSONL file (one JSON object per line).
+            ``steps`` (list, default ``[]``):
+                Inner steps to run per row.
+            ``limit`` (int, default 0):
+                Maximum rows to process (0 = unlimited).
+            ``var`` (str, default ``"$item"``):
+                Placeholder variable name (for future use; currently ``$item``
+                and ``$item.<key>`` are always the substitution targets).
+        """
+        import json as _json
+
+        file_path: str = step.get("file", "")
+        inner_steps: list = step.get("steps") or []
+        limit: int = int(step.get("limit", 0))
+        var: str = step.get("var", "$item")
+
+        if not file_path:
+            logger.warning("foreach_file step: 'file' key missing — skipping")
+            return
+
+        from pathlib import Path as _Path
+
+        try:
+            lines = _Path(file_path).read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            logger.warning("foreach_file step: cannot open file %r: %s", file_path, exc)
+            return
+
+        processed = 0
+        for raw_line in lines:
+            if not self._running:
+                logger.info("foreach_file step: stopped at row %d", processed)
+                break
+            if limit and processed >= limit:
+                logger.info("foreach_file step: limit %d reached", limit)
+                break
+
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+
+            try:
+                item = _json.loads(line)
+            except _json.JSONDecodeError as exc:
+                logger.warning("foreach_file step: JSON parse error at row %d: %s", processed, exc)
+                continue
+
+            if not isinstance(item, dict):
+                logger.warning(
+                    "foreach_file step: row %d is not a JSON object (%r) — skipping",
+                    processed,
+                    type(item).__name__,
+                )
+                continue
+
+            # Substitute $item and $item.<key> placeholders in inner step dicts.
+            substituted: list = []
+            for s in inner_steps:
+                new_s: dict = {}
+                for k, v in s.items():
+                    if isinstance(v, str):
+                        if v == var:
+                            new_s[k] = item
+                        elif v.startswith(f"{var}."):
+                            field_key = v[len(var) + 1 :]
+                            new_s[k] = item.get(field_key, v)
+                        else:
+                            new_s[k] = v
+                    else:
+                        new_s[k] = v
+                substituted.append(new_s)
+
+            logger.debug("foreach_file step: row %d → %r", processed, item)
+            self._run_step_list(substituted, f"foreach_file row {processed}")
+            processed += 1
+
+        logger.info("foreach_file step: done — processed %d row(s) from %r", processed, file_path)

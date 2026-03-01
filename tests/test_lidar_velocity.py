@@ -8,20 +8,22 @@ import time
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Fixture: isolated LidarDriver with a temp SQLite history DB
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def driver_with_history(tmp_path, monkeypatch):
     import castor.drivers.lidar_driver as _mod
+
     _mod._singleton = None
     db = str(tmp_path / "lidar_hist.db")
     monkeypatch.setenv("LIDAR_HISTORY_DB", db)
     # Reload so that _resolve_history_db_path() picks up the new env var
     importlib.reload(_mod)
     from castor.drivers.lidar_driver import LidarDriver
+
     d = LidarDriver({})
     yield d, db
     d.close()
@@ -32,10 +34,12 @@ def driver_with_history(tmp_path, monkeypatch):
 def driver_no_history(tmp_path, monkeypatch):
     """Driver with history explicitly disabled."""
     import castor.drivers.lidar_driver as _mod
+
     _mod._singleton = None
     monkeypatch.setenv("LIDAR_HISTORY_DB", "none")
     importlib.reload(_mod)
     from castor.drivers.lidar_driver import LidarDriver
+
     d = LidarDriver({})
     yield d
     d.close()
@@ -45,6 +49,7 @@ def driver_no_history(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # Helper to insert scan rows directly into the history DB
 # ---------------------------------------------------------------------------
+
 
 def _insert_rows(db_path: str, rows):
     """Insert rows as (ts, front_mm, left_mm, right_mm, rear_mm).
@@ -56,7 +61,15 @@ def _insert_rows(db_path: str, rows):
         con.execute(
             "INSERT INTO scans (ts, min_distance_mm, front_mm, left_mm, right_mm, rear_mm, point_count) "
             "VALUES (?,?,?,?,?,?,?)",
-            (ts, min(front_mm, left_mm, right_mm, rear_mm), front_mm, left_mm, right_mm, rear_mm, 10),
+            (
+                ts,
+                min(front_mm, left_mm, right_mm, rear_mm),
+                front_mm,
+                left_mm,
+                right_mm,
+                rear_mm,
+                10,
+            ),
         )
     con.commit()
     con.close()
@@ -71,16 +84,25 @@ def _init_db(driver, db_path):
 # 1. Returns dict with required keys
 # ---------------------------------------------------------------------------
 
+
 def test_velocity_returns_required_keys(driver_with_history):
     driver, db = driver_with_history
     result = driver.obstacle_velocity()
-    for key in ("front_mm_per_s", "left_mm_per_s", "right_mm_per_s", "rear_mm_per_s", "window_s", "samples"):
+    for key in (
+        "front_mm_per_s",
+        "left_mm_per_s",
+        "right_mm_per_s",
+        "rear_mm_per_s",
+        "window_s",
+        "samples",
+    ):
         assert key in result, f"Missing key: {key}"
 
 
 # ---------------------------------------------------------------------------
 # 2. Returns all zeros when no scan history exists
 # ---------------------------------------------------------------------------
+
 
 def test_velocity_zeros_no_history(driver_with_history):
     driver, db = driver_with_history
@@ -94,6 +116,7 @@ def test_velocity_zeros_no_history(driver_with_history):
 # ---------------------------------------------------------------------------
 # 3. Returns all zeros when only 1 scan
 # ---------------------------------------------------------------------------
+
 
 def test_velocity_zeros_single_scan(driver_with_history):
     driver, db = driver_with_history
@@ -109,6 +132,7 @@ def test_velocity_zeros_single_scan(driver_with_history):
 # 4. samples field is correct count
 # ---------------------------------------------------------------------------
 
+
 def test_velocity_samples_count(driver_with_history):
     driver, db = driver_with_history
     _init_db(driver, db)
@@ -123,6 +147,7 @@ def test_velocity_samples_count(driver_with_history):
 # 5. window_s field matches parameter
 # ---------------------------------------------------------------------------
 
+
 def test_velocity_window_s_field(driver_with_history):
     driver, db = driver_with_history
     result = driver.obstacle_velocity(window_s=3.7)
@@ -132,6 +157,7 @@ def test_velocity_window_s_field(driver_with_history):
 # ---------------------------------------------------------------------------
 # 6. Positive velocity when distance increasing (obstacle receding)
 # ---------------------------------------------------------------------------
+
 
 def test_velocity_positive_when_receding(driver_with_history):
     driver, db = driver_with_history
@@ -148,6 +174,7 @@ def test_velocity_positive_when_receding(driver_with_history):
 # 7. Negative velocity when distance decreasing (obstacle approaching)
 # ---------------------------------------------------------------------------
 
+
 def test_velocity_negative_when_approaching(driver_with_history):
     driver, db = driver_with_history
     _init_db(driver, db)
@@ -162,6 +189,7 @@ def test_velocity_negative_when_approaching(driver_with_history):
 # ---------------------------------------------------------------------------
 # 8. window_s parameter respected (filters old scans)
 # ---------------------------------------------------------------------------
+
 
 def test_velocity_window_filters_old_scans(driver_with_history):
     driver, db = driver_with_history
@@ -183,6 +211,7 @@ def test_velocity_window_filters_old_scans(driver_with_history):
 # 9. Never raises on DB error
 # ---------------------------------------------------------------------------
 
+
 def test_velocity_never_raises_on_db_error(driver_with_history):
     driver, db = driver_with_history
     # Corrupt the connection so queries fail
@@ -198,6 +227,7 @@ def test_velocity_never_raises_on_db_error(driver_with_history):
 # 10. History disabled → returns zeros
 # ---------------------------------------------------------------------------
 
+
 def test_velocity_zeros_history_disabled(driver_no_history):
     driver = driver_no_history
     result = driver.obstacle_velocity()
@@ -208,6 +238,7 @@ def test_velocity_zeros_history_disabled(driver_no_history):
 # ---------------------------------------------------------------------------
 # 11. Left sector velocity computed correctly
 # ---------------------------------------------------------------------------
+
 
 def test_velocity_left_sector(driver_with_history):
     driver, db = driver_with_history
@@ -224,6 +255,7 @@ def test_velocity_left_sector(driver_with_history):
 # 12. Right sector velocity computed correctly
 # ---------------------------------------------------------------------------
 
+
 def test_velocity_right_sector(driver_with_history):
     driver, db = driver_with_history
     _init_db(driver, db)
@@ -239,6 +271,7 @@ def test_velocity_right_sector(driver_with_history):
 # 13. Rear sector velocity computed correctly
 # ---------------------------------------------------------------------------
 
+
 def test_velocity_rear_sector(driver_with_history):
     driver, db = driver_with_history
     _init_db(driver, db)
@@ -253,6 +286,7 @@ def test_velocity_rear_sector(driver_with_history):
 # ---------------------------------------------------------------------------
 # 14. Slope is approximately correct (regression sanity check)
 # ---------------------------------------------------------------------------
+
 
 def test_velocity_slope_approximate_value(driver_with_history):
     driver, db = driver_with_history

@@ -1,10 +1,8 @@
 """Tests for castor.drivers.lidar_driver."""
 
-import math
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Singleton reset
@@ -14,6 +12,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def _reset_lidar_singleton():
     import castor.drivers.lidar_driver as mod
+
     mod._singleton = None
     yield
     mod._singleton = None
@@ -28,6 +27,7 @@ def _mock_driver(port="/dev/ttyUSB0"):
     """Return a LidarDriver forced into mock mode (no rplidar)."""
     with patch("castor.drivers.lidar_driver.HAS_RPLIDAR", False):
         from castor.drivers.lidar_driver import LidarDriver
+
         return LidarDriver(port=port)
 
 
@@ -159,6 +159,7 @@ def test_stop_noop_when_no_lidar():
 def test_get_lidar_singleton():
     with patch("castor.drivers.lidar_driver.HAS_RPLIDAR", False):
         from castor.drivers.lidar_driver import get_lidar
+
         l1 = get_lidar()
         l2 = get_lidar()
     assert l1 is l2
@@ -171,12 +172,14 @@ def test_get_lidar_singleton():
 
 def test_angle_in_sector_normal_range():
     from castor.drivers.lidar_driver import _angle_in_sector
+
     assert _angle_in_sector(90.0, 45.0, 135.0) is True
     assert _angle_in_sector(44.9, 45.0, 135.0) is False
 
 
 def test_angle_in_sector_wrapping_front():
     from castor.drivers.lidar_driver import _angle_in_sector
+
     # Front wraps 315-360 + 0-45
     assert _angle_in_sector(350.0, 315.0, 45.0) is True
     assert _angle_in_sector(10.0, 315.0, 45.0) is True

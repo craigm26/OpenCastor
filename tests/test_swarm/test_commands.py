@@ -15,14 +15,9 @@ Covers:
 from __future__ import annotations
 
 import json
-import os
-import sys
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, List
-from unittest.mock import MagicMock, patch, call
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -137,8 +132,10 @@ class TestStatusQueriesAllNodes:
         mock_client.__exit__ = MagicMock(return_value=False)
         mock_client.get.side_effect = fake_get
 
-        with patch("castor.commands.swarm.load_swarm_config", return_value=_FAKE_NODES), \
-             patch("castor.commands.swarm.httpx") as mock_httpx:
+        with (
+            patch("castor.commands.swarm.load_swarm_config", return_value=_FAKE_NODES),
+            patch("castor.commands.swarm.httpx") as mock_httpx,
+        ):
             mock_httpx.Client.return_value = mock_client
             results = cmd_swarm_status(output_json=True)
 
@@ -162,7 +159,7 @@ class TestStatusOfflineNodeHandled:
         """A ConnectError from httpx should mark the node offline, not crash."""
         import httpx as real_httpx
 
-        from castor.commands.swarm import cmd_swarm_status, _query_node_health
+        from castor.commands.swarm import _query_node_health
 
         offline_node = _FAKE_NODES[0]
 
@@ -199,15 +196,17 @@ class TestStatusOfflineNodeHandled:
         mock_client.__exit__ = MagicMock(return_value=False)
         mock_client.get.side_effect = fake_get
 
-        with patch("castor.commands.swarm.load_swarm_config", return_value=_FAKE_NODES), \
-             patch("castor.commands.swarm.httpx") as mock_httpx:
+        with (
+            patch("castor.commands.swarm.load_swarm_config", return_value=_FAKE_NODES),
+            patch("castor.commands.swarm.httpx") as mock_httpx,
+        ):
             mock_httpx.Client.return_value = mock_client
             # Must not raise
             results = cmd_swarm_status(output_json=True)
 
         assert len(results) == 2
         offline = next(r for r in results if r["name"] == "alpha")
-        online  = next(r for r in results if r["name"] == "beta")
+        online = next(r for r in results if r["name"] == "beta")
         assert offline["online"] is False
         assert online["online"] is True
 
@@ -233,8 +232,10 @@ class TestCommandBroadcastsToAll:
         mock_client.__exit__ = MagicMock(return_value=False)
         mock_client.post.side_effect = fake_post
 
-        with patch("castor.commands.swarm.load_swarm_config", return_value=_FAKE_NODES), \
-             patch("castor.commands.swarm.httpx") as mock_httpx:
+        with (
+            patch("castor.commands.swarm.load_swarm_config", return_value=_FAKE_NODES),
+            patch("castor.commands.swarm.httpx") as mock_httpx,
+        ):
             mock_httpx.Client.return_value = mock_client
             results = cmd_swarm_command("move forward", output_json=True)
 
@@ -269,8 +270,10 @@ class TestCommandNodeFilter:
         mock_client.__exit__ = MagicMock(return_value=False)
         mock_client.post.side_effect = fake_post
 
-        with patch("castor.commands.swarm.load_swarm_config", return_value=_FAKE_NODES), \
-             patch("castor.commands.swarm.httpx") as mock_httpx:
+        with (
+            patch("castor.commands.swarm.load_swarm_config", return_value=_FAKE_NODES),
+            patch("castor.commands.swarm.httpx") as mock_httpx,
+        ):
             mock_httpx.Client.return_value = mock_client
             results = cmd_swarm_command("turn left", node="alpha", output_json=True)
 
@@ -311,8 +314,10 @@ class TestStopBroadcasts:
         mock_client.__exit__ = MagicMock(return_value=False)
         mock_client.post.side_effect = fake_post
 
-        with patch("castor.commands.swarm.load_swarm_config", return_value=_FAKE_NODES), \
-             patch("castor.commands.swarm.httpx") as mock_httpx:
+        with (
+            patch("castor.commands.swarm.load_swarm_config", return_value=_FAKE_NODES),
+            patch("castor.commands.swarm.httpx") as mock_httpx,
+        ):
             mock_httpx.Client.return_value = mock_client
             results = cmd_swarm_stop(output_json=True)
 
@@ -343,10 +348,12 @@ class TestJsonOutput:
         mock_resp = _make_httpx_response(200, _HEALTHY_RESPONSE)
         mock_client = _make_httpx_client_mock(mock_resp)
 
-        with patch("castor.commands.swarm.load_swarm_config", return_value=_FAKE_NODES), \
-             patch("castor.commands.swarm.httpx") as mock_httpx:
+        with (
+            patch("castor.commands.swarm.load_swarm_config", return_value=_FAKE_NODES),
+            patch("castor.commands.swarm.httpx") as mock_httpx,
+        ):
             mock_httpx.Client.return_value = mock_client
-            results = cmd_swarm_status(output_json=True)
+            cmd_swarm_status(output_json=True)
 
         captured = capsys.readouterr()
         parsed = json.loads(captured.out)
@@ -361,10 +368,12 @@ class TestJsonOutput:
         mock_client = _make_httpx_client_mock(mock_resp)
         mock_client.post.return_value = mock_resp
 
-        with patch("castor.commands.swarm.load_swarm_config", return_value=_FAKE_NODES), \
-             patch("castor.commands.swarm.httpx") as mock_httpx:
+        with (
+            patch("castor.commands.swarm.load_swarm_config", return_value=_FAKE_NODES),
+            patch("castor.commands.swarm.httpx") as mock_httpx,
+        ):
             mock_httpx.Client.return_value = mock_client
-            results = cmd_swarm_stop(output_json=True)
+            cmd_swarm_stop(output_json=True)
 
         captured = capsys.readouterr()
         parsed = json.loads(captured.out)
@@ -378,10 +387,12 @@ class TestJsonOutput:
         mock_client = _make_httpx_client_mock(mock_resp)
         mock_client.post.return_value = mock_resp
 
-        with patch("castor.commands.swarm.load_swarm_config", return_value=_FAKE_NODES), \
-             patch("castor.commands.swarm.httpx") as mock_httpx:
+        with (
+            patch("castor.commands.swarm.load_swarm_config", return_value=_FAKE_NODES),
+            patch("castor.commands.swarm.httpx") as mock_httpx,
+        ):
             mock_httpx.Client.return_value = mock_client
-            results = cmd_swarm_command("test", output_json=True)
+            cmd_swarm_command("test", output_json=True)
 
         captured = capsys.readouterr()
         parsed = json.loads(captured.out)
@@ -420,8 +431,10 @@ class TestSyncPostsReload:
         mock_client.__exit__ = MagicMock(return_value=False)
         mock_client.post.side_effect = fake_post
 
-        with patch("castor.commands.swarm.load_swarm_config", return_value=_FAKE_NODES), \
-             patch("castor.commands.swarm.httpx") as mock_httpx:
+        with (
+            patch("castor.commands.swarm.load_swarm_config", return_value=_FAKE_NODES),
+            patch("castor.commands.swarm.httpx") as mock_httpx,
+        ):
             mock_httpx.Client.return_value = mock_client
             results = cmd_swarm_sync(str(config_file), output_json=True)
 

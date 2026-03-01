@@ -149,7 +149,6 @@ class TestHandleMessage:
         result = self._run(ch.handle_message("chat1", "ping"))
         assert result is None
 
-
     def test_dry_run_requires_confirmation(self):
         events = []
 

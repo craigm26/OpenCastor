@@ -2,10 +2,7 @@
 
 import asyncio
 
-import pytest
-
 from castor.agents.shared_state import SharedState
-
 
 # ---------------------------------------------------------------------------
 # Helpers

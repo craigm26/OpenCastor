@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Unit tests
 # ---------------------------------------------------------------------------
@@ -161,9 +160,7 @@ def test_api_i18n_detect(api_client):
 
 
 def test_api_i18n_translate_to_english(api_client):
-    resp = api_client.post(
-        "/api/i18n/translate", json={"text": "adelante", "source_lang": "es"}
-    )
+    resp = api_client.post("/api/i18n/translate", json={"text": "adelante", "source_lang": "es"})
     assert resp.status_code == 200
     data = resp.json()
     assert "forward" in data["translated"].lower()
@@ -182,8 +179,6 @@ def test_api_i18n_translate_from_english(api_client):
 
 
 def test_api_i18n_translate_english_passthrough(api_client):
-    resp = api_client.post(
-        "/api/i18n/translate", json={"text": "go forward", "source_lang": "en"}
-    )
+    resp = api_client.post("/api/i18n/translate", json={"text": "go forward", "source_lang": "en"})
     assert resp.status_code == 200
     assert resp.json()["translated"] == "go forward"

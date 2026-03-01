@@ -67,7 +67,9 @@ def test_apple_provider_think_and_health_check():
     fake_sdk = _fake_sdk_module()
     with patch.dict("sys.modules", {"apple_fm_sdk": fake_sdk}):
         provider = AppleProvider({"provider": "apple", "model": "apple-balanced"})
-        with patch("castor.providers.apple_provider.run_apple_preflight", return_value={"ok": True}):
+        with patch(
+            "castor.providers.apple_provider.run_apple_preflight", return_value={"ok": True}
+        ):
             thought = provider.think(b"", "stop")
 
         health = provider.health_check()

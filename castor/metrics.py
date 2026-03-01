@@ -129,24 +129,37 @@ class ProviderLatencyTracker:
 
     Stored separately from :class:`Histogram` because histograms with varying
     label-sets require per-label bucket data.
+
+    Issue #347: Also stores exact sorted samples for p50/p95/p99 percentile
+    computation and exposes them as ``opencastor_provider_latency_p50_ms``,
+    ``opencastor_provider_latency_p95_ms``, and ``opencastor_provider_latency_p99_ms``
+    gauges per provider.
     """
 
     _DEFAULT_BUCKETS: Tuple[float, ...] = (50, 100, 200, 500, 1000, 2000, 5000, 10000)  # ms
+    # Maximum raw samples kept per provider (prevents unbounded growth)
+    _MAX_SAMPLES: int = 10_000
 
     def __init__(self, buckets: Tuple[float, ...] = _DEFAULT_BUCKETS) -> None:
         self._buckets: Tuple[float, ...] = tuple(sorted(buckets))
-        # provider_name → {counts, sum, total}
+        # provider_name → {counts, sum, total, samples}
         self._data: Dict[str, Dict] = {}
         self._lock = threading.Lock()
 
     def observe(self, provider: str, value: float) -> None:
-        """Record a latency observation for *provider*."""
+        """Record a latency observation for *provider*.
+
+        Args:
+            provider: Provider name string (e.g. ``"google"``, ``"anthropic"``).
+            value:    Latency in milliseconds.
+        """
         with self._lock:
             if provider not in self._data:
                 self._data[provider] = {
                     "counts": defaultdict(float),
                     "sum": 0.0,
                     "total": 0.0,
+                    "samples": [],  # sorted list of raw latency values (#347)
                 }
             d = self._data[provider]
             d["sum"] += value
@@ -154,11 +167,66 @@ class ProviderLatencyTracker:
             for b in self._buckets:
                 if value <= b:
                     d["counts"][b] += 1
+            # Maintain sorted samples list for percentile computation
+            import bisect
+
+            bisect.insort(d["samples"], value)
+            if len(d["samples"]) > self._MAX_SAMPLES:
+                # Trim oldest (smallest) sample to keep list bounded
+                d["samples"].pop(0)
+
+    def percentile(self, provider: str, pct: float) -> Optional[float]:
+        """Compute an exact percentile from sorted samples for *provider*.
+
+        Args:
+            provider: Provider name string.
+            pct:      Percentile in [0, 100].  E.g. ``50.0`` for median.
+
+        Returns:
+            Percentile value in milliseconds, or ``None`` if no samples exist.
+        """
+        with self._lock:
+            d = self._data.get(provider)
+            if d is None or not d["samples"]:
+                return None
+            samples = d["samples"]
+            n = len(samples)
+            # Linear interpolation method (same as numpy percentile default)
+            index = (pct / 100.0) * (n - 1)
+            lo = int(index)
+            hi = lo + 1
+            frac = index - lo
+            if hi >= n:
+                return float(samples[-1])
+            return float(samples[lo] * (1.0 - frac) + samples[hi] * frac)
 
     def providers(self) -> List[str]:
         """Return sorted list of provider names that have been observed."""
         with self._lock:
             return sorted(self._data.keys())
+
+    def render_percentiles(self) -> str:
+        """Render p50/p95/p99 gauges in Prometheus text exposition format.
+
+        Returns lines for ``opencastor_provider_latency_p50_ms``,
+        ``opencastor_provider_latency_p95_ms``, and
+        ``opencastor_provider_latency_p99_ms`` — one time-series per provider.
+        """
+        lines: List[str] = []
+        for pct_label, pct_val in (("p50", 50.0), ("p95", 95.0), ("p99", 99.0)):
+            metric_name = f"opencastor_provider_latency_{pct_label}_ms"
+            lines.append(
+                f"# HELP {metric_name} "
+                f"Provider think() latency {pct_label} percentile in milliseconds"
+            )
+            lines.append(f"# TYPE {metric_name} gauge")
+            with self._lock:
+                providers = sorted(self._data.keys())
+            for provider in providers:
+                val = self.percentile(provider, pct_val)
+                if val is not None:
+                    lines.append(f'{metric_name}{{provider="{provider}"}} {val:.3f}')
+        return "\n".join(lines)
 
     def render(self) -> str:
         """Render labeled histogram in Prometheus text exposition format."""
@@ -479,11 +547,29 @@ class MetricsRegistry:
             sections.append(h.render())
         if self._provider_latency.providers():
             sections.append(self._provider_latency.render())
+            # Issue #347: emit p50/p95/p99 percentile gauges
+            percentile_text = self._provider_latency.render_percentiles()
+            if percentile_text:
+                sections.append(percentile_text)
         if self._channel_interarrival.channels():
             sections.append(self._channel_interarrival.render())
         if self._request_rate.endpoints():
             sections.append(self._request_rate.render())
         return "\n".join(sections) + "\n"
+
+    def provider_latency_percentile(self, provider: str, pct: float) -> Optional[float]:
+        """Return an exact percentile of recorded latency samples for *provider*.
+
+        Delegates to :meth:`ProviderLatencyTracker.percentile`.
+
+        Args:
+            provider: Provider name (e.g. ``"google"``).
+            pct:      Percentile in [0, 100].
+
+        Returns:
+            Latency in milliseconds, or ``None`` if no observations exist.
+        """
+        return self._provider_latency.percentile(provider, pct)
 
 
 # ── Singleton ─────────────────────────────────────────────────────────────────

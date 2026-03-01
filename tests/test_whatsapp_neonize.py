@@ -94,6 +94,7 @@ class TestImportError:
 # Helpers
 # =====================================================================
 
+
 def _make_channel(config: dict = None):
     """Build a WhatsAppChannel with neonize mocked out.
 
@@ -116,8 +117,7 @@ def _make_channel(config: dict = None):
         ch._owner_number = None
         ch._dm_policy = config.get("dm_policy", "allowlist")
         ch._allow_from = [
-            whatsapp_neonize._normalize_number(n)
-            for n in config.get("allow_from", [])
+            whatsapp_neonize._normalize_number(n) for n in config.get("allow_from", [])
         ]
         ch._self_chat_mode = bool(config.get("self_chat_mode", True))
         ch._group_policy = config.get("group_policy", "disabled")

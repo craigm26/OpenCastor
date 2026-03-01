@@ -88,6 +88,14 @@ def _register_builtin_channels():
     except ImportError:
         logger.debug("Matrix channel unavailable (matrix-nio not installed)")
 
+    # Issue #285: Signal Messenger channel (signal-cli REST API)
+    try:
+        from castor.channels.signal_channel import SignalChannel
+
+        _CHANNEL_CLASSES["signal"] = SignalChannel
+    except ImportError:
+        logger.debug("Signal channel unavailable")
+
 
 def get_available_channels() -> List[str]:
     """Return names of channels whose SDKs are installed."""

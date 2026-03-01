@@ -13,12 +13,9 @@ Covers:
 
 from __future__ import annotations
 
-import struct
 from unittest.mock import patch
 
 import numpy as np
-import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers

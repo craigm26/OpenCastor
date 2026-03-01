@@ -9,7 +9,6 @@ from castor.agents.navigator import NavigatorAgent
 from castor.agents.observer import ObserverAgent
 from castor.agents.registry import AgentRegistry
 
-
 # ---------------------------------------------------------------------------
 # Minimal test agents
 # ---------------------------------------------------------------------------

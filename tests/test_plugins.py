@@ -150,8 +150,7 @@ class TestLoadPlugins:
         plugins_dir.mkdir()
 
         plugin_code = (
-            "def register(registry):\n"
-            "    registry.add_command('secret', lambda args: None)\n"
+            "def register(registry):\n    registry.add_command('secret', lambda args: None)\n"
         )
         (plugins_dir / "no_manifest.py").write_text(plugin_code)
         # Deliberately no .json manifest
@@ -479,4 +478,3 @@ class TestInstallPlugin:
             result = install_plugin("/some/path/plugin.txt")
 
         assert result is False
-

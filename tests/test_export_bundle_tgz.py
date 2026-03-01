@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import io
 import json
 import os
 import tarfile
 import tempfile
 
-import pytest
 import yaml
 
 

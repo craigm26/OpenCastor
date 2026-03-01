@@ -7,6 +7,7 @@ Discord, Slack) and forward them to the robot's brain.
 import asyncio
 import inspect
 import logging
+import re
 import time
 from abc import ABC, abstractmethod
 from collections import defaultdict, deque
@@ -91,6 +92,104 @@ class BaseChannel(ABC):
         lines.append("Reply 'confirm' to execute, or 'cancel' to abort.")
         return "\n".join(lines)
 
+    # ── Issue #282: Mission trigger ───────────────────────────────────────────
+
+    #: Regex matching ``!mission <name>`` at the start of a message.
+    _MISSION_TRIGGER_RE = re.compile(r"^[!\/]mission\s+(?P<name>[a-zA-Z0-9_\-]+)", re.IGNORECASE)
+
+    def parse_mission_trigger(self, text: str) -> Optional[str]:
+        """Detect a ``!mission <name>`` trigger in *text*.
+
+        Returns the mission name string if the pattern matches, else ``None``.
+
+        Args:
+            text: Raw incoming message text.
+
+        Returns:
+            Mission name (str) or ``None``.
+        """
+        m = self._MISSION_TRIGGER_RE.match((text or "").strip())
+        if m:
+            return m.group("name")
+        return None
+
+    def handle_mission_trigger(self, mission_name: str, chat_id: str) -> str:
+        """Launch the named behavior mission and return a status reply.
+
+        Attempts to locate and start a behavior via the ``BehaviorRunner``
+        singleton.  Returns a human-readable status message suitable for
+        sending back to the user.
+
+        Args:
+            mission_name: The behavior/mission name to start (e.g. ``"patrol"``).
+            chat_id:      The originating chat_id for logging.
+
+        Returns:
+            Status reply string.
+        """
+        self.logger.info(
+            "[%s] Mission trigger: '%s' from chat_id=%s", self.name, mission_name, chat_id
+        )
+        try:
+            from castor.behaviors import BehaviorRunner
+
+            # Use the module-level singleton runner if available
+            runner = getattr(self, "_mission_runner", None)
+            if runner is None:
+                # Create a lightweight runner in mock mode
+                runner = BehaviorRunner()
+
+            if runner.is_running:
+                return (
+                    f"⚠️ Mission *{mission_name}* requested but a mission is already running. "
+                    f"Send `!stop` to cancel the current mission first."
+                )
+
+            # Try to find behavior file matching mission_name
+            import os
+
+            search_dirs = [".", "behaviors", "missions", os.path.expanduser("~/.castor/behaviors")]
+            behavior_file = None
+            for d in search_dirs:
+                for ext in (".behavior.yaml", ".yaml", ".yml"):
+                    candidate = os.path.join(d, mission_name + ext)
+                    if os.path.exists(candidate):
+                        behavior_file = candidate
+                        break
+                if behavior_file:
+                    break
+
+            if behavior_file is None:
+                return (
+                    f"❌ Mission *{mission_name}* not found. "
+                    f"Place a `{mission_name}.behavior.yaml` in the behaviors/ directory."
+                )
+
+            # Load and start the behavior in a background thread
+            import threading
+
+            def _run_mission():
+                try:
+                    behaviors = runner.load(behavior_file)
+                    behavior = behaviors.get(mission_name) or next(iter(behaviors.values()), None)
+                    if behavior:
+                        runner.run(behavior)
+                    else:
+                        self.logger.warning(
+                            "Mission trigger: no matching behavior '%s' in %s",
+                            mission_name,
+                            behavior_file,
+                        )
+                except Exception as exc:
+                    self.logger.error("Mission trigger: error running '%s': %s", mission_name, exc)
+
+            t = threading.Thread(target=_run_mission, daemon=True, name=f"mission-{mission_name}")
+            t.start()
+            return f"🚀 Mission *{mission_name}* started!"
+        except Exception as exc:
+            self.logger.error("handle_mission_trigger error: %s", exc)
+            return f"❌ Could not start mission *{mission_name}*: {exc}"
+
     async def handle_message(self, chat_id: str, text: str) -> Optional[str]:
         """
         Process an incoming message and return a reply.
@@ -113,6 +212,12 @@ class BaseChannel(ABC):
         if self._on_message_callback:
             try:
                 incoming = (text or "").strip()
+
+                # Issue #282: Mission trigger — intercept before normal processing
+                mission_name = self.parse_mission_trigger(incoming)
+                if mission_name is not None:
+                    return self.handle_mission_trigger(mission_name, chat_id)
+
                 if incoming.lower() == "cancel" and chat_id in self._pending_confirmations:
                     self._pending_confirmations.pop(chat_id, None)
                     return "Cancelled pending dry-run plan."

@@ -814,3 +814,164 @@ class EpisodeMemory:
         if not image_bytes:
             return ""
         return hashlib.sha256(image_bytes).hexdigest()[:16]
+
+    # ── Issue #342: K-means episode clustering (stdlib only) ──────────────────
+
+    @staticmethod
+    def _kmeans_distance_sq(a: List[float], b: List[float]) -> float:
+        """Return squared Euclidean distance between two float vectors."""
+        return sum((x - y) ** 2 for x, y in zip(a, b, strict=False))
+
+    @staticmethod
+    def _kmeans_centroid(vectors: List[List[float]]) -> List[float]:
+        """Compute the mean centroid of a list of float vectors."""
+        if not vectors:
+            return []
+        n = len(vectors[0])
+        totals = [0.0] * n
+        for v in vectors:
+            for i, x in enumerate(v):
+                totals[i] += x
+        return [t / len(vectors) for t in totals]
+
+    def cluster_episodes(
+        self,
+        n_clusters: int = 5,
+        by: str = "action_type",
+        limit: int = 500,
+        max_iter: int = 100,
+        random_seed: int = 42,
+    ) -> Dict[str, Any]:
+        """Group episodes using k-means clustering over action-type frequency vectors.
+
+        Implements k-means from scratch using stdlib only (no sklearn/numpy).
+        Each episode is represented as a frequency vector over the known action
+        types (``move``, ``stop``, ``wait``, ``grip``, ``nav_waypoint``, and
+        ``other``).  The algorithm runs for at most ``max_iter`` iterations or
+        until cluster assignments converge.
+
+        Args:
+            n_clusters: Number of clusters (k).  Clamped to the number of
+                        distinct episodes when fewer are available.
+            by:         Feature scheme.  Currently only ``"action_type"`` is
+                        supported; others raise ``ValueError``.
+            limit:      Maximum number of recent episodes to cluster.
+            max_iter:   Maximum k-means iterations before stopping.
+            random_seed: Seed for the centroid initialisation RNG.
+
+        Returns:
+            A dict with keys:
+
+            * ``"labels"`` — list of cluster indices (int) aligned with
+              ``episode_ids``.
+            * ``"centroids"`` — list of *n_clusters* centroid vectors
+              (each a list of floats).
+            * ``"episode_ids"`` — ordered list of episode ID strings that
+              were clustered.
+            * ``"representative_ids"`` — dict mapping cluster index (str) to
+              the episode ID closest to that cluster's centroid.
+            * ``"n_clusters"`` — actual number of clusters used.
+            * ``"n_episodes"`` — number of episodes clustered.
+            * ``"action_types"`` — ordered list of action-type feature names.
+
+        Raises:
+            ValueError: When ``by`` is not ``"action_type"`` or when no
+                        episodes exist to cluster.
+        """
+        if by != "action_type":
+            raise ValueError(f"cluster_episodes: unsupported 'by' value {by!r}. Use 'action_type'")
+
+        # Fetch recent episodes
+        episodes = self.query_recent(limit=limit)
+        if not episodes:
+            raise ValueError("cluster_episodes: no episodes found to cluster")
+
+        # Feature dimension: ordered action types
+        action_types = ["move", "stop", "wait", "grip", "nav_waypoint", "other"]
+        n_features = len(action_types)
+        type_idx = {t: i for i, t in enumerate(action_types)}
+
+        # Build feature vectors: count occurrences of each action type per episode
+        vectors: List[List[float]] = []
+        ep_ids: List[str] = []
+
+        for ep in episodes:
+            ep_ids.append(ep["id"])
+            action = ep.get("action") or {}
+            action_type = action.get("type", "other") if isinstance(action, dict) else "other"
+            vec = [0.0] * n_features
+            vec[type_idx.get(action_type, type_idx["other"])] = 1.0
+            vectors.append(vec)
+
+        # Clamp n_clusters to the number of episodes
+        k = min(n_clusters, len(vectors))
+
+        # Initialise centroids via k-means++ (distance-weighted seeding).
+        # This guarantees diverse initial centroids, preventing degenerate
+        # clusters where all seeds map to the same feature vector.
+        import random as _random
+
+        rng = _random.Random(random_seed)
+
+        # Pick first centroid at random
+        first_idx = rng.randint(0, len(vectors) - 1)
+        centroids: List[List[float]] = [vectors[first_idx][:]]
+
+        for _ in range(k - 1):
+            # For each vector, compute its distance to the nearest existing centroid
+            distances = [
+                min(self._kmeans_distance_sq(vec, c) for c in centroids) for vec in vectors
+            ]
+            # Pick the point with the maximum distance (deterministic k-means++)
+            next_idx = max(range(len(distances)), key=lambda i: distances[i])
+            centroids.append(vectors[next_idx][:])
+
+        labels = [0] * len(vectors)
+
+        for _iteration in range(max_iter):
+            # Assignment step: assign each vector to nearest centroid
+            new_labels = []
+            for vec in vectors:
+                best_c = 0
+                best_d = float("inf")
+                for c_idx, centroid in enumerate(centroids):
+                    d = self._kmeans_distance_sq(vec, centroid)
+                    if d < best_d:
+                        best_d = d
+                        best_c = c_idx
+                new_labels.append(best_c)
+
+            # Check for convergence
+            if new_labels == labels:
+                break
+            labels = new_labels
+
+            # Update step: recompute centroids
+            for c_idx in range(k):
+                cluster_vecs = [vectors[i] for i, lbl in enumerate(labels) if lbl == c_idx]
+                if cluster_vecs:
+                    centroids[c_idx] = self._kmeans_centroid(cluster_vecs)
+                else:
+                    # Empty cluster: reinitialise to a random vector
+                    centroids[c_idx] = vectors[rng.randint(0, len(vectors) - 1)][:]
+
+        # Find representative episode per cluster (closest to centroid)
+        representative_ids: Dict[str, str] = {}
+        for c_idx in range(k):
+            cluster_members = [
+                (i, ep_ids[i], vectors[i]) for i, lbl in enumerate(labels) if lbl == c_idx
+            ]
+            if cluster_members:
+                centroid = centroids[c_idx]
+                best = min(cluster_members, key=lambda m: self._kmeans_distance_sq(m[2], centroid))
+                representative_ids[str(c_idx)] = best[1]
+
+        return {
+            "labels": labels,
+            "centroids": centroids,
+            "episode_ids": ep_ids,
+            "representative_ids": representative_ids,
+            "n_clusters": k,
+            "n_episodes": len(vectors),
+            "action_types": action_types,
+        }

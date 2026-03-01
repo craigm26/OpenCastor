@@ -38,6 +38,7 @@ def _make_runner():
 # Test 1: "while_true" is registered in _step_handlers
 # ---------------------------------------------------------------------------
 
+
 def test_while_true_registered_in_step_handlers():
     runner = _make_runner()
     assert "while_true" in runner._step_handlers
@@ -47,6 +48,7 @@ def test_while_true_registered_in_step_handlers():
 # ---------------------------------------------------------------------------
 # Test 2: Empty inner_steps → warning logged, returns without running
 # ---------------------------------------------------------------------------
+
 
 def test_empty_inner_steps_logs_warning_and_returns():
     runner = _make_runner()
@@ -74,6 +76,7 @@ def test_missing_inner_steps_logs_warning_and_returns():
 # Test 3: max_iterations=3 → exactly 3 iterations
 # ---------------------------------------------------------------------------
 
+
 def test_max_iterations_3_runs_exactly_3_times():
     runner = _make_runner()
     call_count = []
@@ -96,6 +99,7 @@ def test_max_iterations_3_runs_exactly_3_times():
 # ---------------------------------------------------------------------------
 # Test 4: max_iterations=0 + stop() → exits cleanly (threading)
 # ---------------------------------------------------------------------------
+
 
 def test_stop_from_another_thread_exits_loop():
     """Loop runs until stop() is called from a background thread."""
@@ -125,7 +129,7 @@ def test_stop_from_another_thread_exits_loop():
     step = {
         "inner_steps": [{"type": "wait", "duration_s": 0}],
         "max_iterations": 0,  # unlimited
-        "timeout_s": 0,       # no timeout
+        "timeout_s": 0,  # no timeout
     }
     runner._step_while_true(step)
 
@@ -140,6 +144,7 @@ def test_stop_from_another_thread_exits_loop():
 # Test 5: timeout_s positive → exits after timeout
 # ---------------------------------------------------------------------------
 
+
 def test_timeout_exits_loop():
     runner = _make_runner()
     call_count = []
@@ -152,7 +157,7 @@ def test_timeout_exits_loop():
 
     step = {
         "inner_steps": [{"type": "wait"}],
-        "timeout_s": 0.05,   # 50 ms timeout
+        "timeout_s": 0.05,  # 50 ms timeout
         "max_iterations": 0,  # unlimited
     }
 
@@ -168,6 +173,7 @@ def test_timeout_exits_loop():
 # ---------------------------------------------------------------------------
 # Test 6: dwell_s between iterations is respected (timestamps)
 # ---------------------------------------------------------------------------
+
 
 def test_dwell_s_adds_pause_between_iterations():
     runner = _make_runner()
@@ -190,12 +196,13 @@ def test_dwell_s_adds_pause_between_iterations():
     assert len(timestamps) == 3
     # Gap between first and second iteration should be >= dwell_s (minus small tolerance)
     gap = timestamps[1] - timestamps[0]
-    assert gap >= dwell * 0.7, f"Expected dwell gap >= {dwell*0.7:.3f}s, got {gap:.3f}s"
+    assert gap >= dwell * 0.7, f"Expected dwell gap >= {dwell * 0.7:.3f}s, got {gap:.3f}s"
 
 
 # ---------------------------------------------------------------------------
 # Test 7: All inner steps executed per iteration (2 steps × 3 iters = 6 events)
 # ---------------------------------------------------------------------------
+
 
 def test_all_inner_steps_executed_per_iteration():
     runner = _make_runner()
@@ -223,6 +230,7 @@ def test_all_inner_steps_executed_per_iteration():
 # Test 8: Unknown inner step type doesn't raise
 # ---------------------------------------------------------------------------
 
+
 def test_unknown_inner_step_type_does_not_raise():
     runner = _make_runner()
 
@@ -238,6 +246,7 @@ def test_unknown_inner_step_type_does_not_raise():
 # ---------------------------------------------------------------------------
 # Test 9: stop() called from another thread breaks the loop (via _running=False)
 # ---------------------------------------------------------------------------
+
 
 def test_stop_method_breaks_infinite_loop():
     """stop() sets _running=False which should cause the loop to exit."""
@@ -279,6 +288,7 @@ def test_stop_method_breaks_infinite_loop():
 # Test 10: max_iterations=1 → exactly 1 iteration
 # ---------------------------------------------------------------------------
 
+
 def test_max_iterations_1_runs_exactly_once():
     runner = _make_runner()
     call_count = []
@@ -302,6 +312,7 @@ def test_max_iterations_1_runs_exactly_once():
 # Test 11: After while_true completes, _running is still True
 # ---------------------------------------------------------------------------
 
+
 def test_running_flag_not_cleared_by_step():
     runner = _make_runner()
 
@@ -319,6 +330,7 @@ def test_running_flag_not_cleared_by_step():
 # Test 12: max_iterations=0, timeout_s=0.05 → exits via timeout
 # ---------------------------------------------------------------------------
 
+
 def test_timeout_with_unlimited_iterations():
     runner = _make_runner()
     call_count = []
@@ -330,8 +342,8 @@ def test_timeout_with_unlimited_iterations():
 
     step = {
         "inner_steps": [{"type": "wait"}],
-        "max_iterations": 0,   # unlimited
-        "timeout_s": 0.05,     # 50 ms — exits via timeout
+        "max_iterations": 0,  # unlimited
+        "timeout_s": 0.05,  # 50 ms — exits via timeout
     }
 
     t_start = time.monotonic()
@@ -347,6 +359,7 @@ def test_timeout_with_unlimited_iterations():
 # ---------------------------------------------------------------------------
 # Test 13: dwell_s=0 → no significant extra delay between iterations
 # ---------------------------------------------------------------------------
+
 
 def test_dwell_zero_no_extra_delay():
     runner = _make_runner()
@@ -375,6 +388,7 @@ def test_dwell_zero_no_extra_delay():
 # ---------------------------------------------------------------------------
 # Test 14: Inner steps execute in correct order each iteration
 # ---------------------------------------------------------------------------
+
 
 def test_inner_steps_execute_in_order_each_iteration():
     runner = _make_runner()

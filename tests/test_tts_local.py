@@ -1,12 +1,8 @@
 """Tests for castor/tts_local.py (issue #138)."""
 
-from io import BytesIO
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from castor.tts_local import LocalTTS, _select_engine, available_engines
-
 
 # ---------------------------------------------------------------------------
 # available_engines / _select_engine

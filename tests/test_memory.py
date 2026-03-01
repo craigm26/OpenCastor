@@ -1,8 +1,5 @@
 """Tests for castor/memory.py — SQLite episode memory store (issue #92)."""
 
-import os
-import tempfile
-
 import pytest
 
 from castor.memory import EpisodeMemory
@@ -63,6 +60,7 @@ def test_export_jsonl(mem, tmp_path):
     lines = mem.export_jsonl(str(out))
     assert lines == 1
     import json
+
     with open(out) as f:
         row = json.loads(f.readline())
     assert row["instruction"] == "hello"

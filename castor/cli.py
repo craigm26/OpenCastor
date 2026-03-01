@@ -326,6 +326,60 @@ def cmd_discover(args) -> None:
             print()
 
 
+def cmd_snapshot(args) -> None:
+    """Take, list, or show diagnostic snapshots (Issue #348).
+
+    Sub-commands:
+        castor snapshot take           — Capture a snapshot immediately.
+        castor snapshot latest         — Show the most recent snapshot.
+        castor snapshot history [N]    — Show the last N snapshots (default 5).
+
+    Examples::
+
+        castor snapshot take
+        castor snapshot latest
+        castor snapshot history 10
+    """
+    import json as _json
+
+    sub = getattr(args, "snapshot_action", None) or (
+        args.snapshot_args[0] if getattr(args, "snapshot_args", []) else "latest"
+    )
+
+    from castor.snapshot import get_manager
+
+    mgr = get_manager()
+
+    if sub == "take":
+        snap = mgr.take()
+        print("\n  Snapshot taken:\n")
+        print("  " + _json.dumps(snap, indent=2, default=str).replace("\n", "\n  "))
+        print()
+    elif sub == "history":
+        limit = 5
+        extra = getattr(args, "snapshot_args", [])
+        if extra and len(extra) > 1:
+            try:
+                limit = int(extra[1])
+            except ValueError:
+                pass
+        history = mgr.history(limit=limit)
+        print(f"\n  Last {len(history)} snapshots:\n")
+        for i, snap in enumerate(history):
+            ts = snap.get("timestamp", "?")
+            cpu = snap.get("system", {}).get("cpu_percent", "?")
+            print(f"  [{i + 1}] ts={ts} cpu={cpu}%")
+        print()
+    else:  # latest
+        snap = mgr.latest()
+        if snap is None:
+            print("\n  No snapshots available. Run `castor snapshot take` first.\n")
+        else:
+            print("\n  Latest snapshot:\n")
+            print("  " + _json.dumps(snap, indent=2, default=str).replace("\n", "\n  "))
+            print()
+
+
 def cmd_doctor(args) -> None:
     """Run system health checks."""
     from castor.doctor import print_report, run_all_checks
@@ -2524,6 +2578,26 @@ def main() -> None:
     p_discover.add_argument("--timeout", default="5", help="Scan duration in seconds (default: 5)")
 
     # castor doctor
+    # Issue #348: castor snapshot
+    p_snapshot = sub.add_parser(
+        "snapshot",
+        help="Take or inspect diagnostic snapshots",
+        description="Capture and view system diagnostic snapshots.",
+        epilog="Examples: castor snapshot take | castor snapshot latest | castor snapshot history 10",
+    )
+    p_snapshot.add_argument(
+        "snapshot_action",
+        nargs="?",
+        choices=["take", "latest", "history"],
+        default="latest",
+        help="Snapshot sub-command (default: latest)",
+    )
+    p_snapshot.add_argument(
+        "snapshot_args",
+        nargs="*",
+        help="Extra arguments (e.g. limit N for history)",
+    )
+
     p_doctor = sub.add_parser(
         "doctor",
         help="Run system health checks",
@@ -3539,6 +3613,8 @@ def main() -> None:
         "scan": cmd_scan,
         "daemon": cmd_daemon,
         "deploy": cmd_deploy,
+        # Issue #348
+        "snapshot": cmd_snapshot,
     }
 
     # Load plugins and merge any plugin-provided commands

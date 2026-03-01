@@ -2,13 +2,11 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from castor.provider_fallback import ProviderFallbackManager
 from castor.providers.base import ProviderQuotaError, Thought
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _make_provider(name="Primary"):
     p = MagicMock()
@@ -31,6 +29,7 @@ def _make_config(enabled=True, provider="ollama", model="llama3.2:3b", cooldown=
 
 # ── Construction ──────────────────────────────────────────────────────────────
 
+
 def test_disabled_by_default():
     primary = _make_provider()
     mgr = ProviderFallbackManager({}, primary)
@@ -43,14 +42,17 @@ def test_enabled_builds_fallback():
     cfg = _make_config()
     fallback_provider = _make_provider("Ollama")
 
-    with patch("castor.provider_fallback.ProviderFallbackManager._build_fallback",
-               return_value=fallback_provider):
+    with patch(
+        "castor.provider_fallback.ProviderFallbackManager._build_fallback",
+        return_value=fallback_provider,
+    ):
         mgr = ProviderFallbackManager(cfg, primary)
 
     assert mgr._fallback is fallback_provider
 
 
 # ── probe_fallback ─────────────────────────────────────────────────────────────
+
 
 def test_probe_fallback_ok():
     primary = _make_provider()
@@ -79,6 +81,7 @@ def test_probe_fallback_no_fallback():
 
 # ── health_check() delegation ─────────────────────────────────────────────────
 
+
 def test_health_check_delegates_to_active_provider():
     primary = _make_provider()
     primary.health_check.return_value = {"ok": True, "latency_ms": 5}
@@ -97,6 +100,7 @@ def test_health_check_delegates_to_fallback_when_active():
     mgr._using_fallback = True
 
     import time
+
     mgr._quota_hit_time = time.time() + 9999
 
     result = mgr.health_check()
@@ -106,6 +110,7 @@ def test_health_check_delegates_to_fallback_when_active():
 
 
 # ── get_active_provider ───────────────────────────────────────────────────────
+
 
 def test_get_active_returns_primary_normally():
     primary = _make_provider()
@@ -122,6 +127,7 @@ def test_get_active_returns_fallback_when_switched():
     mgr._quota_hit_time = float("inf")  # never expires
 
     import time
+
     mgr._quota_hit_time = time.time() + 9999
     assert mgr.get_active_provider() is fallback
 
@@ -140,6 +146,7 @@ def test_cooldown_restores_primary():
 
 
 # ── think() transparent wrapper ───────────────────────────────────────────────
+
 
 def test_think_passes_through_normally():
     primary = _make_provider()
@@ -177,6 +184,7 @@ def test_think_no_fallback_returns_error_thought():
 
 
 # ── ProviderQuotaError detection in huggingface_provider ─────────────────────
+
 
 def test_is_quota_error_http_402():
     from castor.providers.huggingface_provider import _is_quota_error

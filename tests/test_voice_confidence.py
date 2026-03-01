@@ -6,13 +6,11 @@ Verifies that ``transcribe_bytes()`` returns a dict with keys ``text``,
 
 from __future__ import annotations
 
-import os
 from unittest.mock import patch
 
 import pytest
 
 import castor.voice as voice_mod
-
 
 # ---------------------------------------------------------------------------
 # Helpers

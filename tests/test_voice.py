@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-import os
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 import castor.voice as voice_mod
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -86,7 +82,9 @@ class TestTranscribeBytes:
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
         with (
             patch.dict("sys.modules", {"openai": MagicMock()}),
-            patch.object(voice_mod, "_transcribe_whisper_api", return_value="auto result") as api_mock,
+            patch.object(
+                voice_mod, "_transcribe_whisper_api", return_value="auto result"
+            ) as api_mock,
         ):
             voice_mod._HAS_OPENAI = None
             result = voice_mod.transcribe_bytes(_DUMMY_AUDIO, engine="auto")
@@ -119,7 +117,9 @@ class TestTranscribeBytes:
     def test_env_var_overrides_engine(self, monkeypatch):
         _reset_probes()
         monkeypatch.setenv("CASTOR_VOICE_ENGINE", "google")
-        with patch.object(voice_mod, "_transcribe_google_sr", return_value="env override") as gsr_mock:
+        with patch.object(
+            voice_mod, "_transcribe_google_sr", return_value="env override"
+        ) as gsr_mock:
             result = voice_mod.transcribe_bytes(_DUMMY_AUDIO, engine="auto")
         gsr_mock.assert_called_once()
         assert result is not None

@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from castor.offline_fallback import OfflineFallbackManager
 
 
@@ -22,6 +20,7 @@ def _make_fallback_provider(ok: bool = True):
 # ---------------------------------------------------------------------------
 # Disabled / no fallback config
 # ---------------------------------------------------------------------------
+
 
 class TestDisabledFallback:
     def test_get_active_provider_returns_primary_when_disabled(self):
@@ -52,6 +51,7 @@ class TestDisabledFallback:
 # ---------------------------------------------------------------------------
 # Enabled fallback — healthy probe
 # ---------------------------------------------------------------------------
+
 
 class TestEnabledFallback:
     def _make_manager(self, fb_ok: bool = True, **extra_config):
@@ -93,6 +93,7 @@ class TestEnabledFallback:
 # ---------------------------------------------------------------------------
 # Provider switching
 # ---------------------------------------------------------------------------
+
 
 class TestProviderSwitching:
     def _make_manager(self):
@@ -156,6 +157,7 @@ class TestProviderSwitching:
 # start() / stop() lifecycle with mocked connectivity
 # ---------------------------------------------------------------------------
 
+
 class TestLifecycle:
     def test_stop_is_safe_without_start(self):
         mgr = OfflineFallbackManager(config={}, primary_provider=_make_primary())
@@ -176,8 +178,10 @@ class TestLifecycle:
         mgr = OfflineFallbackManager(config=config, primary_provider=primary)
         mgr._fallback = fb_provider
 
-        with patch("castor.offline_fallback.ConnectivityMonitor") as mock_cm_cls, \
-             patch("castor.offline_fallback.is_online", return_value=True):
+        with (
+            patch("castor.offline_fallback.ConnectivityMonitor") as mock_cm_cls,
+            patch("castor.offline_fallback.is_online", return_value=True),
+        ):
             mock_cm = MagicMock()
             mock_cm_cls.return_value = mock_cm
 
@@ -191,6 +195,7 @@ class TestLifecycle:
 # ---------------------------------------------------------------------------
 # Runtime connectivity-change provider switching  (#83)
 # ---------------------------------------------------------------------------
+
 
 class TestConnectivityChange:
     """Verify that _on_connectivity_change correctly switches active provider."""

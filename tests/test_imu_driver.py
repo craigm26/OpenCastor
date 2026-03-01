@@ -1,10 +1,8 @@
 """Tests for castor.drivers.imu_driver."""
 
-import math
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Singleton reset
@@ -14,6 +12,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def _reset_imu_singleton():
     import castor.drivers.imu_driver as mod
+
     mod._singleton = None
     yield
     mod._singleton = None
@@ -28,6 +27,7 @@ def _mock_driver(model="auto"):
     """Return an IMUDriver forced into mock mode (no smbus2)."""
     with patch("castor.drivers.imu_driver.HAS_SMBUS2", False):
         from castor.drivers.imu_driver import IMUDriver
+
         return IMUDriver(bus=1, model=model)
 
 
@@ -134,6 +134,7 @@ def test_close_sets_mode_to_mock():
 def test_get_imu_singleton():
     with patch("castor.drivers.imu_driver.HAS_SMBUS2", False):
         from castor.drivers.imu_driver import get_imu
+
         i1 = get_imu()
         i2 = get_imu()
     assert i1 is i2
@@ -146,10 +147,12 @@ def test_get_imu_singleton():
 
 def test_s16_positive():
     from castor.drivers.imu_driver import _s16
+
     assert _s16(0x00, 0x64) == 100
 
 
 def test_s16_negative():
     from castor.drivers.imu_driver import _s16
+
     # 0xFF80 = -128 in signed 16-bit
     assert _s16(0xFF, 0x80) == -128

@@ -5,7 +5,6 @@ import time
 
 from castor.agents.shared_state import SharedState
 
-
 # ---------------------------------------------------------------------------
 # Basic get / set
 # ---------------------------------------------------------------------------
@@ -347,7 +346,9 @@ class TestSharedStateIntents:
         state = SharedState()
         nav = Intent(goal="navigate hallway", priority=2, safety_class="normal", owner="nav")
         state.add_intent(nav)
-        emerg = Intent(goal="emergency stop", priority=1, safety_class="emergency", owner="guardian")
+        emerg = Intent(
+            goal="emergency stop", priority=1, safety_class="emergency", owner="guardian"
+        )
         result = state.add_intent(emerg)
         assert result["preempted"] == nav.intent_id
         assert state.current_intent()["intent_id"] == emerg.intent_id

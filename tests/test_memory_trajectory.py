@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -144,6 +144,7 @@ def test_trajectory_live_replay_503_without_driver(client, episodes, mem, monkey
     """Without a driver, live replay returns 503."""
     monkeypatch.setenv("CASTOR_MEMORY_DB", mem.db_path)
     import castor.api as _api_mod
+
     saved = _api_mod.state.driver
     _api_mod.state.driver = None
     try:

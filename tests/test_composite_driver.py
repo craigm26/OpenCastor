@@ -1,7 +1,5 @@
 """Tests for castor/drivers/composite.py — Composite driver (issue #96)."""
 
-import pytest
-
 from castor.drivers.composite import CompositeDriver
 
 
@@ -12,10 +10,12 @@ def _make_config(subsystems=None, routing=None):
             {
                 "id": "full_robot",
                 "protocol": "composite",
-                "subsystems": subsystems or [
+                "subsystems": subsystems
+                or [
                     {"id": "base", "protocol": "mock"},
                 ],
-                "routing": routing or {
+                "routing": routing
+                or {
                     "linear": "base",
                     "angular": "base",
                     "throttle": "base",
@@ -75,13 +75,14 @@ def test_missing_composite_driver_section():
 
 def test_unknown_subsystem_protocol():
     """Unknown protocol should fall back to NullDriver, not raise."""
-    cfg = _make_config(subsystems=[
-        {"id": "arm", "protocol": "totally_unknown_xyz"},
-    ])
+    cfg = _make_config(
+        subsystems=[
+            {"id": "arm", "protocol": "totally_unknown_xyz"},
+        ]
+    )
     drv = CompositeDriver(cfg)
     drv.move(0.0, 0.0)  # routes to NullDriver — should not raise
     drv.stop()
-
 
 
 def test_isolation_mode_uses_ipc_adapter(monkeypatch):

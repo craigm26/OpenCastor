@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Singleton reset between tests
 # ---------------------------------------------------------------------------
@@ -13,6 +12,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def _reset_singleton():
     import castor.providers.sentence_transformers_provider as mod
+
     mod._instance = None
     yield
     mod._instance = None
@@ -27,6 +27,7 @@ def _mock_mode_provider(model_name=None):
     """Return an EmbeddingProvider forced into mock mode (HAS_ST=False)."""
     with patch("castor.providers.sentence_transformers_provider.HAS_ST", False):
         from castor.providers.sentence_transformers_provider import EmbeddingProvider
+
         return EmbeddingProvider(model_name=model_name)
 
 
@@ -35,6 +36,7 @@ def _real_model_provider():
     mock_model = MagicMock()
     # encode returns list of numpy-like arrays; use plain lists with .tolist()
     import numpy as np
+
     mock_model.encode.side_effect = lambda texts, **kwargs: np.array(
         [[float(i)] * 384 for i in range(len(texts))]
     )
@@ -45,6 +47,7 @@ def _real_model_provider():
             create=True,  # needed when sentence_transformers is not installed (HAS_ST=False at import time)
         ):
             from castor.providers.sentence_transformers_provider import EmbeddingProvider
+
             return EmbeddingProvider()
 
 
@@ -136,6 +139,7 @@ class TestEmbeddingProviderHardwareMode:
 def test_get_embedding_provider_singleton():
     with patch("castor.providers.sentence_transformers_provider.HAS_ST", False):
         from castor.providers.sentence_transformers_provider import get_embedding_provider
+
         p1 = get_embedding_provider()
         p2 = get_embedding_provider()
     assert p1 is p2
@@ -148,10 +152,12 @@ def test_get_embedding_provider_singleton():
 
 def test_cosine_identical_vectors():
     from castor.providers.sentence_transformers_provider import _cosine
+
     v = [1.0, 0.0, 0.0]
     assert _cosine(v, v) == pytest.approx(1.0, abs=1e-6)
 
 
 def test_cosine_zero_vector_returns_zero():
     from castor.providers.sentence_transformers_provider import _cosine
+
     assert _cosine([0.0, 0.0], [1.0, 0.0]) == 0.0

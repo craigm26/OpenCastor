@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 import time
 
-import pytest
-
 from castor.swarm.shared_memory import MemoryEntry, SharedMemory
 
 

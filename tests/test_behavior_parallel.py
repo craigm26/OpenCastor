@@ -19,10 +19,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from unittest.mock import MagicMock, patch
-
-import pytest
-
+from unittest.mock import MagicMock
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -203,9 +200,7 @@ def test_not_running_returns_immediately():
 
     runner._run_step = _spy_run_step  # type: ignore[method-assign]
 
-    runner._step_parallel(
-        {"type": "parallel", "inner_steps": [{"type": "wait", "seconds": 0}]}
-    )
+    runner._step_parallel({"type": "parallel", "inner_steps": [{"type": "wait", "seconds": 0}]})
     assert submitted == [], "Threads should not be launched when _running is False"
 
 
@@ -284,8 +279,6 @@ def test_parallel_running_flag_not_cleared():
     """``_running`` must remain True after ``_step_parallel`` returns normally."""
     runner = _make_runner()
 
-    runner._step_parallel(
-        {"type": "parallel", "inner_steps": [{"type": "wait", "seconds": 0}]}
-    )
+    runner._step_parallel({"type": "parallel", "inner_steps": [{"type": "wait", "seconds": 0}]})
 
     assert runner._running is True, "_step_parallel must not clear the _running flag"

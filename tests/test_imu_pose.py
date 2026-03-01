@@ -6,18 +6,16 @@ import os
 import sys
 import threading
 import time
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from castor.drivers.imu_driver import IMUDriver
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _mock_driver() -> IMUDriver:
     """Return an IMUDriver instance in mock mode with pose state initialised."""
@@ -43,6 +41,7 @@ def _mock_driver() -> IMUDriver:
 # Test 1 — pose() returns a dict
 # ---------------------------------------------------------------------------
 
+
 def test_pose_returns_dict():
     drv = _mock_driver()
     result = drv.pose()
@@ -52,6 +51,7 @@ def test_pose_returns_dict():
 # ---------------------------------------------------------------------------
 # Test 2 — pose() has required keys
 # ---------------------------------------------------------------------------
+
 
 def test_pose_has_required_keys():
     drv = _mock_driver()
@@ -63,6 +63,7 @@ def test_pose_has_required_keys():
 # ---------------------------------------------------------------------------
 # Test 3 — reset_pose() zeros x_m, y_m, heading_deg
 # ---------------------------------------------------------------------------
+
 
 def test_reset_pose_zeros_state():
     drv = _mock_driver()
@@ -84,6 +85,7 @@ def test_reset_pose_zeros_state():
 # Test 4 — reset_pose() callable without crash
 # ---------------------------------------------------------------------------
 
+
 def test_reset_pose_does_not_raise():
     drv = _mock_driver()
     # Should not raise under any condition
@@ -94,6 +96,7 @@ def test_reset_pose_does_not_raise():
 # ---------------------------------------------------------------------------
 # Test 5 — first pose() call returns zeros (no dt yet)
 # ---------------------------------------------------------------------------
+
 
 def test_first_pose_call_returns_zeros():
     drv = _mock_driver()
@@ -106,6 +109,7 @@ def test_first_pose_call_returns_zeros():
 # ---------------------------------------------------------------------------
 # Test 6 — second pose() call returns numeric values
 # ---------------------------------------------------------------------------
+
 
 def test_second_pose_call_returns_numeric():
     drv = _mock_driver()
@@ -121,6 +125,7 @@ def test_second_pose_call_returns_numeric():
 # Test 7 — confidence is between 0.0 and 1.0
 # ---------------------------------------------------------------------------
 
+
 def test_pose_confidence_range():
     drv = _mock_driver()
     drv.pose()  # seed
@@ -133,6 +138,7 @@ def test_pose_confidence_range():
 # Test 8 — mode is a string
 # ---------------------------------------------------------------------------
 
+
 def test_pose_mode_is_string():
     drv = _mock_driver()
     result = drv.pose()
@@ -142,6 +148,7 @@ def test_pose_mode_is_string():
 # ---------------------------------------------------------------------------
 # Test 9 — reset_pose() then pose() returns zeros again
 # ---------------------------------------------------------------------------
+
 
 def test_reset_then_pose_returns_zeros():
     drv = _mock_driver()
@@ -161,6 +168,7 @@ def test_reset_then_pose_returns_zeros():
 # Test 10 — x_m is float
 # ---------------------------------------------------------------------------
 
+
 def test_pose_x_m_is_float():
     drv = _mock_driver()
     drv.pose()  # seed
@@ -172,6 +180,7 @@ def test_pose_x_m_is_float():
 # ---------------------------------------------------------------------------
 # Test 11 — y_m is float
 # ---------------------------------------------------------------------------
+
 
 def test_pose_y_m_is_float():
     drv = _mock_driver()
@@ -185,6 +194,7 @@ def test_pose_y_m_is_float():
 # Test 12 — heading_deg is float
 # ---------------------------------------------------------------------------
 
+
 def test_pose_heading_deg_is_float():
     drv = _mock_driver()
     drv.pose()  # seed
@@ -196,6 +206,7 @@ def test_pose_heading_deg_is_float():
 # ---------------------------------------------------------------------------
 # Test 13 — error path returns error dict (no raises)
 # ---------------------------------------------------------------------------
+
 
 def test_pose_error_returns_safe_dict():
     drv = _mock_driver()
@@ -216,6 +227,7 @@ def test_pose_error_returns_safe_dict():
 # ---------------------------------------------------------------------------
 # Test 14 — heading integrates gyro_z over time
 # ---------------------------------------------------------------------------
+
 
 def test_pose_heading_integrates_gyro():
     drv = _mock_driver()
@@ -242,6 +254,7 @@ def test_pose_heading_integrates_gyro():
 # ---------------------------------------------------------------------------
 # Test 15 — heading wraps correctly beyond 180°
 # ---------------------------------------------------------------------------
+
 
 def test_pose_heading_wraps():
     drv = _mock_driver()

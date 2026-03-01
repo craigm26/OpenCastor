@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import tempfile
-
 import pytest
 
 from castor.memory import EpisodeMemory
@@ -61,7 +59,9 @@ def test_search_multiple_matches(mem):
 def test_search_limit_respected(mem):
     # Insert many matching episodes
     for i in range(50):
-        mem.log_episode(instruction=f"patrol step {i}", raw_thought="moving", action={"type": "move"})
+        mem.log_episode(
+            instruction=f"patrol step {i}", raw_thought="moving", action={"type": "move"}
+        )
     results = mem.search("patrol", limit=5)
     assert len(results) <= 5
 

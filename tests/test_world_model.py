@@ -51,7 +51,9 @@ def test_safe_route_avoids_blocked_zone():
     model = WorldModel(
         waypoints={
             "A": WaypointRecord(entity_id="A", kind="waypoint", neighbors=["B", "C"]),
-            "B": WaypointRecord(entity_id="B", kind="waypoint", neighbors=["D"], zone_ids=["child"]),
+            "B": WaypointRecord(
+                entity_id="B", kind="waypoint", neighbors=["D"], zone_ids=["child"]
+            ),
             "C": WaypointRecord(entity_id="C", kind="waypoint", neighbors=["D"]),
             "D": WaypointRecord(entity_id="D", kind="waypoint", neighbors=[]),
         }

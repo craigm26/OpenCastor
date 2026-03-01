@@ -1,12 +1,8 @@
 """Tests for castor/commands/hub.py plugin support (issue #135)."""
 
-import subprocess
 import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
-
-import pytest
-
 
 # ---------------------------------------------------------------------------
 # _discover_installed_plugins
@@ -70,10 +66,10 @@ def test_discover_handles_entry_point_error():
 
 def test_load_plugin_stdlib_module():
     """Load a stdlib module attribute via entry_point_value string."""
-    from castor.commands.hub import _load_plugin
-
     # "os:path" should return os.path
     import os
+
+    from castor.commands.hub import _load_plugin
 
     result = _load_plugin("os:path")
     assert result is os.path
@@ -81,9 +77,9 @@ def test_load_plugin_stdlib_module():
 
 def test_load_plugin_module_only():
     """Load a module without attribute (no colon)."""
-    from castor.commands.hub import _load_plugin
-
     import os
+
+    from castor.commands.hub import _load_plugin
 
     result = _load_plugin("os")
     assert result is os
@@ -130,7 +126,7 @@ def test_cmd_hub_plugins_prints_table(capsys):
         except (TypeError, AttributeError):
             pass  # Rich may partially load; we only need no crash
 
-    captured = capsys.readouterr()
+    capsys.readouterr()
     # Either rich printed or plain text — plugin name should appear
     # (or there was an import-related skip)
 

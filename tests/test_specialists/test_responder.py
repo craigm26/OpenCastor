@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-
 from castor.specialists.base_specialist import Task, TaskStatus
 from castor.specialists.responder import ResponderSpecialist
 

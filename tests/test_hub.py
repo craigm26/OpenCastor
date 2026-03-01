@@ -458,8 +458,8 @@ class TestHubSearch:
 class TestHubInstall:
     def test_hub_install_downloads_file(self, tmp_path, monkeypatch):
         """cmd_hub_install should download and save the preset file."""
-        from castor.commands.hub import cmd_hub_install
         import castor.commands.hub as hub_mod
+        from castor.commands.hub import cmd_hub_install
 
         monkeypatch.setattr(hub_mod, "_REPO_ROOT", tmp_path)
 

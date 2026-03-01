@@ -312,7 +312,6 @@ class TestStatusEndpoint:
         resp = client.get("/api/status")
         assert resp.json()["last_thought"]["raw_text"] == "hello"
 
-
     def test_status_includes_security_posture_when_fs_available(self, client, api_mod):
         api_mod.state.fs = _make_mock_fs()
         api_mod.state.fs.ns.read.side_effect = lambda path: (
@@ -320,6 +319,7 @@ class TestStatusEndpoint:
         )
         body = client.get("/api/status").json()
         assert body["security_posture"]["mode"] == "degraded"
+
 
 # =====================================================================
 # POST /api/command
@@ -1084,6 +1084,7 @@ class TestResponseFormat:
 # POST /api/command/stream  (#68)
 # ---------------------------------------------------------------------------
 
+
 class TestStreamCommand:
     def test_no_brain_returns_503(self, client):
         resp = client.post("/api/command/stream", json={"instruction": "go"})
@@ -1100,8 +1101,9 @@ class TestStreamCommand:
         assert "application/x-ndjson" in resp.headers["content-type"]
 
         import json as _json
-        lines = [l for l in resp.text.splitlines() if l.strip()]
-        parsed = [_json.loads(l) for l in lines]
+
+        lines = [ln for ln in resp.text.splitlines() if ln.strip()]
+        parsed = [_json.loads(ln) for ln in lines]
         # All lines except last have done=False
         assert all(not p["done"] for p in parsed[:-1])
         # Last line has done=True
@@ -1118,8 +1120,9 @@ class TestStreamCommand:
         assert resp.status_code == 200
 
         import json as _json
-        lines = [l for l in resp.text.splitlines() if l.strip()]
-        parsed = [_json.loads(l) for l in lines]
+
+        lines = [ln for ln in resp.text.splitlines() if ln.strip()]
+        parsed = [_json.loads(ln) for ln in lines]
         assert len(parsed) >= 2
         assert parsed[-1]["done"] is True
 
@@ -1128,6 +1131,7 @@ class TestStreamCommand:
 # GET /api/driver/health  (#69)
 # ---------------------------------------------------------------------------
 
+
 class TestDriverHealth:
     def test_no_driver_returns_503(self, client):
         resp = client.get("/api/driver/health")
@@ -1135,9 +1139,7 @@ class TestDriverHealth:
 
     def test_returns_health_dict_with_driver_type(self, client, api_mod):
         driver = _make_mock_driver()
-        driver.health_check = MagicMock(
-            return_value={"ok": True, "mode": "mock", "error": None}
-        )
+        driver.health_check = MagicMock(return_value={"ok": True, "mode": "mock", "error": None})
         api_mod.state.driver = driver
 
         body = client.get("/api/driver/health").json()
@@ -1160,6 +1162,7 @@ class TestDriverHealth:
 # ---------------------------------------------------------------------------
 # GET /api/learner/stats  (#70)
 # ---------------------------------------------------------------------------
+
 
 class TestLearnerStats:
     def test_no_learner_returns_available_false(self, client):
@@ -1190,6 +1193,7 @@ class TestLearnerStats:
 # ---------------------------------------------------------------------------
 # GET /api/learner/episodes  (#70)
 # ---------------------------------------------------------------------------
+
 
 class TestLearnerEpisodes:
     def test_returns_empty_list_when_no_episodes(self, client, monkeypatch):
@@ -1231,6 +1235,7 @@ class TestLearnerEpisodes:
 # ---------------------------------------------------------------------------
 # POST /api/learner/episode  (#74)
 # ---------------------------------------------------------------------------
+
 
 class TestSubmitEpisode:
     def test_missing_goal_returns_422(self, client):
@@ -1279,6 +1284,7 @@ class TestSubmitEpisode:
 # GET /api/command/history  (#75)
 # ---------------------------------------------------------------------------
 
+
 class TestCommandHistory:
     def test_empty_initially(self, client):
         body = client.get("/api/command/history").json()
@@ -1314,6 +1320,7 @@ class TestCommandHistory:
 # ---------------------------------------------------------------------------
 # POST /api/command/stream — rate-limit coverage  (#82)
 # ---------------------------------------------------------------------------
+
 
 class TestStreamCommandRateLimit:
     def test_rate_limit_returns_429_with_think_stream(self, client, api_mod):
@@ -1373,6 +1380,7 @@ class TestStreamCommandRateLimit:
 # GET /api/status — offline_fallback field  (#77)
 # ---------------------------------------------------------------------------
 
+
 class TestStatusOfflineFallback:
     def test_status_returns_offline_fallback_disabled_when_none(self, client):
         body = client.get("/api/status").json()
@@ -1409,6 +1417,7 @@ class TestStatusOfflineFallback:
 # GET /api/guardian/report  (#81)
 # ---------------------------------------------------------------------------
 
+
 class TestGuardianReport:
     def test_returns_available_false_when_no_fs(self, client):
         body = client.get("/api/guardian/report").json()
@@ -1442,6 +1451,7 @@ class TestGuardianReport:
 # ---------------------------------------------------------------------------
 # Audio transcription endpoint (#89)
 # ---------------------------------------------------------------------------
+
 
 class TestAudioTranscribe:
     def test_returns_text_when_transcription_succeeds(self, client):
@@ -1509,9 +1519,9 @@ class TestAudioTranscribe:
 class TestIntentEndpoints:
     def test_list_intents_disabled_when_no_orchestrator(self, client, api_mod):
         api_mod.state.brain = object()
-        resp = client.get('/api/intents')
+        resp = client.get("/api/intents")
         assert resp.status_code == 200
-        assert resp.json()['enabled'] is False
+        assert resp.json()["enabled"] is False
 
     def test_create_and_reprioritize_intent(self, client, api_mod):
         from castor.agents.orchestrator import OrchestratorAgent
@@ -1521,17 +1531,19 @@ class TestIntentEndpoints:
         brain.orchestrator = OrchestratorAgent(config={}, shared_state=SharedState())
         api_mod.state.brain = brain
 
-        created = client.post('/api/intents', json={'goal': 'dock robot', 'priority': 1, 'owner': 'api'})
+        created = client.post(
+            "/api/intents", json={"goal": "dock robot", "priority": 1, "owner": "api"}
+        )
         assert created.status_code == 200
-        iid = created.json()['intent']['intent_id']
+        iid = created.json()["intent"]["intent_id"]
 
-        reprio = client.post('/api/intents/reprioritize', json={'intent_id': iid, 'priority': 9})
+        reprio = client.post("/api/intents/reprioritize", json={"intent_id": iid, "priority": 9})
         assert reprio.status_code == 200
 
-        listed = client.get('/api/intents')
+        listed = client.get("/api/intents")
         assert listed.status_code == 200
-        assert listed.json()['intents'][0]['intent_id'] == iid
-        assert listed.json()['intents'][0]['priority'] == 9
+        assert listed.json()["intents"][0]["intent_id"] == iid
+        assert listed.json()["intents"][0]["priority"] == 9
 
     def test_pause_intent_not_found(self, client, api_mod):
         from castor.agents.orchestrator import OrchestratorAgent
@@ -1541,7 +1553,7 @@ class TestIntentEndpoints:
         brain.orchestrator = OrchestratorAgent(config={}, shared_state=SharedState())
         api_mod.state.brain = brain
 
-        resp = client.post('/api/intents/pause', json={'intent_id': 'missing', 'paused': True})
+        resp = client.post("/api/intents/pause", json={"intent_id": "missing", "paused": True})
         assert resp.status_code == 404
 
 

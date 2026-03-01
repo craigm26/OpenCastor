@@ -7,7 +7,7 @@ import time
 import pytest
 
 from castor.swarm.consensus import SwarmConsensus
-from castor.swarm.coordinator import Assignment, SwarmCoordinator, SwarmTask
+from castor.swarm.coordinator import SwarmCoordinator, SwarmTask
 from castor.swarm.peer import SwarmPeer
 from castor.swarm.shared_memory import SharedMemory
 

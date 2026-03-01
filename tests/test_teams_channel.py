@@ -1,6 +1,5 @@
 """Tests for castor.channels.teams_channel."""
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -73,8 +72,9 @@ class TestTeamsChannelSendMessage:
         mock_sess.post.return_value.__aenter__ = AsyncMock(return_value=mock_resp)
         mock_sess.post.return_value.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("castor.channels.teams_channel.HAS_AIOHTTP", True), patch(
-            "castor.channels.teams_channel.aiohttp", _mock_aiohttp(mock_sess), create=True
+        with (
+            patch("castor.channels.teams_channel.HAS_AIOHTTP", True),
+            patch("castor.channels.teams_channel.aiohttp", _mock_aiohttp(mock_sess), create=True),
         ):
             await ch.send_message("conv_id", "Hello Teams!")
 
@@ -96,8 +96,9 @@ class TestTeamsChannelSendMessage:
         mock_sess.post.return_value.__aenter__ = AsyncMock(return_value=mock_resp)
         mock_sess.post.return_value.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("castor.channels.teams_channel.HAS_AIOHTTP", True), patch(
-            "castor.channels.teams_channel.aiohttp", _mock_aiohttp(mock_sess), create=True
+        with (
+            patch("castor.channels.teams_channel.HAS_AIOHTTP", True),
+            patch("castor.channels.teams_channel.aiohttp", _mock_aiohttp(mock_sess), create=True),
         ):
             await ch.send_message("conv_id", "test")
 

@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -58,6 +57,7 @@ async def test_retry_succeeds_on_second_attempt():
 @pytest.mark.asyncio
 async def test_retry_exhausted_returns_false():
     """Returns False after all retries are exhausted."""
+
     async def always_fail(chat_id, text):
         raise RuntimeError("always fail")
 
@@ -75,7 +75,7 @@ async def test_retry_total_attempts_is_max_retries_plus_one():
     async def count_calls(chat_id, text):
         nonlocal call_count
         call_count += 1
-        raise IOError("fail")
+        raise OSError("fail")
 
     ch = _DummyChannel()
     ch.send_message = count_calls
@@ -97,8 +97,6 @@ async def test_retry_logs_warning_on_each_failure():
 
     ch = _DummyChannel()
     ch.send_message = flaky
-
-    original_warning = ch.logger.warning
 
     def count_warns(*args, **kwargs):
         nonlocal warn_count

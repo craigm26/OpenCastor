@@ -1,11 +1,7 @@
 """Tests for castor/hotword.py (issue #137)."""
 
-import threading
 import time
-from unittest.mock import MagicMock, patch
-
-import pytest
-
+from unittest.mock import patch
 
 # ---------------------------------------------------------------------------
 # Helpers

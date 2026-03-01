@@ -1,14 +1,13 @@
 """Tests for castor/channels/mqtt_channel.py — MQTT channel (issue #98)."""
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from castor.channels.mqtt_channel import HAS_PAHO, MQTTChannel
 
-
 # ── Construction ──────────────────────────────────────────────────────────────
+
 
 def test_mqtt_channel_defaults():
     ch = MQTTChannel({"broker_host": "localhost"})
@@ -20,14 +19,16 @@ def test_mqtt_channel_defaults():
 
 
 def test_mqtt_channel_custom_config():
-    ch = MQTTChannel({
-        "broker_host": "broker.example.com",
-        "broker_port": 8883,
-        "subscribe_topic": "robot/cmd",
-        "publish_topic": "robot/reply",
-        "tls": True,
-        "qos": 1,
-    })
+    ch = MQTTChannel(
+        {
+            "broker_host": "broker.example.com",
+            "broker_port": 8883,
+            "subscribe_topic": "robot/cmd",
+            "publish_topic": "robot/reply",
+            "tls": True,
+            "qos": 1,
+        }
+    )
     assert ch._broker_host == "broker.example.com"
     assert ch._broker_port == 8883
     assert ch._subscribe_topic == "robot/cmd"
@@ -46,6 +47,7 @@ def test_env_var_defaults(monkeypatch):
 
 # ── No paho-mqtt available ────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_start_raises_without_paho():
     """If paho is not installed, start() should raise ImportError."""
@@ -57,6 +59,7 @@ async def test_start_raises_without_paho():
 
 # ── send_message when not connected ──────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_send_message_noop_when_disconnected():
     """send_message should silently do nothing when not connected."""
@@ -66,6 +69,7 @@ async def test_send_message_noop_when_disconnected():
 
 
 # ── Callbacks ─────────────────────────────────────────────────────────────────
+
 
 def test_on_connect_sets_event():
     ch = MQTTChannel({"broker_host": "localhost"})
@@ -102,8 +106,9 @@ def test_on_message_noop_when_not_running():
 
 # ── Registration in channel registry ─────────────────────────────────────────
 
+
 def test_mqtt_registered_in_channel_registry():
-    from castor.channels import _register_builtin_channels, _CHANNEL_CLASSES
+    from castor.channels import _CHANNEL_CLASSES, _register_builtin_channels
 
     # Force re-registration in case it hasn't run yet
     _register_builtin_channels()
@@ -113,6 +118,7 @@ def test_mqtt_registered_in_channel_registry():
 
 
 # ── Auth map ─────────────────────────────────────────────────────────────────
+
 
 def test_mqtt_in_auth_map():
     from castor.auth import CHANNEL_AUTH_MAP

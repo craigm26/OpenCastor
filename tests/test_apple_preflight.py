@@ -18,7 +18,9 @@ def test_preflight_non_macos_returns_fallback_guidance():
             "macos_version": "",
         },
     ):
-        with patch("castor.providers.apple_preflight._check_xcode", return_value=(False, "missing")):
+        with patch(
+            "castor.providers.apple_preflight._check_xcode", return_value=(False, "missing")
+        ):
             result = run_apple_preflight(model_profile_id="apple-balanced")
 
     assert result["ok"] is False
@@ -61,7 +63,9 @@ def test_preflight_model_not_ready_reason_is_normalized():
             "macos_version": "26.0",
         },
     ):
-        with patch("castor.providers.apple_preflight._check_xcode", return_value=(True, "Xcode 26.0")):
+        with patch(
+            "castor.providers.apple_preflight._check_xcode", return_value=(True, "Xcode 26.0")
+        ):
             with patch.dict("sys.modules", {"apple_fm_sdk": fake_sdk}):
                 result = run_apple_preflight(model_profile_id="apple-tagging")
 

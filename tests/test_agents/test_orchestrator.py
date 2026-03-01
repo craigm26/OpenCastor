@@ -6,7 +6,6 @@ import pytest
 
 from castor.agents.shared_state import SharedState
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -118,7 +117,12 @@ class TestOrchestratorResolve:
     def test_default_idle(self):
         o = make_orchestrator()
         action = o._resolve(
-            {"estop_active": False, "guardian_report": None, "manipulation_result": None, "nav_plan": None}
+            {
+                "estop_active": False,
+                "guardian_report": None,
+                "manipulation_result": None,
+                "nav_plan": None,
+            }
         )
         assert action["type"] == "idle"
 
@@ -239,9 +243,7 @@ class TestTieredBrainLayer3:
         from castor.providers.base import Thought
 
         p = MagicMock()
-        p.think.return_value = Thought(
-            "move forward", action or {"type": "move", "speed": 0.4}
-        )
+        p.think.return_value = Thought("move forward", action or {"type": "move", "speed": 0.4})
         return p
 
     def test_layer3_disabled_by_default(self):

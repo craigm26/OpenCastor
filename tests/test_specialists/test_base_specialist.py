@@ -5,15 +5,12 @@ from __future__ import annotations
 import asyncio
 import time
 
-import pytest
-
 from castor.specialists.base_specialist import (
     BaseSpecialist,
     Task,
     TaskResult,
     TaskStatus,
 )
-
 
 # ---------------------------------------------------------------------------
 # Concrete stub specialist for testing ABC

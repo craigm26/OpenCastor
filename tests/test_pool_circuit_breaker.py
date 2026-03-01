@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from castor.providers.pool_provider import ProviderPool
 
 
@@ -132,7 +130,6 @@ def test_cb_on_failure_does_not_reopen_already_open_circuit():
     pool = _make_pool(threshold=3, cooldown_s=60.0)
     for _ in range(3):
         pool._cb_on_failure(0)
-    import time
 
     first_open_until = pool._cb_open_until[0]
     pool._cb_on_failure(0)  # fourth failure

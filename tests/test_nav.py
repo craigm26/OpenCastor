@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import collections
 import time
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from starlette.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_driver():
     d = MagicMock()
@@ -134,7 +134,7 @@ class TestWaypointNav:
         with patch("castor.nav.time") as mock_time:
             mock_time.sleep = MagicMock()
             mock_time.monotonic.side_effect = [0.0, 1.0]
-            result = nav.execute(distance_m=0.5, heading_deg=0, speed=5.0)
+            nav.execute(distance_m=0.5, heading_deg=0, speed=5.0)
 
         # Move should be called with at most 1.0 linear
         args, kwargs = driver.move.call_args
@@ -181,7 +181,9 @@ class TestWaypointNav:
         from castor.nav import WaypointNav
 
         driver = _make_driver()
-        nav = WaypointNav(driver, _make_config(wheel_circumference_m=0.30, turn_time_per_deg_s=0.02))
+        nav = WaypointNav(
+            driver, _make_config(wheel_circumference_m=0.30, turn_time_per_deg_s=0.02)
+        )
 
         assert nav.wheel_circumference_m == 0.30
         assert nav.turn_time_per_deg_s == 0.02
@@ -242,6 +244,7 @@ def client():
 @pytest.fixture()
 def api_mod():
     import castor.api as mod
+
     return mod
 
 

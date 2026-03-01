@@ -1,6 +1,5 @@
 """Tests for castor.channels.matrix_channel."""
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

@@ -5,21 +5,18 @@ import os
 import time
 from unittest.mock import MagicMock, patch
 
-import pytest
-
+from castor.agents.base import BaseAgent
+from castor.agents.registry import AgentRegistry
 from castor.dashboard_tui import (
     _get_agents_lines,
+    _get_episode_count,
     _get_improvements_lines,
     _get_swarm_lines,
-    _get_episode_count,
     _read_json_file,
     _render_agents_panel,
     _render_improvements_panel,
     _render_swarm_panel,
 )
-from castor.agents.base import AgentStatus, BaseAgent
-from castor.agents.registry import AgentRegistry
-
 
 # ---------------------------------------------------------------------------
 # Minimal stub agent for registry tests

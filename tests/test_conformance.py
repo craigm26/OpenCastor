@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
-import sys
-from copy import deepcopy
 from unittest.mock import patch
 
 import pytest
@@ -907,6 +904,7 @@ class TestCmdValidate:
     def test_cmd_validate_json_output(self, tmp_path):
         """cmd_validate with --json outputs valid JSON."""
         import yaml
+
         from castor.cli import cmd_validate
 
         cfg = make_valid_config()
@@ -915,8 +913,7 @@ class TestCmdValidate:
 
         args = self._make_args(str(config_file), json_out=True)
 
-        captured = []
-        original_print = __builtins__["print"] if isinstance(__builtins__, dict) else print
+        __builtins__["print"] if isinstance(__builtins__, dict) else print
 
         import io
         from contextlib import redirect_stdout
@@ -936,6 +933,7 @@ class TestCmdValidate:
     def test_cmd_validate_exits_1_on_fail(self, tmp_path):
         """cmd_validate exits with code 1 when there are failures."""
         import yaml
+
         from castor.cli import cmd_validate
 
         cfg = make_valid_config()
@@ -954,6 +952,7 @@ class TestCmdValidate:
     def test_cmd_validate_exits_0_on_warns_only(self, tmp_path):
         """cmd_validate exits 0 when there are warns but no fails (no --strict)."""
         import yaml
+
         from castor.cli import cmd_validate
 
         cfg = make_valid_config()
@@ -981,6 +980,7 @@ class TestCmdValidate:
     def test_cmd_validate_strict_exits_1_on_warn(self, tmp_path):
         """cmd_validate --strict exits 1 when there are warns."""
         import yaml
+
         from castor.cli import cmd_validate
 
         cfg = make_valid_config()
@@ -1006,6 +1006,7 @@ class TestCmdValidate:
     def test_cmd_validate_category_filter(self, tmp_path):
         """cmd_validate --category only runs that category."""
         import yaml
+
         from castor.cli import cmd_validate
 
         cfg = make_valid_config()

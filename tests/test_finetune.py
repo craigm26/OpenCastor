@@ -12,14 +12,12 @@ Covers:
 
 from __future__ import annotations
 
-import io
 import json
 import os
 import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -156,7 +154,7 @@ def test_export_to_file(exporter):
         count = exporter.export_to_file(path, fmt="chatml", limit=100)
         assert count == 3
         with open(path) as f:
-            lines = [json.loads(l) for l in f if l.strip()]
+            lines = [json.loads(ln) for ln in f if ln.strip()]
         assert len(lines) == 3
         assert "messages" in lines[0]
     finally:
@@ -166,7 +164,7 @@ def test_export_to_file(exporter):
 def test_export_to_bytes_is_valid_jsonl(exporter):
     data = exporter.export_to_bytes(fmt="alpaca", limit=100)
     assert isinstance(data, bytes)
-    lines = [l for l in data.decode().splitlines() if l.strip()]
+    lines = [ln for ln in data.decode().splitlines() if ln.strip()]
     assert len(lines) == 3
     first = json.loads(lines[0])
     assert "instruction" in first and "input" in first and "output" in first
@@ -240,7 +238,7 @@ def test_api_finetune_export_chatml(api_client, mock_exporter):
     resp = api_client.get("/api/finetune/export?format=chatml&limit=100")
     assert resp.status_code == 200
     assert "application" in resp.headers["content-type"]
-    lines = [l for l in resp.text.splitlines() if l.strip()]
+    lines = [ln for ln in resp.text.splitlines() if ln.strip()]
     assert len(lines) == 3
     first = json.loads(lines[0])
     assert "messages" in first
@@ -261,7 +259,7 @@ def test_api_finetune_export_invalid_format(api_client):
 def test_api_finetune_export_require_action(api_client, mock_exporter):
     resp = api_client.get("/api/finetune/export?format=jsonl&require_action=true")
     assert resp.status_code == 200
-    lines = [l for l in resp.text.splitlines() if l.strip()]
+    lines = [ln for ln in resp.text.splitlines() if ln.strip()]
     assert len(lines) == 2  # ep2 skipped (no action)
 
 

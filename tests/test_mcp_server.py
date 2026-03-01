@@ -41,7 +41,6 @@ def test_unknown_tool_returns_jsonrpc_error(client):
     assert body["error"]["code"] == -32601
 
 
-
 def test_command_dispatch_requires_instruction():
     with pytest.raises(ValueError):
         asyncio.run(mcp_server._tool_command_dispatch({}))

@@ -9,8 +9,6 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -41,9 +39,11 @@ def _driver_with_mock_serial(config=None, readline_data=b'{"ack":true}\n'):
 
     fake_ser = _make_fake_serial(readline_data)
 
-    with patch("castor.drivers.arduino_driver.HAS_SERIAL", True), patch(
-        "castor.drivers.arduino_driver.serial"
-    ) as mock_serial_mod, patch("castor.drivers.arduino_driver.time.sleep"):
+    with (
+        patch("castor.drivers.arduino_driver.HAS_SERIAL", True),
+        patch("castor.drivers.arduino_driver.serial") as mock_serial_mod,
+        patch("castor.drivers.arduino_driver.time.sleep"),
+    ):
         mock_serial_mod.Serial.return_value = fake_ser
         from castor.drivers.arduino_driver import ArduinoSerialDriver
 
@@ -191,45 +191,45 @@ class TestTankMixing:
 
     def test_forward(self):
         drv = self._drv(deadband_pwm=0)
-        l, r = drv._mix_tank(1.0, 0.0)
-        assert l == 255
+        left, r = drv._mix_tank(1.0, 0.0)
+        assert left == 255
         assert r == 255
 
     def test_reverse(self):
         drv = self._drv(deadband_pwm=0)
-        l, r = drv._mix_tank(-1.0, 0.0)
-        assert l == -255
+        left, r = drv._mix_tank(-1.0, 0.0)
+        assert left == -255
         assert r == -255
 
     def test_turn_left(self):
         drv = self._drv(deadband_pwm=0)
-        l, r = drv._mix_tank(0.0, -1.0)
+        left, r = drv._mix_tank(0.0, -1.0)
         # angular=-1 → left=-1→-255, right=+1→255
-        assert l == -255
+        assert left == -255
         assert r == 255
 
     def test_turn_right(self):
         drv = self._drv(deadband_pwm=0)
-        l, r = drv._mix_tank(0.0, 1.0)
-        assert l == 255
+        left, r = drv._mix_tank(0.0, 1.0)
+        assert left == 255
         assert r == -255
 
     def test_zero(self):
         drv = self._drv(deadband_pwm=0)
-        l, r = drv._mix_tank(0.0, 0.0)
-        assert l == 0
+        left, r = drv._mix_tank(0.0, 0.0)
+        assert left == 0
         assert r == 0
 
     def test_clamping(self):
         drv = self._drv(deadband_pwm=0)
-        l, r = drv._mix_tank(2.0, 2.0)
-        assert abs(l) <= 255
+        left, r = drv._mix_tank(2.0, 2.0)
+        assert abs(left) <= 255
         assert abs(r) <= 255
 
     def test_custom_max_pwm(self):
         drv = self._drv(max_pwm=200, deadband_pwm=0)
-        l, r = drv._mix_tank(1.0, 0.0)
-        assert l == 200
+        left, r = drv._mix_tank(1.0, 0.0)
+        assert left == 200
         assert r == 200
 
 

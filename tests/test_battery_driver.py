@@ -10,7 +10,6 @@ import pytest
 import castor.drivers.battery_driver as _mod
 from castor.drivers.battery_driver import BatteryDriver, _estimate_percent, get_battery
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 

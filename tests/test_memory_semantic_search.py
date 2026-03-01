@@ -68,7 +68,9 @@ def test_embed_text_returns_none_for_whitespace():
 def test_embed_text_returns_list_or_none():
     result = EpisodeMemory._embed_text("hello world")
     # Either a list of floats (ST available) or None (ST not installed)
-    assert result is None or (isinstance(result, list) and all(isinstance(x, float) for x in result))
+    assert result is None or (
+        isinstance(result, list) and all(isinstance(x, float) for x in result)
+    )
 
 
 # ── _cosine ───────────────────────────────────────────────────────────────────
@@ -76,17 +78,20 @@ def test_embed_text_returns_list_or_none():
 
 def test_cosine_identical_vectors():
     from castor.memory import EpisodeMemory
+
     v = [1.0, 0.0, 0.0]
     assert EpisodeMemory._cosine(v, v) == pytest.approx(1.0)
 
 
 def test_cosine_orthogonal_vectors():
     from castor.memory import EpisodeMemory
+
     assert EpisodeMemory._cosine([1.0, 0.0], [0.0, 1.0]) == pytest.approx(0.0)
 
 
 def test_cosine_length_mismatch_returns_zero():
     from castor.memory import EpisodeMemory
+
     assert EpisodeMemory._cosine([1.0, 0.0], [1.0]) == 0.0
 
 
@@ -95,6 +100,7 @@ def test_cosine_length_mismatch_returns_zero():
 
 def test_embeddings_table_created(tmp_path):
     import sqlite3
+
     db = str(tmp_path / "mem.db")
     EpisodeMemory(db_path=db, max_episodes=0)
     con = sqlite3.connect(db)
@@ -119,7 +125,9 @@ def test_semantic_search_limit_respected(mem):
 @pytest.fixture()
 def client():
     from fastapi.testclient import TestClient
+
     import castor.api as _api
+
     return TestClient(_api.app)
 
 

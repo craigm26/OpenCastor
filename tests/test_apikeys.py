@@ -10,13 +10,9 @@ Covers:
 
 from __future__ import annotations
 
-import os
-import tempfile
 import time
-from pathlib import Path
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -126,7 +122,7 @@ def test_persistence(tmp_path):
 
 
 def test_get_key_metadata(tmp_mgr):
-    raw = tmp_mgr.generate(label="meta", role="admin")
+    tmp_mgr.generate(label="meta", role="admin")
     items = tmp_mgr.list()
     key_id = items[0]["key_id"]
     meta = tmp_mgr.get(key_id)
@@ -155,9 +151,7 @@ def api_client(tmp_path, monkeypatch):
 
 
 def test_api_keys_generate(api_client):
-    resp = api_client.post(
-        "/api/keys/generate", json={"label": "ci", "role": "operator"}
-    )
+    resp = api_client.post("/api/keys/generate", json={"label": "ci", "role": "operator"})
     assert resp.status_code == 200
     data = resp.json()
     assert "key" in data
@@ -165,9 +159,7 @@ def test_api_keys_generate(api_client):
 
 
 def test_api_keys_generate_invalid_role(api_client):
-    resp = api_client.post(
-        "/api/keys/generate", json={"label": "x", "role": "superuser"}
-    )
+    resp = api_client.post("/api/keys/generate", json={"label": "x", "role": "superuser"})
     assert resp.status_code == 422
 
 

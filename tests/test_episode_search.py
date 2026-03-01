@@ -17,13 +17,47 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 _EPISODES = [
-    {"id": "1", "instruction": "go forward and turn left", "raw_text": "{}", "action": {"action": "forward"}, "latency_ms": 100, "timestamp": "t"},
-    {"id": "2", "instruction": "stop immediately", "raw_text": "{}", "action": {"action": "stop"}, "latency_ms": 50, "timestamp": "t"},
-    {"id": "3", "instruction": "go forward fast", "raw_text": "{}", "action": {"action": "forward"}, "latency_ms": 80, "timestamp": "t"},
-    {"id": "4", "instruction": "turn right sharply", "raw_text": "{}", "action": {"action": "turn"}, "latency_ms": 90, "timestamp": "t"},
-    {"id": "5", "instruction": "take a photo", "raw_text": "{}", "action": {"action": "photo"}, "latency_ms": 200, "timestamp": "t"},
+    {
+        "id": "1",
+        "instruction": "go forward and turn left",
+        "raw_text": "{}",
+        "action": {"action": "forward"},
+        "latency_ms": 100,
+        "timestamp": "t",
+    },
+    {
+        "id": "2",
+        "instruction": "stop immediately",
+        "raw_text": "{}",
+        "action": {"action": "stop"},
+        "latency_ms": 50,
+        "timestamp": "t",
+    },
+    {
+        "id": "3",
+        "instruction": "go forward fast",
+        "raw_text": "{}",
+        "action": {"action": "forward"},
+        "latency_ms": 80,
+        "timestamp": "t",
+    },
+    {
+        "id": "4",
+        "instruction": "turn right sharply",
+        "raw_text": "{}",
+        "action": {"action": "turn"},
+        "latency_ms": 90,
+        "timestamp": "t",
+    },
+    {
+        "id": "5",
+        "instruction": "take a photo",
+        "raw_text": "{}",
+        "action": {"action": "photo"},
+        "latency_ms": 200,
+        "timestamp": "t",
+    },
 ]
 
 
@@ -148,7 +182,6 @@ def api_client():
 
 @pytest.fixture()
 def mock_searcher():
-    from castor.episode_search import EpisodeSimilaritySearch
 
     mem = MagicMock()
     mem.query_recent.return_value = _EPISODES
