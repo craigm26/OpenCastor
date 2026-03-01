@@ -4763,10 +4763,13 @@ async def privacy_mode_disable():
 async def voice_loop_start():
     from castor.voice_loop import get_voice_loop
 
-    # Default wake phrase = robot's name from RCAN config so it always
-    # responds to its own name without requiring env-var overrides.
+    # Wake phrase priority: CASTOR_HOTWORD env var → robot name from RCAN →
+    # "hey castor" fallback.  Robot name from RCAN ensures the robot always
+    # wakes on its own name by default without any env config.
     robot_name = (state.config or {}).get("metadata", {}).get("robot_name", "")
-    hotword = os.getenv("CASTOR_HOTWORD", robot_name or "hey castor")
+    env_hotword = os.getenv("CASTOR_HOTWORD", "")
+    hotword = env_hotword or robot_name or "hey castor"
+    logger.info("Voice loop wake phrase: %r (robot_name=%r, env=%r)", hotword, robot_name, env_hotword)
 
     loop = get_voice_loop(brain=state.brain, hotword=hotword)
     loop.start()
