@@ -288,4 +288,13 @@ def get_voice_loop(
                 hotword=effective_hotword,
                 dry_run_mode=dry_run_mode,
             )
+        elif hotword and _singleton._hotword != effective_hotword and not _singleton._running:
+            # Caller explicitly passed a new hotword and the loop isn't running —
+            # recreate so the wake phrase is updated (e.g. robot name from config).
+            _singleton = VoiceAssistantLoop(
+                brain=brain or _singleton._brain,
+                on_command=on_command or getattr(_singleton, "_on_command", None),
+                hotword=effective_hotword,
+                dry_run_mode=dry_run_mode,
+            )
     return _singleton
