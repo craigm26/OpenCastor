@@ -183,7 +183,9 @@ class WakeWordDetector:
 
             logger.info(
                 "Hotword: microphone open at %dHz → %dHz, listening for %r",
-                native_rate, target_rate, self._wake_phrase,
+                native_rate,
+                target_rate,
+                self._wake_phrase,
             )
             while not self._stop_event.is_set():
                 try:
