@@ -3072,7 +3072,13 @@ async def i18n_translate(req: _I18nTranslateRequest):
 
 @app.post("/api/hotword/start", dependencies=[Depends(verify_token)])
 async def hotword_start():
-    """POST /api/hotword/start — Start always-on wake word detection."""
+    """POST /api/hotword/start — Start always-on wake word detection.
+
+    The wake phrase is resolved in order:
+    1. ``CASTOR_HOTWORD`` environment variable
+    2. ``metadata.robot_name`` from the loaded RCAN config
+    3. Default: ``"hey castor"``
+    """
     from castor.hotword import get_detector
 
     async def _on_wake():
@@ -3080,11 +3086,17 @@ async def hotword_start():
         if state.listener and hasattr(state.listener, "enabled") and state.listener.enabled:
             logger.info("Wake word detected — triggering STT listen")
 
-    det = get_detector()
+    # Prefer env var; fall back to robot name from RCAN config so that a robot
+    # named "alex" will respond to "alex" without any extra configuration.
+    env_phrase = os.getenv("CASTOR_HOTWORD", "")
+    robot_name = (state.config or {}).get("metadata", {}).get("robot_name", "")
+    wake_phrase = env_phrase or robot_name or "hey castor"
+
+    det = get_detector(wake_phrase=wake_phrase)
     det.start(
         on_wake=lambda: asyncio.run_coroutine_threadsafe(_on_wake(), asyncio.get_event_loop())
     )
-    return det.status
+    return {**det.status, "wake_phrase": wake_phrase}
 
 
 @app.post("/api/hotword/stop", dependencies=[Depends(verify_token)])
@@ -3099,10 +3111,11 @@ async def hotword_stop():
 
 @app.get("/api/hotword/status", dependencies=[Depends(verify_token)])
 async def hotword_status():
-    """GET /api/hotword/status — Wake word detector status."""
+    """GET /api/hotword/status — Wake word detector status including active wake phrase."""
     from castor.hotword import get_detector
 
-    return get_detector().status
+    det = get_detector()
+    return {**det.status, "wake_phrase": det._wake_phrase}
 
 
 # ---------------------------------------------------------------------------
@@ -4769,7 +4782,9 @@ async def voice_loop_start():
     robot_name = (state.config or {}).get("metadata", {}).get("robot_name", "")
     env_hotword = os.getenv("CASTOR_HOTWORD", "")
     hotword = env_hotword or robot_name or "hey castor"
-    logger.info("Voice loop wake phrase: %r (robot_name=%r, env=%r)", hotword, robot_name, env_hotword)
+    logger.info(
+        "Voice loop wake phrase: %r (robot_name=%r, env=%r)", hotword, robot_name, env_hotword
+    )
 
     loop = get_voice_loop(brain=state.brain, hotword=hotword)
     loop.start()

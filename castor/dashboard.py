@@ -38,21 +38,27 @@ st.markdown(
   /* dark background */
   .stApp { background-color: #0d1117; color: #e6edf3; }
 
+  /* main container breathing room */
+  .block-container { padding: 1.5rem 2rem !important; }
+
   /* metric cards */
   [data-testid="stMetric"] {
-    background: #161b22;
-    border-radius: 8px;
-    padding: 8px 12px;
-    border: 1px solid #30363d;
+    background: #161b22 !important;
+    border-radius: 8px !important;
+    padding: 18px 20px !important;
+    border: 1px solid #21262d !important;
+    border-left: 3px solid #58a6ff !important;
+    transition: border-left-color 0.3s;
   }
-  [data-testid="stMetricValue"] { font-size: 1.1rem !important; }
+  [data-testid="stMetricValue"] { font-size: 1.2rem !important; font-weight: 700 !important; }
+  [data-testid="stMetricLabel"] { font-size: 0.7rem !important; color: #adbac7 !important; text-transform: uppercase; letter-spacing: 0.06em; }
 
   /* header status bar */
   .status-bar {
     background: #161b22;
     border: 1px solid #30363d;
     border-radius: 8px;
-    padding: 8px 16px;
+    padding: 10px 18px !important;
     margin-bottom: 12px;
     font-family: monospace;
     font-size: 0.9rem;
@@ -60,7 +66,7 @@ st.markdown(
 
   /* panel titles */
   .panel-title {
-    color: #8b949e;
+    color: #adbac7;
     font-size: 0.7rem;
     font-weight: 600;
     letter-spacing: 0.08em;
@@ -82,20 +88,7 @@ st.markdown(
   /* compact dataframe */
   [data-testid="stDataFrame"] { font-size: 0.8rem; }
 
-  /* ── enhanced metric cards ── */
-  [data-testid="stMetric"] {
-    background: #161b22 !important;
-    border-radius: 8px !important;
-    padding: 12px 16px !important;
-    border: 1px solid #21262d !important;
-    border-left: 3px solid #58a6ff !important;
-    transition: border-left-color 0.3s;
-  }
-  [data-testid="stMetricValue"] { font-size: 1.05rem !important; font-weight: 600 !important; }
-  [data-testid="stMetricLabel"] { font-size: 0.7rem !important; color: #8b949e !important; text-transform: uppercase; letter-spacing: 0.06em; }
-
   /* ── glowing status dots ── */
-  .status-bar { padding: 10px 18px !important; }
   .dot-green  { display:inline-block; width:10px; height:10px; border-radius:50%;
                 background:#3fb950; box-shadow: 0 0 6px #3fb950; margin-right:4px; }
   .dot-red    { display:inline-block; width:10px; height:10px; border-radius:50%;
@@ -138,17 +131,31 @@ st.markdown(
   /* ── section divider accent ── */
   .section-header {
     color: #e6edf3;
-    font-size: 0.72rem;
+    font-size: 0.8rem;
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     border-left: 3px solid #58a6ff;
-    padding-left: 8px;
+    padding-left: 10px;
     margin: 12px 0 6px 0;
   }
   .section-header.green { border-left-color: #3fb950; }
   .section-header.orange { border-left-color: #d29922; }
   .section-header.red { border-left-color: #f85149; }
+
+  /* ── sensor/mode badges ── */
+  .badge-hw { display:inline-block; background:#1a4a1a; color:#3fb950; border:1px solid #3fb950; border-radius:4px; font-size:0.65rem; font-weight:700; letter-spacing:0.06em; padding:1px 7px; vertical-align:middle; text-transform:uppercase; }
+  .badge-mock { display:inline-block; background:#3d2b00; color:#d29922; border:1px solid #d29922; border-radius:4px; font-size:0.65rem; font-weight:700; letter-spacing:0.06em; padding:1px 7px; vertical-align:middle; text-transform:uppercase; }
+  .badge-offline { display:inline-block; background:#3d0000; color:#f85149; border:1px solid #f85149; border-radius:4px; font-size:0.65rem; font-weight:700; letter-spacing:0.06em; padding:1px 7px; vertical-align:middle; text-transform:uppercase; }
+  .badge-error { display:inline-block; background:#4d1f00; color:#ff7b72; border:1px solid #ff7b72; border-radius:4px; font-size:0.65rem; font-weight:700; letter-spacing:0.06em; padding:1px 7px; vertical-align:middle; text-transform:uppercase; }
+
+  /* ── telemetry status row cards ── */
+  .telem-row { display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:6px; background:#161b22; border:1px solid #21262d; margin-bottom:6px; font-size:0.85rem; }
+  .telem-label { flex:1; font-weight:600; color:#e6edf3; }
+  .telem-val { color:#adbac7; font-size:0.8rem; }
+
+  /* ── divider spacing ── */
+  .block-container > hr { margin: 1.5rem 0 !important; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -212,6 +219,28 @@ hist = _get("/api/command/history?limit=8")
 episodes = _get("/api/memory/episodes?limit=20")
 usage = _get("/api/usage")
 
+# Sensor telemetry for status panel
+_imu_raw = _get("/api/imu/latest")
+_imu_orient = _get("/api/imu/orientation")  # may 500 on alex
+_lidar_raw = _get("/api/lidar/scan")
+_bat_raw = _get("/api/battery/latest")
+
+# Determine real vs mock for each sensor
+_imu_mode = _imu_raw.get("mode", "offline") if _imu_raw else "offline"
+_lidar_mode = _lidar_raw.get("mode", "offline") if _lidar_raw else "offline"
+_bat_mode = _bat_raw.get("mode", "offline") if _bat_raw else "offline"
+
+
+def _sensor_badge(mode: str) -> str:
+    if mode == "hardware":
+        return '<span class="badge-hw">HARDWARE</span>'
+    if mode == "mock":
+        return '<span class="badge-mock">MOCK</span>'
+    if mode == "error":
+        return '<span class="badge-error">ERROR</span>'
+    return '<span class="badge-offline">OFFLINE</span>'
+
+
 robot_name = status.get("robot_name", health.get("robot_name", "Bob"))
 uptime = health.get("uptime_s", 0)
 brain_ok = health.get("brain")
@@ -247,6 +276,29 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+
+# ── TELEMETRY STATUS PANEL ─────────────────────────────────────────────────────
+_telem_cols = st.columns(5)
+_sensors = [
+    ("🧭 IMU", _imu_mode, _imu_raw.get("model", "") if _imu_raw else ""),
+    ("📡 LiDAR", _lidar_mode, "RPLidar" if _lidar_mode == "hardware" else "not connected"),
+    (
+        "🔋 Battery",
+        _bat_mode,
+        f"{_bat_raw.get('voltage_v', 0):.1f}V"
+        if _bat_raw and _bat_raw.get("voltage_v")
+        else "no sensor",
+    ),
+    ("🦾 Driver", driver.get("mode", "offline"), driver.get("driver_type", "?")),
+    ("📷 Camera", "hardware" if cam_ok else "offline", "live" if cam_ok else "no signal"),
+]
+for col, (name, mode, detail) in zip(_telem_cols, _sensors, strict=False):
+    badge = _sensor_badge(mode)
+    col.markdown(
+        f'<div class="telem-row"><div><div class="telem-label">{name}</div>'
+        f'<div class="telem-val">{detail}</div></div>{badge}</div>',
+        unsafe_allow_html=True,
+    )
 
 # ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -544,6 +596,17 @@ with right_col:
     c2.metric("Speaker", "online" if speaker_ok else "offline")
     c3.metric("Tokens", f"{_today_tokens:,}" if _today_tokens else "0")
 
+    if _imu_mode == "mock" or _lidar_mode == "mock" or _bat_mode == "mock":
+        _mock_sensors = [
+            s
+            for s, m in [("IMU", _imu_mode), ("LiDAR", _lidar_mode), ("Battery", _bat_mode)]
+            if m == "mock"
+        ]
+        st.warning(
+            f"Simulated sensors: {', '.join(_mock_sensors)} — not physically connected",
+            icon=None,
+        )
+
     last_thought = str(proc.get("last_thought") or "")
     if last_thought:
         st.caption(f"💭 {last_thought[:80]}{'…' if len(last_thought) > 80 else ''}")
@@ -565,13 +628,19 @@ with right_col:
         if drv_err:
             st.caption(f"ℹ️ {drv_err[:52]}")
 
-    _bat = _get("/api/battery/latest")
     with _bat_col:
         st.markdown('<p class="section-header green">🔋 Battery</p>', unsafe_allow_html=True)
-        if _bat.get("available", False) or _bat.get("voltage_v") is not None:
-            _bv = _bat.get("voltage_v")
-            _bc = _bat.get("current_ma")
-            _bp = _bat.get("power_mw")
+        _bat_mode_cur = _bat_raw.get("mode", "offline") if _bat_raw else "offline"
+        if _bat_mode_cur == "mock":
+            st.warning(
+                "Mock mode — No battery sensor connected. Readings are simulated.", icon=None
+            )
+        elif _bat_raw and (
+            _bat_raw.get("available", False) or _bat_raw.get("voltage_v") is not None
+        ):
+            _bv = _bat_raw.get("voltage_v")
+            _bc = _bat_raw.get("current_ma")
+            _bp = _bat_raw.get("power_mw")
             _bat1, _bat2 = st.columns(2)
             _bat1.metric("Voltage", f"{_bv:.1f}V" if _bv is not None else "—")
             _bat2.metric("Current", f"{_bc:.0f}mA" if _bc is not None else "—")
@@ -886,8 +955,10 @@ with st.expander("🧠 Provider Health", expanded=False):
 # ── LIDAR POLAR PLOT (#337) ───────────────────────────────────────────────────
 st.divider()
 with st.expander("📡 LiDAR Scan", expanded=False):
-    _lidar_scan = _get("/api/lidar/scan")
+    _lidar_scan = _lidar_raw  # reuse already-fetched data
     _lidar_zone = _get("/api/lidar/zone_map")
+    if _lidar_scan.get("mode") == "mock":
+        st.warning("LiDAR in mock mode — synthetic data shown, no RPLidar connected", icon=None)
     if _lidar_scan.get("error") or not _lidar_scan.get("points"):
         st.caption("LiDAR not available — connect an RPLidar sensor to enable.")
     else:
@@ -964,6 +1035,16 @@ with st.expander("📡 LiDAR Scan", expanded=False):
                 )
             except Exception:
                 pass
+
+        # IMU orientation alongside LiDAR (guarded — /api/imu/orientation may 500)
+        st.markdown('<p class="panel-title">IMU Orientation</p>', unsafe_allow_html=True)
+        if _imu_orient.get("error") or not _imu_orient:
+            st.caption("IMU orientation unavailable — sensor not connected or returned an error.")
+        else:
+            _or_col1, _or_col2, _or_col3 = st.columns(3)
+            _or_col1.metric("Yaw", f"{_imu_orient.get('yaw_deg', 0):.1f}°")
+            _or_col2.metric("Pitch", f"{_imu_orient.get('pitch_deg', 0):.1f}°")
+            _or_col3.metric("Roll", f"{_imu_orient.get('roll_deg', 0):.1f}°")
 
 
 # ── FLEET (Swarm) PANEL ───────────────────────────────────────────────────────
