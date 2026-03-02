@@ -1011,6 +1011,81 @@ class EpisodeMemory:
             logger.warning("EpisodeMemory.tag_frequency error: %s", exc)
             return []
 
+    def export_csv(
+        self,
+        path: str,
+        window_s: float = 86400.0,
+        limit: int = 1000,
+    ) -> Dict:
+        """Export recent episodes to a CSV file.
+
+        Writes a header row followed by one row per episode.  Columns:
+        ``id``, ``ts``, ``instruction``, ``raw_thought``, ``action_type``,
+        ``latency_ms``, ``outcome``, ``source``, ``tags``.
+
+        Args:
+            path:     File path to write (created or overwritten).
+            window_s: Look-back window in seconds (default 86 400 = 24 h).
+            limit:    Maximum number of rows to write (default 1 000).
+
+        Returns:
+            ``{"path": str, "rows_written": int, "columns": list}`` on success.
+            ``{"error": str}`` on failure.  Never raises.
+        """
+        import csv as _csv
+        import time as _time
+
+        _COLUMNS = [
+            "id", "ts", "instruction", "raw_thought",
+            "action_type", "latency_ms", "outcome", "source", "tags",
+        ]
+
+        try:
+            cutoff = _time.time() - max(0.0, window_s)
+            with self._conn() as con:
+                rows = con.execute(
+                    """
+                    SELECT id, ts, instruction, raw_thought, action_json,
+                           latency_ms, outcome, source, tags
+                    FROM episodes
+                    WHERE ts >= ?
+                    ORDER BY ts DESC
+                    LIMIT ?
+                    """,
+                    (cutoff, limit),
+                ).fetchall()
+
+            import json as _json
+
+            with open(path, "w", newline="", encoding="utf-8") as fh:
+                writer = _csv.DictWriter(fh, fieldnames=_COLUMNS)
+                writer.writeheader()
+                for row in rows:
+                    action_json = row[4]
+                    try:
+                        action_type = _json.loads(action_json).get("type", "") if action_json else ""
+                    except Exception:
+                        action_type = ""
+                    raw_tags = row[8]
+                    tags_str = raw_tags if raw_tags else ""
+                    writer.writerow({
+                        "id": row[0],
+                        "ts": row[1],
+                        "instruction": row[2] or "",
+                        "raw_thought": row[3] or "",
+                        "action_type": action_type,
+                        "latency_ms": row[5] or 0.0,
+                        "outcome": row[6] or "",
+                        "source": row[7] or "",
+                        "tags": tags_str,
+                    })
+
+            return {"path": path, "rows_written": len(rows), "columns": _COLUMNS}
+
+        except Exception as exc:
+            logger.warning("EpisodeMemory.export_csv error: %s", exc)
+            return {"error": str(exc)}
+
     def cluster_episodes(
         self,
         n_clusters: int = 5,

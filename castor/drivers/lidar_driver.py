@@ -118,6 +118,10 @@ class LidarDriver:
         self._scan_count: int = 0
         self._last_scan: list = []
         self._prev_scan_points: list = []  # ── Issue #358: moving_objects() history
+        # Issue #376: accumulated SLAM occupancy map
+        self._slam_map: Optional[List[List[float]]] = None
+        self._slam_map_size_m: float = 5.0
+        self._slam_map_resolution_m: float = 0.05
 
         # ── History DB ────────────────────────────────────────────────────────
         self._history_db_path: Optional[str] = _resolve_history_db_path()
@@ -960,6 +964,77 @@ class LidarDriver:
             "resolution_m": resolution_m,
             "cells": cells,
             "mode": self._mode,
+        }
+
+    def slam_update(
+        self,
+        reset: bool = False,
+        size_m: float = 5.0,
+        resolution_m: float = 0.05,
+    ) -> Dict[str, Any]:
+        """Incrementally accumulate the current scan into a persistent occupancy map.
+
+        Merges new scan points into ``_slam_map`` using logical-OR: a cell is
+        occupied once set and stays occupied across subsequent calls.
+
+        In mock mode returns zeros with ``cells_updated=0``.
+
+        Args:
+            reset:        Clear the accumulated map before merging (default False).
+            size_m:       Physical extent of the square map in metres.
+            resolution_m: Cell size in metres.
+
+        Returns:
+            Dict with keys ``cells_updated`` (int), ``total_occupied`` (int),
+            ``cells`` (grid dimension), ``mode`` (str), ``reset`` (bool).
+        """
+        import math
+
+        cells = max(1, int(size_m / resolution_m))
+        origin_x = -size_m / 2.0
+        origin_y = -size_m / 2.0
+
+        with self._lock:
+            # Reinitialise map on reset or size change
+            if (
+                reset
+                or self._slam_map is None
+                or len(self._slam_map) != cells
+                or len(self._slam_map[0]) != cells
+            ):
+                self._slam_map = [[0.0] * cells for _ in range(cells)]
+                self._slam_map_size_m = size_m
+                self._slam_map_resolution_m = resolution_m
+
+            cells_updated = 0
+
+            if self._mode == "hardware":
+                scan = list(self._last_scan)
+                for point in scan:
+                    angle_deg = float(point.get("angle", 0.0))
+                    dist_m = float(point.get("distance", 0.0)) / 1000.0
+                    if dist_m <= 0.0:
+                        continue
+                    rad = math.radians(angle_deg)
+                    x = dist_m * math.cos(rad) - origin_x
+                    y = dist_m * math.sin(rad) - origin_y
+                    col = int(x / resolution_m)
+                    row = int(y / resolution_m)
+                    if 0 <= row < cells and 0 <= col < cells:
+                        if self._slam_map[row][col] == 0.0:
+                            cells_updated += 1
+                        self._slam_map[row][col] = 1.0
+
+            total_occupied = sum(
+                1 for row in self._slam_map for v in row if v > 0.0
+            )
+
+        return {
+            "cells_updated": cells_updated,
+            "total_occupied": total_occupied,
+            "cells": cells,
+            "mode": self._mode,
+            "reset": reset,
         }
 
     def save_map(

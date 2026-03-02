@@ -101,6 +101,10 @@ class BehaviorRunner:
             "get_var": self._step_get_var,
             # Issue #373: assert condition — halt if false
             "assert": self._step_assert,
+            # Issue #379: block until named event is set on runner
+            "event_trigger": self._step_event_trigger,
+            # Issue #383: append structured JSON log to file
+            "log_step": self._step_log_step,
         }
 
         # Chain-recursion depth counter (not thread-local; behaviors run single-threaded)
@@ -113,6 +117,12 @@ class BehaviorRunner:
 
         # Issue #368: runtime variable store (reset on stop())
         self._vars: Dict[str, Any] = {}
+
+        # Issue #379: named event store for event_trigger step
+        import threading as _threading2
+
+        self._events: Dict[str, Any] = {}  # name → threading.Event
+        self._events_lock: _threading2.Lock = _threading2.Lock()
 
     # ------------------------------------------------------------------
     # Public API
@@ -221,6 +231,10 @@ class BehaviorRunner:
         self._stop_event.set()
         self._stop_event.clear()
         self._vars.clear()
+        with self._events_lock:
+            for ev in self._events.values():
+                ev.set()  # unblock any waiting event_trigger steps
+            self._events.clear()
         if self.driver is not None:
             try:
                 self.driver.stop()
@@ -1937,3 +1951,135 @@ class BehaviorRunner:
                             f"Cannot evaluate condition {condition!r}: lhs={lhs_s!r}, rhs={rhs_s!r}"
                         ) from exc
         raise ValueError(f"No supported operator found in condition {condition!r}")
+
+    # ------------------------------------------------------------------
+    # Issue #379 — event_trigger step + set_event / clear_event
+    # ------------------------------------------------------------------
+
+    def set_event(self, name: str) -> None:
+        """Set the named event, unblocking any waiting event_trigger step.
+
+        Creates the event if it does not yet exist.
+
+        Args:
+            name: Event name string (must match the ``event:`` key in the step).
+        """
+        import threading as _th
+
+        with self._events_lock:
+            if name not in self._events:
+                self._events[name] = _th.Event()
+            self._events[name].set()
+        logger.debug("BehaviorRunner.set_event: %r", name)
+
+    def clear_event(self, name: str) -> None:
+        """Clear the named event.
+
+        Args:
+            name: Event name string.
+        """
+        with self._events_lock:
+            if name in self._events:
+                self._events[name].clear()
+        logger.debug("BehaviorRunner.clear_event: %r", name)
+
+    def _step_event_trigger(self, step: dict) -> None:
+        """Block until a named event is set (or timeout elapses).
+
+        Example::
+
+            - type: event_trigger
+              event: obstacle_cleared
+              timeout_s: 30.0
+              on_timeout: warn   # or stop (default)
+
+        Parameters
+        ----------
+        step:
+            ``event`` (str, required): Event name to wait for.
+            ``timeout_s`` (float, default 30.0): Max wait time in seconds.
+            ``on_timeout`` (str, default ``"stop"``): ``"stop"`` sets
+                ``_running=False``; ``"warn"`` logs a warning and continues.
+        """
+        import threading as _th
+
+        event_name: str = step.get("event", "")
+        if not event_name:
+            logger.warning("event_trigger step: 'event' key missing — skipping")
+            return
+
+        timeout_s: float = float(step.get("timeout_s", 30.0))
+        on_timeout: str = step.get("on_timeout", "stop")
+
+        with self._events_lock:
+            if event_name not in self._events:
+                self._events[event_name] = _th.Event()
+            ev = self._events[event_name]
+
+        logger.debug(
+            "event_trigger: waiting for %r (timeout_s=%.1f)", event_name, timeout_s
+        )
+        fired = ev.wait(timeout=timeout_s if timeout_s > 0 else None)
+
+        if fired:
+            logger.debug("event_trigger: event %r fired", event_name)
+        else:
+            msg = f"event_trigger: timeout waiting for event {event_name!r}"
+            if on_timeout == "warn":
+                logger.warning(msg)
+            else:
+                logger.error(msg)
+                self._running = False
+
+    # ------------------------------------------------------------------
+    # Issue #383 — log_step: append structured JSON log entry to file
+    # ------------------------------------------------------------------
+
+    def _step_log_step(self, step: dict) -> None:
+        """Append a structured JSON record to a log file.
+
+        Example::
+
+            - type: log_step
+              path: /tmp/behavior.log
+              data:
+                event: patrol_started
+                robot: my-robot
+
+        ``data`` values that equal ``$var.<name>`` are substituted from
+        the runtime variable store before writing.
+
+        Parameters
+        ----------
+        step:
+            ``path`` (str, required): File path to append to.
+            ``data`` (dict, optional): Key-value pairs to include in the record.
+                Values matching ``"$var.<name>"`` are substituted from ``_vars``.
+        """
+        import json as _json
+        import time as _time
+
+        path: str = step.get("path", "")
+        if not path:
+            logger.warning("log_step: 'path' key missing — skipping")
+            return
+
+        raw_data: dict = step.get("data") or {}
+
+        # Substitute $var.<name> placeholders in values
+        substituted: dict = {}
+        for k, v in raw_data.items():
+            if isinstance(v, str) and v.startswith("$var."):
+                var_name = v[5:]
+                substituted[k] = self._vars.get(var_name, v)
+            else:
+                substituted[k] = v
+
+        record = {"ts": _time.time(), "step": step.get("label", "log_step"), "data": substituted}
+
+        try:
+            with open(path, "a", encoding="utf-8") as fh:
+                fh.write(_json.dumps(record) + "\n")
+            logger.debug("log_step: wrote record to %r", path)
+        except Exception as exc:
+            logger.warning("log_step: could not write to %r: %s", path, exc)

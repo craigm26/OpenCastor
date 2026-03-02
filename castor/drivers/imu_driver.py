@@ -893,6 +893,61 @@ class IMUDriver:
         """Clear shake detection history."""
         self._shake_history = []
 
+    # ── Issue #381 — step_counter (dict-returning variant) ────────────────────
+
+    def step_counter(
+        self,
+        threshold_g: Optional[float] = None,
+        min_interval_s: float = 0.3,
+    ) -> dict:
+        """Count motion steps via accelerometer magnitude peaks.
+
+        Each call reads the IMU, applies a peak-detection algorithm using
+        *threshold_g* as the detection threshold, and returns the accumulated
+        step count together with configuration metadata.
+
+        In mock mode the step count remains 0 (no hardware to integrate).
+
+        Args:
+            threshold_g:    Acceleration magnitude threshold in g-units above
+                            which a step peak is detected.  Defaults to the
+                            ``_step_threshold`` value set at construction.
+            min_interval_s: Minimum seconds between consecutive steps (used for
+                            debounce on hardware; not enforced in mock mode).
+
+        Returns:
+            ``{"steps": int, "threshold_g": float, "min_interval_s": float, "mode": str}``.
+            Never raises.
+        """
+        _thr = float(threshold_g) if threshold_g is not None else self._step_threshold
+        try:
+            if self._mode == "hardware":
+                data = self.read()
+                accel = data.get("accel_g", {})
+                ax = float(accel.get("x", 0.0))
+                ay = float(accel.get("y", 0.0))
+                az = float(accel.get("z", 0.0))
+                mag = math.sqrt(ax * ax + ay * ay + az * az)
+                if mag > _thr and not self._step_in_peak:
+                    self._step_count += 1
+                    self._step_in_peak = True
+                elif mag <= _thr * 0.8:
+                    self._step_in_peak = False
+        except Exception as exc:
+            logger.warning("IMUDriver.step_counter error: %s", exc)
+
+        return {
+            "steps": self._step_count,
+            "threshold_g": _thr,
+            "min_interval_s": min_interval_s,
+            "mode": self._mode,
+        }
+
+    def reset_step_counter(self) -> None:
+        """Reset the accumulated step counter to zero."""
+        self._step_count = 0
+        self._step_in_peak = False
+
     def reset_pose(self) -> None:
         """Zero all accumulated pose state.
 

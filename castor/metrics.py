@@ -259,9 +259,11 @@ class ChannelInterArrivalTracker:
 
     _DEFAULT_BUCKETS: Tuple[float, ...] = (10, 50, 100, 250, 500, 1000, 2000, 5000)  # ms
 
+    _MAX_SAMPLES: int = 1000
+
     def __init__(self, buckets: Tuple[float, ...] = _DEFAULT_BUCKETS) -> None:
         self._buckets: Tuple[float, ...] = tuple(sorted(buckets))
-        # channel_name → {counts, sum, total}
+        # channel_name → {counts, sum, total, samples}
         self._data: Dict[str, Dict] = {}
         self._last_ts: Dict[str, float] = {}  # epoch seconds of last message per channel
         self._lock = threading.Lock()
@@ -280,6 +282,7 @@ class ChannelInterArrivalTracker:
                     "counts": defaultdict(float),
                     "sum": 0.0,
                     "total": 0.0,
+                    "samples": [],
                 }
             d = self._data[channel]
             d["sum"] += interval_ms
@@ -287,7 +290,36 @@ class ChannelInterArrivalTracker:
             for b in self._buckets:
                 if interval_ms <= b:
                     d["counts"][b] += 1
+            import bisect as _bisect
+
+            _bisect.insort(d["samples"], interval_ms)
+            if len(d["samples"]) > self._MAX_SAMPLES:
+                d["samples"].pop(0)
             return interval_ms
+
+    def percentile(self, channel: str, pct: float) -> Optional[float]:
+        """Return an exact percentile of recorded inter-arrival samples for *channel*.
+
+        Args:
+            channel: Channel name string.
+            pct:     Percentile in [0, 100].
+
+        Returns:
+            Inter-arrival time in milliseconds, or ``None`` if no samples.
+        """
+        with self._lock:
+            d = self._data.get(channel)
+            if d is None or not d["samples"]:
+                return None
+            samples = d["samples"]
+            n = len(samples)
+            index = (pct / 100.0) * (n - 1)
+            lo = int(index)
+            hi = lo + 1
+            frac = index - lo
+            if hi >= n:
+                return float(samples[-1])
+            return float(samples[lo] * (1.0 - frac) + samples[hi] * frac)
 
     def channels(self) -> List[str]:
         """Return sorted list of channel names that have been observed."""
@@ -645,6 +677,34 @@ class MetricsRegistry:
             snapshot["endpoint_rps"][endpoint] = round(self._request_rate.rate(endpoint), 4)
 
         return snapshot
+
+    def channel_rate_histogram(self) -> Dict[str, Any]:
+        """Return per-channel message inter-arrival percentiles.
+
+        Returns:
+            ``{channel: {p50, p95, p99, count}}`` for every channel that has
+            received at least two messages.  Returns ``{}`` when no channels
+            have been recorded.  Never raises.
+        """
+        result: Dict[str, Any] = {}
+        try:
+            for channel in self._channel_interarrival.channels():
+                with self._channel_interarrival._lock:
+                    d = self._channel_interarrival._data.get(channel, {})
+                    count = int(d.get("total", 0))
+                result[channel] = {
+                    "p50": self._channel_interarrival.percentile(channel, 50.0),
+                    "p95": self._channel_interarrival.percentile(channel, 95.0),
+                    "p99": self._channel_interarrival.percentile(channel, 99.0),
+                    "count": count,
+                }
+        except Exception as exc:
+            import logging as _logging
+
+            _logging.getLogger("OpenCastor.Metrics").warning(
+                "channel_rate_histogram error: %s", exc
+            )
+        return result
 
 
 # ── Singleton ─────────────────────────────────────────────────────────────────

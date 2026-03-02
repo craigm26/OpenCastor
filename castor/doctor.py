@@ -279,6 +279,81 @@ def check_disk_space(path: str = "/") -> tuple:
         return False, "Disk space", str(exc)
 
 
+def check_memory_usage() -> tuple:
+    """Check system RAM usage, warn when ≥85% used (Issue #382).
+
+    Reads ``/proc/meminfo`` on Linux; falls back to ``psutil`` if available,
+    then to ``resource.getrusage`` for a rough estimate.  Returns a safe
+    ``(False, 'Memory usage', error_str)`` on any failure.
+
+    Returns:
+        ``(ok, 'Memory usage', detail_str)`` where ``ok`` is ``True`` when
+        usage < 85%.
+    """
+    _NAME = "Memory usage"
+    _THRESHOLD = 85.0
+
+    try:
+        # ── Linux: parse /proc/meminfo ────────────────────────────────────
+        import os as _os
+
+        if _os.path.exists("/proc/meminfo"):
+            meminfo: dict = {}
+            with open("/proc/meminfo", encoding="utf-8") as fh:
+                for line in fh:
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        key = parts[0].rstrip(":")
+                        try:
+                            meminfo[key] = int(parts[1])  # kB
+                        except ValueError:
+                            pass
+            total_kb = meminfo.get("MemTotal", 0)
+            avail_kb = meminfo.get("MemAvailable", meminfo.get("MemFree", 0))
+            if total_kb > 0:
+                used_kb = total_kb - avail_kb
+                pct = used_kb / total_kb * 100.0
+                free_mb = avail_kb / 1024.0
+                if pct >= _THRESHOLD:
+                    return (
+                        False,
+                        _NAME,
+                        f"{pct:.1f}% used ({free_mb:.0f} MB free) — RAM >85% full",
+                    )
+                return True, _NAME, f"{pct:.1f}% used ({free_mb:.0f} MB free)"
+    except Exception:
+        pass
+
+    try:
+        # ── psutil fallback ───────────────────────────────────────────────
+        import psutil as _psutil  # type: ignore[import-untyped]
+
+        vm = _psutil.virtual_memory()
+        pct = vm.percent
+        free_mb = vm.available / (1024 * 1024)
+        if pct >= _THRESHOLD:
+            return (
+                False,
+                _NAME,
+                f"{pct:.1f}% used ({free_mb:.0f} MB free) — RAM >85% full",
+            )
+        return True, _NAME, f"{pct:.1f}% used ({free_mb:.0f} MB free)"
+    except ImportError:
+        pass
+    except Exception as exc:
+        return False, _NAME, str(exc)
+
+    try:
+        # ── resource.getrusage: very rough RSS estimate ───────────────────
+        import resource as _resource
+
+        usage_bytes = _resource.getrusage(_resource.RUSAGE_SELF).ru_maxrss
+        usage_mb = usage_bytes / 1024  # Linux: kB, macOS: bytes
+        return True, _NAME, f"~{usage_mb:.0f} MB RSS (exact usage unavailable)"
+    except Exception as exc:
+        return False, _NAME, str(exc)
+
+
 def run_all_checks(config_path=None):
     """Run every health check.  Returns a flat list of (ok, name, detail) tuples."""
     results = []
@@ -312,6 +387,8 @@ def run_all_checks(config_path=None):
     results.append(check_signal_channel())
     # Issue #371: disk space check
     results.append(check_disk_space())
+    # Issue #382: memory usage check
+    results.append(check_memory_usage())
 
     return results
 

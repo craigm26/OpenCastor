@@ -5447,7 +5447,9 @@ async def memory_replay_similar(query: str, top_k: int = 5):
     """GET /api/memory/replay/similar — Top-K episodes similar to query (#356)."""
     from castor.memory import EpisodeMemory
 
-    db = __import__("os").getenv("CASTOR_MEMORY_DB", __import__("os").path.expanduser("~/.castor/memory.db"))
+    db = __import__("os").getenv(
+        "CASTOR_MEMORY_DB", __import__("os").path.expanduser("~/.castor/memory.db")
+    )
     mem = EpisodeMemory(db_path=db)
     return {"episodes": mem.replay_similar(query=query, top_k=top_k)}
 
@@ -5467,7 +5469,10 @@ async def metrics_push(gateway_url: str = "", job: str = "opencastor"):
         return {"status": "pushed", "job": job}
     return JSONResponse(
         status_code=503,
-        content={"error": "push failed — check CASTOR_PROMETHEUS_PUSHGATEWAY or gateway_url", "code": "HTTP_503"},
+        content={
+            "error": "push failed — check CASTOR_PROMETHEUS_PUSHGATEWAY or gateway_url",
+            "code": "HTTP_503",
+        },
     )
 
 
@@ -5483,7 +5488,13 @@ async def metrics_json():
 async def imu_shake_detection():
     """GET /api/imu/shake — Single/shake gesture detection (#369)."""
     if state.driver is None:
-        return {"shaking": False, "reversals": 0, "axis": None, "timestamp": None, "error": "no driver"}
+        return {
+            "shaking": False,
+            "reversals": 0,
+            "axis": None,
+            "timestamp": None,
+            "error": "no driver",
+        }
     from castor.drivers.imu_driver import get_imu
 
     imu = get_imu()
@@ -5503,7 +5514,13 @@ async def imu_shake_reset():
 async def lidar_zone_velocity(zone: str = "front", window_s: float = 2.0):
     """GET /api/lidar/zone_velocity — Per-zone approaching speed estimate (#366)."""
     if state.driver is None:
-        return {"zone": zone, "velocity_m_s": 0.0, "samples": 0, "window_s": window_s, "direction": "stationary"}
+        return {
+            "zone": zone,
+            "velocity_m_s": 0.0,
+            "samples": 0,
+            "window_s": window_s,
+            "direction": "stationary",
+        }
     from castor.drivers.lidar_driver import get_lidar
 
     lidar = get_lidar()
@@ -5515,7 +5532,9 @@ async def memory_tag_frequency(window_s: float = 3600.0, top_k: int = 10):
     """GET /api/memory/tag_frequency — Action-type tag histogram (#367)."""
     from castor.memory import EpisodeMemory
 
-    db = __import__("os").getenv("CASTOR_MEMORY_DB", __import__("os").path.expanduser("~/.castor/memory.db"))
+    db = __import__("os").getenv(
+        "CASTOR_MEMORY_DB", __import__("os").path.expanduser("~/.castor/memory.db")
+    )
     mem = EpisodeMemory(db_path=db)
     return {"tags": mem.tag_frequency(window_s=window_s, top_k=top_k)}
 
@@ -5524,13 +5543,86 @@ async def memory_tag_frequency(window_s: float = 3600.0, top_k: int = 10):
 async def pool_warm_providers():
     """GET /api/pool/warm — Run warm_providers() health check (#370)."""
     if state.brain is None:
-        return JSONResponse(status_code=503, content={"error": "no brain configured", "code": "HTTP_503"})
+        return JSONResponse(
+            status_code=503, content={"error": "no brain configured", "code": "HTTP_503"}
+        )
     from castor.providers.pool_provider import ProviderPool
 
     if not isinstance(state.brain, ProviderPool):
-        return JSONResponse(status_code=400, content={"error": "brain is not a ProviderPool", "code": "HTTP_400"})
+        return JSONResponse(
+            status_code=400, content={"error": "brain is not a ProviderPool", "code": "HTTP_400"}
+        )
     results = state.brain.warm_providers()
     return {"warm_results": results, "all_ok": all(results.values())}
+
+
+@app.get("/api/lidar/slam_update", dependencies=[Depends(verify_token)])
+async def lidar_slam_update(reset: bool = False):
+    """GET /api/lidar/slam_update — Incremental SLAM map accumulation (#376)."""
+    from castor.drivers.lidar_driver import get_lidar
+
+    lidar = get_lidar()
+    return lidar.slam_update(reset=reset)
+
+
+@app.get("/api/memory/export/csv", dependencies=[Depends(verify_token)])
+async def memory_export_csv(
+    window_s: float = 86400.0,
+    limit: int = 1000,
+    path: str = "/tmp/opencastor_episodes.csv",
+):
+    """GET /api/memory/export/csv — Export recent episodes to CSV (#377)."""
+    from castor.memory import EpisodeMemory
+
+    mem = EpisodeMemory()
+    result = mem.export_csv(path=path, window_s=window_s, limit=limit)
+    return result
+
+
+@app.get("/api/metrics/channel_rates", dependencies=[Depends(verify_token)])
+async def metrics_channel_rates():
+    """GET /api/metrics/channel_rates — Per-channel message rate histogram (#380)."""
+    from castor.metrics import get_registry
+
+    return get_registry().channel_rate_histogram()
+
+
+@app.get("/api/imu/step_counter", dependencies=[Depends(verify_token)])
+async def imu_step_counter(threshold_g: float = 0.3, min_interval_s: float = 0.3):
+    """GET /api/imu/step_counter — Pedometer step count (#381)."""
+    if state.driver is None:
+        return {
+            "steps": 0,
+            "threshold_g": threshold_g,
+            "min_interval_s": min_interval_s,
+            "error": "no driver",
+        }
+    from castor.drivers.imu_driver import get_imu
+
+    imu = get_imu()
+    return imu.step_counter(threshold_g=threshold_g, min_interval_s=min_interval_s)
+
+
+@app.post("/api/imu/step_counter/reset", dependencies=[Depends(verify_token)])
+async def imu_step_counter_reset():
+    """POST /api/imu/step_counter/reset — Reset step counter (#381)."""
+    from castor.drivers.imu_driver import get_imu
+
+    imu = get_imu()
+    imu.reset_step_counter()
+    return {"reset": True}
+
+
+@app.get("/api/memory/clusters", dependencies=[Depends(verify_token)])
+async def memory_clusters(n_clusters: int = 5, limit: int = 500):
+    """GET /api/memory/clusters — K-means episode clustering (#385)."""
+    from castor.memory import EpisodeMemory
+
+    mem = EpisodeMemory()
+    try:
+        return mem.cluster_episodes(n_clusters=n_clusters, limit=limit)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc), "code": "HTTP_400"})
 
 
 @app.on_event("shutdown")
