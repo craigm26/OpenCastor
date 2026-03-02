@@ -34,6 +34,8 @@ Optional::
     pool_burst_latency_ms: 5000         # latency threshold triggering burst demotion (#331)
     pool_burst_cooldown_s: 30           # seconds a burst-detected provider is demoted (#331)
     pool_ab_split: 0.5                  # fraction routed to provider 0 in A/B mode (#338)
+    pool_sticky_session: true           # route same conversation_id to same provider (#359)
+    pool_sticky_ttl_s: 3600            # seconds a sticky binding is remembered (#359)
 """
 
 from __future__ import annotations
@@ -96,6 +98,10 @@ class ProviderPool(BaseProvider):
         # A/B test config (#338) — split fraction for provider 0 vs provider 1
         self._ab_split: float = float(config.get("pool_ab_split", 0.5))
 
+        # Sticky session config (#359) — route same conversation_id to same provider
+        self._sticky_session: bool = bool(config.get("pool_sticky_session", False))
+        self._sticky_ttl_s: float = float(config.get("pool_sticky_ttl_s", 3600.0))
+
         # Issue #345: Cost tracking — per-provider cumulative token/USD accounting
         # Config: pool_cost_per_1k_tokens — dict mapping provider name to USD per 1k tokens
         self._cost_per_1k: Dict[str, float] = dict(config.get("pool_cost_per_1k_tokens", {}))
@@ -149,6 +155,9 @@ class ProviderPool(BaseProvider):
         self._cb_failures: Dict[int, int] = {}  # consecutive failures per provider
         self._cb_open_until: Dict[int, float] = {}  # epoch when circuit re-closes
         self._current_index = 0
+
+        # Sticky session state (#359): conversation_id → (provider_index, expiry_epoch)
+        self._sticky_map: Dict[str, Tuple[int, float]] = {}
 
         # Burst detection state (#331): provider index → epoch when demotion expires
         self._burst_demoted_until: Dict[int, float] = {}
@@ -471,6 +480,42 @@ class ProviderPool(BaseProvider):
                 self._ab_stats[group]["fail"] += 1
 
     # ------------------------------------------------------------------
+    # Sticky session helpers (#359)
+    # ------------------------------------------------------------------
+
+    def _get_sticky_provider(self, conversation_id: str) -> Optional[Tuple[int, BaseProvider]]:
+        """Return (index, provider) for a sticky conversation, or None if unbound/expired."""
+        if not self._sticky_session or not conversation_id:
+            return None
+        with self._lock:
+            entry = self._sticky_map.get(conversation_id)
+            if entry is None:
+                return None
+            idx, expiry = entry
+            if time.time() > expiry:
+                del self._sticky_map[conversation_id]
+                logger.debug(
+                    "ProviderPool sticky: binding expired for conversation %r", conversation_id
+                )
+                return None
+            if idx >= len(self._providers):
+                return None
+            return idx, self._providers[idx]
+
+    def _set_sticky_provider(self, conversation_id: str, idx: int) -> None:
+        """Bind conversation_id to provider idx for the configured TTL."""
+        if not self._sticky_session or not conversation_id:
+            return
+        with self._lock:
+            self._sticky_map[conversation_id] = (idx, time.time() + self._sticky_ttl_s)
+        logger.debug(
+            "ProviderPool sticky: bound conversation %r to pool[%d] (ttl=%.0fs)",
+            conversation_id,
+            idx,
+            self._sticky_ttl_s,
+        )
+
+    # ------------------------------------------------------------------
     # Issue #345: Cost tracking helpers
     # ------------------------------------------------------------------
 
@@ -721,7 +766,12 @@ class ProviderPool(BaseProvider):
                 names.append(name)
         return " | ".join(names) if names else "pool"
 
-    def think(self, image_bytes: bytes, instruction: str) -> Thought:
+    def think(
+        self,
+        image_bytes: bytes,
+        instruction: str,
+        conversation_id: Optional[str] = None,
+    ) -> Thought:
         """Forward think() to the next provider, with optional fallback."""
         self._check_instruction_safety(instruction)
 
@@ -738,8 +788,19 @@ class ProviderPool(BaseProvider):
             self._record_thought(instruction, result)
             return result
 
-        primary = self._next_provider()
-        start_idx = self._current_index
+        # Sticky session (#359): reuse the same provider for an ongoing conversation
+        sticky = self._get_sticky_provider(conversation_id) if conversation_id else None
+        if sticky is not None:
+            start_idx, primary = sticky
+            logger.debug(
+                "ProviderPool sticky: routing conversation %r to pool[%d]",
+                conversation_id,
+                start_idx,
+            )
+        else:
+            primary = self._next_provider()
+            start_idx = self._current_index
+
         ab_group = getattr(self, "_ab_current_group", None)
 
         if not self._fallback:
@@ -754,9 +815,9 @@ class ProviderPool(BaseProvider):
                 if ab_group is not None:
                     self._ab_record(ab_group, success=True)
                 self._record_thought(instruction, result)
-                # Issue #345: record cost for this provider
                 self._record_cost(start_idx, result)
-                # Issue #340: fire shadow call in background thread
+                # Sticky: bind this conversation to the successful provider
+                self._set_sticky_provider(conversation_id, start_idx)
                 if self._shadow_provider is not None:
                     import threading as _threading
 
@@ -787,9 +848,9 @@ class ProviderPool(BaseProvider):
                 if ab_group is not None:
                     self._ab_record(ab_group, success=True)
                 self._record_thought(instruction, result)
-                # Issue #345: record cost for this provider
                 self._record_cost(idx, result)
-                # Issue #340: fire shadow call in background thread
+                # Sticky: bind this conversation to the successful provider
+                self._set_sticky_provider(conversation_id, idx)
                 if self._shadow_provider is not None:
                     import threading as _threading
 
@@ -951,6 +1012,14 @@ class ProviderPool(BaseProvider):
             "enabled": self._shadow_provider is not None,
             "provider": self._shadow_provider_name,
             "log_path": self._shadow_log_path,
+        }
+        # Issue #359: sticky session state
+        with self._lock:
+            active_sticky = len(self._sticky_map)
+        health["sticky_session"] = {
+            "enabled": self._sticky_session,
+            "ttl_s": self._sticky_ttl_s,
+            "active_bindings": active_sticky,
         }
         return health
 

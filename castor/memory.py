@@ -423,6 +423,71 @@ class EpisodeMemory:
             row = con.execute("SELECT * FROM episodes WHERE id = ?", (ep_id,)).fetchone()
         return self._row_to_dict(row) if row else None
 
+    def replay_episode(self, episode_id: str) -> Optional[Dict]:
+        """Return a single episode by ID, or None if not found.
+
+        Semantically named alias for :meth:`get_episode` for use in replay workflows.
+        """
+        return self.get_episode(episode_id)
+
+    def replay_similar(self, query: str, top_k: int = 5) -> List[Dict]:
+        """Return the *top_k* episodes most similar to *query*, each annotated
+        with a ``similarity_score`` field (float 0–1, descending).
+
+        Falls back to keyword search (``similarity_score=0.0``) when embeddings
+        are unavailable or no embeddings have been stored yet.
+
+        Args:
+            query: Natural-language query string.
+            top_k: Maximum episodes to return (default 5).
+        """
+        query = (query or "").strip()
+        if not query:
+            return []
+        top_k = max(1, top_k)
+
+        query_emb = self._embed_text(query)
+        if query_emb is None:
+            logger.debug("replay_similar: ST unavailable — falling back to keyword search")
+            results = self.search(query, limit=top_k, mode="keyword")
+            for r in results:
+                r["similarity_score"] = 0.0
+            return results
+
+        try:
+            with self._conn() as con:
+                rows = con.execute(
+                    "SELECT e.*, ee.embedding_json FROM episodes e "
+                    "JOIN episode_embeddings ee ON e.id = ee.id"
+                ).fetchall()
+        except Exception as exc:
+            logger.warning("replay_similar: DB read failed: %s", exc)
+            return []
+
+        if not rows:
+            logger.debug("replay_similar: no embeddings stored — falling back to keyword search")
+            results = self.search(query, limit=top_k, mode="keyword")
+            for r in results:
+                r["similarity_score"] = 0.0
+            return results
+
+        scored: List[tuple] = []
+        for row in rows:
+            try:
+                emb = json.loads(row["embedding_json"])
+                score = self._cosine(query_emb, emb)
+                scored.append((score, row))
+            except Exception:
+                continue
+
+        scored.sort(key=lambda t: t[0], reverse=True)
+        out = []
+        for score, row in scored[:top_k]:
+            d = self._row_to_dict(row)
+            d["similarity_score"] = round(float(score), 6)
+            out.append(d)
+        return out
+
     def get_episode_image(self, episode_id: int) -> Optional[bytes]:
         """Return the stored JPEG thumbnail bytes for *episode_id*, or ``None``.
 

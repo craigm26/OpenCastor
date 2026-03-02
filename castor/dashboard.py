@@ -169,6 +169,7 @@ _DEFAULTS = {
     "voice_mode": False,
     "voice_speak_replies": True,
     "last_refresh": 0.0,
+    "_latency_history": {},  # {str(provider_index): [ema_ms, ...]} rolling 20 readings (#363)
 }
 for k, v in _DEFAULTS.items():
     if k not in st.session_state:
@@ -950,6 +951,37 @@ with st.expander("🧠 Provider Health", expanded=False):
         _replay_entries = _ph_replay.get("replay_entries", 0)
         if _replay_entries:
             st.info(f"Replay map loaded: {_replay_entries} cached entries")
+
+        # Provider latency sparkline (#363) — rolling EMA latency per pool member
+        _ema_now = (_ph.get("adaptive") or {}).get("ema_latency_ms", {})
+        if not _ema_now and _ph_members:
+            # Fallback: use avg_latency_ms per member when adaptive not active
+            _ema_now = {
+                str(m.get("pool_index", i)): m.get("avg_latency_ms", 0)
+                for i, m in enumerate(_ph_members)
+                if m.get("avg_latency_ms") is not None
+            }
+        if _ema_now:
+            _lat_hist = st.session_state.get("_latency_history", {})
+            for _k, _v in _ema_now.items():
+                _lat_hist.setdefault(str(_k), []).append(round(float(_v), 1))
+                _lat_hist[str(_k)] = _lat_hist[str(_k)][-20:]  # keep 20 readings
+            st.session_state["_latency_history"] = _lat_hist
+            if any(len(v) > 1 for v in _lat_hist.values()):
+                st.markdown(
+                    '<p class="panel-title">Provider Latency Sparkline</p>',
+                    unsafe_allow_html=True,
+                )
+                try:
+                    import pandas as _pd_spark
+
+                    _spark_df = _pd_spark.DataFrame(
+                        {f"Pool[{k}]": vals for k, vals in _lat_hist.items() if vals}
+                    )
+                    st.line_chart(_spark_df, height=120, use_container_width=True)
+                    st.caption("EMA latency (ms) per provider over last 20 refreshes")
+                except Exception:
+                    pass
 
 
 # ── LIDAR POLAR PLOT (#337) ───────────────────────────────────────────────────

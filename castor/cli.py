@@ -389,6 +389,11 @@ def cmd_doctor(args) -> None:
     print_report(results)
     print()
 
+    if getattr(args, "auto_fix", False):
+        from castor.doctor import run_auto_fix
+
+        run_auto_fix(results, config_path=args.config)
+
     # Peripheral scan section
     try:
         from castor.peripherals import print_scan_table, scan_all
@@ -2642,6 +2647,11 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_doctor.add_argument("--config", default=None, help="RCAN config file to validate")
+    p_doctor.add_argument(
+        "--auto-fix",
+        action="store_true",
+        help="Attempt to auto-fix common issues (e.g. missing .env, large memory DB)",
+    )
 
     # castor demo
     p_demo = sub.add_parser(

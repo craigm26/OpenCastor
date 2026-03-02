@@ -5417,6 +5417,60 @@ async def imu_pose_reset():
     return {"reset": True}
 
 
+@app.get("/api/lidar/moving", dependencies=[Depends(verify_token)])
+async def lidar_moving_objects(min_delta_m: float = 0.05):
+    """GET /api/lidar/moving — Objects that moved between the last two LiDAR scans (#358)."""
+    from castor.drivers.lidar_driver import get_lidar
+
+    return {"moving_objects": get_lidar().moving_objects(min_delta_m=min_delta_m)}
+
+
+@app.get("/api/imu/tap", dependencies=[Depends(verify_token)])
+async def imu_tap_detection():
+    """GET /api/imu/tap — Single/double tap detection from accelerometer (#357)."""
+    from castor.drivers.imu_driver import get_imu
+
+    return get_imu().tap_detection()
+
+
+@app.post("/api/imu/tap/reset", dependencies=[Depends(verify_token)])
+async def imu_tap_reset():
+    """POST /api/imu/tap/reset — Zero tap detection state (#357)."""
+    from castor.drivers.imu_driver import get_imu
+
+    get_imu().reset_taps()
+    return {"reset": True}
+
+
+@app.get("/api/memory/replay/similar", dependencies=[Depends(verify_token)])
+async def memory_replay_similar(query: str, top_k: int = 5):
+    """GET /api/memory/replay/similar — Top-K episodes similar to query (#356)."""
+    from castor.memory import EpisodeMemory
+
+    db = __import__("os").getenv("CASTOR_MEMORY_DB", __import__("os").path.expanduser("~/.castor/memory.db"))
+    mem = EpisodeMemory(db_path=db)
+    return {"episodes": mem.replay_similar(query=query, top_k=top_k)}
+
+
+@app.post("/api/metrics/push", dependencies=[Depends(verify_token)])
+async def metrics_push(gateway_url: str = "", job: str = "opencastor"):
+    """POST /api/metrics/push — Push metrics to a Prometheus Pushgateway (#361).
+
+    Query params:
+        gateway_url: Pushgateway URL (overrides CASTOR_PROMETHEUS_PUSHGATEWAY env var).
+        job:         Prometheus job label (default: opencastor).
+    """
+    from castor.metrics import push_to_gateway
+
+    ok = push_to_gateway(gateway_url=gateway_url or None, job=job)
+    if ok:
+        return {"status": "pushed", "job": job}
+    return JSONResponse(
+        status_code=503,
+        content={"error": "push failed — check CASTOR_PROMETHEUS_PUSHGATEWAY or gateway_url", "code": "HTTP_503"},
+    )
+
+
 @app.on_event("shutdown")
 async def on_shutdown():
     # Close WebRTC peers

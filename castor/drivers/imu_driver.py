@@ -293,6 +293,12 @@ class IMUDriver:
         self._step_threshold: float = float(os.getenv("IMU_STEP_THRESHOLD", "1.2"))
         self._step_in_peak: bool = False
 
+        # ── Tap detection (#357) ──────────────────────────────────────────────
+        self._last_tap_time: Optional[float] = None
+        self._tap_count: int = 0
+        self._tap_accel_threshold_g: float = float(os.getenv("IMU_TAP_THRESHOLD_G", "2.0"))
+        self._double_tap_window_s: float = float(os.getenv("IMU_DOUBLE_TAP_WINDOW_S", "0.5"))
+
         # Resolve explicit address from env or constructor argument
         env_addr = os.getenv("IMU_I2C_ADDRESS", "")
         if env_addr:
@@ -713,6 +719,93 @@ class IMUDriver:
         Convenience wrapper around ``step_count(reset=True)``.
         """
         return self.step_count(reset=True)
+
+    # ── Tap detection (#357) ──────────────────────────────────────────────────
+
+    def tap_detection(
+        self,
+        accel_threshold_g: Optional[float] = None,
+        double_tap_window_s: Optional[float] = None,
+    ) -> dict:
+        """Detect single and double tap events from accelerometer spikes.
+
+        Returns mock (all-False) values immediately when in mock mode.  In
+        hardware mode reads the current accelerometer vector and checks
+        whether any axis exceeds *accel_threshold_g*, tracking ``_last_tap_time``
+        and ``_tap_count`` to distinguish single from double taps.
+
+        Args:
+            accel_threshold_g:   Acceleration threshold in g (default 2.0 g).
+            double_tap_window_s: Max seconds between taps to count as double
+                                 (default 0.5 s).
+
+        Returns:
+            ``{"single_tap": bool, "double_tap": bool, "axis": str|None,
+            "timestamp": float|None}``.  Falls back to mock result on any
+            hardware error.  Never raises.
+        """
+        _mock: dict = {"single_tap": False, "double_tap": False, "axis": None, "timestamp": None}
+
+        if self._mode != "hardware" or self._bus is None:
+            return _mock
+
+        threshold_g = (
+            accel_threshold_g if accel_threshold_g is not None else self._tap_accel_threshold_g
+        )
+        window_s = (
+            double_tap_window_s if double_tap_window_s is not None else self._double_tap_window_s
+        )
+
+        try:
+            data = self.read()
+            accel = data.get("accel_g", {})
+            ax = abs(float(accel.get("x", 0.0)))
+            ay = abs(float(accel.get("y", 0.0)))
+            az = abs(float(accel.get("z", 0.0)))
+            axis_vals = {"x": ax, "y": ay, "z": az}
+            dominant_axis = max(axis_vals, key=lambda k: axis_vals[k])
+            if axis_vals[dominant_axis] < threshold_g:
+                return _mock
+
+            now = time.time()
+            if self._last_tap_time is not None:
+                elapsed = now - self._last_tap_time
+                if elapsed <= window_s:
+                    self._last_tap_time = None
+                    self._tap_count = 0
+                    return {
+                        "single_tap": False,
+                        "double_tap": True,
+                        "axis": dominant_axis,
+                        "timestamp": now,
+                    }
+                # Too slow — start fresh single-tap sequence
+                self._last_tap_time = now
+                self._tap_count = 1
+                return {
+                    "single_tap": True,
+                    "double_tap": False,
+                    "axis": dominant_axis,
+                    "timestamp": now,
+                }
+
+            # First tap in a new sequence
+            self._last_tap_time = now
+            self._tap_count = 1
+            return {
+                "single_tap": True,
+                "double_tap": False,
+                "axis": dominant_axis,
+                "timestamp": now,
+            }
+        except Exception as exc:
+            logger.warning("IMUDriver.tap_detection error: %s", exc)
+            return _mock
+
+    def reset_taps(self) -> None:
+        """Zero tap detection state for a fresh single/double-tap sequence."""
+        self._last_tap_time = None
+        self._tap_count = 0
 
     def reset_pose(self) -> None:
         """Zero all accumulated pose state.

@@ -92,10 +92,17 @@ class BehaviorRunner:
             "event_wait": self._step_event_wait,
             # Issue #341: iterate JSONL/CSV file rows as $item in nested steps
             "foreach_file": self._step_foreach_file,
+            # Issue #360: execute steps at a wall-clock time or recurring interval
+            "schedule": self._step_schedule,
         }
 
         # Chain-recursion depth counter (not thread-local; behaviors run single-threaded)
         self._chain_depth: int = 0
+
+        # Issue #360: schedule step uses this event for interruptible waits
+        import threading as _threading
+
+        self._stop_event: _threading.Event = _threading.Event()
 
     # ------------------------------------------------------------------
     # Public API
@@ -201,6 +208,8 @@ class BehaviorRunner:
         """Stop the current behavior and halt the driver (if available)."""
         self._running = False
         self._current_name = None
+        self._stop_event.set()
+        self._stop_event.clear()
         if self.driver is not None:
             try:
                 self.driver.stop()
@@ -1479,14 +1488,15 @@ class BehaviorRunner:
     # ------------------------------------------------------------------
 
     def _step_foreach_file(self, step: dict) -> None:
-        """Iterate over JSONL rows from a file, substituting each row into nested steps.
+        """Iterate over JSONL or CSV rows from a file, substituting each row into nested steps.
 
-        Reads the file at ``file`` path line-by-line.  Each non-empty line is
-        parsed as a JSON object and made available as ``$item`` (a dict) in
-        nested steps.  Field values from ``$item`` can be injected into step
+        Reads the file at ``file`` path.  For JSONL files each non-empty line is
+        parsed as a JSON object.  For CSV files each row is parsed with
+        :class:`csv.DictReader`.  Rows are made available as ``$item`` (a dict)
+        in nested steps.  Field values from ``$item`` can be injected into step
         parameters using ``"$item.<key>"`` placeholders.
 
-        Example step::
+        Example step (JSONL)::
 
             - type: foreach_file
               file: "/data/waypoints.jsonl"
@@ -1496,26 +1506,41 @@ class BehaviorRunner:
                   distance_m: "$item.distance_m"
                   heading_deg: "$item.heading_deg"
 
+        Example step (CSV)::
+
+            - type: foreach_file
+              file: "/data/waypoints.csv"
+              max_rows: 10
+              steps:
+                - type: speak
+                  text: "$item.label"
+
         Parameters
         ----------
         step:
             The step dict.
 
             ``file`` (str, required):
-                Path to a JSONL file (one JSON object per line).
+                Path to a JSONL file (one JSON object per line) or a CSV file.
+                Format is auto-detected from the ``.csv`` extension or the
+                optional ``format`` key (``"jsonl"`` / ``"csv"``).
             ``steps`` (list, default ``[]``):
                 Inner steps to run per row.
             ``limit`` (int, default 0):
-                Maximum rows to process (0 = unlimited).
+                Maximum rows to process (0 = unlimited).  Alias: ``max_rows``.
+            ``max_rows`` (int, default 0):
+                Alias for ``limit``.
             ``var`` (str, default ``"$item"``):
-                Placeholder variable name (for future use; currently ``$item``
-                and ``$item.<key>`` are always the substitution targets).
+                Placeholder variable name (currently ``$item`` and
+                ``$item.<key>`` are always the substitution targets).
         """
+        import csv as _csv
         import json as _json
 
         file_path: str = step.get("file", "")
         inner_steps: list = step.get("steps") or []
-        limit: int = int(step.get("limit", 0))
+        # max_rows is an alias for limit (Issue #355)
+        limit: int = int(step.get("limit", step.get("max_rows", 0)))
         var: str = step.get("var", "$item")
 
         if not file_path:
@@ -1524,38 +1549,49 @@ class BehaviorRunner:
 
         from pathlib import Path as _Path
 
+        # Detect format: explicit 'format' key overrides extension
+        fmt: str = step.get("format", "")
+        if not fmt:
+            fmt = "csv" if file_path.lower().endswith(".csv") else "jsonl"
+
         try:
-            lines = _Path(file_path).read_text(encoding="utf-8").splitlines()
+            content = _Path(file_path).read_text(encoding="utf-8")
         except OSError as exc:
             logger.warning("foreach_file step: cannot open file %r: %s", file_path, exc)
             return
 
+        # Build row iterator
+        if fmt == "csv":
+            import io as _io
+
+            rows: list = list(_csv.DictReader(_io.StringIO(content)))
+        else:
+            rows = []
+            for raw_line in content.splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                try:
+                    item = _json.loads(line)
+                except _json.JSONDecodeError as exc:
+                    logger.warning("foreach_file step: JSON parse error: %s", exc)
+                    continue
+                if not isinstance(item, dict):
+                    logger.warning(
+                        "foreach_file step: row is not a JSON object (%r) — skipping",
+                        type(item).__name__,
+                    )
+                    continue
+                rows.append(item)
+
         processed = 0
-        for raw_line in lines:
+        for item in rows:
             if not self._running:
                 logger.info("foreach_file step: stopped at row %d", processed)
                 break
             if limit and processed >= limit:
                 logger.info("foreach_file step: limit %d reached", limit)
                 break
-
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
-                continue
-
-            try:
-                item = _json.loads(line)
-            except _json.JSONDecodeError as exc:
-                logger.warning("foreach_file step: JSON parse error at row %d: %s", processed, exc)
-                continue
-
-            if not isinstance(item, dict):
-                logger.warning(
-                    "foreach_file step: row %d is not a JSON object (%r) — skipping",
-                    processed,
-                    type(item).__name__,
-                )
-                continue
 
             # Substitute $item and $item.<key> placeholders in inner step dicts.
             substituted: list = []
@@ -1579,3 +1615,96 @@ class BehaviorRunner:
             processed += 1
 
         logger.info("foreach_file step: done — processed %d row(s) from %r", processed, file_path)
+
+    # ------------------------------------------------------------------
+    # Issue #360 — schedule step
+    # ------------------------------------------------------------------
+
+    def _step_schedule(self, step: dict) -> None:
+        """Execute inner steps at a wall-clock time or on a recurring interval.
+
+        Modes
+        -----
+        ``at``
+            ``step["at"]`` is a 24-hour ``HH:MM`` string.  The runner waits
+            until the next occurrence of that wall-clock minute, then executes
+            ``step["steps"]`` once.
+
+        ``every``
+            ``step["every"]`` is a float number of seconds.  The runner
+            executes ``step["steps"]`` repeatedly every N seconds while
+            ``self._running`` is ``True``.  An optional ``step["count"]`` caps
+            the total number of repetitions.
+
+        Both modes use ``self._stop_event.wait(timeout=...)`` so that the
+        runner can be interrupted cleanly.  Never raises.
+
+        Example step::
+
+            - type: schedule
+              every: 30
+              count: 5
+              steps:
+                - type: speak
+                  text: "tick"
+
+            - type: schedule
+              at: "08:00"
+              steps:
+                - type: speak
+                  text: "good morning"
+        """
+        import datetime as _dt
+
+        inner = step.get("steps", [])
+        if not inner:
+            logger.warning("schedule step: 'steps' is empty — skipping")
+            return
+
+        at_str: str = step.get("at", "")
+        every_s: float = float(step.get("every", 0))
+        count: int = int(step.get("count", 0))  # 0 = unlimited
+
+        if at_str:
+            # ── 'at' mode: wait until the next HH:MM wall-clock occurrence ──
+            try:
+                target_h, target_m = (int(x) for x in at_str.split(":", 1))
+            except (ValueError, TypeError):
+                logger.warning("schedule step: invalid 'at' value %r — skipping", at_str)
+                return
+
+            now = _dt.datetime.now()
+            target = now.replace(hour=target_h, minute=target_m, second=0, microsecond=0)
+            if target <= now:
+                target += _dt.timedelta(days=1)
+            wait_s = (target - _dt.datetime.now()).total_seconds()
+            logger.info("schedule step: waiting %.0fs until %02d:%02d", wait_s, target_h, target_m)
+            if wait_s > 0:
+                self._stop_event.wait(timeout=wait_s)
+            if not self._running:
+                return
+            logger.info("schedule step: executing at %s", at_str)
+            self._run_step_list(inner, "schedule at")
+
+        elif every_s > 0:
+            # ── 'every' mode: execute repeatedly at a fixed interval ─────────
+            executions = 0
+            logger.info(
+                "schedule step: repeating every %.1fs%s",
+                every_s,
+                f", count={count}" if count else "",
+            )
+            while self._running:
+                if count and executions >= count:
+                    logger.info("schedule step: count %d reached — stopping", count)
+                    break
+                logger.debug("schedule step: executing (iteration %d)", executions + 1)
+                self._run_step_list(inner, f"schedule every iteration {executions}")
+                executions += 1
+                if count and executions >= count:
+                    break
+                self._stop_event.wait(timeout=every_s)
+            logger.info("schedule step: done — %d execution(s)", executions)
+
+        else:
+            logger.warning("schedule step: neither 'at' nor 'every' specified — skipping")

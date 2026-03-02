@@ -117,6 +117,7 @@ class LidarDriver:
         self._lock = threading.Lock()
         self._scan_count: int = 0
         self._last_scan: list = []
+        self._prev_scan_points: list = []  # ── Issue #358: moving_objects() history
 
         # ── History DB ────────────────────────────────────────────────────────
         self._history_db_path: Optional[str] = _resolve_history_db_path()
@@ -288,6 +289,7 @@ class LidarDriver:
         """
         if self._mode != "hardware" or self._lidar is None:
             result = self._mock_scan()
+            self._prev_scan_points = list(self._last_scan)
             self._last_scan = result
             obs = self.obstacles()
             self._log_scan(obs, len(result))
@@ -309,6 +311,7 @@ class LidarDriver:
                             )
                     break  # one sweep is enough
                 self._scan_count += 1
+                self._prev_scan_points = list(self._last_scan)
                 self._last_scan = points
                 obs = self.obstacles()
                 self._log_scan(obs, len(points))
@@ -570,6 +573,71 @@ class LidarDriver:
         except Exception as exc:
             logger.warning("LidarDriver.obstacle_velocity error: %s", exc)
             return _zero
+
+    # ── Moving objects (#358) ─────────────────────────────────────────────────
+
+    def moving_objects(self, min_delta_m: float = 0.05) -> List[Dict[str, Any]]:
+        """Detect objects that moved between the last two scans.
+
+        Compares per-angle distances between ``_prev_scan_points`` and
+        ``_last_scan``.  Requires at least two scans in history
+        (``get_scan_history(window_s=5, limit=2)``) as a guard.
+
+        Args:
+            min_delta_m: Minimum absolute distance change in metres to report
+                         (default 0.05 m).
+
+        Returns:
+            List of ``{"angle_deg": int, "delta_m": float,
+            "direction": "approaching"|"receding"}`` dicts, one per angle
+            bucket that exceeded *min_delta_m*.  Returns ``[]`` when fewer
+            than 2 scans are available or on any error.  Never raises.
+        """
+        try:
+            history = self.get_scan_history(window_s=5, limit=2)
+            if len(history) < 2:
+                return []
+            prev = self._prev_scan_points
+            curr = self._last_scan
+            if not prev or not curr:
+                return []
+
+            def _bucket(points: list) -> Dict[int, float]:
+                buckets: Dict[int, float] = {}
+                for pt in points:
+                    try:
+                        angle = pt.get("angle_deg")
+                        dist = pt.get("distance_mm")
+                        if angle is None or dist is None or dist <= 0:
+                            continue
+                        deg = int(round(float(angle))) % 360
+                        if deg not in buckets or dist < buckets[deg]:
+                            buckets[deg] = float(dist)
+                    except Exception:
+                        continue
+                return buckets
+
+            prev_b = _bucket(prev)
+            curr_b = _bucket(curr)
+            results: List[Dict[str, Any]] = []
+            for deg in range(360):
+                if deg not in prev_b or deg not in curr_b:
+                    continue
+                delta_mm = curr_b[deg] - prev_b[deg]
+                delta_m = delta_mm / 1000.0
+                if abs(delta_m) < min_delta_m:
+                    continue
+                results.append(
+                    {
+                        "angle_deg": deg,
+                        "delta_m": round(delta_m, 4),
+                        "direction": "approaching" if delta_m < 0.0 else "receding",
+                    }
+                )
+            return results
+        except Exception as exc:
+            logger.warning("LidarDriver.moving_objects error: %s", exc)
+            return []
 
     # ── SLAM hint ─────────────────────────────────────────────────────────────
 

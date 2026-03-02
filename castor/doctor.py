@@ -301,6 +301,81 @@ def run_post_wizard_checks(config_path, config, provider_name):
     return results
 
 
+# ── Auto-fix (#362) ───────────────────────────────────────────────────
+
+
+def _fix_env_file() -> bool:
+    """Copy .env.example → .env if .env is missing.  Returns True on fix."""
+    if os.path.exists(".env"):
+        print("  SKIP   .env file — already exists")
+        return False
+    if not os.path.exists(".env.example"):
+        print("  SKIP   .env file — .env.example not found (run `castor wizard` to create)")
+        return False
+    import shutil
+
+    shutil.copy(".env.example", ".env")
+    print("  FIXED  .env file created from .env.example")
+    print("         → Edit .env to add your API keys")
+    return True
+
+
+def _fix_memory_db() -> bool:
+    """Prune episodes older than 30 days to reduce DB size.  Returns True on fix."""
+    import sqlite3
+    import time
+
+    db_path = os.getenv("CASTOR_MEMORY_DB", os.path.expanduser("~/.castor/memory.db"))
+    if not os.path.exists(db_path):
+        print("  SKIP   Memory DB — not found (will be created on first use)")
+        return False
+    cutoff = int(time.time()) - 30 * 86400
+    try:
+        con = sqlite3.connect(db_path)
+        cur = con.execute("DELETE FROM episodes WHERE timestamp < ?", (cutoff,))
+        deleted = cur.rowcount
+        con.commit()  # commit DELETE before VACUUM (VACUUM cannot run inside a transaction)
+        con.execute("VACUUM")
+        con.close()
+        print(f"  FIXED  Memory DB — deleted {deleted} episodes older than 30 days + VACUUM")
+        return True
+    except Exception as exc:
+        print(f"  FAIL   Memory DB — {exc}")
+        return False
+
+
+def run_auto_fix(results, config_path=None) -> None:
+    """Attempt to auto-fix common issues found by :func:`run_all_checks`.
+
+    Prints a line for each check, showing FIXED / SKIP / FAIL.
+
+    Args:
+        results:     List of ``(ok, name, detail)`` tuples from
+                     :func:`run_all_checks`.
+        config_path: Optional RCAN config path (unused currently; reserved for
+                     future config-level fixes).
+    """
+    print("  Auto-Fix\n")
+    fixed_any = False
+    for ok, name, detail in results:
+        if ok:
+            continue
+        if name == ".env file":
+            if _fix_env_file():
+                fixed_any = True
+        elif "Memory DB" in name and "large" in detail:
+            if _fix_memory_db():
+                fixed_any = True
+        else:
+            pass  # other checks not auto-fixable
+
+    print()
+    if not fixed_any:
+        print("  No automatic fixes were applied.")
+        print("  For provider keys, run `castor wizard` or edit .env manually.")
+    print()
+
+
 # ── Output ────────────────────────────────────────────────────────────
 
 
