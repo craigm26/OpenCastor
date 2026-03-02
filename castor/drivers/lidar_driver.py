@@ -522,6 +522,80 @@ class LidarDriver:
             logger.warning("LidarDriver.scan_rate error: %s", exc)
             return _base
 
+    # ── Issue #409 — per-sector distance history ──────────────────────────────
+
+    def sector_history(self, window_s: float = 30.0) -> Dict[str, Any]:
+        """Return per-sector distance history over a time window (Issue #409).
+
+        Queries scan history and groups obstacle readings by sector name,
+        returning a time series for each sector found.
+
+        Returns:
+            Dict with key ``"sectors"`` mapping sector name → list of
+            ``{ts: float, dist_mm: float}`` dicts, plus ``"window_s"`` and ``"mode"``.
+        """
+        try:
+            history = self.get_scan_history(window_s=window_s)
+            sectors: Dict[str, List[Dict[str, Any]]] = {}
+            sector_columns = {
+                "front": "front_mm",
+                "left": "left_mm",
+                "right": "right_mm",
+                "rear": "rear_mm",
+            }
+            for row in history:
+                ts = row.get("ts", 0.0)
+                for sector_name, col_key in sector_columns.items():
+                    dist_mm = row.get(col_key)
+                    if dist_mm is None:
+                        continue
+                    if sector_name not in sectors:
+                        sectors[sector_name] = []
+                    sectors[sector_name].append({"ts": ts, "dist_mm": dist_mm})
+            # Sort each sector's entries by ascending timestamp
+            for sector_name in sectors:
+                sectors[sector_name].sort(key=lambda e: e["ts"])
+            return {"sectors": sectors, "window_s": window_s, "mode": self._mode}
+        except Exception as exc:
+            logger.warning("LidarDriver.sector_history error: %s", exc)
+            return {"sectors": {}, "window_s": window_s, "mode": self._mode}
+
+    # ── Issue #418 — 2D Cartesian point cloud ─────────────────────────────────
+
+    def point_cloud_2d(self) -> Dict[str, Any]:
+        """Return full 2D Cartesian point array from latest scan (Issue #418).
+
+        Converts polar (angle_deg, distance_mm) to Cartesian (x_m, y_m).
+
+        Returns:
+            Dict with ``"points"`` list of ``{x_m, y_m, dist_mm, angle_deg}`` dicts,
+            ``"count"`` (int), and ``"mode"`` (str).
+        """
+        try:
+            raw_points = self.scan()
+            points: List[Dict[str, Any]] = []
+            for pt in raw_points:
+                dist_mm = pt.get("distance_mm")
+                angle_deg = pt.get("angle_deg")
+                if dist_mm is None or dist_mm <= 0 or angle_deg is None:
+                    continue
+                angle_rad = math.radians(float(angle_deg))
+                dist_m = dist_mm / 1000.0
+                x_m = dist_m * math.cos(angle_rad)
+                y_m = dist_m * math.sin(angle_rad)
+                points.append(
+                    {
+                        "x_m": round(x_m, 6),
+                        "y_m": round(y_m, 6),
+                        "dist_mm": float(dist_mm),
+                        "angle_deg": float(angle_deg),
+                    }
+                )
+            return {"points": points, "count": len(points), "mode": self._mode}
+        except Exception as exc:
+            logger.warning("LidarDriver.point_cloud_2d error: %s", exc)
+            return {"points": [], "count": 0, "mode": self._mode}
+
     # ── Zone map ──────────────────────────────────────────────────────────────
 
     def zone_map(self, resolution_m: float = 0.05, size_m: float = 5.0) -> dict:

@@ -5753,6 +5753,104 @@ async def doctor_gpu_memory():
     return {"ok": ok, "name": name, "detail": detail}
 
 
+# ── Cycle 20 endpoints (#409–#419) ──────────────────────────────────────────
+
+
+@app.get("/api/lidar/sector_history", dependencies=[Depends(verify_token)])
+async def lidar_sector_history(window_s: float = 30.0):
+    """GET /api/lidar/sector_history — Per-sector distance history (#409)."""
+    from castor.drivers.lidar_driver import get_lidar
+
+    return get_lidar().sector_history(window_s=window_s)
+
+
+@app.get("/api/lidar/point_cloud_2d", dependencies=[Depends(verify_token)])
+async def lidar_point_cloud_2d():
+    """GET /api/lidar/point_cloud_2d — Full 2D Cartesian point array (#418)."""
+    from castor.drivers.lidar_driver import get_lidar
+
+    return get_lidar().point_cloud_2d()
+
+
+@app.get("/api/imu/heading_history", dependencies=[Depends(verify_token)])
+async def imu_heading_history(window_s: float = 60.0):
+    """GET /api/imu/heading_history — Timestamped yaw readings over window (#413)."""
+    from castor.drivers.imu_driver import get_imu
+
+    return get_imu().heading_history(window_s=window_s)
+
+
+@app.get("/api/memory/export_tags_csv", dependencies=[Depends(verify_token)])
+async def memory_export_tags_csv(
+    path: str,
+    window_s: float = 3600.0,
+    top_k: int = 20,
+):
+    """GET /api/memory/export_tags_csv — Export tag frequency to CSV (#410)."""
+    from castor.memory import EpisodeMemory
+
+    db = __import__("os").getenv(
+        "CASTOR_MEMORY_DB", __import__("os").path.expanduser("~/.castor/memory.db")
+    )
+    return EpisodeMemory(db_path=db).export_tags_csv(path=path, window_s=window_s, top_k=top_k)
+
+
+@app.post("/api/memory/retention_policy", dependencies=[Depends(verify_token)])
+async def memory_retention_policy(
+    max_age_s: float = None,
+    max_count: int = None,
+    keep_flagged: bool = True,
+):
+    """POST /api/memory/retention_policy — Auto-expire old episodes (#415)."""
+    from castor.memory import EpisodeMemory
+
+    db = __import__("os").getenv(
+        "CASTOR_MEMORY_DB", __import__("os").path.expanduser("~/.castor/memory.db")
+    )
+    return EpisodeMemory(db_path=db).retention_policy(
+        max_age_s=max_age_s, max_count=max_count, keep_flagged=keep_flagged
+    )
+
+
+@app.get("/api/pool/latency_percentiles", dependencies=[Depends(verify_token)])
+async def pool_latency_percentiles():
+    """GET /api/pool/latency_percentiles — p50/p95/p99 per provider (#414)."""
+    brain = state.brain
+    if brain is None:
+        return {"error": "no brain loaded", "code": "HTTP_503"}
+    if not hasattr(brain, "latency_percentiles"):
+        return {"error": "brain is not a ProviderPool", "code": "HTTP_400"}
+    return brain.latency_percentiles()
+
+
+@app.post("/api/pool/reset_stats", dependencies=[Depends(verify_token)])
+async def pool_reset_stats():
+    """POST /api/pool/reset_stats — Zero all per-provider counters (#416)."""
+    brain = state.brain
+    if brain is None:
+        return {"error": "no brain loaded", "code": "HTTP_503"}
+    if not hasattr(brain, "reset_stats"):
+        return {"error": "brain is not a ProviderPool", "code": "HTTP_400"}
+    return brain.reset_stats()
+
+
+@app.get("/api/metrics/loop_latency_percentiles", dependencies=[Depends(verify_token)])
+async def metrics_loop_latency_percentiles():
+    """GET /api/metrics/loop_latency_percentiles — p50/p95/p99 loop duration (#417)."""
+    from castor.metrics import get_registry
+
+    return get_registry().loop_latency_percentiles()
+
+
+@app.get("/api/doctor/swap_usage", dependencies=[Depends(verify_token)])
+async def doctor_swap_usage():
+    """GET /api/doctor/swap_usage — Swap memory usage check (#412)."""
+    from castor.doctor import check_swap_usage
+
+    ok, name, detail = check_swap_usage()
+    return {"ok": ok, "name": name, "detail": detail}
+
+
 @app.on_event("shutdown")
 async def on_shutdown():
     # Close WebRTC peers

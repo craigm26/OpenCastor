@@ -1012,6 +1012,140 @@ class EpisodeMemory:
             return []
 
     # ------------------------------------------------------------------
+    # Issue #410 — export tag frequency as CSV
+    # ------------------------------------------------------------------
+
+    def export_tags_csv(
+        self,
+        path: str,
+        window_s: float = 3600.0,
+        top_k: int = 20,
+    ) -> Dict[str, Any]:
+        """Export action-tag frequency histogram to a CSV file (Issue #410).
+
+        Calls tag_frequency() and writes results to a CSV with columns:
+        tag, count, rank.
+
+        Returns:
+            Dict with ``"path"`` (str), ``"rows_written"`` (int), ``"window_s"`` (float).
+        """
+        import csv as _csv
+
+        try:
+            tags = self.tag_frequency(window_s=window_s, top_k=top_k)
+            os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+            with open(path, "w", newline="", encoding="utf-8") as fh:
+                writer = _csv.writer(fh)
+                writer.writerow(["tag", "count", "rank"])
+                for rank, entry in enumerate(tags, start=1):
+                    writer.writerow([entry.get("tag", ""), entry.get("count", 0), rank])
+            return {"path": path, "rows_written": len(tags), "window_s": window_s}
+        except Exception as exc:
+            logger.warning("EpisodeMemory.export_tags_csv error: %s", exc)
+            return {"path": path, "rows_written": 0, "window_s": window_s}
+
+    # ------------------------------------------------------------------
+    # Issue #415 — retention policy: auto-expire old episodes
+    # ------------------------------------------------------------------
+
+    def retention_policy(
+        self,
+        max_age_s: Optional[float] = None,
+        max_count: Optional[int] = None,
+        keep_flagged: bool = True,
+    ) -> Dict[str, Any]:
+        """Auto-expire old episodes according to retention rules (Issue #415).
+
+        Applies rules in this order:
+        1. Delete episodes older than max_age_s (if set)
+        2. Delete episodes beyond max_count (oldest first, if set)
+
+        keep_flagged=True (default) prevents deletion of flagged episodes.
+
+        Returns:
+            Dict with ``"deleted_by_age"`` (int), ``"deleted_by_count"`` (int),
+            ``"total_deleted"`` (int), ``"remaining"`` (int).
+        """
+        import time as _time
+
+        deleted_by_age = 0
+        deleted_by_count = 0
+        try:
+            with self._conn() as con:
+                # --- Rule 1: delete by age ---
+                if max_age_s is not None:
+                    cutoff = _time.time() - max(0.0, float(max_age_s))
+                    try:
+                        if keep_flagged:
+                            cur = con.execute(
+                                "DELETE FROM episodes WHERE ts < ? AND flagged = 0",
+                                (cutoff,),
+                            )
+                        else:
+                            cur = con.execute(
+                                "DELETE FROM episodes WHERE ts < ?",
+                                (cutoff,),
+                            )
+                        deleted_by_age = cur.rowcount
+                    except Exception:
+                        # flagged column may not exist on old DBs
+                        cur = con.execute(
+                            "DELETE FROM episodes WHERE ts < ?",
+                            (cutoff,),
+                        )
+                        deleted_by_age = cur.rowcount
+
+                # --- Rule 2: delete by count ---
+                if max_count is not None:
+                    max_count = max(0, int(max_count))
+                    total_row = con.execute("SELECT COUNT(*) FROM episodes").fetchone()
+                    total = total_row[0] if total_row else 0
+                    excess = total - max_count
+                    if excess > 0:
+                        try:
+                            if keep_flagged:
+                                ids_rows = con.execute(
+                                    "SELECT id FROM episodes WHERE flagged = 0 "
+                                    "ORDER BY ts ASC LIMIT ?",
+                                    (excess,),
+                                ).fetchall()
+                            else:
+                                ids_rows = con.execute(
+                                    "SELECT id FROM episodes ORDER BY ts ASC LIMIT ?",
+                                    (excess,),
+                                ).fetchall()
+                        except Exception:
+                            ids_rows = con.execute(
+                                "SELECT id FROM episodes ORDER BY ts ASC LIMIT ?",
+                                (excess,),
+                            ).fetchall()
+                        ids = [r[0] for r in ids_rows]
+                        if ids:
+                            placeholders = ",".join("?" * len(ids))
+                            cur2 = con.execute(
+                                f"DELETE FROM episodes WHERE id IN ({placeholders})",
+                                ids,
+                            )
+                            deleted_by_count = cur2.rowcount
+
+            remaining = self.count()
+        except Exception as exc:
+            logger.warning("EpisodeMemory.retention_policy error: %s", exc)
+            return {
+                "deleted_by_age": 0,
+                "deleted_by_count": 0,
+                "total_deleted": 0,
+                "remaining": 0,
+            }
+
+        return {
+            "deleted_by_age": deleted_by_age,
+            "deleted_by_count": deleted_by_count,
+            "total_deleted": deleted_by_age + deleted_by_count,
+            "remaining": remaining,
+        }
+
+    # ------------------------------------------------------------------
     # Issue #401 — per-tag episode timeline bucketed over time
     # ------------------------------------------------------------------
 

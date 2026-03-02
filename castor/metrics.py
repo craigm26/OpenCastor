@@ -420,6 +420,9 @@ class MetricsRegistry:
         self._channel_msg_counts: Dict[str, int] = {}
         # Issue #397: per-provider error counts for error histogram
         self._provider_error_counts: Dict[str, int] = {}
+        # Issue #417 — loop latency samples for percentile computation
+        self._loop_latency_samples: List[float] = []
+        self._loop_latency_max_samples: int = 1000
 
         # Pre-register standard OpenCastor metrics
         self._init_standard_metrics()
@@ -504,6 +507,13 @@ class MetricsRegistry:
         lag = self._gauges.get("opencastor_avg_latency_ms")
         if lag:
             lag.set(latency_ms, robot=robot)
+        if self._enabled:
+            with self._lock:
+                self._loop_latency_samples.append(latency_ms)
+                if len(self._loop_latency_samples) > self._loop_latency_max_samples:
+                    self._loop_latency_samples = self._loop_latency_samples[
+                        -self._loop_latency_max_samples :
+                    ]
 
     def record_command(self, robot: str = "robot", source: str = "api") -> None:
         c = self._counters.get("opencastor_commands_total")
@@ -777,6 +787,33 @@ class MetricsRegistry:
         buckets["+Inf"] = len(counts)
 
         return {"buckets": buckets, "per_provider": counts}
+
+    def loop_latency_percentiles(self) -> Dict[str, Any]:
+        """Return p50/p95/p99 of loop duration in ms (Issue #417).
+
+        Uses the last up to 1000 loop latency samples recorded by record_loop().
+        Returns None for each percentile when no samples exist.
+
+        Returns:
+            Dict with ``p50_ms``, ``p95_ms``, ``p99_ms``, ``sample_count`` keys.
+        """
+        with self._lock:
+            samples = sorted(self._loop_latency_samples)
+
+        n = len(samples)
+        if n == 0:
+            return {"p50_ms": None, "p95_ms": None, "p99_ms": None, "sample_count": 0}
+
+        def _pct(pct: float) -> float:
+            idx = int(pct * (n - 1))
+            return round(samples[idx], 3)
+
+        return {
+            "p50_ms": _pct(0.50),
+            "p95_ms": _pct(0.95),
+            "p99_ms": _pct(0.99),
+            "sample_count": n,
+        }
 
 
 # ── Singleton ─────────────────────────────────────────────────────────────────

@@ -21,7 +21,7 @@ import math
 import os
 import threading
 import time
-from typing import Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
     import numpy as np
@@ -315,6 +315,10 @@ class IMUDriver:
         # Issue #404 — fall detection state
         self._fall_consecutive: int = 0  # count of consecutive readings below threshold
         self._fall_detected: bool = False  # latch: True after a fall event until reset
+
+        # Issue #413 — heading history ring buffer
+        self._heading_history: List[Tuple[float, float]] = []  # (ts, yaw_deg)
+        self._heading_history_max: int = 3600  # max entries (~1 per second for 1 hour)
 
         # Resolve explicit address from env or constructor argument
         env_addr = os.getenv("IMU_I2C_ADDRESS", "")
@@ -1033,6 +1037,50 @@ class IMUDriver:
         """Clear the fall-detection latch and consecutive counter."""
         self._fall_consecutive = 0
         self._fall_detected = False
+
+    # ── Issue #413 — heading history ──────────────────────────────────────────
+
+    def heading_history(self, window_s: float = 60.0) -> Dict[str, Any]:
+        """Return timestamped yaw readings over a time window (Issue #413).
+
+        Calls orientation() to record the current heading, then returns
+        all readings within the last window_s seconds.
+
+        Args:
+            window_s: Time window in seconds to include in the returned readings
+                      (default 60.0).
+
+        Returns:
+            Dict with ``"readings"`` list of ``{ts: float, yaw_deg: float}`` dicts,
+            ``"window_s"`` float, ``"count"`` int, and ``"mode"`` str.
+
+        Never raises.
+        """
+        import time as _t
+
+        now = _t.time()
+        try:
+            ori = self.orientation()
+            yaw = ori.get("yaw_deg")
+            if yaw is not None:
+                self._heading_history.append((now, float(yaw)))
+                if len(self._heading_history) > self._heading_history_max:
+                    self._heading_history = self._heading_history[-self._heading_history_max :]
+        except Exception:
+            pass
+
+        cutoff = now - window_s
+        readings = [
+            {"ts": ts, "yaw_deg": round(yaw_val, 4)}
+            for ts, yaw_val in self._heading_history
+            if ts >= cutoff
+        ]
+        return {
+            "readings": readings,
+            "window_s": window_s,
+            "count": len(readings),
+            "mode": self._mode,
+        }
 
     # ── Issue #391 — adaptive calibration ─────────────────────────────────────
 

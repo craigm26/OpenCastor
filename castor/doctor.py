@@ -424,6 +424,76 @@ def check_gpu_memory() -> tuple:
     return True, _NAME, "no GPU detected — skipping"
 
 
+def check_swap_usage() -> tuple:
+    """Check swap usage, warn when >50% used (Issue #412).
+
+    Reads /proc/swaps on Linux; falls back to psutil.swap_memory().
+    Returns (True, 'Swap usage', detail) when no swap or usage is fine.
+
+    Returns:
+        (ok, 'Swap usage', detail_str)
+    """
+    _NAME = "Swap usage"
+    _THRESHOLD = 50.0
+
+    # ── /proc/swaps (Linux) ──────────────────────────────────────────
+    try:
+        import os as _os
+
+        if _os.path.exists("/proc/swaps"):
+            with open("/proc/swaps", encoding="utf-8") as fh:
+                lines = fh.read().strip().splitlines()
+            # First line is header; each subsequent line is a swap device
+            swap_lines = [ln for ln in lines[1:] if ln.strip()]
+            if not swap_lines:
+                return True, _NAME, "no swap configured"
+            total_kb = 0
+            used_kb = 0
+            for ln in swap_lines:
+                parts = ln.split()
+                if len(parts) >= 4:
+                    try:
+                        total_kb += int(parts[2])
+                        used_kb += int(parts[3])
+                    except ValueError:
+                        pass
+            if total_kb > 0:
+                pct = used_kb / total_kb * 100.0
+                free_mb = (total_kb - used_kb) / 1024.0
+                if pct >= _THRESHOLD:
+                    return (
+                        False,
+                        _NAME,
+                        f"{pct:.1f}% swap used ({free_mb:.0f} MB free) — swap >50% full",
+                    )
+                return True, _NAME, f"{pct:.1f}% swap used ({free_mb:.0f} MB free)"
+    except Exception:
+        pass
+
+    # ── psutil fallback ──────────────────────────────────────────────
+    try:
+        import psutil as _psutil
+
+        sw = _psutil.swap_memory()
+        if sw.total == 0:
+            return True, _NAME, "no swap configured"
+        pct = sw.percent
+        free_mb = (sw.total - sw.used) / (1024 * 1024)
+        if pct >= _THRESHOLD:
+            return (
+                False,
+                _NAME,
+                f"{pct:.1f}% swap used ({free_mb:.0f} MB free) — swap >50% full",
+            )
+        return True, _NAME, f"{pct:.1f}% swap used ({free_mb:.0f} MB free)"
+    except ImportError:
+        pass
+    except Exception as exc:
+        return False, _NAME, str(exc)
+
+    return True, _NAME, "swap info unavailable — skipping"
+
+
 def run_all_checks(config_path=None):
     """Run every health check.  Returns a flat list of (ok, name, detail) tuples."""
     results = []
@@ -461,6 +531,8 @@ def run_all_checks(config_path=None):
     results.append(check_memory_usage())
     # Issue #406: GPU VRAM check
     results.append(check_gpu_memory())
+    # Issue #412: swap usage check
+    results.append(check_swap_usage())
 
     return results
 

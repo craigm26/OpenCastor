@@ -113,6 +113,10 @@ class BehaviorRunner:
             "unless": self._step_unless,
             # Issue #402: raise _BreakLoop to exit enclosing loops
             "break_on": self._step_break_on,
+            # Issue #411: run inner steps concurrently; stop all when first finishes
+            "parallel_race": self._step_parallel_race,
+            # Issue #419: block until named threading.Event is set via set_event()
+            "wait_for_event": self._step_wait_for_event,
         }
 
         # Chain-recursion depth counter (not thread-local; behaviors run single-threaded)
@@ -2240,3 +2244,132 @@ class BehaviorRunner:
             raise _BreakLoop(f"break_on: condition={condition!r}")
         else:
             logger.debug("break_on step: condition %r is False — continuing", condition)
+
+    # ------------------------------------------------------------------
+    # Issue #411 — parallel_race step
+    # ------------------------------------------------------------------
+
+    def _step_parallel_race(self, step: dict) -> None:
+        """Run inner steps concurrently; return as soon as the first one finishes (Issue #411).
+
+        Unlike ``parallel`` (which waits for all), ``parallel_race`` cancels
+        remaining threads as soon as any inner step completes without raising.
+
+        Example step::
+
+            - type: parallel_race
+              inner_steps:
+                - type: wait
+                  duration_s: 5
+                - type: speak
+                  text: "hello"
+              timeout_s: 30   # optional overall timeout
+
+        Parameters
+        ----------
+        step:
+            ``inner_steps`` (list, required): Steps to run concurrently.
+            ``timeout_s`` (float, default 0): Overall timeout. 0 = none.
+        """
+        if not self._running:
+            return
+
+        inner_steps: list = step.get("inner_steps", [])
+        if not inner_steps:
+            logger.warning("parallel_race step: 'inner_steps' is missing or empty — skipping")
+            return
+
+        timeout_s: float = float(step.get("timeout_s", 0))
+
+        logger.info(
+            "parallel_race step: launching %d inner step(s) in race (timeout_s=%.1f)",
+            len(inner_steps),
+            timeout_s,
+        )
+
+        # Use threading.Event to signal first completion
+        first_done = threading.Event()
+
+        def _race_run(inner_step: dict) -> None:
+            try:
+                self._run_step(inner_step)
+            finally:
+                first_done.set()  # signal regardless of success/failure
+
+        threads = []
+        for inner_step in inner_steps:
+            t = threading.Thread(target=_race_run, args=(inner_step,), daemon=True)
+            threads.append(t)
+            t.start()
+
+        # Wait for the first to finish (or timeout)
+        wait_time = timeout_s if timeout_s > 0 else None
+        first_done.wait(timeout=wait_time)
+
+        # Count how many finished
+        finished = sum(1 for t in threads if not t.is_alive())
+        logger.info(
+            "parallel_race step: race finished — %d/%d thread(s) completed",
+            finished,
+            len(inner_steps),
+        )
+
+    # ------------------------------------------------------------------
+    # Issue #419 — wait_for_event step (named event version)
+    # ------------------------------------------------------------------
+
+    def _step_wait_for_event(self, step: dict) -> None:
+        """Block until a named event is set via set_event() (Issue #419).
+
+        Uses the runner's internal _events dict (threading.Event objects).
+        Creates the event if it doesn't exist yet.
+
+        Example step::
+
+            - type: wait_for_event
+              event: "my_event_name"
+              timeout_s: 30     # optional
+              clear_after: true  # optional: clear event after waiting
+
+        Parameters
+        ----------
+        step:
+            ``event`` (str, required): Name of the event to wait for.
+            ``timeout_s`` (float, default 30.0): Max wait time. 0 = no timeout.
+            ``clear_after`` (bool, default True): Clear the event after it fires.
+        """
+        event_name: str = step.get("event", "")
+        timeout_s: float = float(step.get("timeout_s", 30.0))
+        clear_after: bool = bool(step.get("clear_after", True))
+
+        if not event_name:
+            logger.warning("wait_for_event step: 'event' key missing — skipping")
+            return
+
+        # Ensure event exists
+        with self._events_lock:
+            if event_name not in self._events:
+                self._events[event_name] = threading.Event()
+            ev = self._events[event_name]
+
+        logger.info(
+            "wait_for_event step: waiting for event %r (timeout_s=%.1f)",
+            event_name,
+            timeout_s,
+        )
+
+        wait_time = timeout_s if timeout_s > 0 else None
+        fired = ev.wait(timeout=wait_time)
+
+        if fired:
+            logger.info("wait_for_event step: event %r fired", event_name)
+            if clear_after:
+                with self._events_lock:
+                    if event_name in self._events:
+                        self._events[event_name].clear()
+        else:
+            logger.info(
+                "wait_for_event step: event %r timed out after %.1fs",
+                event_name,
+                timeout_s,
+            )

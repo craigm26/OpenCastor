@@ -627,6 +627,58 @@ class ProviderPool(BaseProvider):
             "pool_size": len(self._providers),
         }
 
+    def latency_percentiles(self) -> Dict[str, Any]:
+        """Return p50/p95/p99 latency per pool provider (Issue #414).
+
+        Reads from the MetricsRegistry ProviderLatencyTracker.
+
+        Returns:
+            Dict with key ``"providers"`` mapping provider name →
+            ``{p50_ms, p95_ms, p99_ms, sample_count}`` dicts,
+            plus ``"pool_size"`` (int).
+        """
+        from castor.metrics import get_registry
+
+        tracker = get_registry()._provider_latency
+
+        result = {}
+        for i, p in enumerate(self._providers):
+            name = getattr(p, "model_name", None) or f"pool[{i}]"
+            result[name] = {
+                "p50_ms": tracker.percentile(name, 0.50),
+                "p95_ms": tracker.percentile(name, 0.95),
+                "p99_ms": tracker.percentile(name, 0.99),
+                "sample_count": len(tracker._data.get(name, {}).get("samples", [])),
+            }
+
+        return {"providers": result, "pool_size": len(self._providers)}
+
+    def reset_stats(self) -> Dict[str, Any]:
+        """Reset all per-provider counters and state to zero (Issue #416).
+
+        Clears: cost_tracker, cb_failures, cb_open_until, degraded,
+        burst_demoted_until, ab_stats.
+
+        Returns:
+            Dict with ``"ok": True``, ``"providers_reset"`` (int).
+        """
+        with self._lock:
+            n = len(self._providers)
+            # Reset cost tracking
+            for i in range(n):
+                self._cost_tracker[i] = {"tokens_total": 0.0, "cost_usd_total": 0.0, "calls": 0.0}
+            # Reset circuit breaker state
+            self._cb_failures.clear()
+            self._cb_open_until.clear()
+            # Reset degraded/burst state
+            self._degraded.clear()
+            self._burst_demoted_until.clear()
+            # Reset A/B stats
+            self._ab_stats = {0: {"success": 0, "fail": 0}, 1: {"success": 0, "fail": 0}}
+
+        logger.info("ProviderPool.reset_stats: cleared stats for %d provider(s)", n)
+        return {"ok": True, "providers_reset": n}
+
     # ------------------------------------------------------------------
     # Issue #340: Shadow mode helpers
     # ------------------------------------------------------------------
