@@ -5,6 +5,33 @@ All notable changes to OpenCastor are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [CalVer](https://calver.org/) versioning: `YYYY.M.DD.PATCH`.
 
+## [2026.3.3.0] - 2026-03-03 🔐 Release: AI Accountability Layer & RCAN v1.2
+
+### Added
+- **AI Accountability Layer (RCAN §16)** — three new modules implement the full §16 accountability stack:
+  - `castor/confidence_gate.py` — per-command confidence threshold enforcement; commands below threshold are escalated to HiTL gate
+  - `castor/hitl_gate.py` — Human-in-the-Loop authorization gate; blocks or queues commands pending human approval; `POST /api/hitl/authorize` endpoint
+  - `castor/thought_log.py` — append-only thought log; every AI inference recorded with provider, model, model_version, latency_ms, confidence, escalated, gate_bypassed flags
+- **`Thought` dataclass** — `id`, `provider`, `model`, `model_version`, `layer` (planner/fast-brain), `latency_ms`, `escalated`, `gate_bypassed`; attached to every AI-produced motor command
+- **AI block in audit log** — `log_motor_command(thought=)` parameter writes an `ai` sub-dict to tamper-evident audit entries; model identity survives log rotation
+- **AI block in quantum commitment** — AI-attributed commitments include `proof.model_identity`; `ai` block is part of HMAC AAD so tampering breaks chain verification
+- **`GET /api/thoughts/<id>`** — retrieve a specific thought record by ID
+- **`POST /api/hitl/authorize`** — approve or reject a pending HiTL-gated command
+- **RCAN v1.2 compliance** — full protocol upgrade:
+  - `MessageType.AUTHORIZE = 9`, `MessageType.PENDING_AUTH = 10`
+  - `rcan_version: "1.2.0"` in all RCAN generator manifests
+  - v1.2 conformance checks in `castor/conformance.py` (§16 AI accountability assertions)
+  - mDNS version TXT record updated to `"1.2.0"`
+
+### Security
+- **GitHub Actions deps** — actions/checkout 4.3.1 → 6.0.2 (Dependabot #434)
+- **GitHub Actions deps** — actions/github-script 7 → 8 (Dependabot #433)
+
+### Validation
+- pytest → 5,989 tests passing; 0 new failures
+- ruff check → 0 errors
+- RCAN v1.2 conformance suite → all L1/L2/L3 checks pass
+
 ## [2026.3.1.16] - 2026-03-01 🚀 Release: NPU Vision, Mesh Networking, Geofence Editor & More
 
 ### Added

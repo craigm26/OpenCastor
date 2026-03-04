@@ -51,6 +51,13 @@ Supports **Linux, macOS (Apple Silicon & Intel), Windows 11, Raspberry Pi, Docke
 Installer flags: `--dry-run`, `--no-rpi`, `--skip-wizard`
 </details>
 
+## ✨ What's New in v2026.3.3.0
+
+- **AI Accountability Layer (RCAN §16)** — `castor/confidence_gate.py`, `castor/hitl_gate.py`, `castor/thought_log.py`; every AI-produced command carries model identity (provider, model, version, latency), confidence gate, and Human-in-the-Loop gate; `GET /api/thoughts/<id>` and `POST /api/hitl/authorize` endpoints; AI block written to tamper-evident audit logs and quantum commitment payload
+- **RCAN v1.2 compliance** — AUTHORIZE (type 9) and PENDING_AUTH (type 10) message types; `rcan_version: "1.2.0"` in all generated manifests; v1.2 conformance checks in `castor/conformance.py`; mDNS version TXT updated to "1.2.0"
+- **Security patches** — GitHub Actions: actions/checkout 4.3.1→6.0.2, actions/github-script 7→8
+- **5,989 tests passing** across all test files.
+
 ## ✨ What's New in v2026.3.1.16
 
 - **Metrics p50/p95/p99 percentiles (#347)** — `ProviderLatencyTracker` now stores exact sorted samples and exposes `opencastor_provider_latency_p50/p95/p99_ms` Prometheus gauge per provider

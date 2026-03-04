@@ -20,7 +20,7 @@ castor fleet status --timeout 15
 
 ```bash
 curl http://192.168.1.10:8000/health
-# {"status": "ok", "uptime_seconds": 3421.2, "version": "2026.2.26.3"}
+# {"status": "ok", "uptime_seconds": 3421.2, "version": "2026.3.3.0"}
 ```
 
 ## Self-Improvement
@@ -139,7 +139,7 @@ castor doctor
 
 # Example output:
 # ✅  Python 3.12.0
-# ✅  castor package v2026.2.26.3
+# ✅  castor package v2026.3.3.0
 # ✅  ANTHROPIC_API_KEY set
 # ⚠️  GOOGLE_API_KEY not set (optional)
 # ✅  Camera index 0 accessible
@@ -242,8 +242,8 @@ castor restore --backup 2026-02-21T14:30:00
 castor update-check
 
 # Output:
-# Current: v2026.2.26.3
-# Latest:  v2026.2.26.3  ✅  Up to date
+# Current: v2026.3.3.0
+# Latest:  v2026.3.3.0  ✅  Up to date
 ```
 
 ## Community Hub
