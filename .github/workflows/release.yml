@@ -244,7 +244,7 @@ jobs:
           git config user.name "GitHub Actions"
           git add sbom/
           git diff --staged --quiet || git commit -m "chore(sbom): update SBOM for ${{ github.ref_name }}"
-          git push
+          git push origin HEAD:main || true
 
       - name: Publish to PyPI (Trusted Publisher / OIDC)
         id: publish_oidc
