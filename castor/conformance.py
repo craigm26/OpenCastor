@@ -83,7 +83,7 @@ class ConformanceChecker:
     def run_all(self) -> list[ConformanceResult]:
         """Run every check and return results."""
         results: list[ConformanceResult] = []
-        for category in ("safety", "provider", "protocol", "performance", "hardware"):
+        for category in ("safety", "provider", "protocol", "performance", "hardware", "rcan_v12"):
             results.extend(self.run_category(category))
         return results
 
@@ -95,6 +95,7 @@ class ConformanceChecker:
             "protocol": self._check_protocol,
             "performance": self._check_performance,
             "hardware": self._check_hardware,
+            "rcan_v12": self._check_rcan_v12,
         }
         runner = runners.get(category)
         if runner is None:
@@ -873,3 +874,266 @@ class ConformanceChecker:
             status="pass",
             detail=f"physics.dof={idof} (reasonable)",
         )
+
+    # ------------------------------------------------------------------
+    # RCAN v1.2 conformance checks
+    # ------------------------------------------------------------------
+
+    def _check_rcan_v12(self) -> list[ConformanceResult]:
+        return [
+            self._v12_rcan_version(),
+            *self._v12_confidence_gates(),
+            *self._v12_hitl_gates(),
+        ]
+
+    def _v12_rcan_version(self) -> ConformanceResult:
+        cid = "rcan_v12.rcan_version"
+        version = str(self._cfg.get("rcan_version", "")).strip()
+        if not version:
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v12",
+                status="fail",
+                detail="rcan_version is missing — required for RCAN v1.2 compliance",
+                fix='Set rcan_version: "1.2.0" at the top of your config',
+            )
+        # Accept "1.2.x" or later; warn on older versions.
+        try:
+            parts = [int(x) for x in version.split(".")[:2]]
+        except ValueError:
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v12",
+                status="warn",
+                detail=f"rcan_version='{version}' is not a numeric semver string",
+                fix='Set rcan_version: "1.2.0" for RCAN v1.2 compliance',
+            )
+        major, minor = parts[0], parts[1] if len(parts) > 1 else 0
+        if (major, minor) < (1, 2):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v12",
+                status="warn",
+                detail=(
+                    f"rcan_version='{version}' is below 1.2.0 — "
+                    "confidence_gates and hitl_gates are RCAN v1.2 features"
+                ),
+                fix='Update rcan_version: "1.2.0" to enable v1.2 features',
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v12",
+            status="pass",
+            detail=f"rcan_version='{version}' is compatible with RCAN v1.2",
+        )
+
+    def _v12_confidence_gates(self) -> list[ConformanceResult]:
+        agent = self._cfg.get("agent", {}) or {}
+        gates = agent.get("confidence_gates")
+        if gates is None:
+            return []  # Optional feature; skip if not declared
+
+        results: list[ConformanceResult] = []
+        _VALID_ON_FAIL = {"block", "escalate", "allow"}
+
+        if not isinstance(gates, list):
+            results.append(
+                ConformanceResult(
+                    check_id="rcan_v12.confidence_gates.type",
+                    category="rcan_v12",
+                    status="fail",
+                    detail="agent.confidence_gates must be a list",
+                    fix="Change agent.confidence_gates to a YAML list of gate definitions",
+                )
+            )
+            return results
+
+        for i, gate in enumerate(gates):
+            cid_base = f"rcan_v12.confidence_gates[{i}]"
+            if not isinstance(gate, dict):
+                results.append(
+                    ConformanceResult(
+                        check_id=cid_base,
+                        category="rcan_v12",
+                        status="fail",
+                        detail=f"confidence_gates[{i}] must be a mapping (dict)",
+                        fix="Each gate entry must be a YAML mapping with scope, min_confidence, on_fail",
+                    )
+                )
+                continue
+
+            # Required fields
+            for field in ("scope", "min_confidence", "on_fail"):
+                if field not in gate:
+                    results.append(
+                        ConformanceResult(
+                            check_id=f"{cid_base}.{field}",
+                            category="rcan_v12",
+                            status="fail",
+                            detail=f"confidence_gates[{i}] missing required field '{field}'",
+                            fix=f"Add '{field}:' to confidence_gates[{i}]",
+                        )
+                    )
+
+            # Validate min_confidence range
+            min_conf = gate.get("min_confidence")
+            if min_conf is not None:
+                try:
+                    fval = float(min_conf)
+                    if not (0.0 <= fval <= 1.0):
+                        results.append(
+                            ConformanceResult(
+                                check_id=f"{cid_base}.min_confidence",
+                                category="rcan_v12",
+                                status="warn",
+                                detail=f"confidence_gates[{i}].min_confidence={fval} is outside [0.0, 1.0]",
+                                fix="Set min_confidence between 0.0 and 1.0 (e.g. 0.7)",
+                            )
+                        )
+                except (TypeError, ValueError):
+                    results.append(
+                        ConformanceResult(
+                            check_id=f"{cid_base}.min_confidence",
+                            category="rcan_v12",
+                            status="fail",
+                            detail=f"confidence_gates[{i}].min_confidence is not a number: {min_conf!r}",
+                            fix="Set min_confidence to a float between 0.0 and 1.0",
+                        )
+                    )
+
+            # Validate on_fail value
+            on_fail = gate.get("on_fail")
+            if on_fail is not None and on_fail not in _VALID_ON_FAIL:
+                results.append(
+                    ConformanceResult(
+                        check_id=f"{cid_base}.on_fail",
+                        category="rcan_v12",
+                        status="fail",
+                        detail=(
+                            f"confidence_gates[{i}].on_fail='{on_fail}' is invalid; "
+                            f"must be one of: {sorted(_VALID_ON_FAIL)}"
+                        ),
+                        fix=f"Set on_fail to one of: {', '.join(sorted(_VALID_ON_FAIL))}",
+                    )
+                )
+
+            if not results:
+                results.append(
+                    ConformanceResult(
+                        check_id=cid_base,
+                        category="rcan_v12",
+                        status="pass",
+                        detail=(
+                            f"confidence_gates[{i}]: scope={gate.get('scope')!r}, "
+                            f"min_confidence={gate.get('min_confidence')}, "
+                            f"on_fail={gate.get('on_fail')!r}"
+                        ),
+                    )
+                )
+
+        return results
+
+    def _v12_hitl_gates(self) -> list[ConformanceResult]:
+        agent = self._cfg.get("agent", {}) or {}
+        gates = agent.get("hitl_gates")
+        if gates is None:
+            return []  # Optional feature; skip if not declared
+
+        results: list[ConformanceResult] = []
+        _VALID_ON_FAIL = {"block", "allow"}
+
+        if not isinstance(gates, list):
+            results.append(
+                ConformanceResult(
+                    check_id="rcan_v12.hitl_gates.type",
+                    category="rcan_v12",
+                    status="fail",
+                    detail="agent.hitl_gates must be a list",
+                    fix="Change agent.hitl_gates to a YAML list of gate definitions",
+                )
+            )
+            return results
+
+        for i, gate in enumerate(gates):
+            cid_base = f"rcan_v12.hitl_gates[{i}]"
+            if not isinstance(gate, dict):
+                results.append(
+                    ConformanceResult(
+                        check_id=cid_base,
+                        category="rcan_v12",
+                        status="fail",
+                        detail=f"hitl_gates[{i}] must be a mapping (dict)",
+                        fix="Each gate entry must be a YAML mapping with action_types and require_auth",
+                    )
+                )
+                continue
+
+            # Required fields
+            for field in ("action_types", "require_auth"):
+                if field not in gate:
+                    results.append(
+                        ConformanceResult(
+                            check_id=f"{cid_base}.{field}",
+                            category="rcan_v12",
+                            status="fail",
+                            detail=f"hitl_gates[{i}] missing required field '{field}'",
+                            fix=f"Add '{field}:' to hitl_gates[{i}]",
+                        )
+                    )
+
+            # Validate action_types is a list
+            action_types = gate.get("action_types")
+            if action_types is not None and not isinstance(action_types, list):
+                results.append(
+                    ConformanceResult(
+                        check_id=f"{cid_base}.action_types",
+                        category="rcan_v12",
+                        status="fail",
+                        detail=f"hitl_gates[{i}].action_types must be a list of action type strings",
+                        fix="Set action_types to a list, e.g. [motor_command, config_change]",
+                    )
+                )
+
+            # Validate require_auth is boolean
+            require_auth = gate.get("require_auth")
+            if require_auth is not None and not isinstance(require_auth, bool):
+                results.append(
+                    ConformanceResult(
+                        check_id=f"{cid_base}.require_auth",
+                        category="rcan_v12",
+                        status="warn",
+                        detail=f"hitl_gates[{i}].require_auth should be a boolean (got {require_auth!r})",
+                        fix="Set require_auth: true or require_auth: false",
+                    )
+                )
+
+            # Validate on_fail value
+            on_fail = gate.get("on_fail")
+            if on_fail is not None and on_fail not in _VALID_ON_FAIL:
+                results.append(
+                    ConformanceResult(
+                        check_id=f"{cid_base}.on_fail",
+                        category="rcan_v12",
+                        status="fail",
+                        detail=(
+                            f"hitl_gates[{i}].on_fail='{on_fail}' is invalid; "
+                            f"must be one of: {sorted(_VALID_ON_FAIL)}"
+                        ),
+                        fix=f"Set on_fail to one of: {', '.join(sorted(_VALID_ON_FAIL))}",
+                    )
+                )
+
+            if not results:
+                results.append(
+                    ConformanceResult(
+                        check_id=cid_base,
+                        category="rcan_v12",
+                        status="pass",
+                        detail=(
+                            f"hitl_gates[{i}]: action_types={gate.get('action_types')!r}, "
+                            f"require_auth={gate.get('require_auth')}"
+                        ),
+                    )
+                )
+
+        return results

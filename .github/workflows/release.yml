@@ -148,7 +148,7 @@ jobs:
           python scripts/sync-version.py ${{ steps.version.outputs.VERSION }}
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git diff --quiet || git commit -am "chore: sync version touchpoints to v${{ steps.version.outputs.VERSION }} [skip ci]"
+          git diff --quiet || git commit -am "chore: sync version touchpoints to v${{ steps.version.outputs.VERSION }}"
           git push origin HEAD:main || true
 
       - name: Generate release notes

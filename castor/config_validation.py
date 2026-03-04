@@ -24,8 +24,33 @@ REQUIRED_TOP_LEVEL: List[str] = [
     "rcan_protocol",
 ]
 
+# Optional top-level keys recognised by RCAN v1.2+
+OPTIONAL_TOP_LEVEL: List[str] = [
+    "security_level",  # v1.2: deployment security posture (e.g. "standard", "high")
+    "reactive",
+    "tiered_brain",
+    "agent_roster",
+    "learner",
+    "camera",
+    "offline_fallback",
+    "geofence",
+    "hailo_vision",
+    "hailo_confidence",
+]
+
 # Required keys inside the 'agent' block
 REQUIRED_AGENT_KEYS: List[str] = ["model"]
+
+# Optional keys inside the 'agent' block (recognised by RCAN v1.2+)
+OPTIONAL_AGENT_KEYS: List[str] = [
+    "provider",
+    "vision_enabled",
+    "latency_budget_ms",
+    "safety_stop",
+    "confidence_gates",  # v1.2: list of confidence gate definitions
+    "hitl_gates",        # v1.2: list of HiTL gate definitions
+    "security_level",    # v1.2: agent-level security override
+]
 
 # Required keys inside the 'metadata' block
 REQUIRED_METADATA_KEYS: List[str] = ["robot_name"]
@@ -65,6 +90,57 @@ def validate_rcan_config(config: dict) -> Tuple[bool, List[str]]:
         for key in REQUIRED_AGENT_KEYS:
             if not agent.get(key):
                 errors.append(f"Missing or empty required key: 'agent.{key}'")
+
+        # ── RCAN v1.2: confidence_gates ───────────────────────────────────
+        confidence_gates = agent.get("confidence_gates")
+        if confidence_gates is not None:
+            if not isinstance(confidence_gates, list):
+                errors.append("'agent.confidence_gates' must be a list")
+            else:
+                _VALID_CONF_ON_FAIL = {"block", "escalate", "allow"}
+                for i, gate in enumerate(confidence_gates):
+                    if not isinstance(gate, dict):
+                        errors.append(
+                            f"agent.confidence_gates[{i}] must be a mapping (dict)"
+                        )
+                        continue
+                    for field in ("scope", "min_confidence", "on_fail"):
+                        if field not in gate:
+                            errors.append(
+                                f"agent.confidence_gates[{i}] is missing required field '{field}'"
+                            )
+                    on_fail = gate.get("on_fail")
+                    if on_fail is not None and on_fail not in _VALID_CONF_ON_FAIL:
+                        errors.append(
+                            f"agent.confidence_gates[{i}].on_fail must be one of "
+                            f"{sorted(_VALID_CONF_ON_FAIL)}, got '{on_fail}'"
+                        )
+
+        # ── RCAN v1.2: hitl_gates ─────────────────────────────────────────
+        hitl_gates = agent.get("hitl_gates")
+        if hitl_gates is not None:
+            if not isinstance(hitl_gates, list):
+                errors.append("'agent.hitl_gates' must be a list")
+            else:
+                _VALID_HITL_ON_FAIL = {"block", "allow"}
+                for i, gate in enumerate(hitl_gates):
+                    if not isinstance(gate, dict):
+                        errors.append(
+                            f"agent.hitl_gates[{i}] must be a mapping (dict)"
+                        )
+                        continue
+                    for field in ("action_types", "require_auth"):
+                        if field not in gate:
+                            errors.append(
+                                f"agent.hitl_gates[{i}] is missing required field '{field}'"
+                            )
+                    on_fail = gate.get("on_fail")
+                    if on_fail is not None and on_fail not in _VALID_HITL_ON_FAIL:
+                        errors.append(
+                            f"agent.hitl_gates[{i}].on_fail must be one of "
+                            f"{sorted(_VALID_HITL_ON_FAIL)}, got '{on_fail}'"
+                        )
+
     elif "agent" in config:
         errors.append("'agent' must be a mapping (dict), not a scalar")
 

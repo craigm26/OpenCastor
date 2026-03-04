@@ -2,6 +2,8 @@
 
 import time
 
+import pytest
+
 from castor.rcan.message import MessageType, Priority, RCANMessage
 
 
@@ -171,10 +173,81 @@ class TestMessageTypes:
     """Enum coverage."""
 
     def test_all_message_types(self):
-        assert len(MessageType) == 8
+        # RCAN v1.2 adds AUTHORIZE (9) and PENDING_AUTH (10)
+        assert len(MessageType) == 10
         assert MessageType.DISCOVER == 1
         assert MessageType.ERROR == 8
+        assert MessageType.AUTHORIZE == 9
+        assert MessageType.PENDING_AUTH == 10
 
     def test_all_priorities(self):
         assert len(Priority) == 4
         assert Priority.LOW < Priority.NORMAL < Priority.HIGH < Priority.SAFETY
+
+
+class TestRCANv12Messages:
+    """RCAN v1.2 — AUTHORIZE and PENDING_AUTH factory methods."""
+
+    def test_authorize_approve(self):
+        msg = RCANMessage.authorize(
+            source="rcan://operator/user1",
+            target="rcan://robot/main",
+            ref_message_id="abc-123",
+            principal="user1",
+            decision="approve",
+        )
+        assert msg.type == MessageType.AUTHORIZE
+        assert msg.payload["decision"] == "approve"
+        assert msg.payload["principal"] == "user1"
+        assert msg.payload["ref_message_id"] == "abc-123"
+        assert msg.priority == Priority.HIGH
+        assert "hitl" in msg.scope
+
+    def test_authorize_deny(self):
+        msg = RCANMessage.authorize(
+            source="rcan://operator/user1",
+            target="rcan://robot/main",
+            ref_message_id="abc-123",
+            principal="user1",
+            decision="deny",
+        )
+        assert msg.payload["decision"] == "deny"
+
+    def test_authorize_invalid_decision_raises(self):
+        with pytest.raises(ValueError, match="approve.*deny"):
+            RCANMessage.authorize(
+                source="rcan://operator/user1",
+                target="rcan://robot/main",
+                ref_message_id="abc-123",
+                principal="user1",
+                decision="maybe",
+            )
+
+    def test_pending_auth(self):
+        msg = RCANMessage.pending_auth(
+            source="rcan://robot/main",
+            target="rcan://operator/user1",
+            pending_id="pending-456",
+            action_type="motor_command",
+            description="Move forward 1m",
+            timeout_remaining_ms=30000,
+        )
+        assert msg.type == MessageType.PENDING_AUTH
+        assert msg.payload["pending_id"] == "pending-456"
+        assert msg.payload["action_type"] == "motor_command"
+        assert msg.payload["timeout_remaining_ms"] == 30000
+        assert msg.priority == Priority.HIGH
+        assert "hitl" in msg.scope
+
+    def test_authorize_roundtrip(self):
+        msg = RCANMessage.authorize(
+            source="rcan://operator/user1",
+            target="rcan://robot/main",
+            ref_message_id="abc-123",
+            principal="user1",
+            decision="approve",
+        )
+        d = msg.to_dict()
+        assert d["type_name"] == "AUTHORIZE"
+        restored = RCANMessage.from_dict(d)
+        assert restored.type == MessageType.AUTHORIZE

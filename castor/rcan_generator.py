@@ -21,7 +21,7 @@ from typing import Optional
 logger = logging.getLogger("OpenCastor.RCANGenerator")
 
 _RCAN_TEMPLATE = """\
-rcan_version: "1.1.0"
+rcan_version: "1.2.0"
 
 metadata:
   robot_name: "{robot_name}"
@@ -173,7 +173,7 @@ def generate_rcan_config(description: str, brain=None) -> str:
                 "Based on this description, generate a complete, valid RCAN YAML configuration.\n\n"
                 f"Description: {description}\n\n"
                 "Requirements:\n"
-                "- rcan_version: '1.1.0'\n"
+                "- rcan_version: '1.2.0'\n"
                 "- Include metadata.robot_name, metadata.robot_uuid (new UUID), "
                 "metadata.author, metadata.description\n"
                 "- Include agent.provider, agent.model, agent.vision_enabled\n"

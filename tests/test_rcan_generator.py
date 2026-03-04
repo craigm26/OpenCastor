@@ -101,7 +101,7 @@ class TestGenerateRcanConfig:
 
     def test_llm_used_when_valid(self):
         good_yaml = (
-            'rcan_version: "1.1.0"\n'
+            'rcan_version: "1.2.0"\n'
             "metadata:\n  robot_name: LLM Robot\n"
             "agent:\n  provider: google\n  model: gemini-2.0-flash-exp\n"
             "drivers:\n  - id: wheels\n    protocol: pca9685\n"

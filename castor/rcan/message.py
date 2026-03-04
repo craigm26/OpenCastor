@@ -6,14 +6,16 @@ Messages are plain JSON (no protobuf) -- readable with ``curl``, zero deps.
 
 Message types follow the RCAN spec::
 
-    DISCOVER  -- mDNS / peer discovery
-    STATUS    -- Telemetry / state reporting
-    COMMAND   -- Motor, config, or action command
-    STREAM    -- Continuous sensor data
-    EVENT     -- Asynchronous notifications
-    HANDOFF   -- Transfer control between principals
-    ACK       -- Acknowledgement of a prior message
-    ERROR     -- Error response
+    DISCOVER     -- mDNS / peer discovery
+    STATUS       -- Telemetry / state reporting
+    COMMAND      -- Motor, config, or action command
+    STREAM       -- Continuous sensor data
+    EVENT        -- Asynchronous notifications
+    HANDOFF      -- Transfer control between principals
+    ACK          -- Acknowledgement of a prior message
+    ERROR        -- Error response
+    AUTHORIZE    -- Out-of-band authorization for HiTL gate (v1.2)
+    PENDING_AUTH -- Notification that HiTL gate is awaiting authorization (v1.2)
 
 Each message carries a priority (LOW, NORMAL, HIGH, SAFETY) that determines
 queue ordering.  SAFETY priority messages skip the queue entirely
@@ -40,6 +42,8 @@ class MessageType(IntEnum):
     HANDOFF = 6
     ACK = 7
     ERROR = 8
+    AUTHORIZE = 9     # Out-of-band authorization for HiTL gate (RCAN v1.2)
+    PENDING_AUTH = 10  # Notification that HiTL gate is awaiting authorization (RCAN v1.2)
 
 
 class Priority(IntEnum):
@@ -152,6 +156,89 @@ class RCANMessage:
             target=target,
             reply_to=reply_to,
             payload={"code": code, "detail": detail},
+        )
+
+    @classmethod
+    def authorize(
+        cls,
+        source: str,
+        target: str,
+        ref_message_id: str,
+        principal: str,
+        decision: str,
+        **kwargs: Any,
+    ) -> "RCANMessage":
+        """Create an AUTHORIZE message for out-of-band HiTL gate authorization.
+
+        Args:
+            source:         RURI of the authorizing principal.
+            target:         RURI of the robot or gateway receiving the decision.
+            ref_message_id: ID of the PENDING_AUTH message being responded to.
+            principal:      Identity of the authorizing principal (e.g. user ID).
+            decision:       Must be ``'approve'`` or ``'deny'``.
+            **kwargs:       Additional fields forwarded to the message payload.
+
+        Raises:
+            ValueError: If *decision* is not ``'approve'`` or ``'deny'``.
+        """
+        if decision not in ("approve", "deny"):
+            raise ValueError(
+                f"AUTHORIZE decision must be 'approve' or 'deny', got {decision!r}"
+            )
+        payload: Dict[str, Any] = {
+            "ref_message_id": ref_message_id,
+            "principal": principal,
+            "decision": decision,
+        }
+        payload.update(kwargs)
+        return cls(
+            type=MessageType.AUTHORIZE,
+            source=source,
+            target=target,
+            payload=payload,
+            priority=Priority.HIGH,
+            scope=["hitl", "control"],
+        )
+
+    @classmethod
+    def pending_auth(
+        cls,
+        source: str,
+        target: str,
+        pending_id: str,
+        action_type: str,
+        description: str,
+        timeout_remaining_ms: int,
+        **kwargs: Any,
+    ) -> "RCANMessage":
+        """Create a PENDING_AUTH notification message.
+
+        Sent by the HiTL gate to notify subscribers that an action is
+        awaiting out-of-band authorization before it can be dispatched.
+
+        Args:
+            source:              RURI of the robot / gateway.
+            target:              RURI of the principal(s) who can authorize.
+            pending_id:          Unique ID for this pending authorization request.
+            action_type:         The action type awaiting authorization.
+            description:         Human-readable description of the action.
+            timeout_remaining_ms: Milliseconds until the gate times out.
+            **kwargs:            Additional fields forwarded to the message payload.
+        """
+        payload: Dict[str, Any] = {
+            "pending_id": pending_id,
+            "action_type": action_type,
+            "description": description,
+            "timeout_remaining_ms": timeout_remaining_ms,
+        }
+        payload.update(kwargs)
+        return cls(
+            type=MessageType.PENDING_AUTH,
+            source=source,
+            target=target,
+            payload=payload,
+            priority=Priority.HIGH,
+            scope=["hitl", "status"],
         )
 
     # ------------------------------------------------------------------

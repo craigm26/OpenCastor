@@ -88,7 +88,7 @@ class RCANServiceBroadcaster:
                 "model": self.model,
                 "caps": ",".join(self.capabilities),
                 "roles": "GUEST,USER,LEASEE,OWNER,CREATOR",
-                "version": "1.0.0",
+                "version": "1.2.0",
                 "name": self.robot_name,
                 "status": self._status_fn(),
             }
