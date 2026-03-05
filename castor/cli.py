@@ -2777,6 +2777,14 @@ def main() -> None:
         "--refresh", type=float, default=2.0, help="Refresh interval in seconds (default: 2.0)"
     )
 
+    # castor fit
+    sub.add_parser(
+        "fit",
+        help="Show which LLM models fit your robot's hardware (via llmfit)",
+        epilog="Example: castor fit",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
     # castor fix
     p_fix = sub.add_parser(
         "fix",
@@ -3662,6 +3670,8 @@ def main() -> None:
         "deploy": cmd_deploy,
         # Issue #348
         "snapshot": cmd_snapshot,
+        # llmfit model fit analysis
+        "fit": lambda _args: __import__("castor.llmfit_helper", fromlist=["run_fit_command"]).run_fit_command(),
     }
 
     # Load plugins and merge any plugin-provided commands

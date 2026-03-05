@@ -2502,6 +2502,19 @@ def main():
 
         # Step 12: Hardware preset (explicit even in QuickStart)
         preset = choose_hardware() or "rpi_rc_car"
+
+        # Step 12b: Model Fit Analysis (optional, via llmfit)
+        try:
+            from castor.llmfit_helper import run_wizard_step as _llmfit_step
+            llmfit_rec = _llmfit_step(_console if HAS_RICH else None)
+            if llmfit_rec and llmfit_rec.get("provider") == provider_key:
+                # Pre-fill model if provider matches what user selected
+                suggested_model = llmfit_rec.get("model")
+                if suggested_model:
+                    agent_config["model"] = suggested_model
+        except Exception:
+            pass  # Never block wizard progress
+
         select_setup_session(
             setup_session_id,
             "save",
