@@ -17,10 +17,21 @@ The complete RCAN robot safety stack is now production-ready:
 - **Thought log** — full AI reasoning audit trail with JSONL persistence
 - **Commitment chain** — XDG-compliant HMAC-chained action ledger
 
+#### Distributed Registry (RCAN §17)
+- **`node_resolver.py`** — `NodeResolver` resolves delegated RRNs via `rcan-py` `NodeClient`; follows delegation chain automatically
+- **`node_broadcaster.py`** — `NodeBroadcaster` pushes robot record updates to the root rcan.dev registry via `POST /api/v1/sync`
+- **Verification tiers** — `castor inspect` now displays robot verification badge (⬜🟡🔵✅) pulled from live registry
+- **SDK compat pre-register check** — `castor register` calls `check_rcan_compliance_version()` before submitting; aborts with clear message if spec version mismatch
+- **`rcan-py >= 0.2.0`** is now a core dependency (NodeClient, RRN delegated format, rcan-validate node)
+
 #### Compliance
 - `castor compliance` — generate structured compliance reports (text/JSON)
-- `castor doctor` — 13-point system health check
-- RCAN v1.2 compatibility (rcan_version field validation)
+- `castor doctor` — 13-point system health check including:
+  - RCAN config present check
+  - RCAN compliance level (L1/L2/L3) via `check_compliance()`
+  - RCAN registry reachability (`check_rcan_registry_reachable()`)
+  - Commitment chain integrity check
+- RCAN v1.2 compatibility matrix check (`check_rcan_compliance_version()`)
 
 #### Developer Experience
 - `castor update` — in-place self-update
@@ -34,6 +45,7 @@ The complete RCAN robot safety stack is now production-ready:
 - 6,248+ tests across Python 3.10/3.11/3.12/3.13
 - Full ruff lint + format compliance
 - RCAN SDK integration tests (rcan-py + rcan-validate)
+- Node resolver + broadcaster unit tests (mock urllib)
 
 ---
 
