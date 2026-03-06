@@ -63,7 +63,8 @@ dependencies = [
     "rich>=13.0.0",
     "argcomplete>=3.0.0",
     # RCAN Python SDK — official protocol implementation
-    "rcan>=0.1.0",
+    # NOTE: rcan is not yet on PyPI; install from source: pip install git+https://github.com/continuonai/rcan-py.git
+    # "rcan>=0.1.0",  # re-enable once published to PyPI
 ]
 
 [project.optional-dependencies]
