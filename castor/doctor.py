@@ -500,6 +500,108 @@ def check_signal_channel() -> tuple[bool, str, str]:
     return True, "Signal channel", "not configured (optional)"
 
 
+def check_rcan_compliance_version(config_path: Optional[str] = None) -> tuple[bool, str, str]:
+    """Return (ok, 'RCAN compliance', detail_str).
+
+    Reads rcan_version from the RCAN YAML, fetches the compatibility matrix from
+    https://rcan-spec.pages.dev/compatibility.json (cached to ~/.opencastor/compat-cache.json
+    with a 24-hour TTL), and validates the claimed version against the matrix.
+    Falls back gracefully on network or parse errors.
+    """
+    import json as _json
+    import time as _time
+
+    # ── resolve config path ──────────────────────────────────────────────────
+    cfg_path_str = config_path or os.environ.get("CASTOR_CONFIG", "")
+    candidates: list[Path] = []
+    if cfg_path_str:
+        candidates.append(Path(cfg_path_str))
+    candidates += [
+        Path.cwd() / "bob.rcan.yaml",
+        Path.cwd() / "robot.rcan.yaml",
+        Path.home() / ".opencastor" / "config.yaml",
+    ]
+
+    rcan_version: Optional[str] = None
+    for p in candidates:
+        if p.exists():
+            try:
+                import yaml as _yaml  # type: ignore[import]
+
+                data = _yaml.safe_load(p.read_text())
+                if isinstance(data, dict):
+                    rcan_version = (
+                        str(data.get("rcan_version", ""))
+                        or str(data.get("rcan", {}).get("version", ""))
+                        if isinstance(data.get("rcan"), dict)
+                        else str(data.get("rcan_version", ""))
+                    )
+                    rcan_version = rcan_version.strip() or None
+            except Exception:
+                pass
+            break
+
+    if not rcan_version:
+        return True, "RCAN compliance", "no rcan_version in config (skipped)"
+
+    # ── fetch/cache compatibility.json ──────────────────────────────────────
+    cache_dir = Path.home() / ".opencastor"
+    cache_file = cache_dir / "compat-cache.json"
+    COMPAT_URL = "https://rcan-spec.pages.dev/compatibility.json"
+    TTL = 86400  # 24 h
+
+    compat_data: Optional[dict] = None
+
+    # Try cache first
+    try:
+        if cache_file.exists():
+            cached = _json.loads(cache_file.read_text())
+            if _time.time() - cached.get("_cached_at", 0) < TTL:
+                compat_data = cached
+    except Exception:
+        pass
+
+    if compat_data is None:
+        try:
+            import urllib.request as _req
+
+            with _req.urlopen(COMPAT_URL, timeout=5) as resp:
+                raw = resp.read().decode()
+            compat_data = _json.loads(raw)
+            compat_data["_cached_at"] = _time.time()
+            try:
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                cache_file.write_text(_json.dumps(compat_data))
+            except Exception:
+                pass
+        except Exception as exc:
+            return True, "RCAN compliance", f"could not fetch compatibility matrix: {exc}"
+
+    # ── validate ─────────────────────────────────────────────────────────────
+    try:
+        spec_versions = compat_data.get("spec_versions", [])
+        matched = next(
+            (sv for sv in spec_versions if sv.get("version") == rcan_version),
+            None,
+        )
+        if matched is None:
+            # Check if any current/supported spec supports this version
+            all_versions = [sv.get("version", "") for sv in spec_versions]
+            return (
+                False,
+                "RCAN compliance",
+                f"rcan_version '{rcan_version}' not in compatibility matrix {all_versions}",
+            )
+        status = matched.get("status", "unknown")
+        ok = status in ("current", "supported")
+        detail = f"spec v{rcan_version} — {status}"
+        if not ok:
+            detail += " (upgrade recommended)"
+        return ok, "RCAN compliance", detail
+    except Exception as exc:
+        return True, "RCAN compliance", f"could not parse compatibility matrix: {exc}"
+
+
 def run_all_checks(config_path: Optional[str] = None) -> list[tuple[bool, str, str]]:
     """Run all checks and return list of (ok, name, detail) tuples."""
     checks = [
@@ -511,6 +613,7 @@ def run_all_checks(config_path: Optional[str] = None) -> list[tuple[bool, str, s
         check_ble_driver,
         check_memory_db_size,
         check_signal_channel,
+        check_rcan_compliance_version,
     ]
     results = []
     for fn in checks:
