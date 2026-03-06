@@ -1139,8 +1139,20 @@ def cmd_audit(args) -> None:
 
 
 def cmd_backup(args) -> None:
-    """castor backup."""
-    print("castor backup: not yet implemented.")
+    """castor backup — create a backup archive of configs and credentials."""
+    import tarfile
+
+    from castor.backup import create_backup, print_backup_summary
+
+    output = getattr(args, "output", None)
+    archive = create_backup(output_path=output)
+    # Read back the list of archived files for the summary
+    try:
+        with tarfile.open(archive, "r:gz") as tf:
+            files = tf.getnames()
+    except Exception:
+        files = []
+    print_backup_summary(archive, files)
 
 
 def cmd_benchmark(args) -> None:
@@ -1209,18 +1221,65 @@ def cmd_benchmark(args) -> None:
 
 
 def cmd_calibrate(args) -> None:
-    """castor calibrate."""
-    print("castor calibrate: not yet implemented.")
+    """castor calibrate — interactive servo/motor calibration."""
+    from castor.calibrate import run_calibration
+
+    run_calibration(config_path=getattr(args, "config", "robot.rcan.yaml"))
 
 
 def cmd_configure(args) -> None:
-    """castor configure."""
-    print("castor configure: not yet implemented.")
+    """castor configure — interactive post-wizard config editor."""
+    from castor.configure import run_configure
+
+    run_configure(config_path=getattr(args, "config", "robot.rcan.yaml"))
 
 
 def cmd_daemon(args) -> None:
-    """castor daemon."""
-    print("castor daemon: not yet implemented.")
+    """castor daemon — manage the OpenCastor auto-start systemd service."""
+    from castor.daemon import (
+        daemon_logs,
+        daemon_status,
+        disable_daemon,
+        enable_daemon,
+    )
+
+    action = getattr(args, "action", "status")
+
+    if action == "enable":
+        config_path = getattr(args, "config", "robot.rcan.yaml")
+        user = getattr(args, "user", None)
+        result = enable_daemon(config_path=config_path, user=user)
+        icon = "✅" if result.get("ok") else "❌"
+        print(f"  {icon} {result.get('message', '')}")
+        if result.get("service_path"):
+            print(f"  Service file: {result['service_path']}")
+
+    elif action == "disable":
+        result = disable_daemon()
+        icon = "✅" if result.get("ok") else "❌"
+        print(f"  {icon} {result.get('message', 'Disabled.')}")
+
+    elif action == "status":
+        result = daemon_status()
+        active = result.get("active", "unknown")
+        icon = "✅" if active == "active" else "⏸️"
+        print(f"  {icon} Status: {active}")
+        for key in ("description", "pid", "started"):
+            if result.get(key):
+                print(f"     {key}: {result[key]}")
+
+    elif action == "logs":
+        lines = getattr(args, "lines", 50)
+        output = daemon_logs(lines=lines)
+        print(output)
+
+    elif action == "restart":
+        import subprocess
+        rc = subprocess.call(["sudo", "systemctl", "restart", "castor"])
+        if rc == 0:
+            print("  ✅ Service restarted.")
+        else:
+            print(f"  ❌ Restart failed (exit {rc}).")
 
 
 def cmd_demo(args) -> None:
@@ -1295,8 +1354,17 @@ def cmd_deploy(args) -> None:
 
 
 def cmd_diff(args) -> None:
-    """castor diff."""
-    print("castor diff: not yet implemented.")
+    """castor diff — compare two RCAN config files."""
+    from castor.diff import diff_configs, print_diff
+
+    config_a = getattr(args, "config", "robot.rcan.yaml")
+    config_b = getattr(args, "baseline", None)
+    if not config_b:
+        print("  Usage: castor diff --config current.rcan.yaml --baseline old.rcan.yaml")
+        return
+
+    diffs = diff_configs(config_a, config_b)
+    print_diff(diffs, config_a, config_b)
 
 
 def cmd_doctor(args) -> None:
@@ -1513,8 +1581,15 @@ def cmd_improve(args) -> None:
 
 
 def cmd_install_service(args) -> None:
-    """castor install service."""
-    print("castor install service: not yet implemented.")
+    """castor install-service — generate and install a systemd service unit."""
+    from castor.daemon import enable_daemon
+
+    config_path = getattr(args, "config", "robot.rcan.yaml")
+    result = enable_daemon(config_path=config_path)
+    icon = "✅" if result.get("ok") else "❌"
+    print(f"  {icon} {result.get('message', '')}")
+    if result.get("service_path"):
+        print(f"  Service file: {result['service_path']}")
 
 
 def cmd_learn(args) -> None:
@@ -1552,13 +1627,65 @@ def cmd_lint(args) -> None:
 
 
 def cmd_login(args) -> None:
-    """castor login."""
-    print("castor login: not yet implemented.")
+    """castor login — authenticate with AI provider services."""
+    service = getattr(args, "service", "huggingface")
+    token = getattr(args, "token", None)
+    list_models = getattr(args, "list_models", False)
+    task = getattr(args, "task", "text-generation")
+
+    if service in ("huggingface", "hf"):
+        try:
+            from huggingface_hub import login, list_models as hf_list_models
+
+            if token:
+                login(token=token)
+                print("  ✅ Logged in to Hugging Face.")
+            else:
+                login()  # interactive prompt
+
+            if list_models:
+                print(f"\n  Trending {task} models:\n")
+                for i, m in enumerate(hf_list_models(task=task, limit=10)):
+                    print(f"  {i+1:2}. {m.modelId}")
+        except ImportError:
+            print("  huggingface_hub not installed. Run: pip install huggingface_hub")
+
+    elif service == "ollama":
+        import subprocess
+        rc = subprocess.call(["ollama", "list"])
+        if rc != 0:
+            print("  Ollama not found. Install from https://ollama.com")
+
+    else:
+        print(f"  Unknown service: {service}")
 
 
 def cmd_streaming(args) -> None:
-    """castor streaming."""
-    print("castor streaming: not yet implemented.")
+    """castor streaming — start WebRTC / MJPEG camera stream."""
+    config_path = getattr(args, "config", "robot.rcan.yaml")
+    port = getattr(args, "port", 8001)
+
+    try:
+        import yaml
+        with open(config_path) as f:
+            config = yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        config = {}
+
+    try:
+        from castor.stream import StreamServer
+        server = StreamServer(config=config, port=port)
+        print(f"  Starting stream server on port {port} …")
+        print(f"  MJPEG stream: http://0.0.0.0:{port}/stream")
+        server.serve_forever()
+    except ImportError:
+        # aiortc / cv2 not installed — show install hint
+        print(
+            f"  WebRTC stream requires additional packages:\n"
+            f"    pip install opencastor[webrtc]\n"
+            f"  or: pip install aiortc opencv-python\n"
+            f"\n  For MJPEG only: pip install opencv-python"
+        )
 
 
 def cmd_update(args) -> None:
