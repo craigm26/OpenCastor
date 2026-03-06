@@ -1699,272 +1699,6 @@ def cmd_swarm(args) -> None:
         print("  Available: status, command, stop, sync, update")
 
 
-def cmd_update(args) -> None:
-    """Update OpenCastor (delegates to castor/commands/update.py)."""
-    from castor.commands.update import cmd_update as _cmd_update
-
-    _cmd_update(args)
-
-def cmd_memory(args) -> None:
-    """Episode replay and memory management."""
-    memory_cmd = getattr(args, "memory_cmd", None)
-    if memory_cmd is None:
-        print("Usage: castor memory <replay>")
-        return
-    if memory_cmd == "replay":
-        from castor.memory.replay import run_replay_cli
-        run_replay_cli(args)
-    else:
-        print(f"Unknown memory command: {memory_cmd}")
-
-
-def cmd_deploy(args) -> None:
-    """Deploy config to a remote Pi via SSH."""
-    from castor.commands.deploy import cmd_deploy as _deploy
-
-    _deploy(args)
-
-
-def cmd_agents(args) -> None:
-    """Manage robot agents."""
-    action = getattr(args, "action", "list") or "list"
-    if action == "list":
-        from castor.agents.navigator import NavigatorAgent
-        from castor.agents.observer import ObserverAgent
-        from castor.agents.registry import AgentRegistry
-
-        reg = AgentRegistry()
-        reg.register(ObserverAgent)
-        reg.register(NavigatorAgent)
-        agents = reg.list_agents()
-        if not agents:
-            print("  No agents running. Use: castor agents spawn --name observer")
-            return
-        for a in agents:
-            print(f"  {a['name']:20s} {a['status']}")
-    elif action == "status":
-        from castor.agents.registry import AgentRegistry
-
-        reg = AgentRegistry()
-        report = reg.health_report()
-        if not report:
-            print("  No agents running.")
-            return
-        for name, health in report.items():
-            status = health.get("status", "unknown")
-            uptime = health.get("uptime_s", 0.0)
-            print(f"  {name:20s} {status:10s} uptime={uptime:.1f}s")
-    elif action == "spawn":
-        name = getattr(args, "name", None)
-        if not name:
-            print("  Error: --name required for spawn")
-            return
-        try:
-            from castor.agents.navigator import NavigatorAgent
-            from castor.agents.observer import ObserverAgent
-            from castor.agents.registry import AgentRegistry
-
-            reg = AgentRegistry()
-            reg.register(ObserverAgent)
-            reg.register(NavigatorAgent)
-            agent = reg.spawn(name)
-            print(f"  ✅ Spawned agent '{name}' (status: {agent.status.value})")
-            print("  Note: Agent runs within the gateway process. Start the gateway to activate.")
-        except (ValueError, KeyError):
-            print(f"  Error: Unknown agent '{name}'. Available: observer, navigator")
-    elif action == "stop":
-        name = getattr(args, "name", None)
-        if not name:
-            print("  Error: --name required for stop")
-            return
-        print(f"  Agent '{name}' stop requested. Use 'castor gateway stop' to stop all agents.")
-
-
-def cmd_export(args) -> None:
-    """Export config bundle (no secrets)."""
-    if not os.path.exists(args.config):
-        print(f"\n  Config not found: {args.config}")
-        return
-
-    if args.format == "tgz":
-        from castor.export import export_bundle_tgz, print_export_summary
-
-        output = export_bundle_tgz(
-            config_path=args.config,
-            output_path=args.output,
-            episodes_limit=args.episodes,
-        )
-    else:
-        from castor.export import export_bundle, print_export_summary
-
-        output = export_bundle(
-            config_path=args.config,
-            output_path=args.output,
-            fmt=args.format,
-        )
-    print_export_summary(output, args.format)
-
-
-def cmd_export_finetune(args) -> None:
-    """Export episode memory as a fine-tuning dataset (#172)."""
-    from castor.finetune import EpisodeFinetuneExporter
-    from castor.memory import EpisodeMemory
-
-    db = os.getenv("CASTOR_MEMORY_DB", os.path.expanduser("~/.castor/memory.db"))
-    mem = EpisodeMemory(db_path=db)
-    exporter = EpisodeFinetuneExporter(mem)
-
-    stats = exporter.stats(limit=args.limit)
-    print(
-        f"\n  Episode memory: {stats['total_episodes']} total, "
-        f"{stats['with_action']} with action, "
-        f"avg latency {stats['avg_latency_ms']:.0f} ms"
-    )
-
-    if stats["total_episodes"] == 0:
-        print("  No episodes found. Run the robot first to collect data.\n")
-        return
-
-    output_path = args.output or f"robot_dataset.{args.format}.jsonl"
-    count = exporter.export_to_file(
-        output_path,
-        fmt=args.format,
-        limit=args.limit,
-        require_action=args.require_action,
-    )
-    size_kb = os.path.getsize(output_path) / 1024
-    print(f"\n  Exported {count} records to: {output_path}")
-    print(f"  Format: {args.format}  |  Size: {size_kb:.1f} KB\n")
-
-
-# ---------------------------------------------------------------------------
-# OpenClaw-inspired command handlers (batch 4)
-# ---------------------------------------------------------------------------
-
-
-def cmd_approvals(args) -> None:
-    """Manage approval queue for dangerous commands."""
-    from castor.approvals import ApprovalGate, print_approvals
-
-    # Load config to initialize gate
-    config = {}
-    if args.config and os.path.exists(args.config):
-        import yaml
-
-        with open(args.config) as f:
-            config = yaml.safe_load(f)
-
-    gate = ApprovalGate(config)
-
-    if args.approve:
-        action = gate.approve(int(args.approve))
-        if action:
-            print(f"\n  Approved action ID {args.approve}: {action}\n")
-        else:
-            print(f"\n  Approval ID {args.approve} not found or already resolved.\n")
-    elif args.deny:
-        if gate.deny(int(args.deny)):
-            print(f"\n  Denied action ID {args.deny}.\n")
-        else:
-            print(f"\n  Approval ID {args.deny} not found or already resolved.\n")
-    elif args.clear:
-        gate.clear()
-        print("\n  Cleared all resolved approvals.\n")
-    else:
-        pending = gate.list_pending()
-        print_approvals(pending)
-
-
-def cmd_schedule(args) -> None:
-    """Manage scheduled tasks."""
-    from castor.schedule import (
-        add_task,
-        install_crontab,
-        list_tasks,
-        print_schedule,
-        remove_task,
-    )
-
-    action = args.action
-
-    if action == "list":
-        tasks = list_tasks(config_path=args.config)
-        print_schedule(tasks)
-    elif action == "add":
-        if not args.name or not args.task_command or not args.cron:
-            print("\n  Usage: castor schedule add --name NAME --command CMD --cron EXPR\n")
-            return
-        task = add_task(args.name, args.task_command, args.cron)
-        print(f"\n  Added: {task['name']} ({task['cron']})\n")
-    elif action == "remove":
-        if not args.name:
-            print("\n  Usage: castor schedule remove --name NAME\n")
-            return
-        if remove_task(args.name):
-            print(f"\n  Removed: {args.name}\n")
-        else:
-            print(f"\n  Task not found: {args.name}\n")
-    elif action == "install":
-        install_crontab(config_path=args.config)
-    else:
-        print("\n  Usage: castor schedule {list|add|remove|install}\n")
-
-
-def cmd_configure(args) -> None:
-    """Interactive config editor."""
-    from castor.configure import run_configure
-
-    run_configure(config_path=args.config)
-
-
-def cmd_search(args) -> None:
-    """Search operational logs and session recordings."""
-    from castor.memory_search import print_search_results, search_logs
-
-    results = search_logs(
-        query=args.query,
-        log_file=args.log_file,
-        since=args.since,
-        max_results=args.max_results,
-    )
-    print_search_results(results, args.query)
-
-
-def cmd_network(args) -> None:
-    """Network configuration and VPN exposure controls."""
-    from castor.network import expose, network_status
-
-    action = args.action
-
-    if action == "status":
-        network_status(config_path=args.config)
-    elif action == "expose":
-        mode = args.mode or "serve"
-        port = args.port
-        expose(mode=mode, port=port)
-    else:
-        network_status(config_path=args.config)
-
-
-def cmd_privacy(args) -> None:
-    """Show or configure privacy policy."""
-    import yaml
-
-    from castor.privacy import print_privacy_policy
-
-    config = {}
-    if args.config and os.path.exists(args.config):
-        with open(args.config) as f:
-            config = yaml.safe_load(f)
-
-    print_privacy_policy(config)
-
-
-# ---------------------------------------------------------------------------
-# Batch 5: Polish & quality-of-life command handlers
-# ---------------------------------------------------------------------------
-
-
 def cmd_update_check(args) -> None:
     """Check PyPI for a newer version of OpenCastor."""
     from castor.update_check import print_update_status
@@ -2943,6 +2677,115 @@ def cmd_audit(args) -> None:
 # Parser setup
 # ---------------------------------------------------------------------------
 
+
+
+
+
+
+def cmd_approvals(args) -> None:
+    """castor approvals — not yet implemented."""
+    print("castor approvals: coming in a future release.")
+
+
+def cmd_configure(args) -> None:
+    """castor configure — not yet implemented."""
+    print("castor configure: coming in a future release.")
+
+
+def cmd_deploy(args) -> None:
+    """castor deploy — not yet implemented."""
+    print("castor deploy: coming in a future release.")
+
+
+def cmd_export(args) -> None:
+    """castor export — not yet implemented."""
+    print("castor export: coming in a future release.")
+
+
+def cmd_export_finetune(args) -> None:
+    """castor export finetune — not yet implemented."""
+    print("castor export finetune: coming in a future release.")
+
+
+def cmd_memory(args) -> None:
+    """castor memory — not yet implemented."""
+    print("castor memory: coming in a future release.")
+
+
+def cmd_network(args) -> None:
+    """castor network — not yet implemented."""
+    print("castor network: coming in a future release.")
+
+
+def cmd_privacy(args) -> None:
+    """castor privacy — not yet implemented."""
+    print("castor privacy: coming in a future release.")
+
+
+def cmd_schedule(args) -> None:
+    """castor schedule — not yet implemented."""
+    print("castor schedule: coming in a future release.")
+
+
+def cmd_search(args) -> None:
+    """castor search — not yet implemented."""
+    print("castor search: coming in a future release.")
+
+def cmd_agents(args) -> None:
+    """castor agents — list registered agent configs."""
+    cfg = _find_default_config()
+    if cfg:
+        import yaml as _yaml
+        with open(cfg) as f:
+            data = _yaml.safe_load(f)
+        agents = data.get("agents", {})
+        if agents:
+            for name, conf in agents.items():
+                print(f"  {name}: {conf}")
+        else:
+            print("No agents configured in", cfg)
+    else:
+        print("No RCAN config found.")
+
+def cmd_update(args: argparse.Namespace) -> None:
+    """castor update — check for and apply updates from PyPI."""
+    from castor.updater import do_upgrade, get_version_info
+    try:
+        from rich.console import Console
+        con = Console()
+        HAS_RICH = True
+    except ImportError:
+        con = None
+        HAS_RICH = False
+
+    info = get_version_info()
+
+    if HAS_RICH:
+        status = "[green]✅ up to date[/green]" if info.up_to_date else f"[yellow]⚠ update available → {info.latest}[/yellow]"
+        con.print(f"\nOpenCastor [bold]{info.current}[/bold]  {status}")
+        if not info.up_to_date:
+            con.print(f"  Release notes: {info.release_url}", style="dim")
+    else:
+        print(f"Current: {info.current}  Latest: {info.latest}")
+
+    if info.up_to_date:
+        if not getattr(args, "check", False):
+            if HAS_RICH:
+                con.print("[dim]Already on latest.[/dim]")
+            else:
+                print("Already on latest.")
+        return
+
+    if getattr(args, "check", False):
+        return  # --check only, don't prompt
+
+    yes = getattr(args, "yes", False)
+    rc = do_upgrade(yes=yes)
+    if rc == 0:
+        if HAS_RICH:
+            con.print("[green]✅ Upgrade complete. Restart castor to use the new version.[/green]")
+        else:
+            print("✅ Upgrade complete.")
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -4189,6 +4032,7 @@ def main() -> None:
         "discover": cmd_discover,
         "memory": cmd_memory,
         "fleet": cmd_fleet,
+        "update": cmd_update,
         "inspect": cmd_inspect,
         "register": cmd_register,
         "compliance": cmd_compliance,
@@ -4214,8 +4058,7 @@ def main() -> None:
         "lint": cmd_lint,
         "validate": cmd_validate,
         "swarm": cmd_swarm,
-        "update": cmd_update,
-        "learn": cmd_learn,
+                "learn": cmd_learn,
         "improve": cmd_improve,
         "agents": cmd_agents,
         "export": cmd_export,
