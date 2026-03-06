@@ -31,7 +31,36 @@ from typing import Any
 
 logger = logging.getLogger("OpenCastor.CommitmentChain")
 
-DEFAULT_LOG_PATH = Path(".opencastor-commitments.jsonl")
+
+def _resolve_default_log_path() -> Path:
+    """Resolve the default commitment log path using XDG conventions.
+
+    Resolution order:
+    1. ``$OPENCASTOR_COMMITMENT_LOG`` env var
+    2. ``$XDG_DATA_HOME/opencastor/commitments.jsonl``
+    3. ``~/.local/share/opencastor/commitments.jsonl``
+    4. ``.opencastor-commitments.jsonl`` (CWD fallback)
+    """
+    env_path = os.environ.get("OPENCASTOR_COMMITMENT_LOG")
+    if env_path:
+        return Path(env_path)
+
+    xdg_data_home = os.environ.get("XDG_DATA_HOME")
+    if xdg_data_home:
+        return Path(xdg_data_home) / "opencastor" / "commitments.jsonl"
+
+    local_share = Path.home() / ".local" / "share" / "opencastor" / "commitments.jsonl"
+    try:
+        # Verify home directory is accessible
+        local_share.parent.mkdir(parents=True, exist_ok=True)
+        return local_share
+    except OSError:
+        pass
+
+    return Path(".opencastor-commitments.jsonl")
+
+
+DEFAULT_LOG_PATH = _resolve_default_log_path()
 
 
 class CommitmentChain:
