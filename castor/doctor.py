@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import os
 import shutil
+from typing import Optional
 import socket
 import subprocess
 import sys
@@ -257,3 +258,280 @@ def print_report(report: DoctorReport) -> None:
                 line += f"  → {c.fix}"
             print(line)
         print(f"\n{report.ok_count} ok, {report.warn_count} warnings, {report.fail_count} failures")
+
+
+# ── Backward-compatible tuple-returning check functions ───────────────────────
+# These preserve the (ok: bool, name: str, detail: str) API used by existing tests.
+
+
+def check_cpu_temperature() -> tuple[bool, str, str]:
+    """Return (ok, 'CPU temperature', detail_str)."""
+    try:
+        path = Path("/sys/class/thermal/thermal_zone0/temp")
+        if path.exists():
+            temp_mc = int(path.read_text().strip())
+            temp_c = temp_mc / 1000.0
+            ok = temp_c < 80.0
+            return ok, "CPU temperature", f"{temp_c:.1f}°C {'(OK)' if ok else '(HIGH — >80°C)'}"
+        # psutil fallback
+        try:
+            import psutil
+
+            temps = psutil.sensors_temperatures()
+            if temps:
+                for key in ("coretemp", "cpu_thermal", "acpitz"):
+                    if key in temps and temps[key]:
+                        t = temps[key][0].current
+                        ok = t < 80.0
+                        return ok, "CPU temperature", f"{t:.1f}°C"
+        except Exception:
+            pass
+        return True, "CPU temperature", "unavailable"
+    except Exception as exc:
+        return True, "CPU temperature", f"error: {exc}"
+
+
+def check_gpu_memory() -> tuple[bool, str, str]:
+    """Return (ok, 'GPU memory', detail_str)."""
+    try:
+        import subprocess as _sp
+
+        result = _sp.run(
+            ["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            used, total = (int(x.strip()) for x in result.stdout.strip().split(","))
+            pct = used / total * 100 if total else 0
+            ok = pct < 90
+            return ok, "GPU memory", f"{used}/{total} MiB ({pct:.1f}%)"
+    except Exception:
+        pass
+    return True, "GPU memory", "no NVIDIA GPU detected"
+
+
+def check_memory_usage() -> tuple[bool, str, str]:
+    """Return (ok, 'Memory usage', detail_str). Warns above 85%."""
+    WARN_PCT = 85.0
+    try:
+        proc = "/proc/meminfo"
+        if os.path.exists(proc):
+            info = {}
+            with open(proc) as _f:
+                for line in _f.read().splitlines():
+                    if ":" in line:
+                        k, v = line.split(":", 1)
+                        info[k.strip()] = int(v.strip().split()[0])
+            total = info.get("MemTotal", 0)
+            avail = info.get("MemAvailable", 0)
+            if total > 0:
+                used_pct = (1 - avail / total) * 100
+                ok = used_pct < WARN_PCT
+                detail = f"{used_pct:.1f}% used"
+                if not ok:
+                    detail += " (>85% — consider freeing memory)"
+                return ok, "Memory usage", detail
+    except Exception:
+        pass
+    # psutil fallback
+    try:
+        import psutil
+
+        vm = psutil.virtual_memory()
+        ok = vm.percent < WARN_PCT
+        return (
+            ok,
+            "Memory usage",
+            f"{vm.percent:.1f}% used ({vm.available // 1024 // 1024} MB free)",
+        )
+    except Exception:
+        pass
+    return True, "Memory usage", "unavailable"
+
+
+def check_swap_usage() -> tuple[bool, str, str]:
+    """Return (ok, 'Swap usage', detail_str). Warns above 80%."""
+    WARN_PCT = 80.0
+    try:
+        proc = Path("/proc/swaps")
+        if proc.exists():
+            lines = proc.read_text().strip().splitlines()
+            if len(lines) > 1:
+                total_kb = sum(int(ln.split()[2]) for ln in lines[1:] if len(ln.split()) >= 4)
+                used_kb = sum(int(ln.split()[3]) for ln in lines[1:] if len(ln.split()) >= 4)
+                if total_kb > 0:
+                    pct = used_kb / total_kb * 100
+                    ok = pct < WARN_PCT
+                    return (
+                        ok,
+                        "Swap usage",
+                        f"{pct:.1f}% used ({used_kb // 1024} MB / {total_kb // 1024} MB)",
+                    )
+            return True, "Swap usage", "no swap configured"
+    except Exception:
+        pass
+    try:
+        import psutil
+
+        sw = psutil.swap_memory()
+        ok = sw.percent < WARN_PCT
+        return ok, "Swap usage", f"{sw.percent:.1f}% used"
+    except Exception:
+        pass
+    return True, "Swap usage", "unavailable"
+
+
+def check_disk_space(path: str = "/") -> tuple[bool, str, str]:
+    """Return (ok, 'Disk space', detail_str). Warns when >90% used."""
+    import shutil as _shutil
+
+    try:
+        usage = _shutil.disk_usage(path)
+        free_pct = usage.free / usage.total * 100 if usage.total else 100
+        ok = free_pct > 10
+        detail = f"{free_pct:.1f}% free ({usage.free // 1024 // 1024} MB)"
+        if not ok:
+            used_pct = usage.used / usage.total * 100
+            detail = f"disk {used_pct:.0f}% full — only {free_pct:.1f}% free"
+        return ok, "Disk space", detail
+    except Exception as exc:
+        return False, "Disk space", f"error: {exc}"
+
+
+def check_ble_driver() -> tuple[bool, str, str]:
+    """Return (ok, 'BLE driver', detail_str)."""
+    import shutil as _sh
+
+    if _sh.which("hciconfig") or Path("/sys/class/bluetooth").exists():
+        return True, "BLE driver", "detected"
+    return True, "BLE driver", "not detected (optional)"
+
+
+def check_memory_db_size() -> tuple[bool, str, str]:
+    """Return (ok, 'Memory DB size', detail_str)."""
+    candidates = [
+        Path(".opencastor") / "memory.db",
+        Path.home() / ".opencastor" / "memory.db",
+    ]
+    for p in candidates:
+        if p.exists():
+            size_mb = p.stat().st_size / 1024 / 1024
+            ok = size_mb < 500
+            return ok, "Memory DB size", f"{size_mb:.1f} MB"
+    return True, "Memory DB size", "not found"
+
+
+def check_signal_channel() -> tuple[bool, str, str]:
+    """Return (ok, 'Signal channel', detail_str)."""
+    env_file = Path.home() / ".opencastor" / "env"
+    if env_file.exists() and "SIGNAL" in env_file.read_text():
+        return True, "Signal channel", "configured"
+    if os.environ.get("SIGNAL_NUMBER") or os.environ.get("SIGNAL_PHONE"):
+        return True, "Signal channel", "configured via env"
+    return True, "Signal channel", "not configured (optional)"
+
+
+def run_all_checks() -> list[tuple[bool, str, str]]:
+    """Run all checks and return list of (ok, name, detail) tuples."""
+    checks = [
+        check_cpu_temperature,
+        check_gpu_memory,
+        check_memory_usage,
+        check_swap_usage,
+        lambda: check_disk_space("/"),
+        check_ble_driver,
+        check_memory_db_size,
+        check_signal_channel,
+    ]
+    results = []
+    for fn in checks:
+        try:
+            results.append(fn())
+        except Exception as exc:
+            results.append((False, fn.__name__, f"error: {exc}"))
+    return results
+
+
+# ── Auto-fix helpers ──────────────────────────────────────────────────────────
+
+
+def _fix_env_file() -> bool:
+    """Copy .env.example → .env if .env missing. Prints FIXED/SKIP. Returns True if fixed."""
+    env = Path(".env")
+    example = Path(".env.example")
+    if env.exists():
+        print("SKIP  .env file — already exists")
+        return False
+    if not example.exists():
+        print("SKIP  .env file — no .env.example found")
+        return False
+    import shutil as _shutil
+
+    _shutil.copy(example, env)
+    print("FIXED .env file — copied from .env.example")
+    return True
+
+
+def _fix_memory_db() -> bool:
+    """Delete episodes older than 30 days from memory DB. Returns True if fixed."""
+    import sqlite3 as _sq
+    import time as _t
+
+    db_path_str = os.environ.get("CASTOR_MEMORY_DB", "")
+    candidates: list[Path] = []
+    if db_path_str:
+        candidates.append(Path(db_path_str))
+    candidates += [
+        Path(".opencastor/memory.db"),
+        Path.home() / ".opencastor" / "memory.db",
+    ]
+
+    for p in candidates:
+        if not p.exists():
+            continue
+        try:
+            cutoff = int(_t.time()) - 30 * 86400
+            with _sq.connect(str(p)) as conn:
+                cur = conn.execute("DELETE FROM episodes WHERE timestamp < ?", (cutoff,))
+                deleted = cur.rowcount
+                conn.commit()
+            print(f"FIXED Memory DB — deleted {deleted} episodes older than 30 days from {p}")
+            return True
+        except Exception as exc:
+            print(f"SKIP  Memory DB — {exc}")
+            return False
+
+    print("SKIP  Memory DB — no database found")
+    return False
+
+
+_AUTO_FIX_MAP = {
+    ".env file": _fix_env_file,
+    "Memory DB": _fix_memory_db,
+}
+
+
+def run_auto_fix(results: list) -> None:
+    """Run auto-fixers for failing checks.
+
+    Args:
+        results: list of (ok, name, detail) tuples from run_all_checks()
+    """
+    failed = [r for r in results if not r[0]]
+    if not failed:
+        print("No automatic fixes needed — all checks passed.")
+        return
+
+    for _ok, name, _detail in failed:
+        fn = next(
+            (v for k, v in _AUTO_FIX_MAP.items() if name.startswith(k) or k in name),
+            None,
+        )
+        if fn:
+            try:
+                fn()
+            except Exception as exc:
+                print(f"Auto-fix for '{name}' failed: {exc}")
+        # No handler for this check name — silently skip (do not raise)

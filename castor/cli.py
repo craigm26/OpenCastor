@@ -1044,8 +1044,25 @@ def cmd_approvals(args) -> None:
 
 
 def cmd_audit(args) -> None:
-    """castor audit."""
-    print("castor audit: not yet implemented.")
+    """castor audit — view and verify the tamper-evident audit log."""
+    from castor.audit import get_audit, print_audit
+
+    audit = get_audit()
+
+    if getattr(args, "verify", False):
+        ok, broken_idx = audit.verify_chain()
+        if ok:
+            print("  ✅ Audit chain intact — no tampering detected.")
+        else:
+            print(f"  ❌ Chain broken at entry index {broken_idx}.")
+        return
+
+    entries = audit.read(
+        since=getattr(args, "since", None),
+        event=getattr(args, "event", None),
+        limit=getattr(args, "limit", 50),
+    )
+    print_audit(entries)
 
 
 def cmd_backup(args) -> None:
@@ -1134,8 +1151,15 @@ def cmd_daemon(args) -> None:
 
 
 def cmd_demo(args) -> None:
-    """castor demo."""
-    print("castor demo: not yet implemented.")
+    """castor demo — run a simulated full-stack demo (no hardware/API keys needed)."""
+    from castor.demo import run_demo
+
+    run_demo(
+        steps=getattr(args, "steps", 10),
+        delay=getattr(args, "delay", 0.8),
+        layout=getattr(args, "layout", "full"),
+        no_color=getattr(args, "no_color", False),
+    )
 
 
 def cmd_deploy(args) -> None:
@@ -1149,13 +1173,33 @@ def cmd_diff(args) -> None:
 
 
 def cmd_doctor(args) -> None:
-    """castor doctor."""
-    print("castor doctor: not yet implemented.")
+    """castor doctor — run system health checks."""
+    from castor.doctor import print_report, run_all_checks, run_auto_fix, run_doctor
+
+    report = run_doctor()
+    print_report(report)
+
+    if getattr(args, "auto_fix", False):
+        print("\n  Running auto-fix...")
+        results = run_all_checks()
+        run_auto_fix(results)
 
 
 def cmd_export(args) -> None:
-    """castor export."""
-    print("castor export: not yet implemented.")
+    """castor export — export config bundle with secrets redacted."""
+    from castor.export import export_bundle, export_bundle_tgz, print_export_summary
+
+    fmt = getattr(args, "format", "zip")
+    config_path = getattr(args, "config", "robot.rcan.yaml")
+    output = getattr(args, "output", None)
+    episodes = getattr(args, "episodes", 100)
+
+    if fmt == "tgz":
+        out = export_bundle_tgz(config_path, output_path=output, max_episodes=episodes)
+    else:
+        out = export_bundle(config_path, output_path=output, fmt=fmt)
+
+    print_export_summary(out, fmt)
 
 
 def cmd_export_finetune(args) -> None:
@@ -1164,18 +1208,157 @@ def cmd_export_finetune(args) -> None:
 
 
 def cmd_fix(args) -> None:
-    """castor fix."""
-    print("castor fix: not yet implemented.")
+    """castor fix — auto-fix common issues detected by castor doctor."""
+    from castor.fix import run_fix
+
+    run_fix(config_path=getattr(args, "config", None))
 
 
 def cmd_hub(args) -> None:
-    """castor hub."""
-    print("castor hub: not yet implemented.")
+    """castor hub — community recipe hub: browse, share, and install robot configs."""
+    from castor.hub import (
+        get_recipe,
+        install_recipe,
+        list_recipes,
+        package_recipe,
+        print_recipe_card,
+        submit_recipe_pr,
+    )
+
+    action = getattr(args, "action", "browse")
+    query = getattr(args, "query", None)
+    verbose = getattr(args, "verbose", False)
+
+    if action in ("browse", "list"):
+        recipes = list_recipes(
+            category=getattr(args, "category", None),
+            difficulty=getattr(args, "difficulty", None),
+            provider=getattr(args, "provider", None),
+            search=query if action == "list" else None,
+        )
+        if not recipes:
+            print("  No recipes found.")
+            return
+        for r in recipes:
+            print_recipe_card(r, verbose=verbose)
+
+    elif action == "search":
+        if not query:
+            print("  Usage: castor hub search <query>")
+            return
+        recipes = list_recipes(search=query)
+        if not recipes:
+            print(f"  No recipes matching '{query}'.")
+            return
+        for r in recipes:
+            print_recipe_card(r, verbose=verbose)
+
+    elif action == "show":
+        if not query:
+            print("  Usage: castor hub show <recipe-id>")
+            return
+        recipe = get_recipe(query)
+        if not recipe:
+            print(f"  Recipe '{query}' not found.")
+            return
+        print_recipe_card(recipe, verbose=True)
+
+    elif action == "install":
+        if not query:
+            print("  Usage: castor hub install <recipe-id>")
+            return
+        dest = getattr(args, "output", ".") or "."
+        result = install_recipe(query, dest=dest)
+        if result:
+            print(f"  ✅ Installed to {result}")
+        else:
+            print(f"  ❌ Recipe '{query}' not found.")
+
+    elif action == "share":
+        config = getattr(args, "config", None)
+        if not config:
+            print("  Usage: castor hub share --config robot.rcan.yaml")
+            return
+        docs = getattr(args, "docs", None) or []
+        dry_run = getattr(args, "dry_run", False)
+        submit = getattr(args, "submit", False)
+        output = getattr(args, "output", None)
+        recipe_dir = package_recipe(config, output_dir=output, docs=docs, dry_run=dry_run)
+        if not dry_run:
+            print(f"  ✅ Recipe packaged at: {recipe_dir}")
+            if submit:
+                submit_recipe_pr(recipe_dir)
+
+    elif action == "categories":
+        from castor.hub import CATEGORIES
+        for key, label in CATEGORIES.items():
+            print(f"  {key:<20} {label}")
+
+    else:
+        print(f"  Unknown hub action: {action}")
 
 
 def cmd_improve(args) -> None:
-    """castor improve."""
-    print("castor improve: not yet implemented.")
+    """castor improve — self-improving loop: analyze episodes and apply improvements."""
+    # --enable / --disable toggle learner in RCAN config
+    if _improve_toggle(args):
+        return
+
+    status = getattr(args, "status", False)
+    improvements = getattr(args, "improvements", False)
+    rollback_id = getattr(args, "rollback", None)
+    batch = getattr(args, "batch", False)
+    episodes_n = getattr(args, "episodes", 5)
+    dry_run = getattr(args, "dry_run", False)
+
+    try:
+        from castor.learner.sisyphus import SisyphusLoop
+        from castor.memory import EpisodeMemory
+
+        loop = SisyphusLoop()
+
+        if status:
+            stats = loop.stats()
+            print(f"  Total runs:        {stats.total_runs}")
+            print(f"  Improvements:      {stats.improvements_applied}")
+            print(f"  Rollbacks:         {stats.rollbacks}")
+            print(f"  Last run:          {stats.last_run or 'never'}")
+            return
+
+        if improvements:
+            applied = loop.list_improvements()
+            if not applied:
+                print("  No improvements applied yet.")
+                return
+            for imp in applied:
+                print(f"  [{imp.id[:8]}] {imp.description} ({imp.applied_at})")
+            return
+
+        if rollback_id:
+            ok = loop.rollback(rollback_id)
+            if ok:
+                print(f"  ✅ Rolled back improvement {rollback_id}")
+            else:
+                print(f"  ❌ Rollback failed: improvement {rollback_id} not found")
+            return
+
+        # Analyze episodes
+        mem = EpisodeMemory()
+        eps = mem.recent(n=episodes_n)
+        if not eps:
+            print(f"  No episodes found. Run castor run first to collect data.")
+            return
+
+        print(f"  Analyzing {len(eps)} episodes...")
+        results = loop.run_batch(eps)
+        applied = [r for r in results if r.applied and not dry_run]
+        print(f"  {len(results)} improvements identified, {len(applied)} applied.")
+        for r in results:
+            status_icon = "✅" if (r.applied and not dry_run) else ("🔍" if dry_run else "⏭️")
+            print(f"  {status_icon} {r.description}")
+
+    except ImportError:
+        print("  Learner not available. Install with: pip install opencastor[learner]")
 
 
 def cmd_install_service(args) -> None:
@@ -1184,13 +1367,37 @@ def cmd_install_service(args) -> None:
 
 
 def cmd_learn(args) -> None:
-    """castor learn."""
-    print("castor learn: not yet implemented.")
+    """castor learn — interactive step-by-step tutorial."""
+    from castor.learn import run_learn
+
+    run_learn(lesson=getattr(args, "lesson", None))
 
 
 def cmd_lint(args) -> None:
-    """castor lint."""
-    print("castor lint: not yet implemented.")
+    """castor lint — deep semantic validation of RCAN config."""
+    from castor.lint import run_lint
+
+    config_path = getattr(args, "config", "robot.rcan.yaml")
+    issues = run_lint(config_path)
+
+    if not issues:
+        print(f"  ✅ {config_path}: no issues found.")
+        return
+
+    errors = [(s, m) for s, m in issues if s == "error"]
+    warnings = [(s, m) for s, m in issues if s == "warning"]
+    infos = [(s, m) for s, m in issues if s == "info"]
+
+    for _, msg in errors:
+        print(f"  ❌ error:   {msg}")
+    for _, msg in warnings:
+        print(f"  ⚠️  warning: {msg}")
+    for _, msg in infos:
+        print(f"  ℹ️  info:    {msg}")
+
+    print(f"\n  {len(errors)} error(s), {len(warnings)} warning(s), {len(infos)} info(s)")
+    if errors:
+        raise SystemExit(1)
 
 
 def cmd_login(args) -> None:
@@ -1204,8 +1411,17 @@ def cmd_streaming(args) -> None:
 
 
 def cmd_update(args) -> None:
-    """castor update."""
-    print("castor update: not yet implemented.")
+    """castor update — self-update OpenCastor from PyPI."""
+    from castor.updater import do_upgrade, get_version_info
+
+    info = get_version_info()
+    if info.up_to_date:
+        print(f"  ✅ Already up to date: {info.current}")
+        return
+    print(f"  Current: {info.current}  →  Latest: {info.latest}")
+    yes = getattr(args, "yes", False)
+    rc = do_upgrade(yes=yes)
+    raise SystemExit(rc)
 
 
 def _improve_toggle(args) -> bool:
