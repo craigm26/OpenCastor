@@ -1034,13 +1034,86 @@ def _cmd_monitor(args) -> None:
 
 
 def cmd_agents(args) -> None:
-    """castor agents."""
-    print("castor agents: not yet implemented.")
+    """castor agents — list, status, spawn, or stop Layer-3 agents."""
+    from castor.agents import AgentRegistry
+
+    action = getattr(args, "action", "list")
+    registry = AgentRegistry()
+
+    if action in ("list", "status"):
+        agents = registry.list_agents()
+        if not agents:
+            print("  No agents spawned.")
+            return
+        print(f"  {'Name':<20} {'Status':<12} {'Uptime (s)'}")
+        print(f"  {'-'*20} {'-'*12} {'-'*10}")
+        for a in agents:
+            print(f"  {a['name']:<20} {a['status']:<12} {a['uptime_s']}")
+
+    elif action == "spawn":
+        name = getattr(args, "name", None)
+        if not name:
+            print("  Usage: castor agents spawn --name <agent-name>")
+            return
+        config_path = getattr(args, "config", None)
+        cfg = {}
+        if config_path:
+            import yaml
+            with open(config_path) as f:
+                cfg = yaml.safe_load(f) or {}
+        agent = registry.spawn(name, config=cfg)
+        print(f"  ✅ Spawned agent: {name} (status: {agent.status.value})")
+
+    elif action == "stop":
+        name = getattr(args, "name", None)
+        if not name:
+            print("  Usage: castor agents stop --name <agent-name>")
+            return
+        import asyncio
+        agent = registry.get(name)
+        if not agent:
+            print(f"  ❌ Agent '{name}' not found.")
+            return
+        asyncio.run(agent.stop())
+        print(f"  ✅ Stopped agent: {name}")
+
+    else:
+        print(f"  Unknown action: {action}")
 
 
 def cmd_approvals(args) -> None:
-    """castor approvals."""
-    print("castor approvals: not yet implemented.")
+    """castor approvals — manage the safety approval queue."""
+    from castor.approvals import ApprovalGate, print_approvals
+
+    gate = ApprovalGate()
+
+    approve_id = getattr(args, "approve", None)
+    deny_id = getattr(args, "deny", None)
+    clear = getattr(args, "clear", False)
+
+    if approve_id is not None:
+        try:
+            result = gate.approve(int(approve_id))
+            print(f"  ✅ Approved action {approve_id}: {result.get('action', {}).get('type', '?')}")
+        except Exception as exc:
+            print(f"  ❌ Approve failed: {exc}")
+        return
+
+    if deny_id is not None:
+        ok = gate.deny(int(deny_id))
+        if ok:
+            print(f"  ✅ Denied action {deny_id}.")
+        else:
+            print(f"  ❌ Action {deny_id} not found.")
+        return
+
+    if clear:
+        gate.clear()
+        print("  ✅ Cleared all pending approvals.")
+        return
+
+    pending = gate.list_pending()
+    print_approvals(pending)
 
 
 def cmd_audit(args) -> None:
@@ -1163,8 +1236,62 @@ def cmd_demo(args) -> None:
 
 
 def cmd_deploy(args) -> None:
-    """castor deploy."""
-    print("castor deploy: not yet implemented.")
+    """castor deploy — SSH-push RCAN config and restart service on remote Pi."""
+    import shlex
+    import subprocess
+
+    host = getattr(args, "host", None)
+    if not host:
+        print("  Usage: castor deploy <user@host> --config robot.rcan.yaml")
+        return
+
+    config_path = getattr(args, "config", "robot.rcan.yaml")
+    full = getattr(args, "full", False)
+    status_only = getattr(args, "status", False)
+    dry_run = getattr(args, "dry_run", False)
+    port = getattr(args, "port", 22)
+    key = getattr(args, "key", None)
+    no_restart = getattr(args, "no_restart", False)
+
+    ssh_opts = ["-p", str(port), "-o", "StrictHostKeyChecking=accept-new"]
+    if key:
+        ssh_opts += ["-i", key]
+
+    def _run(cmd: list[str]) -> int:
+        display = " ".join(shlex.quote(c) for c in cmd)
+        print(f"  $ {display}")
+        if dry_run:
+            return 0
+        return subprocess.call(cmd)
+
+    if status_only:
+        _run(["ssh"] + ssh_opts + [host, "systemctl status castor --no-pager 2>&1 || echo 'castor service not found'"])
+        return
+
+    # SCP config to remote
+    rc = _run(["scp", "-P", str(port)] + (["-i", key] if key else []) + [config_path, f"{host}:~/robot.rcan.yaml"])
+    if rc != 0:
+        print(f"  ❌ SCP failed (exit {rc})")
+        return
+    print(f"  ✅ Config pushed to {host}:~/robot.rcan.yaml")
+
+    # Optional: pip install
+    if full:
+        rc = _run(["ssh"] + ssh_opts + [host, "pip install -q --upgrade opencastor"])
+        if rc != 0:
+            print(f"  ⚠️  pip install returned exit {rc}")
+
+    # Restart service
+    if not no_restart:
+        rc = _run(["ssh"] + ssh_opts + [host,
+            "systemctl restart castor 2>/dev/null || "
+            "(pkill -f 'castor gateway' 2>/dev/null; "
+            "nohup castor gateway --config ~/robot.rcan.yaml &>/tmp/castor.log &)"
+        ])
+        if rc == 0:
+            print("  ✅ Service restarted on remote.")
+        else:
+            print(f"  ⚠️  Restart returned exit {rc} — check remote logs.")
 
 
 def cmd_diff(args) -> None:
