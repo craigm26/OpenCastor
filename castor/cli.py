@@ -1054,8 +1054,68 @@ def cmd_backup(args) -> None:
 
 
 def cmd_benchmark(args) -> None:
-    """castor benchmark."""
-    print("castor benchmark: not yet implemented.")
+    """castor benchmark — measure AI provider latency/throughput or hardware loop timing."""
+    providers_arg = getattr(args, "providers", None)
+
+    if providers_arg:
+        # Provider latency benchmark: N think() calls per provider
+        import asyncio
+        import json as _json
+
+        from castor.benchmarker import BenchmarkResult, print_results, run_benchmark
+        from castor.providers import get_provider
+
+        provider_names = [p.strip() for p in providers_arg.split(",") if p.strip()]
+        n = getattr(args, "rounds", 3)
+        results: list[BenchmarkResult] = []
+
+        async def _bench_all() -> None:
+            for pname in provider_names:
+                cfg: dict = {"provider": pname}
+                model_arg = getattr(args, "model", None)
+                if model_arg:
+                    cfg["model"] = model_arg
+                try:
+                    brain = get_provider(cfg)
+                    model_name = getattr(brain, "model", pname) or pname
+
+                    async def _think(prompt: str, _b=brain) -> object:
+                        return await asyncio.to_thread(_b.think, None, prompt)
+
+                    result = await run_benchmark(_think, n=n, provider=pname, model=model_name)
+                    results.append(result)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"  Skipping {pname}: {exc}")
+
+        asyncio.run(_bench_all())
+        print_results(results)
+
+        output = getattr(args, "output", None)
+        if output and results:
+            data = [
+                {
+                    "provider": r.provider,
+                    "model": r.model,
+                    "n": r.n,
+                    "mean_ms": round(r.mean_ms, 1),
+                    "min_ms": round(r.min_ms, 1),
+                    "max_ms": round(r.max_ms, 1),
+                    "p95_ms": round(r.p95_ms, 1),
+                    "errors": r.errors,
+                    "success_rate": round(r.success_rate, 3),
+                }
+                for r in results
+            ]
+            with open(output, "w") as fh:
+                _json.dump(data, fh, indent=2)
+            print(f"  Results written to {output}")
+    else:
+        # Hardware perception-action loop benchmark
+        config_path = getattr(args, "config", "robot.rcan.yaml")
+        iterations = getattr(args, "iterations", 3)
+        simulate = getattr(args, "simulate", False)
+        from castor.benchmark import run_benchmark as hw_run
+        hw_run(config_path, iterations=iterations, simulate=simulate)
 
 
 def cmd_calibrate(args) -> None:
@@ -1146,6 +1206,47 @@ def cmd_streaming(args) -> None:
 def cmd_update(args) -> None:
     """castor update."""
     print("castor update: not yet implemented.")
+
+
+def _improve_toggle(args) -> bool:
+    """Toggle learner.enabled in RCAN YAML. Returns True if a change was made."""
+    enable = getattr(args, "enable", False)
+    disable = getattr(args, "disable", False)
+    if not enable and not disable:
+        return False
+
+    config_path = getattr(args, "config", None)
+    if not config_path:
+        config_path = _find_default_config()
+    if not config_path:
+        print("No RCAN config found — cannot toggle learner.")
+        return True
+
+    from pathlib import Path as _Path
+
+    import yaml as _yaml
+
+    p = _Path(config_path)
+    if not p.exists():
+        print(f"Config not found: {config_path}")
+        return True
+
+    data = _yaml.safe_load(p.read_text()) or {}
+    learner = data.setdefault("learner", {})
+
+    if enable:
+        learner["enabled"] = True
+        if "provider" not in learner:
+            learner["provider"] = "huggingface"
+        if "auto_apply_code" not in learner:
+            learner["auto_apply_code"] = False
+    else:
+        learner["enabled"] = False
+
+    p.write_text(_yaml.dump(data, default_flow_style=False))
+    action = "enabled" if enable else "disabled"
+    print(f"Learner {action} in {config_path}")
+    return True
 
 
 def main() -> None:
@@ -1836,31 +1937,6 @@ def main() -> None:
     p_improve.add_argument(
         "--disable", action="store_true", help="Disable self-improving loop in RCAN config"
     )
-
-    # castor fleet
-    p_fleet = sub.add_parser(
-        "fleet",
-        help="Multi-robot fleet management",
-        epilog=(
-            "Examples:\n"
-            "  castor fleet                         # list discovered robots\n"
-            "  castor fleet --watch                 # live table (refresh every 2s)\n"
-            "  castor fleet status <ruri>           # status of specific robot\n"
-            "  castor fleet command <ruri> 'go'     # send command to specific robot\n"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    p_fleet.add_argument(
-        "--timeout", default="5", help="mDNS scan duration in seconds (default: 5)"
-    )
-    p_fleet.add_argument("--watch", action="store_true", help="Live table, refresh every 2s")
-    p_fleet.add_argument("--gateway", default="http://127.0.0.1:8000", help="Gateway URL")
-    p_fleet_sub = p_fleet.add_subparsers(dest="fleet_subcmd")
-    p_fleet_status = p_fleet_sub.add_parser("status", help="Status of a specific robot")
-    p_fleet_status.add_argument("ruri", help="Robot RURI")
-    p_fleet_cmd = p_fleet_sub.add_parser("command", help="Send command to a specific robot")
-    p_fleet_cmd.add_argument("ruri", help="Robot RURI")
-    p_fleet_cmd.add_argument("instruction", help="Instruction text")
 
     # castor deploy (issue #103)
     p_deploy = sub.add_parser(
