@@ -36,6 +36,14 @@ logger = logging.getLogger("OpenCastor.Hotword")
 
 CASTOR_HOTWORD = os.getenv("CASTOR_HOTWORD", "hey castor")
 CASTOR_HOTWORD_ENGINE = os.getenv("CASTOR_HOTWORD_ENGINE", "auto")
+# Optional: pin the PyAudio input device index to avoid hangs on systems where
+# the default device probe blocks (e.g. RPi without a configured ALSA default).
+# Set to the integer index shown by `python3 -c "import pyaudio; pa=pyaudio.PyAudio();
+# [print(i, pa.get_device_info_by_index(i)['name']) for i in range(pa.get_device_count())]"`.
+_MIC_DEVICE_INDEX_ENV = os.getenv("CASTOR_MIC_DEVICE_INDEX", "").strip()
+CASTOR_MIC_DEVICE_INDEX: int | None = (
+    int(_MIC_DEVICE_INDEX_ENV) if _MIC_DEVICE_INDEX_ENV.isdigit() else None
+)
 
 # ---------------------------------------------------------------------------
 # Availability guards
@@ -168,7 +176,10 @@ class WakeWordDetector:
 
             pa = pyaudio.PyAudio()
             # Use device's native rate; downsample to 16 kHz for openwakeword
-            dev_info = pa.get_default_input_device_info()
+            if CASTOR_MIC_DEVICE_INDEX is not None:
+                dev_info = pa.get_device_info_by_index(CASTOR_MIC_DEVICE_INDEX)
+            else:
+                dev_info = pa.get_default_input_device_info()
             native_rate = int(dev_info.get("defaultSampleRate", 44100))
             target_rate = 16000
             chunk_native = int(1280 * native_rate / target_rate)
@@ -233,7 +244,7 @@ class WakeWordDetector:
             # Build a set of trigger words from the wake phrase (e.g. "alex")
             trigger_words = {w.lower() for w in self._wake_phrase.split()}
 
-            mic = sr.Microphone()
+            mic = sr.Microphone(device_index=CASTOR_MIC_DEVICE_INDEX)
             with mic as source:
                 recognizer.adjust_for_ambient_noise(source, duration=1.0)
 

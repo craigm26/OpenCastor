@@ -85,6 +85,9 @@ Copy `.env.example` to `.env` and fill in what you need.
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `CASTOR_VOICE_ENGINE` | auto | Override voice engine: `whisper`, `google`, `local` |
+| `CASTOR_HOTWORD` | `hey castor` | Wake phrase for the voice loop (e.g. `hey alex`) |
+| `CASTOR_HOTWORD_ENGINE` | `auto` | Wake detection backend: `sr`, `openwakeword`, `mock` |
+| `CASTOR_MIC_DEVICE_INDEX` | — | PyAudio input device index. Required on RPi/systems where the ALSA default device probe hangs (no PulseAudio or unconfigured ALSA default). Find the index: `python3 -c "import pyaudio; pa=pyaudio.PyAudio(); [print(i,pa.get_device_info_by_index(i)['name']) for i in range(pa.get_device_count())]"` |
 | `SDL_AUDIODRIVER` | — | Override SDL audio driver (e.g., `alsa` for RPi USB speaker) |
 | `AUDIODEV` | — | ALSA device override for gTTS/pygame (e.g., `plughw:2,0`) |
 
@@ -163,3 +166,5 @@ Fix: `pip install "neonize==0.3.13.post0" -q`
 - PCA9685 requires external power before i2cdetect shows `0x40`.
 - OAK-D: `pip install depthai==3.3.0` + `sudo udevadm control --reload-rules`
 - USB speaker ALSA routing: `~/.asoundrc` with `defaults.pcm.card 2`; set `SDL_AUDIODRIVER=alsa` + `AUDIODEV=plughw:2,0`
+- **STT (Google SR) requires `flac`**: `sudo apt-get install -y flac`. Without it, `SpeechRecognition` raises `OSError: FLAC conversion utility not available` and all transcription silently fails.
+- **USB mic device index**: If PyAudio finds 0 devices (common on RPi without PulseAudio), install PulseAudio (`sudo apt-get install -y pulseaudio`) and set `CASTOR_MIC_DEVICE_INDEX` to the USB mic's device index in `.env`. Check with `arecord -l` for the card number.
