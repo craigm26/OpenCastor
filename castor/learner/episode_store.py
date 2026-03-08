@@ -15,14 +15,26 @@ except ImportError:  # pragma: no cover - Windows fallback
 from .episode import Episode
 
 DEFAULT_STORE_DIR = Path.home() / ".opencastor" / "episodes"
+DEFAULT_MAX_EPISODES = 10_000
 
 
 class EpisodeStore:
-    """Persists episodes as JSON files with file-locking for thread safety."""
+    """Persists episodes as JSON files with file-locking for thread safety.
 
-    def __init__(self, store_dir: Optional[Path] = None) -> None:
+    Limits on-disk episode count to *max_episodes* (default 10,000) using
+    FIFO eviction — oldest episodes (by start_time) are deleted when the
+    store exceeds the cap.  This mirrors the SQLite-backed EpisodeMemory cap
+    and prevents unbounded disk growth on long-running robots.
+    """
+
+    def __init__(
+        self,
+        store_dir: Optional[Path] = None,
+        max_episodes: int = DEFAULT_MAX_EPISODES,
+    ) -> None:
         self.store_dir = store_dir or DEFAULT_STORE_DIR
         self.store_dir.mkdir(parents=True, exist_ok=True)
+        self.max_episodes = max(1, max_episodes)
 
     def _path_for(self, episode_id: str) -> Path:
         return self.store_dir / f"{episode_id}.json"
@@ -44,8 +56,9 @@ class EpisodeStore:
                 self._unlock(f)
 
     def save(self, episode: Episode) -> None:
-        """Save an episode to disk."""
+        """Save an episode to disk, then enforce the max-episodes cap."""
         self._write_locked(self._path_for(episode.id), episode.to_dict())
+        self._enforce_max()
 
     def load(self, episode_id: str) -> Episode:
         """Load an episode by ID. Raises FileNotFoundError if missing."""
@@ -79,6 +92,38 @@ class EpisodeStore:
                     path.unlink()
                     removed += 1
             except (json.JSONDecodeError, OSError):
+                continue
+        return removed
+
+    def _enforce_max(self) -> int:
+        """Delete oldest episodes (FIFO) if count exceeds *max_episodes*.
+
+        Returns the number of episodes deleted.
+        Reads only enough metadata to sort by start_time — avoids loading
+        full episode content for large stores.
+        """
+        paths = list(self.store_dir.glob("*.json"))
+        if len(paths) <= self.max_episodes:
+            return 0
+
+        # Read start_time from each file to find the oldest
+        timed: list[tuple[float, Path]] = []
+        for path in paths:
+            try:
+                data = self._read_locked(path)
+                timed.append((data.get("start_time", 0.0), path))
+            except (json.JSONDecodeError, OSError):
+                continue
+
+        # Sort ascending — oldest first
+        timed.sort(key=lambda x: x[0])
+        to_delete = len(timed) - self.max_episodes
+        removed = 0
+        for _, path in timed[:to_delete]:
+            try:
+                path.unlink(missing_ok=True)
+                removed += 1
+            except OSError:
                 continue
         return removed
 

@@ -80,3 +80,51 @@ class TestEpisodeStore:
         store.save(ep)
         removed = store.cleanup(max_age_days=1)
         assert removed == 0
+
+
+class TestEpisodeStoreEviction:
+    def test_max_episodes_enforced(self, tmp_path):
+        """Saving beyond max_episodes evicts the oldest episodes (FIFO)."""
+        store = EpisodeStore(store_dir=tmp_path, max_episodes=3)
+        for i in range(5):
+            ep = _make_ep(goal=f"task {i}", start_time=float(i + 1))
+            store.save(ep)
+        remaining = store.list_recent(100)
+        assert len(remaining) == 3
+
+    def test_eviction_removes_oldest_by_start_time(self, tmp_path):
+        """After eviction, only the most-recent episodes survive."""
+        store = EpisodeStore(store_dir=tmp_path, max_episodes=2)
+        ep_old = _make_ep(goal="old", start_time=1.0)
+        ep_mid = _make_ep(goal="mid", start_time=2.0)
+        ep_new = _make_ep(goal="new", start_time=3.0)
+        store.save(ep_old)
+        store.save(ep_mid)
+        store.save(ep_new)
+        remaining = store.list_recent(100)
+        goals = {e.goal for e in remaining}
+        assert "old" not in goals
+        assert "mid" in goals or "new" in goals
+
+    def test_max_episodes_exactly_at_limit(self, tmp_path):
+        """Saving exactly max_episodes episodes does not trigger eviction."""
+        store = EpisodeStore(store_dir=tmp_path, max_episodes=3)
+        for i in range(3):
+            store.save(_make_ep(goal=f"t{i}", start_time=float(i)))
+        assert len(store.list_recent(100)) == 3
+
+    def test_default_max_is_ten_thousand(self, tmp_path):
+        """Default max_episodes is 10,000."""
+        store = EpisodeStore(store_dir=tmp_path)
+        assert store.max_episodes == 10_000
+
+    def test_enforce_max_returns_removed_count(self, tmp_path):
+        """_enforce_max returns the number of files deleted."""
+        store = EpisodeStore(store_dir=tmp_path, max_episodes=2)
+        for i in range(4):
+            # Bypass save() to pre-populate without triggering eviction mid-loop
+            ep = _make_ep(goal=f"t{i}", start_time=float(i))
+            store._write_locked(store._path_for(ep.id), ep.to_dict())
+        removed = store._enforce_max()
+        assert removed == 2
+        assert len(store.list_recent(100)) == 2
