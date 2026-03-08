@@ -4810,9 +4810,11 @@ async def gamepad_page(token: str = ""):
 
 @app.get("/face")
 async def robot_face_page(token: str = ""):
-    """Animated minimal geometric robot face — kiosk home screen.
+    """Animated friendly geometric robot face — kiosk home screen.
 
     Polls /api/status every 500ms to drive reactive SVG animations.
+    Speaking mouth is driven by requestAnimationFrame with a composite-sine
+    oscillator for natural lip movement.
     Long-press (2 s) anywhere navigates to the Streamlit dashboard (port 8501).
     No auth required (kiosk use).
     """
@@ -4832,164 +4834,220 @@ async def robot_face_page(token: str = ""):
              font-family:system-ui,sans-serif;user-select:none;-webkit-user-select:none;}}
   svg{{max-width:min(90vw,90vh);max-height:min(90vw,90vh);}}
 
-  /* idle breathing glow on head */
-  @keyframes breathe{{0%,100%{{filter:drop-shadow(0 0 4px #0057ff88);}}
-                       50%{{filter:drop-shadow(0 0 18px #0057ffcc);}}}}
-  #head{{animation:breathe 2.8s ease-in-out infinite;}}
-
-  /* blink: eye inner circles scale to 0 vertically */
-  @keyframes blink{{0%,90%,100%{{transform:scaleY(1);}}95%{{transform:scaleY(0.05);}}}}
-  .eye-inner{{transform-origin:center;animation:blink 4s ease-in-out infinite;}}
-  .eye-inner-r{{transform-origin:center;animation:blink 4s ease-in-out infinite 0.07s;}}
-
-  /* mouth oscillation for speaking */
-  @keyframes speak{{
-    0%,100%{{d:path("M 155 230 Q 200 255 245 230");}}
-    50%{{d:path("M 155 220 Q 200 245 245 220");}}
-  }}
+  /* blink: whole eye group scaleY — sclera+iris+pupil+highlight blink together */
+  @keyframes blink{{0%,88%,100%{{transform:scaleY(1);}}93%{{transform:scaleY(0.06);}}}}
+  #eye-l{{transform-origin:158px 175px;animation:blink 4.2s ease-in-out infinite;}}
+  #eye-r{{transform-origin:242px 175px;animation:blink 4.2s ease-in-out infinite 0.09s;}}
 
   /* listening ring pulse */
-  @keyframes listen-ring{{0%,100%{{r:130;opacity:0.25;}}50%{{r:145;opacity:0.7;}}}}
-  #listen-ring{{display:none;animation:listen-ring 1s ease-in-out infinite;}}
+  @keyframes listen-ring{{0%,100%{{r:148;opacity:0.18;}}50%{{r:165;opacity:0.6;}}}}
+  #listen-ring{{display:none;animation:listen-ring 1.1s ease-in-out infinite;}}
 
   /* long-press progress ring */
-  #lp-ring{{display:none;transform-origin:200px 200px;}}
+  #lp-ring{{display:none;}}
 
-  /* e-stop red glow */
-  @keyframes estop-glow{{0%,100%{{filter:drop-shadow(0 0 8px #c00000);}}
-                          50%{{filter:drop-shadow(0 0 28px #c00000);}}}}
-  .estop-face{{animation:estop-glow 0.6s ease-in-out infinite;}}
+  /* e-stop glow on face group */
+  @keyframes estop-glow{{0%,100%{{filter:drop-shadow(0 0 10px #c00000);}}
+                          50%{{filter:drop-shadow(0 0 32px #c00000);}}}}
+  .estop-face{{animation:estop-glow 0.55s ease-in-out infinite;}}
 </style>
 </head>
 <body>
-<svg id="face" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
-  <!-- listening pulse ring (behind head) -->
-  <circle id="listen-ring" cx="200" cy="200" r="130" fill="none"
+<svg id="svg-face" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- listening pulse ring (behind everything) -->
+  <circle id="listen-ring" cx="200" cy="195" r="148" fill="none"
           stroke="#0057ff" stroke-width="4"/>
 
-  <!-- long-press progress ring -->
-  <circle id="lp-ring" cx="200" cy="200" r="122" fill="none"
-          stroke="#0057ff" stroke-width="5" stroke-dasharray="767" stroke-dashoffset="767"
-          stroke-linecap="round" transform="rotate(-90 200 200)"/>
+  <!-- long-press progress ring (r=155, circumference≈974) -->
+  <circle id="lp-ring" cx="200" cy="195" r="155" fill="none"
+          stroke="#0057ff" stroke-width="5" stroke-dasharray="974" stroke-dashoffset="974"
+          stroke-linecap="round" transform="rotate(-90 200 195)"/>
 
-  <!-- head: rounded hexagon via path -->
-  <g id="head">
-    <path id="head-path"
-      d="M 200 70 L 295 115 L 295 285 L 200 330 L 105 285 L 105 115 Z"
-      fill="none" stroke="#0057ff" stroke-width="5" stroke-linejoin="round"/>
-  </g>
+  <!-- face group (e-stop glow target) -->
+  <g id="face-group">
 
-  <!-- left eye -->
-  <g id="eye-l">
-    <circle cx="158" cy="185" r="22" fill="none" stroke="#0d0d0d" stroke-width="4"/>
-    <circle class="eye-inner" cx="158" cy="185" r="11" fill="#0d0d0d"/>
-  </g>
+    <!-- left eyebrow -->
+    <path id="brow-l" d="M 128 142 Q 158 130 182 140"
+          fill="none" stroke="#0d0d0d" stroke-width="4.5" stroke-linecap="round"/>
 
-  <!-- right eye -->
-  <g id="eye-r">
-    <circle cx="242" cy="185" r="22" fill="none" stroke="#0d0d0d" stroke-width="4"/>
-    <circle class="eye-inner eye-inner-r" cx="242" cy="185" r="11" fill="#0d0d0d"/>
-  </g>
+    <!-- right eyebrow -->
+    <path id="brow-r" d="M 218 140 Q 242 130 272 142"
+          fill="none" stroke="#0d0d0d" stroke-width="4.5" stroke-linecap="round"/>
 
-  <!-- mouth: calm arc default -->
-  <path id="mouth" d="M 155 230 Q 200 255 245 230"
-        fill="none" stroke="#0d0d0d" stroke-width="4" stroke-linecap="round"/>
+    <!-- left eye: sclera + blue iris + black pupil + white highlight -->
+    <g id="eye-l">
+      <circle cx="158" cy="175" r="28" fill="#ffffff" stroke="#0d0d0d" stroke-width="3"/>
+      <circle cx="158" cy="175" r="17" fill="#0057ff"/>
+      <circle cx="158" cy="175" r="9"  fill="#0d0d0d"/>
+      <circle cx="150" cy="167" r="5"  fill="#ffffff"/>
+    </g>
 
-  <!-- estop X eyes (hidden by default) -->
-  <g id="x-eyes" style="display:none">
-    <line x1="140" y1="167" x2="176" y2="203" stroke="#c00000" stroke-width="6" stroke-linecap="round"/>
-    <line x1="176" y1="167" x2="140" y2="203" stroke="#c00000" stroke-width="6" stroke-linecap="round"/>
-    <line x1="224" y1="167" x2="260" y2="203" stroke="#c00000" stroke-width="6" stroke-linecap="round"/>
-    <line x1="260" y1="167" x2="224" y2="203" stroke="#c00000" stroke-width="6" stroke-linecap="round"/>
+    <!-- right eye: sclera + blue iris + black pupil + white highlight -->
+    <g id="eye-r">
+      <circle cx="242" cy="175" r="28" fill="#ffffff" stroke="#0d0d0d" stroke-width="3"/>
+      <circle cx="242" cy="175" r="17" fill="#0057ff"/>
+      <circle cx="242" cy="175" r="9"  fill="#0d0d0d"/>
+      <circle cx="234" cy="167" r="5"  fill="#ffffff"/>
+    </g>
+
+    <!-- nose: two small nostril dots -->
+    <circle cx="192" cy="228" r="5" fill="#6b7280"/>
+    <circle cx="208" cy="228" r="5" fill="#6b7280"/>
+
+    <!-- mouth — d attribute and fill driven entirely by JS -->
+    <path id="mouth" d="M 145 252 Q 200 285 255 252"
+          fill="none" stroke="#0d0d0d" stroke-width="5" stroke-linecap="round"/>
+
+    <!-- estop X eyes (hidden by default) -->
+    <g id="x-eyes" style="display:none">
+      <line x1="134" y1="151" x2="182" y2="199" stroke="#c00000" stroke-width="7" stroke-linecap="round"/>
+      <line x1="182" y1="151" x2="134" y2="199" stroke="#c00000" stroke-width="7" stroke-linecap="round"/>
+      <line x1="218" y1="151" x2="266" y2="199" stroke="#c00000" stroke-width="7" stroke-linecap="round"/>
+      <line x1="266" y1="151" x2="218" y2="199" stroke="#c00000" stroke-width="7" stroke-linecap="round"/>
+    </g>
+
   </g>
 </svg>
 
 <script>
-const TOKEN = "{_tok}";
-const API   = window.location.origin;
-const DASH  = "http://" + window.location.hostname + ":8501";
-const LP_MS = 2000;
-const LP_CIRC = 2 * Math.PI * 122;
+const TOKEN   = "{_tok}";
+const API     = window.location.origin;
+const DASH    = "http://" + window.location.hostname + ":8501";
+const LP_MS   = 2000;
+const LP_CIRC = 2 * Math.PI * 155;
 
-const headPath  = document.getElementById("head-path");
-const headG     = document.getElementById("head");
+// Elements
+const faceGroup = document.getElementById("face-group");
 const eyeL      = document.getElementById("eye-l");
 const eyeR      = document.getElementById("eye-r");
+const browL     = document.getElementById("brow-l");
+const browR     = document.getElementById("brow-r");
 const xEyes     = document.getElementById("x-eyes");
 const mouth     = document.getElementById("mouth");
 const lpRing    = document.getElementById("lp-ring");
 const lsRing    = document.getElementById("listen-ring");
-const eyeInners = document.querySelectorAll(".eye-inner");
+const irisL     = eyeL.children[1];  // blue iris (child index 1)
+const irisR     = eyeR.children[1];
 
+// ── Speaking mouth oscillator ─────────────────────────────────────────────────
+// Composite sine wave mimics speech phoneme rhythm:
+//   primary ~3 Hz (syllable rate) + overtone ~6.5 Hz (articulation detail)
+// Drives SVG path `d` directly via requestAnimationFrame at ~60 fps.
+// The mouth draws a D-shaped open oval whose lower-lip Y position oscillates.
+let _speakRaf = null;
+let _speakT   = 0;
+
+function _speakTick() {{
+  _speakT += 1 / 60;
+  // absolute-value envelope → only upward openings (no negative jaw movement)
+  const amp = 28 * Math.abs(
+    0.65 * Math.sin(_speakT * 3.0 * Math.PI) +
+    0.35 * Math.sin(_speakT * 6.5 * Math.PI + 0.8)
+  );
+  const uy = 250;                     // upper-lip Y stays fixed
+  const ly = uy + Math.max(2, amp);  // lower-lip Y, min 2px so never fully closed mid-oscillation
+  // D-shaped open-mouth path: upper arc + lower arc joined into a filled oval
+  mouth.setAttribute("d",
+    `M 148 ${{uy}} Q 200 ${{uy - 10}} 252 ${{uy}} Q 200 ${{ly + 8}} 148 ${{uy}} Z`
+  );
+  mouth.setAttribute("fill", "#0d0d0d");
+  _speakRaf = requestAnimationFrame(_speakTick);
+}}
+function _startSpeak() {{ if (!_speakRaf) _speakTick(); }}
+function _stopSpeak()  {{
+  if (_speakRaf) {{ cancelAnimationFrame(_speakRaf); _speakRaf = null; }}
+  mouth.setAttribute("fill", "none");
+}}
+
+// ── Mouth path presets ────────────────────────────────────────────────────────
+const M_SMILE = "M 145 252 Q 200 285 255 252";   // wide friendly smile
+const M_FLAT  = "M 155 258 Q 200 263 245 258";   // neutral / focused
+const M_SMISH = "M 150 256 Q 200 272 250 256";   // slight smile (listening)
+const M_FROWN = "M 148 270 Q 200 250 252 270";   // frown (estop)
+
+// ── State machine ─────────────────────────────────────────────────────────────
 let state = "idle";
+
+function _resetFace() {{
+  faceGroup.classList.remove("estop-face");
+  lsRing.style.display = "none";
+  _stopSpeak();
+  eyeL.style.display = "block"; eyeR.style.display = "block";
+  xEyes.style.display = "none";
+  irisL.setAttribute("fill", "#0057ff");
+  irisR.setAttribute("fill", "#0057ff");
+  eyeL.style.transform = ""; eyeR.style.transform = "";
+  mouth.setAttribute("stroke", "#0d0d0d");
+}}
 
 function applyState(s) {{
   if (s === state) return;
   state = s;
-  headG.classList.remove("estop-face");
-  xEyes.style.display = "none";
-  eyeL.style.display = "block";
-  eyeR.style.display = "block";
-  lsRing.style.display = "none";
-  headPath.setAttribute("stroke", "#0057ff");
-  eyeInners.forEach(e => {{
-    e.style.transform = "";
-    e.style.transformBox = "";
-    e.style.transformOrigin = "";
-    e.setAttribute("fill", "#0d0d0d");
-  }});
-  mouth.style.animation = "";
+  _resetFace();
 
   if (s === "idle") {{
-    mouth.setAttribute("d", "M 155 230 Q 200 255 245 230");
+    browL.setAttribute("d", "M 128 142 Q 158 130 182 140");
+    browR.setAttribute("d", "M 218 140 Q 242 130 272 142");
+    mouth.setAttribute("d", M_SMILE);
+
   }} else if (s === "moving") {{
-    eyeInners.forEach(e => {{
-      e.style.transform = "scaleY(0.45)";
-      e.style.transformBox = "fill-box";
-      e.style.transformOrigin = "center";
-    }});
-    mouth.setAttribute("d", "M 160 232 Q 200 236 240 232");
+    browL.setAttribute("d", "M 128 148 Q 158 140 182 150"); // lower inner corners: focused
+    browR.setAttribute("d", "M 218 150 Q 242 140 272 148");
+    mouth.setAttribute("d", M_FLAT);
+
   }} else if (s === "speaking") {{
-    mouth.style.animation = "speak 0.35s ease-in-out infinite";
+    browL.setAttribute("d", "M 128 136 Q 158 124 182 134"); // raised: engaged
+    browR.setAttribute("d", "M 218 134 Q 242 124 272 136");
+    _startSpeak();  // rAF oscillator takes over mouth path
+
   }} else if (s === "listening") {{
     lsRing.style.display = "block";
-    eyeInners.forEach(e => {{
-      e.style.transform = "scale(1.3)";
-      e.style.transformBox = "fill-box";
-      e.style.transformOrigin = "center";
-    }});
-    mouth.setAttribute("d", "M 160 232 Q 200 236 240 232");
+    eyeL.style.transform = "scale(1.12)"; eyeL.style.transformOrigin = "158px 175px";
+    eyeR.style.transform = "scale(1.12)"; eyeR.style.transformOrigin = "242px 175px";
+    browL.setAttribute("d", "M 128 134 Q 158 120 182 132"); // high: attentive/surprised
+    browR.setAttribute("d", "M 218 132 Q 242 120 272 134");
+    mouth.setAttribute("d", M_SMISH);
+
   }} else if (s === "estop") {{
-    headPath.setAttribute("stroke", "#c00000");
-    headG.classList.add("estop-face");
+    faceGroup.classList.add("estop-face");
+    eyeL.style.display = "none"; eyeR.style.display = "none";
     xEyes.style.display = "block";
-    eyeL.style.display = "none";
-    eyeR.style.display = "none";
-    mouth.setAttribute("d", "M 155 242 Q 200 222 245 242");
+    browL.setAttribute("d", "M 128 158 Q 158 148 182 160"); // V-angry
+    browR.setAttribute("d", "M 218 160 Q 242 148 272 158");
+    mouth.setAttribute("stroke", "#c00000");
+    mouth.setAttribute("d", M_FROWN);
+
   }} else if (s === "offline") {{
-    headPath.setAttribute("stroke", "#9aa3af");
-    eyeInners.forEach(e => e.setAttribute("fill", "#9aa3af"));
-    mouth.setAttribute("d", "M 160 232 Q 200 236 240 232");
+    irisL.setAttribute("fill", "#9aa3af");  // grey iris
+    irisR.setAttribute("fill", "#9aa3af");
+    browL.setAttribute("d", "M 128 148 Q 158 144 182 150"); // drooped
+    browR.setAttribute("d", "M 218 150 Q 242 144 272 148");
+    mouth.setAttribute("d", M_FLAT);
   }}
 }}
 
+// ── Poll /api/status every 500ms ──────────────────────────────────────────────
 async function poll() {{
   const headers = TOKEN ? {{"Authorization": "Bearer " + TOKEN}} : {{}};
   try {{
-    const r = await fetch(API + "/api/status", {{headers}});
+    const r = await fetch(API + "/api/status", {{
+      headers,
+      signal: AbortSignal.timeout(1000),
+    }});
     if (!r.ok) {{ applyState("offline"); return; }}
     const d = await r.json();
-    if (d.estop) applyState("estop");
-    else if (d.listening) applyState("listening");
-    else if (d.speaking) applyState("speaking");
-    else if (Math.abs(d.linear||0) > 0.02 || Math.abs(d.angular||0) > 0.02) applyState("moving");
-    else applyState("idle");
-  }} catch(e) {{ applyState("offline"); }}
+    if      (d.estop)                                                  applyState("estop");
+    else if (d.listening)                                              applyState("listening");
+    else if (d.speaking)                                               applyState("speaking");
+    else if (Math.abs(d.linear||0)>0.02||Math.abs(d.angular||0)>0.02) applyState("moving");
+    else                                                               applyState("idle");
+  }} catch {{ applyState("offline"); }}
 }}
 setInterval(poll, 500);
 poll();
 
-let lpTimer = null;
+// ── Long-press 2s → backstage dashboard ──────────────────────────────────────
 let lpStart = 0;
 let lpAnim  = null;
 
@@ -5001,20 +5059,13 @@ function lpBegin(e) {{
   lpAnim = setInterval(() => {{
     const frac = Math.min((Date.now() - lpStart) / LP_MS, 1);
     lpRing.style.strokeDashoffset = LP_CIRC * (1 - frac);
-    if (frac >= 1) {{
-      clearInterval(lpAnim);
-      window.location.href = DASH;
-    }}
+    if (frac >= 1) {{ clearInterval(lpAnim); window.location.href = DASH; }}
   }}, 16);
 }}
+function lpEnd() {{ clearInterval(lpAnim); lpRing.style.display = "none"; }}
 
-function lpEnd() {{
-  clearInterval(lpAnim);
-  lpRing.style.display = "none";
-}}
-
-document.addEventListener("pointerdown", lpBegin);
-document.addEventListener("pointerup",   lpEnd);
+document.addEventListener("pointerdown",   lpBegin);
+document.addEventListener("pointerup",     lpEnd);
 document.addEventListener("pointercancel", lpEnd);
 </script>
 </body>
