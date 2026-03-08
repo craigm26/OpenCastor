@@ -1396,68 +1396,75 @@ with st.expander("🎯 Mission Control", expanded=False):
 st.divider()
 with st.expander("🎮 Gamepad / Manual Drive", expanded=False):
     st.caption(
-        "USB/Bluetooth gamepad control — supports 8bitdo Zero 2 and standard gamepads. "
-        "D-pad or left stick drives the robot. Commands sent to /api/action at ~10 Hz."
+        "USB/Bluetooth gamepad — 8bitdo Zero 2 and standard gamepads. "
+        "D-pad or left stick drives the robot at ~10 Hz."
     )
     _gp_speed = st.slider("Drive speed", 0.1, 1.0, 0.7, 0.05, key="gp_speed")
     _gp_turn_speed = st.slider("Turn speed", 0.1, 1.0, 0.6, 0.05, key="gp_turn_speed")
+    # NOTE: gamepad listeners are attached to window.top so they work even inside
+    # Streamlit's sandboxed iframe (Chrome blocks navigator.getGamepads() in iframes
+    # without an explicit `allow="gamepad"` attribute that Streamlit doesn't set).
+    # confirm() is also blocked in iframes, so power actions use an inline confirm div.
     _gamepad_html = f"""
 <style>
   #gp-wrap {{ font-family: monospace; font-size: 0.8rem; color: #e6edf3; }}
-  #gp-name {{ color: #8b949e; }}
-  .gp-btn {{ display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem;
-    background: #21262d; border: 1px solid #30363d; margin: 1px; }}
-  .gp-btn.active {{ background: #1f6feb; border-color: #58a6ff; color: #fff; }}
-  .gp-btn.stop {{ background: #da3633; border-color: #f85149; color: #fff; }}
-  .gp-btn.warn {{ background: #d29922; border-color: #e3b341; color: #0d1117; }}
-  .gp-row {{ display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0; }}
-  .gp-action-btn {{ padding: 5px 14px; border: none; border-radius: 5px; cursor: pointer;
-    font-size: 0.82rem; font-family: monospace; }}
+  .gp-badge {{ display:inline-block; padding:2px 7px; border-radius:4px; font-size:0.72rem;
+    background:#21262d; border:1px solid #30363d; margin:1px; transition:background 0.1s; }}
+  .gp-badge.on  {{ background:#1f6feb; border-color:#58a6ff; color:#fff; }}
+  .gp-badge.stp {{ background:#da3633; border-color:#f85149; color:#fff; }}
+  .gp-badge.wrn {{ background:#d29922; border-color:#e3b341; color:#0d1117; }}
+  .gp-row {{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:4px 0; }}
+  .gp-act {{ padding:5px 13px; border:none; border-radius:5px; cursor:pointer;
+    font-size:0.82rem; font-family:monospace; }}
+  #gp-confirm {{ display:none; background:#161b22; border:1px solid #d29922;
+    border-radius:6px; padding:8px 12px; margin-top:6px; }}
 </style>
 <div id="gp-wrap">
-  <div style="margin-bottom:6px;">
-    🎮 <span id="gp-name">Not connected — plug in controller and press any button</span>
+  <div style="margin-bottom:5px;">
+    🎮 <span id="gp-name" style="color:#8b949e;">Not connected — press any button to activate</span>
   </div>
   <div class="gp-row">
-    <div style="text-align:center;">
-      <div id="gp-dir" style="font-size:1.6rem;min-width:2rem;">⬜</div>
-      <div style="font-size:0.65rem;color:#6e7681;">D-PAD</div>
+    <div style="text-align:center;min-width:2.2rem;">
+      <div id="gp-dir" style="font-size:1.5rem;">⬜</div>
+      <div style="font-size:0.62rem;color:#6e7681;">D-PAD</div>
     </div>
-    <div style="text-align:center;margin:0 4px;">
-      <div id="gp-linear" style="color:#3fb950;">↕ 0.00</div>
+    <div style="margin:0 6px;">
+      <div id="gp-linear"  style="color:#3fb950;">↕ 0.00</div>
       <div id="gp-angular" style="color:#58a6ff;">↔ 0.00</div>
     </div>
-    <div class="gp-row" style="gap:4px;">
-      <span id="btn-a" class="gp-btn" title="A — Stop">A·Stop</span>
-      <span id="btn-b" class="gp-btn" title="B — Stop">B·Stop</span>
-      <span id="btn-x" class="gp-btn" title="X — Status">X·Status</span>
-      <span id="btn-y" class="gp-btn" title="Y — Snapshot">Y·Snap</span>
-    </div>
-    <div class="gp-row" style="gap:4px;">
-      <span id="btn-l" class="gp-btn" title="L shoulder — Reboot">L·Reboot</span>
-      <span id="btn-r" class="gp-btn" title="R shoulder — Shutdown">R·Shutdown</span>
-      <span id="btn-start" class="gp-btn" title="Start — E-STOP">Start·ESTOP</span>
-      <span id="btn-sel" class="gp-btn" title="Select — Clear ESTOP">Sel·Clear</span>
+    <div class="gp-row" style="gap:3px;">
+      <span id="btn-a" class="gp-badge">A·Stop</span>
+      <span id="btn-b" class="gp-badge">B·Stop</span>
+      <span id="btn-x" class="gp-badge">X·Status</span>
+      <span id="btn-y" class="gp-badge">Y·Snap</span>
+      <span id="btn-l" class="gp-badge">L·Reboot</span>
+      <span id="btn-r" class="gp-badge">R·Shutdown</span>
+      <span id="btn-st" class="gp-badge">Start·ESTOP</span>
+      <span id="btn-sl" class="gp-badge">Sel·Clear</span>
     </div>
   </div>
-  <div class="gp-row" style="margin-top:6px;gap:6px;">
-    <button class="gp-action-btn" id="gp-estop"
-      style="background:#da3633;color:#fff;">⏹ E-STOP</button>
-    <button class="gp-action-btn" id="gp-clear"
-      style="background:#238636;color:#fff;">▶ Clear Stop</button>
-    <button class="gp-action-btn" id="gp-reboot"
-      style="background:#d29922;color:#0d1117;">↺ Reboot</button>
-    <button class="gp-action-btn" id="gp-shutdown"
-      style="background:#6e40c9;color:#fff;">⏻ Shutdown</button>
-    <span id="gp-feedback" style="color:#8b949e;font-size:0.75rem;"></span>
+  <div class="gp-row" style="margin-top:5px;">
+    <button class="gp-act" id="gp-estop"  style="background:#da3633;color:#fff;">⏹ E-STOP</button>
+    <button class="gp-act" id="gp-clear"  style="background:#238636;color:#fff;">▶ Clear</button>
+    <button class="gp-act" id="gp-reboot" style="background:#d29922;color:#0d1117;">↺ Reboot…</button>
+    <button class="gp-act" id="gp-shtdwn" style="background:#6e40c9;color:#fff;">⏻ Shutdown…</button>
+    <span id="gp-fb" style="color:#8b949e;font-size:0.74rem;margin-left:4px;"></span>
   </div>
-  <div style="margin-top:5px;font-size:0.68rem;color:#6e7681;">
-    Button map: D-pad/stick=move · A/B=stop · X=status · Y=snapshot · L=reboot · R=shutdown · Start=E-STOP · Sel=clear
+  <div id="gp-confirm">
+    <span id="gp-confirm-msg"></span>&nbsp;
+    <button class="gp-act" id="gp-confirm-yes" style="background:#da3633;color:#fff;padding:3px 10px;">Yes</button>
+    <button class="gp-act" id="gp-confirm-no"  style="background:#21262d;color:#e6edf3;padding:3px 10px;">No</button>
+  </div>
+  <div style="margin-top:4px;font-size:0.65rem;color:#6e7681;">
+    D-pad/stick=move · A/B=stop · X=status · Y=snapshot · L=reboot · R=shutdown · Start=ESTOP · Sel=clear
   </div>
 </div>
 <script>
 (function() {{
-  const GW = "{GW}";
+  // Use window.top so the Gamepad API isn't blocked by iframe Permissions-Policy.
+  // Streamlit components are same-origin so window.top access is allowed.
+  const TOP = (function() {{ try {{ return window.top; }} catch(e) {{ return window; }} }})();
+  const GW    = "{GW}";
   const TOKEN = "{st.session_state.get("token", "")}";
   const SPEED = {_gp_speed};
   const TURN  = {_gp_turn_speed};
@@ -1465,157 +1472,150 @@ with st.expander("🎮 Gamepad / Manual Drive", expanded=False):
   const jsonHdr = Object.assign({{"Content-Type": "application/json"}}, authHdr);
 
   let gpIndex = null;
-  let interval = null;
+  let rafId   = null;
   let prevBtns = {{}};
   let lastActionTime = 0;
+  let pendingAction  = null;  // for inline confirm
 
-  function feedback(msg, color) {{
-    const el = document.getElementById("gp-feedback");
+  function fb(msg, color) {{
+    const el = document.getElementById("gp-fb");
     if (el) {{ el.textContent = msg; el.style.color = color || "#8b949e"; }}
   }}
 
   function post(path, body) {{
-    fetch(GW + path, {{
+    return fetch(GW + path, {{
       method: "POST",
       headers: body !== undefined ? jsonHdr : authHdr,
       body: body !== undefined ? JSON.stringify(body) : undefined
     }}).then(function(r) {{
-      feedback(path + " → " + r.status, r.ok ? "#3fb950" : "#f85149");
-    }}).catch(function(e) {{ feedback("err: " + e, "#f85149"); }});
+      fb(path.split("/").pop() + " " + r.status, r.ok ? "#3fb950" : "#f85149");
+    }}).catch(function(e) {{ fb("" + e, "#f85149"); }});
   }}
 
-  function setBtnActive(id, on, cls) {{
+  function badge(id, on, cls) {{
     const el = document.getElementById(id);
-    if (!el) return;
-    el.className = "gp-btn" + (on ? " " + (cls || "active") : "");
+    if (el) el.className = "gp-badge" + (on ? " " + (cls || "on") : "");
   }}
 
-  // Physical buttons in dashboard
-  document.getElementById("gp-estop").onclick = function() {{
-    post("/api/stop");
+  // Inline confirm (replaces window.confirm which is blocked in iframes)
+  function confirmAction(msg, fn) {{
+    pendingAction = fn;
+    const box = document.getElementById("gp-confirm");
+    document.getElementById("gp-confirm-msg").textContent = msg;
+    box.style.display = "block";
+  }}
+  document.getElementById("gp-confirm-yes").onclick = function() {{
+    document.getElementById("gp-confirm").style.display = "none";
+    if (pendingAction) {{ pendingAction(); pendingAction = null; }}
   }};
-  document.getElementById("gp-clear").onclick = function() {{
-    post("/api/estop/clear");
-  }};
-  document.getElementById("gp-reboot").onclick = function() {{
-    if (confirm("Reboot the robot host?")) post("/api/system/reboot");
-  }};
-  document.getElementById("gp-shutdown").onclick = function() {{
-    if (confirm("Shut down the robot host?")) post("/api/system/shutdown");
+  document.getElementById("gp-confirm-no").onclick = function() {{
+    document.getElementById("gp-confirm").style.display = "none";
+    pendingAction = null;
+    fb("Cancelled", "#8b949e");
   }};
 
-  window.addEventListener("gamepadconnected", function(e) {{
+  // Dashboard click handlers
+  document.getElementById("gp-estop").onclick  = function() {{ post("/api/stop"); }};
+  document.getElementById("gp-clear").onclick  = function() {{ post("/api/estop/clear"); }};
+  document.getElementById("gp-reboot").onclick = function() {{
+    confirmAction("Reboot the robot host?", function() {{ post("/api/system/reboot"); }});
+  }};
+  document.getElementById("gp-shtdwn").onclick = function() {{
+    confirmAction("Shut down the robot host?", function() {{ post("/api/system/shutdown"); }});
+  }};
+
+  // Attach gamepad events to TOP window so Chrome allows the Gamepad API
+  TOP.addEventListener("gamepadconnected", function(e) {{
     gpIndex = e.gamepad.index;
     document.getElementById("gp-name").textContent = e.gamepad.id;
-    feedback("Connected", "#3fb950");
-    if (!interval) interval = setInterval(loop, 100);
+    document.getElementById("gp-name").style.color = "#3fb950";
+    fb("Connected", "#3fb950");
+    if (!rafId) rafId = TOP.requestAnimationFrame(loop);
   }});
-  window.addEventListener("gamepaddisconnected", function(e) {{
+  TOP.addEventListener("gamepaddisconnected", function(e) {{
     if (e.gamepad.index === gpIndex) {{
       gpIndex = null;
-      clearInterval(interval); interval = null;
-      document.getElementById("gp-name").textContent = "Disconnected";
+      if (rafId) {{ TOP.cancelAnimationFrame(rafId); rafId = null; }}
+      document.getElementById("gp-name").textContent = "Disconnected — press a button to reconnect";
+      document.getElementById("gp-name").style.color = "#8b949e";
       document.getElementById("gp-dir").textContent = "⬜";
     }}
   }});
 
-  function deadzone(v, dz) {{ return Math.abs(v) < (dz || 0.12) ? 0 : v; }}
+  function dz(v) {{ return Math.abs(v) < 0.12 ? 0 : v; }}
 
-  function btnPressed(gp, idx) {{
-    const b = gp.buttons[idx];
-    return b && (typeof b === "object" ? b.pressed : b > 0.5);
+  function pressed(gp, i) {{
+    const b = gp.buttons[i];
+    return b ? (typeof b === "object" ? b.pressed : b > 0.5) : false;
   }}
-
-  function btnJustPressed(gp, idx) {{
-    const now = btnPressed(gp, idx);
-    const was = prevBtns[idx] || false;
-    prevBtns[idx] = now;
+  function justPressed(gp, i) {{
+    const now = pressed(gp, i), was = prevBtns[i] || false;
+    prevBtns[i] = now;
     return now && !was;
   }}
 
   function loop() {{
-    const gp = navigator.getGamepads ? navigator.getGamepads()[gpIndex] : null;
+    rafId = TOP.requestAnimationFrame(loop);
+    if (gpIndex === null) return;
+    // getGamepads() must also be called on TOP
+    const gps = TOP.navigator.getGamepads ? TOP.navigator.getGamepads() : [];
+    const gp  = gps[gpIndex];
     if (!gp) return;
 
-    // ── Movement: D-pad buttons (8bitdo Zero 2) OR left analog stick ──────
-    const dUp    = btnPressed(gp, 12);
-    const dDown  = btnPressed(gp, 13);
-    const dLeft  = btnPressed(gp, 14);
-    const dRight = btnPressed(gp, 15);
-
-    let linear  = 0;
-    let angular = 0;
-
-    if (dUp || dDown || dLeft || dRight) {{
-      // D-pad digital
-      if (dUp)    {{ linear  =  SPEED; }}
-      if (dDown)  {{ linear  = -SPEED; }}
-      if (dLeft)  {{ angular =  TURN; }}
-      if (dRight) {{ angular = -TURN; }}
-      const arrows = (dUp?"↑":"") + (dDown?"↓":"") + (dLeft?"←":"") + (dRight?"→":"");
-      document.getElementById("gp-dir").textContent = arrows;
+    // Movement: prefer D-pad buttons (12-15), fall back to left stick axes
+    const dU = pressed(gp, 12), dD = pressed(gp, 13);
+    const dL = pressed(gp, 14), dR = pressed(gp, 15);
+    let linear = 0, angular = 0;
+    if (dU || dD || dL || dR) {{
+      if (dU) linear  =  SPEED;
+      if (dD) linear  = -SPEED;
+      if (dL) angular =  TURN;
+      if (dR) angular = -TURN;
+      document.getElementById("gp-dir").textContent =
+        (dU?"↑":"") + (dD?"↓":"") + (dL?"←":"") + (dR?"→":"");
     }} else {{
-      // Analog stick fallback
-      linear  = -deadzone(gp.axes[1]);
-      angular = -deadzone(gp.axes[0]);
-      if (Math.abs(linear) > 0.01 || Math.abs(angular) > 0.01) {{
-        document.getElementById("gp-dir").textContent = "🕹";
-      }} else {{
-        document.getElementById("gp-dir").textContent = "⬜";
-      }}
+      linear  = -dz(gp.axes[1] || 0);
+      angular = -dz(gp.axes[0] || 0);
+      document.getElementById("gp-dir").textContent =
+        (Math.abs(linear) > 0.01 || Math.abs(angular) > 0.01) ? "🕹" : "⬜";
     }}
 
     document.getElementById("gp-linear").textContent  = "↕ " + linear.toFixed(2);
     document.getElementById("gp-angular").textContent = "↔ " + angular.toFixed(2);
 
-    const now = Date.now();
-    if ((Math.abs(linear) > 0.01 || Math.abs(angular) > 0.01) && now - lastActionTime > 80) {{
-      lastActionTime = now;
+    const t = Date.now();
+    if ((Math.abs(linear) > 0.01 || Math.abs(angular) > 0.01) && t - lastActionTime > 80) {{
+      lastActionTime = t;
       post("/api/action", {{linear: linear, angular: angular}});
     }}
 
-    // ── Face buttons (just-pressed, one-shot) ─────────────────────────────
-    setBtnActive("btn-a", btnPressed(gp, 0));
-    setBtnActive("btn-b", btnPressed(gp, 1));
-    setBtnActive("btn-x", btnPressed(gp, 2));
-    setBtnActive("btn-y", btnPressed(gp, 3));
-    setBtnActive("btn-l", btnPressed(gp, 4));
-    setBtnActive("btn-r", btnPressed(gp, 5));
-    setBtnActive("btn-start", btnPressed(gp, 9));
-    setBtnActive("btn-sel",   btnPressed(gp, 8));
+    // Live badge highlights
+    badge("btn-a",  pressed(gp, 0),  "on");
+    badge("btn-b",  pressed(gp, 1),  "on");
+    badge("btn-x",  pressed(gp, 2),  "on");
+    badge("btn-y",  pressed(gp, 3),  "on");
+    badge("btn-l",  pressed(gp, 4),  "wrn");
+    badge("btn-r",  pressed(gp, 5),  "wrn");
+    badge("btn-st", pressed(gp, 9),  "stp");
+    badge("btn-sl", pressed(gp, 8),  "on");
 
-    if (btnJustPressed(gp, 0) || btnJustPressed(gp, 1)) {{   // A or B → stop
-      post("/api/stop");
-      setBtnActive("btn-a", true, "stop"); setBtnActive("btn-b", true, "stop");
-    }}
-    if (btnJustPressed(gp, 2)) {{                              // X → status
-      post("/api/command", {{instruction: "what is your current status?"}});
-    }}
-    if (btnJustPressed(gp, 3)) {{                              // Y → snapshot
-      fetch(GW + "/api/camera/snapshot", {{headers: authHdr}})
-        .then(function() {{ feedback("Snapshot taken", "#3fb950"); }})
-        .catch(function() {{ feedback("Snapshot unavailable", "#f85149"); }});
-    }}
-    if (btnJustPressed(gp, 4)) {{                              // L shoulder → reboot
-      setBtnActive("btn-l", true, "warn");
-      if (confirm("Reboot the robot host?")) post("/api/system/reboot");
-    }}
-    if (btnJustPressed(gp, 5)) {{                              // R shoulder → shutdown
-      setBtnActive("btn-r", true, "warn");
-      if (confirm("Shut down the robot host?")) post("/api/system/shutdown");
-    }}
-    if (btnJustPressed(gp, 9)) {{                              // Start → E-STOP
-      setBtnActive("btn-start", true, "stop");
-      post("/api/stop");
-    }}
-    if (btnJustPressed(gp, 8)) {{                              // Select → clear estop
-      post("/api/estop/clear");
-    }}
+    // One-shot button actions
+    if (justPressed(gp, 0) || justPressed(gp, 1)) post("/api/stop");
+    if (justPressed(gp, 2)) post("/api/command", {{instruction: "what is your current status?"}});
+    if (justPressed(gp, 3)) fetch(GW + "/api/camera/snapshot", {{headers: authHdr}})
+      .then(function() {{ fb("Snapshot taken", "#3fb950"); }})
+      .catch(function() {{ fb("Snapshot unavailable", "#f85149"); }});
+    if (justPressed(gp, 4)) confirmAction("Reboot the robot host?",
+      function() {{ post("/api/system/reboot"); }});
+    if (justPressed(gp, 5)) confirmAction("Shut down the robot host?",
+      function() {{ post("/api/system/shutdown"); }});
+    if (justPressed(gp, 9)) post("/api/stop");
+    if (justPressed(gp, 8)) post("/api/estop/clear");
   }}
 }})();
 </script>
 """
-    st.components.v1.html(_gamepad_html, height=280)
+    st.components.v1.html(_gamepad_html, height=300)
 
 
 # ── SLAM MAP PANEL ─────────────────────────────────────────────────────────────
