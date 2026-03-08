@@ -4783,7 +4783,7 @@ async def gamepad_page(token: str = ""):
 
     const t=Date.now();
     if((Math.abs(lin)>0.01||Math.abs(ang)>0.01)&&t-lastT>80){{
-      lastT=t; send("/api/action",{{linear:lin,angular:ang}});
+      lastT=t; send("/api/action",{{type:"move",linear:lin,angular:ang}});
     }}
 
     badge("btn-a", pressed(gp,0));  badge("btn-b", pressed(gp,1));
