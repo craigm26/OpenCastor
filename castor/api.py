@@ -4817,7 +4817,8 @@ async def robot_face_page(token: str = ""):
     No auth required (kiosk use).
     """
     from fastapi.responses import HTMLResponse
-    _tok = token
+    import re as _re
+    _tok = _re.sub(r"[^A-Za-z0-9._\-]", "", token)
     _html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -4840,6 +4841,12 @@ async def robot_face_page(token: str = ""):
   @keyframes blink{{0%,90%,100%{{transform:scaleY(1);}}95%{{transform:scaleY(0.05);}}}}
   .eye-inner{{transform-origin:center;animation:blink 4s ease-in-out infinite;}}
   .eye-inner-r{{transform-origin:center;animation:blink 4s ease-in-out infinite 0.07s;}}
+
+  /* mouth oscillation for speaking */
+  @keyframes speak{{
+    0%,100%{{d:path("M 155 230 Q 200 255 245 230");}}
+    50%{{d:path("M 155 220 Q 200 245 245 220");}}
+  }}
 
   /* listening ring pulse */
   @keyframes listen-ring{{0%,100%{{r:130;opacity:0.25;}}50%{{r:145;opacity:0.7;}}}}
