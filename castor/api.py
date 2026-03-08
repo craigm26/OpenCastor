@@ -650,6 +650,24 @@ async def runtime_status():
     }
 
 
+@app.post("/api/system/reboot", dependencies=[Depends(verify_token)])
+async def system_reboot(request: Request):
+    """Reboot the host machine. Requires admin role."""
+    import subprocess
+    _check_min_role(request, "admin")
+    subprocess.Popen(["sudo", "reboot"])
+    return {"status": "rebooting"}
+
+
+@app.post("/api/system/shutdown", dependencies=[Depends(verify_token)])
+async def system_shutdown(request: Request):
+    """Shut down the host machine. Requires admin role."""
+    import subprocess
+    _check_min_role(request, "admin")
+    subprocess.Popen(["sudo", "shutdown", "-h", "now"])
+    return {"status": "shutting_down"}
+
+
 @app.get("/api/intents", dependencies=[Depends(verify_token)])
 async def list_intents(request: Request):
     """List active and queued orchestration intents."""
