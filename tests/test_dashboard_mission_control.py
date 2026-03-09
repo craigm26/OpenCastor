@@ -194,3 +194,44 @@ def test_dashboard_mission_control_has_stop_button():
         dashboard_path = Path("/home/craigm26/OpenCastor/castor/dashboard.py")
     source = dashboard_path.read_text()
     assert "Stop Mission" in source or "mc_stop" in source
+
+
+# ── T-001: gamepad removal & D-pad HTML component ─────────────────────────────
+
+
+def _dashboard_source() -> str:
+    from pathlib import Path
+
+    for candidate in ("castor/dashboard.py", "/home/craigm26/OpenCastor/castor/dashboard.py"):
+        p = Path(candidate)
+        if p.exists():
+            return p.read_text()
+    raise FileNotFoundError("dashboard.py not found")
+
+
+def test_no_gamepad_button():
+    """'Open Gamepad Controller' button must be removed from the control tab."""
+    assert "Open Gamepad Controller" not in _dashboard_source()
+
+
+def test_no_gamepad_link():
+    """'/gamepad' link must not appear in the control tab section."""
+    source = _dashboard_source()
+    ctrl_start = source.find("with _tab_ctrl:")
+    status_start = source.find("with _tab_status:")
+    assert ctrl_start != -1, "_tab_ctrl block not found"
+    assert status_start != -1, "_tab_status block not found"
+    ctrl_section = source[ctrl_start:status_start]
+    assert "/gamepad" not in ctrl_section
+
+
+def test_dpad_html_component():
+    """D-pad must use st.components.v1.html with pointer events and direction arrows."""
+    source = _dashboard_source()
+    assert "st.components.v1.html" in source
+    # Locate the D-pad html block (after the speed/turn sliders)
+    dpad_idx = source.find("hold-to-move")
+    assert dpad_idx != -1, "D-pad HTML component marker not found"
+    dpad_block = source[dpad_idx : dpad_idx + 4000]
+    assert "pointerdown" in dpad_block
+    assert "⬆" in dpad_block or "⬅" in dpad_block

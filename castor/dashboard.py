@@ -330,7 +330,7 @@ _tab_ctrl, _tab_status, _tab_chat, _tab_fleet, _tab_builder, _tab_settings = st.
 # ═══════════════════════════════════════════════════════════════════════════════
 with _tab_ctrl:
     # E-STOP row always at top
-    _estop_c, _clr_c, _gp_c = st.columns([2, 2, 3])
+    _estop_c, _clr_c = st.columns(2)
     with _estop_c:
         if st.button("⏹ E-STOP", type="primary", use_container_width=True, key="ctrl_estop"):
             try:
@@ -345,23 +345,6 @@ with _tab_ctrl:
                 st.toast("Stop cleared", icon="▶")
             except Exception as _e:
                 st.error(str(_e))
-    with _gp_c:
-        _gp_tok = st.session_state.api_token
-        _gp_host = GW.replace("http://", "").replace("https://", "").split(":")[0]
-        _gp_port = GW.split(":")[-1].split("/")[0] if ":" in GW else "8000"
-        _gp_proto = "https:" if GW.startswith("https") else "http:"
-        if _gp_host in ("127.0.0.1", "localhost", ""):
-            _gp_host = f"{robot_name}.local"
-        _gp_url = f"{_gp_proto}//{_gp_host}:{_gp_port}/gamepad" + (
-            f"?token={_gp_tok}" if _gp_tok else ""
-        )
-        st.markdown(
-            f'<a href="{_gp_url}" target="_blank" style="display:inline-flex;align-items:center;'
-            f"height:48px;padding:0 16px;background:#0057ff;color:#fff;border-radius:8px;"
-            f'text-decoration:none;font-size:0.9rem;border:1px solid #3b7de8;white-space:nowrap;">'
-            f"🎮 Open Gamepad Controller →</a>",
-            unsafe_allow_html=True,
-        )
 
     st.divider()
 
@@ -437,52 +420,113 @@ with _tab_ctrl:
         st.session_state.dp_speed = _spd
         st.session_state.dp_turn = _trn
 
-        # D-pad grid  [  ] [▲] [  ]
-        #             [◀] [■] [▶]
-        #             [  ] [▼] [  ]
-        _r1a, _r1b, _r1c = st.columns(3)
-        _r2a, _r2b, _r2c = st.columns(3)
-        _r3a, _r3b, _r3c = st.columns(3)
-
-        def _move(lin, ang):
-            try:
-                _req.post(
-                    f"{GW}/api/action",
-                    json={
-                        "type": "move",
-                        "linear": round(lin, 2),
-                        "angular": round(ang, 2),
-                        "duration_ms": 600,
-                    },
-                    headers=_hdr(),
-                    timeout=2,
-                )
-            except Exception:
-                pass
-
-        with _r1b:
-            if st.button("▲", use_container_width=True, key="dp_fwd", help="Forward"):
-                _move(_spd, 0.0)
-        with _r2a:
-            if st.button("◀", use_container_width=True, key="dp_left", help="Turn left"):
-                _move(0.0, _trn)
-        with _r2b:
-            if st.button("■", use_container_width=True, key="dp_stop", help="Stop", type="primary"):
-                try:
-                    _req.post(
-                        f"{GW}/api/action",
-                        json={"type": "move", "linear": 0.0, "angular": 0.0},
-                        headers=_hdr(),
-                        timeout=2,
-                    )
-                except Exception:
-                    pass
-        with _r2c:
-            if st.button("▶", use_container_width=True, key="dp_right", help="Turn right"):
-                _move(0.0, -_trn)
-        with _r3b:
-            if st.button("▼", use_container_width=True, key="dp_back", help="Backward"):
-                _move(-_spd, 0.0)
+        # D-pad — rich HTML/JS component with hold-to-move and active feedback
+        st.components.v1.html(
+            f"""
+<style>
+  .dpad {{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    grid-template-rows:repeat(3,1fr);
+    gap:6px;
+    width:100%;
+    max-width:280px;
+    margin:0 auto;
+  }}
+  .dpad-btn {{
+    min-width:72px;
+    min-height:72px;
+    width:min(90px,22vw);
+    height:min(90px,22vw);
+    background:#1e293b;
+    color:#f8fafc;
+    border:none;
+    border-radius:10px;
+    font-size:1.6rem;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    user-select:none;
+    touch-action:none;
+    transition:background 0.08s,transform 0.08s;
+  }}
+  .dpad-btn:active, .dpad-btn.pressed {{
+    background:#2563eb;
+    transform:scale(0.93);
+  }}
+  .dpad-empty {{ visibility:hidden; }}
+</style>
+<div class="dpad">
+  <div></div>
+  <button class="dpad-btn" id="dp_fwd" title="Forward">⬆</button>
+  <div></div>
+  <button class="dpad-btn" id="dp_left" title="Turn left">⬅</button>
+  <button class="dpad-btn" id="dp_stop" title="Stop">⏹</button>
+  <button class="dpad-btn" id="dp_right" title="Turn right">➡</button>
+  <div></div>
+  <button class="dpad-btn" id="dp_back" title="Backward">⬇</button>
+  <div></div>
+</div>
+<script>
+(function(){{
+  var spd={_spd}, trn={_trn};
+  var tok="{_tok_js}", cfgHost="{_gw_host}", port="{_gw_port}", proto="{_gw_proto}";
+  var host=cfgHost;
+  if(host==="127.0.0.1"||host==="localhost"||host===""){{
+    try{{var ph=window.parent.location.hostname;if(ph)host=ph;}}catch(e){{}}
+    try{{var th=window.top.location.hostname;if(th)host=th;}}catch(e){{}}
+  }}
+  var base=proto+"//"+host+":"+port+"/api/action";
+  function hdrs(){{
+    var h={{"Content-Type":"application/json"}};
+    if(tok)h["Authorization"]="Bearer "+tok;
+    return h;
+  }}
+  var _interval=null;
+  var _activeBtn=null;
+  var _actions={{
+    dp_fwd:  {{"type":"move","linear":spd,"angular":0.0}},
+    dp_left: {{"type":"move","linear":0.0,"angular":trn}},
+    dp_right:{{"type":"move","linear":0.0,"angular":-trn}},
+    dp_back: {{"type":"move","linear":-spd,"angular":0.0}},
+    dp_stop: null
+  }};
+  function postAction(body){{
+    fetch(base,{{method:"POST",headers:hdrs(),body:JSON.stringify(body)}}).catch(function(){{}});
+  }}
+  function sendStop(){{
+    postAction({{"type":"move","linear":0.0,"angular":0.0}});
+  }}
+  function startHold(id){{
+    if(_interval)return;
+    var action=_actions[id];
+    if(!action){{ sendStop(); return; }}
+    postAction(action);
+    _interval=setInterval(function(){{postAction(action);}},150);
+  }}
+  function endHold(){{
+    if(_interval){{clearInterval(_interval);_interval=null;}}
+    if(_activeBtn){{_activeBtn.classList.remove("pressed");_activeBtn=null;}}
+    sendStop();
+  }}
+  ["dp_fwd","dp_left","dp_stop","dp_right","dp_back"].forEach(function(id){{
+    var btn=document.getElementById(id);
+    if(!btn)return;
+    btn.addEventListener("pointerdown",function(e){{
+      e.preventDefault();
+      btn.setPointerCapture(e.pointerId);
+      _activeBtn=btn;
+      btn.classList.add("pressed");
+      startHold(id);
+    }});
+    btn.addEventListener("pointerup",function(e){{e.preventDefault();endHold();}});
+    btn.addEventListener("pointercancel",function(e){{e.preventDefault();endHold();}});
+  }});
+}})();
+</script>""",
+            height=320,
+        )
 
         st.divider()
         st.markdown('<p class="sh">🎤 Voice</p>', unsafe_allow_html=True)
@@ -516,16 +560,6 @@ with _tab_ctrl:
             except Exception as _stt_e:
                 st.toast(f"STT: {_stt_e}", icon="❌")
 
-        st.divider()
-        st.markdown(
-            f'<p class="sh">🎮 Gamepad</p>'
-            f'<a href="{_gp_url}" target="_blank" style="display:inline-block;padding:6px 14px;'
-            f"background:#ffffff;color:#0057ff;border-radius:6px;text-decoration:none;"
-            f'font-size:0.8rem;border:1px solid #d0d5dd;">Open controller page →</a>'
-            f'<div style="color:#6b7280;font-size:0.68rem;margin-top:4px;">'
-            f"D-pad/stick=move · A/B=soft stop · Start=ESTOP</div>",
-            unsafe_allow_html=True,
-        )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
