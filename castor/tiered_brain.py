@@ -326,10 +326,17 @@ class TieredBrain:
                 if swarm_action.get("type") not in (None, "idle"):
                     self.stats["swarm_count"] += 1
                     logger.debug("Layer 3 swarm action: %s", swarm_action.get("type"))
-                    return Thought(
+                    swarm_thought = Thought(
                         f"Swarm: {swarm_action.get('type', '?')}",
                         swarm_action,
                     )
+                    # Interpreter post-think: store episode for swarm path
+                    if self.interpreter and scene_ctx:
+                        try:
+                            self.interpreter.post_think(scene_ctx, swarm_thought)
+                        except Exception as exc:
+                            logger.debug("Interpreter post_think (non-fatal): %s", exc)
+                    return swarm_thought
             except Exception as exc:
                 logger.debug("Layer 3 error (non-fatal): %s", exc)
 

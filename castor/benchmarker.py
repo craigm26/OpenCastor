@@ -165,6 +165,12 @@ def run_embedding_benchmark(config: dict | None = None, backends: list | None = 
             from .providers.gemini_embedding_provider import GeminiEmbeddingProvider
 
             if backend_name == "gemini":
+                if not os.getenv("GOOGLE_API_KEY"):
+                    logger.info("Skipping Gemini benchmark — GOOGLE_API_KEY not set")
+                    results.append(
+                        {"backend": "gemini", "status": "skipped", "reason": "no API key"}
+                    )
+                    continue
                 provider = GeminiEmbeddingProvider(cfg.get("gemini", {}))
             elif backend_name == "mock":
                 provider = CLIPEmbeddingProvider({"model": "mock"})
