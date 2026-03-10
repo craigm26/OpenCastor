@@ -132,8 +132,7 @@ class TestEmbeddingInterpreter:
         ctx = interp_mock.pre_think(None, "go forward")
         assert len(interp_mock._meta) == 0
         interp_mock.post_think(ctx, mock_thought, outcome="success")
-        # Wait for background thread
-        time.sleep(0.2)
+        interp_mock.flush()
         assert len(interp_mock._meta) == 1
 
     def test_format_rag_context_empty(self, interp_mock):
@@ -145,7 +144,7 @@ class TestEmbeddingInterpreter:
         # Store an episode first
         ctx1 = interp_mock.pre_think(None, "go forward")
         interp_mock.post_think(ctx1, mock_thought, outcome="success")
-        time.sleep(0.3)  # wait for background thread
+        interp_mock.flush()
 
         # Now pre_think should find the stored episode
         ctx2 = interp_mock.pre_think(None, "go forward")
@@ -164,9 +163,10 @@ class TestEmbeddingInterpreter:
         )
         ctx1 = interp.pre_think(None, "task 1")
         interp.post_think(ctx1, mock_thought, outcome="ok")
+        interp.flush()
         ctx2 = interp.pre_think(None, "task 2")
         interp.post_think(ctx2, mock_thought, outcome="ok")
-        time.sleep(0.3)
+        interp.flush()
         assert len(interp._meta) <= 1
 
     def test_status_returns_dict(self, interp_mock):

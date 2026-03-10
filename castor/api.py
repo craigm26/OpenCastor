@@ -6967,7 +6967,7 @@ async def test_run(body: TestRunRequest):
 
     with _test_run_lock:
         if _test_run_state["running"]:
-            return {"error": "Test run already in progress", "code": "HTTP_409"}
+            raise HTTPException(status_code=409, detail="Test run already in progress")
         _test_run_state["running"] = True
         _test_run_state["started_at"] = time.time()
 
