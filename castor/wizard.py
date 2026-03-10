@@ -1517,6 +1517,79 @@ def choose_learner_setup(primary_provider, already_authed):
 
 
 # ---------------------------------------------------------------------------
+# Embedding tier selection step
+# ---------------------------------------------------------------------------
+
+
+def choose_embedding_setup() -> dict:
+    """Guide user through semantic scene memory (EmbeddingInterpreter) setup.
+
+    Returns:
+        Dict with ``interpreter`` key if enabled, else empty dict.
+    """
+    print(f"\n{Colors.GREEN}{'=' * 60}{Colors.ENDC}")
+    print(f"{Colors.BOLD}  🧠 SEMANTIC SCENE MEMORY (Embedding Interpreter){Colors.ENDC}")
+    print(f"{Colors.GREEN}{'=' * 60}{Colors.ENDC}")
+    print()
+    print("  Enable semantic perception to give your robot scene memory.")
+    print("  The interpreter embeds every frame + instruction into a vector")
+    print("  space, enabling retrieval-augmented planning (RAG) and goal")
+    print("  similarity monitoring.")
+    print()
+    print(f"  {Colors.BOLD}Tiers:{Colors.ENDC}")
+    print("    Tier 0 — CLIP (local, CPU, free, 512-dim)")
+    print("             openai/clip-vit-base-patch32 (~340 MB download)")
+    print("    Tier 1 — ImageBind (local, CC BY-NC, 1024-dim)")
+    print("             Meta AI — NOT for commercial products")
+    print("    Tier 2 — Gemini Embedding 2 (cloud, paid API, 1536-dim)")
+    print("             Requires GOOGLE_API_KEY (paid billing)")
+    print()
+    print(f"  {Colors.GREEN}Enable semantic scene memory?{Colors.ENDC}")
+    print()
+    print(f"  [0] {Colors.BOLD}No — skip (default){Colors.ENDC}")
+    print("  [1] Tier 0 — CLIP local  (recommended: free, offline, private)")
+    print("  [2] Tier 1 — ImageBind   (CC BY-NC — research/internal only)")
+    print("  [3] Tier 2 — Gemini      (paid API — highest quality)")
+    print("  [4] Auto   — Try Gemini first, fall back to CLIP")
+    print()
+
+    choice = input_default("Selection", "0").strip()
+
+    if choice == "0" or not choice:
+        print(f"\n  Semantic scene memory: {Colors.BOLD}disabled{Colors.ENDC}")
+        print("  You can enable it later by adding ``interpreter:`` to your RCAN config.")
+        return {}
+
+    backend_map = {"1": "local", "2": "local_extended", "3": "gemini", "4": "auto"}
+    backend = backend_map.get(choice)
+    if not backend:
+        print(f"\n  {Colors.YELLOW}Invalid selection — skipping semantic memory.{Colors.ENDC}")
+        return {}
+
+    print(
+        f"\n  Semantic scene memory: {Colors.GREEN}{Colors.BOLD}enabled{Colors.ENDC} (backend={backend})"
+    )
+
+    interpreter_cfg: dict = {
+        "enabled": True,
+        "backend": backend,
+        "goal_similarity_threshold": 0.65,
+        "novelty_threshold": 0.4,
+        "episode_store": "~/.opencastor/episodes/",
+        "max_episodes": 2000,
+        "rag_k": 3,
+    }
+
+    if backend in ("gemini", "auto"):
+        interpreter_cfg["gemini"] = {"dimensions": 1536}
+
+    if backend in ("local", "local_extended", "auto"):
+        interpreter_cfg["local"] = {"model": "openai/clip-vit-base-patch32"}
+
+    return {"interpreter": interpreter_cfg}
+
+
+# ---------------------------------------------------------------------------
 # Legacy choose_provider — used by Advanced flow
 # ---------------------------------------------------------------------------
 def choose_provider():
@@ -2647,6 +2720,9 @@ def main():
         # Step 10: Self-Improving Loop (optional, disabled by default)
         learner_config = choose_learner_setup(provider_key, already_authed)
 
+        # Step 10b: Semantic scene memory (optional, disabled by default)
+        embedding_config = choose_embedding_setup()
+
         # Step 11: Messaging channel (optional)
         print(f"\n{Colors.GREEN}--- MESSAGING (optional) ---{Colors.ENDC}")
         print("  Connect a messaging app to talk to your robot.")
@@ -2705,6 +2781,10 @@ def main():
         # Merge learner config
         if learner_config:
             rcan_data.update(learner_config)
+
+        # Merge embedding interpreter config
+        if embedding_config:
+            rcan_data.update(embedding_config)
     else:
         # -- Advanced Path (legacy) --
         agent_config = choose_provider()
