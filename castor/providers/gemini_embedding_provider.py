@@ -25,6 +25,18 @@ from .embedding_backend import EmbeddingBackend
 
 logger = logging.getLogger("OpenCastor.GeminiEmbedding")
 
+
+def _mime_from_bytes(data: bytes, default_mime: str) -> str:
+    """Detect MIME type from magic bytes; fall back to *default_mime*."""
+    if len(data) >= 8 and data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if len(data) >= 2 and data[:2] == b"\xff\xd8":
+        return "image/jpeg"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+        return "audio/wav"
+    return default_mime
+
+
 try:
     from google import genai as _genai
     from google.genai import types as _gtypes
@@ -143,7 +155,11 @@ class GeminiEmbeddingProvider(EmbeddingBackend):
                 contents=text,
                 config={"output_dimensionality": self._dims},
             )
-            return np.array(result.embeddings[0].values, dtype=np.float32)
+            vec = np.array(result.embeddings[0].values, dtype=np.float32)
+            norm = float(np.linalg.norm(vec))
+            if norm < 1e-9:
+                return self._zeros()
+            return (vec / norm).astype(np.float32)
         except Exception as exc:
             logger.warning("embed_text failed (%s) — returning zeros", exc)
             return self._zeros()
@@ -175,13 +191,15 @@ class GeminiEmbeddingProvider(EmbeddingBackend):
 
         if frame_bytes and len(frame_bytes) > 100:
             try:
-                contents.append(_gtypes.Part.from_bytes(data=frame_bytes, mime_type="image/jpeg"))
+                img_mime = _mime_from_bytes(frame_bytes, "image/jpeg")
+                contents.append(_gtypes.Part.from_bytes(data=frame_bytes, mime_type=img_mime))
             except Exception as exc:
                 logger.debug("Could not attach frame to embedding request: %s", exc)
 
         if audio_bytes and len(audio_bytes) > 100:
             try:
-                contents.append(_gtypes.Part.from_bytes(data=audio_bytes, mime_type="audio/mpeg"))
+                audio_mime = _mime_from_bytes(audio_bytes, "audio/mpeg")
+                contents.append(_gtypes.Part.from_bytes(data=audio_bytes, mime_type=audio_mime))
             except Exception as exc:
                 logger.debug("Could not attach audio to embedding request: %s", exc)
 
@@ -191,7 +209,11 @@ class GeminiEmbeddingProvider(EmbeddingBackend):
                 contents=contents,
                 config={"output_dimensionality": self._dims},
             )
-            return np.array(result.embeddings[0].values, dtype=np.float32)
+            vec = np.array(result.embeddings[0].values, dtype=np.float32)
+            norm = float(np.linalg.norm(vec))
+            if norm < 1e-9:
+                return self._zeros()
+            return (vec / norm).astype(np.float32)
         except Exception as exc:
             logger.warning("embed_scene failed (%s) — returning zeros", exc)
             return self._zeros()

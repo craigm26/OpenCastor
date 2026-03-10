@@ -120,13 +120,20 @@ class ImageBindProvider(EmbeddingBackend):
                 import os
                 import tempfile
 
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                    f.write(audio_bytes)
-                    tmp_path = f.name
-                inputs[ModalityType.AUDIO] = ib_data.load_and_transform_audio_data(
-                    [tmp_path], device="cpu"
-                )
-                os.unlink(tmp_path)
+                tmp_path = None
+                try:
+                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                        f.write(audio_bytes)
+                        tmp_path = f.name
+                    inputs[ModalityType.AUDIO] = ib_data.load_and_transform_audio_data(
+                        [tmp_path], device="cpu"
+                    )
+                finally:
+                    if tmp_path is not None:
+                        try:
+                            os.unlink(tmp_path)
+                        except OSError:
+                            pass
 
             if not inputs:
                 return np.zeros(_DEFAULT_DIMS, dtype=np.float32)
