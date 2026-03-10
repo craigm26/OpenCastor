@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import io
+import json
+import logging
+import os
 import statistics
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Awaitable, Callable, List
+
+logger = logging.getLogger("OpenCastor.Benchmarker")
 
 try:
     from rich.console import Console
@@ -103,3 +111,137 @@ def print_results(results: List[BenchmarkResult]) -> None:
             print(
                 f"{r.provider}/{r.model}: mean={r.mean_ms:.0f}ms p95={r.p95_ms:.0f}ms errors={r.errors}"
             )
+
+
+def _make_synthetic_image() -> bytes:
+    """Generate a small synthetic 64x64 RGB JPEG image for benchmarking."""
+    try:
+        from PIL import Image
+
+        img = Image.new("RGB", (64, 64), color=(100, 149, 237))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        return buf.getvalue()
+    except Exception:
+        # Minimal JPEG-like bytes if Pillow not available
+        return b"\xff\xd8\xff\xe0" + b"\x00" * 60 + b"\xff\xd9"
+
+
+def run_embedding_benchmark(config: dict | None = None, backends: list | None = None) -> dict:
+    """Benchmark embedding backends for latency.
+
+    Measures p50/p95 latency over 10 calls per backend using a small
+    inline test corpus (5 text strings + 3 synthetic 64x64 JPEG images).
+
+    Results are saved to ``~/.opencastor/benchmarks/embedding_YYYY-MM-DD.json``.
+
+    Args:
+        config:   Optional config dict passed to each provider.
+        backends: List of backend names to test (default: ``["mock"]``).
+                  Supported values: ``"mock"``, ``"local"``, ``"gemini"``.
+
+    Returns:
+        Dict with keys: ``backends`` (list of result dicts), ``saved_to`` (path).
+    """
+    cfg = config or {}
+    if backends is None:
+        backends = ["mock"]
+
+    _corpus_text = [
+        "the robot moves forward",
+        "an obstacle is detected on the left side",
+        "the battery level is at 20 percent",
+        "reaching the charging station",
+        "navigate to the kitchen table",
+    ]
+    _images = [_make_synthetic_image() for _ in range(3)]
+
+    results = []
+
+    for backend_name in backends:
+        logger.info("Benchmarking embedding backend: %s", backend_name)
+        try:
+            from .providers.clip_embedding_provider import CLIPEmbeddingProvider
+            from .providers.gemini_embedding_provider import GeminiEmbeddingProvider
+
+            if backend_name == "gemini":
+                provider = GeminiEmbeddingProvider(cfg.get("gemini", {}))
+            elif backend_name == "mock":
+                provider = CLIPEmbeddingProvider({"model": "mock"})
+            else:
+                provider = CLIPEmbeddingProvider(cfg.get("local", {}))
+
+            latencies: list[float] = []
+            errors = 0
+
+            # Text embed calls (5 texts x 2 = 10 calls)
+            for text in _corpus_text:
+                t0 = time.perf_counter()
+                try:
+                    provider.embed(text=text)
+                    latencies.append((time.perf_counter() - t0) * 1000)
+                except Exception:
+                    errors += 1
+
+            # Image embed calls (3 images)
+            for img in _images:
+                t0 = time.perf_counter()
+                try:
+                    provider.embed(image_bytes=img)
+                    latencies.append((time.perf_counter() - t0) * 1000)
+                except Exception:
+                    errors += 1
+
+            # Mixed text+image (2 calls)
+            for text, img in zip(_corpus_text[:2], _images[:2], strict=False):
+                t0 = time.perf_counter()
+                try:
+                    provider.embed(text=text, image_bytes=img)
+                    latencies.append((time.perf_counter() - t0) * 1000)
+                except Exception:
+                    errors += 1
+
+            sorted_lats = sorted(latencies)
+            n = len(sorted_lats)
+            p50 = sorted_lats[max(0, int(n * 0.50) - 1)] if n else 0.0
+            p95 = sorted_lats[max(0, int(n * 0.95) - 1)] if n else 0.0
+
+            results.append(
+                {
+                    "backend": backend_name,
+                    "backend_name": provider.backend_name,
+                    "dimensions": provider.dimensions,
+                    "n_calls": len(latencies) + errors,
+                    "errors": errors,
+                    "p50_ms": round(p50, 2),
+                    "p95_ms": round(p95, 2),
+                    "mean_ms": round(sum(latencies) / len(latencies), 2) if latencies else 0.0,
+                }
+            )
+            logger.info(
+                "Backend %s: p50=%.1fms p95=%.1fms errors=%d",
+                backend_name,
+                p50,
+                p95,
+                errors,
+            )
+        except Exception as exc:
+            logger.warning("Benchmark failed for backend %s: %s", backend_name, exc)
+            results.append({"backend": backend_name, "error": str(exc)})
+
+    # Save results
+    today = datetime.now().strftime("%Y-%m-%d")
+    save_dir = Path(os.path.expanduser("~/.opencastor/benchmarks"))
+    save_dir.mkdir(parents=True, exist_ok=True)
+    save_path = save_dir / f"embedding_{today}.json"
+    payload = {
+        "date": today,
+        "backends": results,
+    }
+    try:
+        save_path.write_text(json.dumps(payload, indent=2))
+        logger.info("Embedding benchmark results saved to %s", save_path)
+    except Exception as exc:
+        logger.warning("Could not save benchmark results: %s", exc)
+
+    return {**payload, "saved_to": str(save_path)}
