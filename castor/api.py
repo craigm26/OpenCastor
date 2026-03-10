@@ -951,6 +951,31 @@ async def provider_health():
     }
 
 
+@app.get("/api/interpreter/status", dependencies=[Depends(verify_token)])
+async def interpreter_status():
+    """GET /api/interpreter/status — Return EmbeddingInterpreter status."""
+    _disabled = {
+        "enabled": False,
+        "backend": "none",
+        "dimensions": 0,
+        "episode_count": 0,
+        "last_goal_similarity": None,
+        "escalations_session": 0,
+        "avg_latency_ms": None,
+        "recent_episodes": [],
+    }
+    if state.brain is None:
+        return _disabled
+    brain = state.brain
+    interp = getattr(brain, "interpreter", None)
+    if interp is None:
+        return _disabled
+    try:
+        return interp.status()
+    except Exception as exc:
+        return {**_disabled, "error": str(exc)}
+
+
 @app.get("/api/pool/health", dependencies=[Depends(verify_token)])
 async def pool_health():
     """GET /api/pool/health — Health, circuit breaker, adaptive and replay state for ProviderPool.

@@ -310,8 +310,8 @@ st.markdown(
 )
 
 # ── TABS ──────────────────────────────────────────────────────────────────────
-_tab_ctrl, _tab_status, _tab_chat, _tab_fleet, _tab_builder, _tab_settings = st.tabs(
-    ["🕹️ Control", "📊 Status", "💬 Chat", "🤖 Fleet", "🔧 Builder", "⚙️ Settings"]
+_tab_ctrl, _tab_status, _tab_chat, _tab_fleet, _tab_builder, _tab_emb, _tab_settings = st.tabs(
+    ["🕹️ Control", "📊 Status", "💬 Chat", "🤖 Fleet", "🔧 Builder", "🧠 Embedding", "⚙️ Settings"]
 )
 
 
@@ -1373,6 +1373,62 @@ with _tab_builder:
                     st.warning("Shutting down…")
                 except Exception as _sde:
                     st.error(str(_sde))
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 🧠 EMBEDDING TAB
+# ═══════════════════════════════════════════════════════════════════════════════
+with _tab_emb:
+    st.subheader("🧠 Embedding Interpreter")
+    try:
+        _emb_r = _req.get(f"{GW}/api/interpreter/status", headers=_hdr(), timeout=3)
+        _emb_d = _emb_r.json() if _emb_r.status_code == 200 else {"enabled": False}
+    except Exception:
+        _emb_d = {"enabled": False}
+
+    if not _emb_d.get("enabled"):
+        st.info(
+            "Embedding Interpreter is disabled. Enable it in your RCAN config:\n\n"
+            "```yaml\ninterpreter:\n  enabled: true\n  backend: auto\n```"
+        )
+    else:
+        # Status cards
+        _ec1, _ec2, _ec3, _ec4 = st.columns(4)
+        with _ec1:
+            st.metric("Backend", _emb_d.get("backend", "—"))
+        with _ec2:
+            st.metric("Episodes", _emb_d.get("episode_count", 0))
+        with _ec3:
+            _sim = _emb_d.get("last_goal_similarity")
+            st.metric("Goal Similarity", f"{_sim:.2f}" if _sim is not None else "—")
+        with _ec4:
+            st.metric("Escalations", _emb_d.get("escalations_session", 0))
+
+        st.caption(
+            f"Backend: {_emb_d.get('backend', '?')} · "
+            f"Dims: {_emb_d.get('dimensions', '?')} · "
+            f"Avg latency: {_emb_d.get('avg_latency_ms') or '—'}ms"
+        )
+
+        # Recent episodes table
+        _recent = _emb_d.get("recent_episodes", [])
+        if _recent:
+            st.subheader("Recent Episodes")
+            import pandas as _pd
+
+            _ep_rows = []
+            for ep in _recent[-10:]:
+                _ep_rows.append(
+                    {
+                        "Timestamp": ep.get("timestamp", "")[:19].replace("T", " "),
+                        "Instruction": ep.get("instruction", "")[:40],
+                        "Action": ep.get("action_type", "?"),
+                        "Outcome": ep.get("outcome", "?"),
+                        "Similarity": round(ep.get("goal_similarity", 0), 3),
+                    }
+                )
+            st.dataframe(_pd.DataFrame(_ep_rows), use_container_width=True, hide_index=True)
+        else:
+            st.info("No episodes stored yet. Run the robot to populate the episode store.")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ⚙️ SETTINGS TAB
