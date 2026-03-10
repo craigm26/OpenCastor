@@ -35,8 +35,8 @@ PANE_FILTERS = {
 
 LAYOUTS = {
     "full": {
-        "desc": "7-pane: Brain, Eyes, Body, Safety, Comms, Logs, Status",
-        "panes": ["brain", "eyes", "body", "safety", "comms", "logs", "status"],
+        "desc": "8-pane: Brain, Eyes, Body, Safety, Comms, Logs, Status, Embedding",
+        "panes": ["brain", "eyes", "body", "safety", "comms", "logs", "status", "embedding"],
     },
     "minimal": {
         "desc": "4-pane: Brain, Body, Logs, Status",
@@ -56,6 +56,7 @@ PANE_TITLES = {
     "comms": "💬 Comms (Messaging)",
     "logs": "📋 Full Logs",
     "status": "📊 Status (Agents/Swarm/Improvements)",
+    "embedding": "🧠 Embedding Interpreter",
 }
 
 PANE_COLORS = {
@@ -66,6 +67,7 @@ PANE_COLORS = {
     "comms": "magenta",
     "logs": "white",
     "status": "blue",
+    "embedding": "cyan",
 }
 
 
@@ -412,12 +414,48 @@ def kill_existing_session():
     )
 
 
+def _run_embedding_loop() -> None:
+    """Render embedding interpreter metrics to terminal. Runs in a tmux pane."""
+    import time as _time
+
+    try:
+        import requests
+    except ImportError:
+        print("🧠 Embedding Interpreter: requests not installed")
+        _time.sleep(999999)
+        return
+
+    BASE = "http://localhost:18789"
+    while True:
+        try:
+            r = requests.get(f"{BASE}/api/interpreter/status", timeout=2)
+            d = r.json()
+        except Exception:
+            d = {"enabled": False}
+
+        # Clear + render
+        print("\033[2J\033[H", end="")
+        if not d.get("enabled"):
+            print("🧠 Embedding Interpreter: disabled")
+        else:
+            sim = d.get("last_goal_similarity", 0) or 0
+            bar = "█" * int(sim * 20) + "░" * (20 - int(sim * 20))
+            print("🧠 EMBEDDING INTERPRETER")
+            print(f"  Backend   : {d.get('backend', '?')}")
+            print(f"  Episodes  : {d.get('episode_count', 0)}")
+            print(f"  Goal sim  : {sim:.2f} [{bar}]")
+            print(f"  Escalations: {d.get('escalations_session', 0)} (session)")
+            print(f"  Latency   : {d.get('avg_latency_ms') or '—'}ms avg")
+        _time.sleep(2)
+
+
 def build_log_command(config_path, pane_name):
     """Build the command for a specific pane.
 
     Each pane runs the robot and filters logs to its subsystem.
     The 'logs' pane shows everything unfiltered.
     The 'status' pane runs the live status monitor (agents/swarm/improvements).
+    The 'embedding' pane renders EmbeddingInterpreter metrics.
     """
     if pane_name == "logs":
         # Full unfiltered log — tail the log file or run the robot
@@ -432,6 +470,12 @@ def build_log_command(config_path, pane_name):
         return (
             f"{sys.executable} -c "
             f"'from castor.dashboard_tui import _run_status_loop; _run_status_loop()'"
+        )
+
+    if pane_name == "embedding":
+        return (
+            f"{sys.executable} -c "
+            f"'from castor.dashboard_tui import _run_embedding_loop; _run_embedding_loop()'"
         )
 
     pattern = PANE_FILTERS.get(pane_name, "")
