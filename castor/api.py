@@ -1956,19 +1956,14 @@ async def voice_listen():
         503: {"error": "..."} if listener is not available
     """
     if state.listener is None:
-        raise HTTPException(
-            status_code=503, detail={"error": "STT listener not initialized", "code": "HTTP_503"}
-        )
+        raise HTTPException(status_code=503, detail="STT listener not initialized")
     if not state.listener.enabled:
-        raise HTTPException(
-            status_code=503, detail={"error": "no audio input device", "code": "HTTP_503"}
-        )
+        raise HTTPException(status_code=503, detail="no audio input device")
 
     transcript = await asyncio.to_thread(state.listener.listen_once)
     if transcript is None:
         raise HTTPException(
-            status_code=503,
-            detail={"error": "Could not capture audio or recognise speech", "code": "HTTP_503"},
+            status_code=503, detail="Could not capture audio or recognise speech"
         )
 
     thought_dict: Optional[dict] = None
