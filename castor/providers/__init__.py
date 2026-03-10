@@ -2,6 +2,7 @@ from .anthropic_provider import AnthropicProvider
 from .apple_provider import AppleProvider
 from .consensus_provider import ConsensusProvider
 from .deepseek_provider import DeepSeekProvider
+from .embedding_backend import EmbeddingBackend
 from .google_provider import GoogleProvider
 from .grok_provider import GrokProvider
 from .groq_provider import GroqProvider
@@ -18,6 +19,7 @@ __all__ = [
     "ConsensusProvider",
     "AppleProvider",
     "DeepSeekProvider",
+    "EmbeddingBackend",
     "GoogleProvider",
     "GrokProvider",
     "GroqProvider",
