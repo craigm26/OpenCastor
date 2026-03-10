@@ -1547,6 +1547,48 @@ with _tab_settings:
         unsafe_allow_html=True,
     )
 
+    st.divider()
+
+    with st.expander("🧪 Test Suite", expanded=False):
+        st.caption("Run the automated test suite from the dashboard.")
+        _tc1, _tc2 = st.columns(2)
+        with _tc1:
+            if st.button("▶ Run full test suite", key="run_full_tests"):
+                try:
+                    _req.post(
+                        f"{GW}/api/test/run", json={"suite": "full"}, headers=_hdr(), timeout=5
+                    )
+                    st.toast("Test suite started!", icon="🧪")
+                except Exception as _e:
+                    st.error(str(_e))
+        with _tc2:
+            if st.button("▶ Run embedding tests", key="run_emb_tests"):
+                try:
+                    _req.post(
+                        f"{GW}/api/test/run",
+                        json={"suite": "embedding"},
+                        headers=_hdr(),
+                        timeout=5,
+                    )
+                    st.toast("Embedding tests started!", icon="🧠")
+                except Exception as _e:
+                    st.error(str(_e))
+        try:
+            _tr = _req.get(f"{GW}/api/test/status", headers=_hdr(), timeout=3)
+            _trd = _tr.json() if _tr.status_code == 200 else {}
+        except Exception:
+            _trd = {}
+        if _trd.get("running"):
+            st.info("⏳ Test suite running…")
+        elif _trd.get("result"):
+            _res = _trd["result"]
+            if _res.get("passed"):
+                st.success(f"✅ Tests passed (suite: {_res.get('suite', '?')})")
+            else:
+                st.error(f"❌ Tests failed (suite: {_res.get('suite', '?')})")
+            if _res.get("stdout"):
+                st.code(_res["stdout"][-2000:], language="text")
+
 
 # ── AUTO-REFRESH ───────────────────────────────────────────────────────────────
 time.sleep(refresh_s)

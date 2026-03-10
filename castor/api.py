@@ -6945,6 +6945,102 @@ async def hitl_authorize(body: HiTLAuthorizeRequest, request: Request):
     )
 
 
+# ---------------------------------------------------------------------------
+# Test suite runner endpoints  (issue #515)
+# ---------------------------------------------------------------------------
+
+_test_run_state: dict = {"running": False, "result": None, "started_at": None}
+_test_run_lock = threading.Lock()
+
+
+class TestRunRequest(BaseModel):
+    """Request body for POST /api/test/run."""
+
+    suite: str = "full"  # "full" | "embedding" | "fast"
+
+
+@app.post("/api/test/run", dependencies=[Depends(verify_token)])
+async def test_run(body: TestRunRequest):
+    """Spawn a pytest subprocess and record results."""
+    import json as _json
+    import subprocess as _subprocess
+
+    with _test_run_lock:
+        if _test_run_state["running"]:
+            return {"error": "Test run already in progress", "code": "HTTP_409"}
+        _test_run_state["running"] = True
+        _test_run_state["started_at"] = time.time()
+
+    def _run():
+        suite_map = {
+            "full": ["python", "-m", "pytest", "tests/", "-x", "-q", "--tb=short", "--no-header"],
+            "embedding": [
+                "python",
+                "-m",
+                "pytest",
+                "tests/test_embedding_interpreter.py",
+                "-v",
+                "--tb=short",
+                "--no-header",
+            ],
+            "fast": [
+                "python",
+                "-m",
+                "pytest",
+                "tests/",
+                "-x",
+                "-q",
+                "--tb=short",
+                "-m",
+                "not slow",
+            ],
+        }
+        cmd = suite_map.get(body.suite, suite_map["full"])
+        try:
+            proc = _subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            result = {
+                "returncode": proc.returncode,
+                "stdout": proc.stdout[-8000:],
+                "stderr": proc.stderr[-2000:],
+                "passed": proc.returncode == 0,
+                "suite": body.suite,
+                "completed_at": time.time(),
+            }
+        except Exception as exc:
+            result = {
+                "returncode": -1,
+                "stdout": "",
+                "stderr": str(exc),
+                "passed": False,
+                "suite": body.suite,
+                "completed_at": time.time(),
+            }
+        # Save to disk
+        try:
+            _last_run_path = Path.home() / ".opencastor" / "last_test_run.json"
+            _last_run_path.parent.mkdir(parents=True, exist_ok=True)
+            _last_run_path.write_text(_json.dumps(result, indent=2))
+        except Exception:
+            pass
+        with _test_run_lock:
+            _test_run_state["running"] = False
+            _test_run_state["result"] = result
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"status": "started", "suite": body.suite}
+
+
+@app.get("/api/test/status", dependencies=[Depends(verify_token)])
+async def test_status():
+    """Return last test run result + running flag."""
+    with _test_run_lock:
+        return {
+            "running": _test_run_state["running"],
+            "result": _test_run_state["result"],
+            "started_at": _test_run_state["started_at"],
+        }
+
+
 @app.on_event("shutdown")
 async def on_shutdown():
     # Close WebRTC peers
