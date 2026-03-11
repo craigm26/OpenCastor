@@ -39,7 +39,7 @@ jobs:
       contents: read
     steps:
       - name: Verify tag commit is on main and CI passed
-        uses: actions/github-script@v8
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7
         with:
           script: |
             const owner = context.repo.owner;
@@ -93,10 +93,10 @@ jobs:
         python-version: ['3.10', '3.11', '3.12']
 
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -225,7 +225,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: python3 .github/scripts/generate_sbom.py
       - name: Attach SBOM to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@e7a8f85ef1c1a55d4177bc9474eb8a0550d67c05  # v2
         with:
           files: opencastor-${{ github.ref_name }}-sbom.cyclonedx.json
           fail_on_unmatched_files: false

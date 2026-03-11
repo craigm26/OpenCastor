@@ -187,7 +187,7 @@ def _build_ssh_cmd(
     host: str,
     remote_cmd: str,
 ) -> List[str]:
-    cmd = ["ssh", "-p", str(port), "-o", "StrictHostKeyChecking=no", "-o", "BatchMode=yes"]
+    cmd = ["ssh", "-p", str(port), "-o", "StrictHostKeyChecking=accept-new", "-o", "BatchMode=yes"]
     if key_file:
         cmd += ["-i", key_file]
     cmd += [f"{user}@{host}", remote_cmd]
@@ -200,7 +200,7 @@ def _build_scp_cmd(
     local_src: str,
     remote_dest: str,
 ) -> List[str]:
-    cmd = ["scp", "-P", str(port), "-o", "StrictHostKeyChecking=no"]
+    cmd = ["scp", "-P", str(port), "-o", "StrictHostKeyChecking=accept-new"]
     if key_file:
         cmd += ["-i", key_file]
     cmd += [local_src, remote_dest]

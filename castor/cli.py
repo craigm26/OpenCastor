@@ -41,6 +41,8 @@ Usage:
 """
 
 import argparse
+import hashlib
+import hmac
 import os
 import sys
 import traceback
@@ -2158,6 +2160,25 @@ def cmd_flash(args) -> None:
                 print(f"  Cached to {fw_path}")
             else:
                 print(f"  Using cached {fw_path}")
+
+            # --- Firmware integrity check (#562) ---
+            all_assets = release_data.get("assets", [])
+            sha_assets = [a for a in all_assets if a["name"].endswith(".sha256")]
+            if sha_assets:
+                sha_url = sha_assets[0]["browser_download_url"]
+                with urllib.request.urlopen(sha_url, timeout=15) as r:  # noqa: S310
+                    expected_hash = r.read().decode().split()[0].strip()
+                actual_hash = hashlib.sha256(fw_path.read_bytes()).hexdigest()
+                if not hmac.compare_digest(actual_hash, expected_hash):
+                    fw_path.unlink(missing_ok=True)  # delete corrupted cache
+                    print(f"  ERROR: Firmware checksum mismatch!")
+                    print(f"    expected: {expected_hash}")
+                    print(f"    got:      {actual_hash}")
+                    print("  Aborting flash — firmware may be corrupted or tampered.")
+                    return
+                print(f"  SHA-256 verified: {actual_hash[:16]}...")
+            else:
+                print("  WARNING: No .sha256 asset found for this release — skipping checksum verification.")
         except Exception as exc:
             print(f"  Failed to fetch firmware: {exc}")
             return

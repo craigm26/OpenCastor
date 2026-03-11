@@ -85,11 +85,21 @@ app = FastAPI(
 )
 
 # CORS: configurable via OPENCASTOR_CORS_ORIGINS env var (comma-separated).
-# Defaults to ["*"] for local development. Restrict for production.
-_cors_origins = os.getenv("OPENCASTOR_CORS_ORIGINS", "*").split(",")
+# Defaults to localhost dashboard only. Set OPENCASTOR_CORS_ORIGINS="*" to allow all origins
+# (development only — never use "*" in production).
+_cors_origins = os.getenv(
+    "OPENCASTOR_CORS_ORIGINS",
+    "http://localhost:8501,http://127.0.0.1:8501",
+).split(",")
+_cors_origins_stripped = [o.strip() for o in _cors_origins]
+if _cors_origins_stripped == ["*"]:
+    logger.warning(
+        "CORS is configured to allow all origins (*). "
+        "Set OPENCASTOR_CORS_ORIGINS to restrict origins in production."
+    )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in _cors_origins],
+    allow_origins=_cors_origins_stripped,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -244,6 +254,11 @@ async def verify_token(request: Request):
     """
     # Allow token via query param (e.g. for MJPEG <img> tags and VLC)
     query_token = request.query_params.get("token", "")
+    if query_token:
+        logger.warning(
+            "API token supplied via ?token= query parameter — this exposes the token in "
+            "server access logs. Use 'Authorization: Bearer <token>' header instead."
+        )
     auth = request.headers.get("Authorization", "") or (
         f"Bearer {query_token}" if query_token else ""
     )
@@ -280,9 +295,9 @@ async def verify_token(request: Request):
         except Exception:
             pass  # Fall through to static token check
 
-    # --- Layer 3: Static API token ---
+    # --- Layer 3: Static API token (constant-time compare to prevent timing attacks) ---
     if API_TOKEN:
-        if auth != f"Bearer {API_TOKEN}":
+        if not hmac.compare_digest(auth.encode(), f"Bearer {API_TOKEN}".encode()):
             raise HTTPException(status_code=401, detail="Invalid or missing API token")
         request.state.jwt_username = "api"
         request.state.jwt_role = "admin"
@@ -337,10 +352,25 @@ class IntentReprioritizeRequest(BaseModel):
 # ---------------------------------------------------------------------------
 @app.get("/health")
 async def health():
-    """Health check -- returns OK if the gateway is running."""
+    """Health check -- returns OK if the gateway is running (unauthenticated, minimal info)."""
+    import castor as _castor_pkg
+
     return {
         "status": "ok",
         "uptime_s": round(time.time() - state.boot_time, 1),
+        "version": _castor_pkg.__version__,
+    }
+
+
+@app.get("/api/health/detail", dependencies=[Depends(verify_token)])
+async def health_detail():
+    """Authenticated health check with full runtime state (brain, driver, channels)."""
+    import castor as _castor_pkg
+
+    return {
+        "status": "ok",
+        "uptime_s": round(time.time() - state.boot_time, 1),
+        "version": _castor_pkg.__version__,
         "brain": state.brain is not None,
         "driver": state.driver is not None,
         "channels": list(state.channels.keys()),
@@ -787,9 +817,9 @@ async def reprioritize_intent(req: IntentReprioritizeRequest, request: Request):
 # ---------------------------------------------------------------------------
 
 
-@app.get("/api/metrics")
+@app.get("/api/metrics", dependencies=[Depends(verify_token)])
 async def get_metrics():
-    """Prometheus text exposition format metrics (no auth — safe for scrapers)."""
+    """Prometheus text exposition format metrics (auth required — exposes provider/model info)."""
     from fastapi.responses import Response as _Response
 
     from castor.metrics import get_registry
@@ -2343,7 +2373,18 @@ async def behavior_stop():
 
 @app.get("/api/behavior/status")
 async def behavior_status():
-    """Return the current behavior job status (no auth required for status polling).
+    """Return whether a behavior job is running (unauthenticated, no internal details).
+
+    Returns:
+        200: ``{"running": bool}``
+    """
+    running = False if state.behavior_job is None else state.behavior_job.get("running", False)
+    return {"running": running}
+
+
+@app.get("/api/behavior/status/detail", dependencies=[Depends(verify_token)])
+async def behavior_status_detail():
+    """Return full behavior job state including name and job_id (authenticated).
 
     Returns:
         200: ``{"running": bool, "name": str|None, "job_id": str|None}``
@@ -5814,9 +5855,31 @@ async def generate_rcan_templates():
 # ── Teams / Matrix webhook inbound ────────────────────────────────────────────
 
 
+def _verify_webhook_hmac(secret_env: str, raw_body: bytes, signature_header: str) -> bool:
+    """Verify HMAC-SHA256 webhook signature.
+
+    Returns True if valid, or if no secret is configured (backward compatible).
+    Set the env var to enforce signature verification.
+    """
+    secret = os.getenv(secret_env, "")
+    if not secret:
+        logger.warning(
+            "Webhook secret %s not configured — skipping signature verification. "
+            "Set this env var to enforce HMAC verification.",
+            secret_env,
+        )
+        return True
+    expected = "sha256=" + hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature_header or "")
+
+
 @app.post("/webhooks/teams")
 async def teams_webhook(request: Request):
-    body = await request.json()
+    raw_body = await request.body()
+    sig = request.headers.get("X-Hub-Signature-256", "")
+    if not _verify_webhook_hmac("OPENCASTOR_TEAMS_WEBHOOK_SECRET", raw_body, sig):
+        raise HTTPException(status_code=401, detail={"error": "Invalid webhook signature"})
+    body = await request.json() if not raw_body else __import__("json").loads(raw_body)
     channel = state.channels.get("teams")
     if not channel:
         raise HTTPException(status_code=503, detail={"error": "Teams channel not active"})
@@ -5828,6 +5891,10 @@ async def teams_webhook(request: Request):
 @app.post("/webhooks/matrix")
 async def matrix_webhook(request: Request):
     """Placeholder for Matrix push gateway events (sync is handled by matrix-nio directly)."""
+    raw_body = await request.body()
+    sig = request.headers.get("X-Hub-Signature-256", "")
+    if not _verify_webhook_hmac("OPENCASTOR_MATRIX_WEBHOOK_SECRET", raw_body, sig):
+        raise HTTPException(status_code=401, detail={"error": "Invalid webhook signature"})
     return {"ok": True}
 
 

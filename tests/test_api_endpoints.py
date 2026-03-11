@@ -161,40 +161,35 @@ class TestHealthEndpoint:
         assert isinstance(body["uptime_s"], (int, float))
         assert body["uptime_s"] >= 0
 
-    def test_health_brain_false_when_not_loaded(self, client):
-        resp = client.get("/health")
-        assert resp.json()["brain"] is False
-
-    def test_health_brain_true_when_loaded(self, client, api_mod):
-        api_mod.state.brain = object()
-        resp = client.get("/health")
-        assert resp.json()["brain"] is True
-
-    def test_health_driver_false_when_not_loaded(self, client):
-        resp = client.get("/health")
-        assert resp.json()["driver"] is False
-
-    def test_health_driver_true_when_loaded(self, client, api_mod):
-        api_mod.state.driver = _make_mock_driver()
-        resp = client.get("/health")
-        assert resp.json()["driver"] is True
-
-    def test_health_channels_empty(self, client):
-        resp = client.get("/health")
-        assert resp.json()["channels"] == []
-
-    def test_health_channels_lists_active(self, client, api_mod):
-        api_mod.state.channels = {"telegram": MagicMock(), "discord": MagicMock()}
-        resp = client.get("/health")
-        channels = resp.json()["channels"]
-        assert "telegram" in channels
-        assert "discord" in channels
-
     def test_health_no_auth_required_when_token_set(self, client, api_mod):
         """Health endpoint must remain accessible even when API auth is on."""
         api_mod.API_TOKEN = "secret-token-123"
         resp = client.get("/health")
         assert resp.status_code == 200
+
+    def test_health_does_not_expose_channels(self, client):
+        """/health must not expose internal channel names (use /api/health/detail)."""
+        resp = client.get("/health")
+        body = resp.json()
+        assert "channels" not in body
+        assert "brain" not in body
+        assert "driver" not in body
+
+    def test_health_detail_requires_auth(self, client, api_mod):
+        """/api/health/detail must require a valid token."""
+        api_mod.API_TOKEN = "secret-token-123"
+        resp = client.get("/api/health/detail")
+        assert resp.status_code == 401
+
+    def test_health_detail_returns_full_info(self, client, api_mod):
+        """/api/health/detail returns brain/driver/channels when authenticated."""
+        api_mod.API_TOKEN = ""  # no auth required in test
+        api_mod.state.channels = {"telegram": MagicMock()}
+        resp = client.get("/api/health/detail")
+        body = resp.json()
+        assert "channels" in body
+        assert "brain" in body
+        assert "driver" in body
 
 
 # =====================================================================
@@ -930,11 +925,12 @@ class TestWhatsAppStatus:
 # CORS
 # =====================================================================
 class TestCORS:
-    def test_cors_preflight(self, client):
+    def test_cors_preflight_allowed_origin(self, client):
+        """Preflight from the dashboard origin (localhost:8501) must be allowed."""
         resp = client.options(
             "/api/status",
             headers={
-                "Origin": "http://localhost:3000",
+                "Origin": "http://localhost:8501",
                 "Access-Control-Request-Method": "GET",
                 "Access-Control-Request-Headers": "Authorization",
             },
@@ -942,13 +938,19 @@ class TestCORS:
         assert resp.status_code == 200
         assert "access-control-allow-origin" in resp.headers
 
-    def test_cors_header_on_response(self, client):
+    def test_cors_header_on_response_allowed_origin(self, client):
+        """Requests from the dashboard origin must include CORS headers."""
         resp = client.get(
             "/health",
-            headers={"Origin": "http://localhost:3000"},
+            headers={"Origin": "http://localhost:8501"},
         )
         assert resp.status_code == 200
         assert "access-control-allow-origin" in resp.headers
+
+    def test_cors_wildcard_not_default(self, client):
+        """Default CORS must NOT be wildcard (*) — only specific origins allowed."""
+        import castor.api as api_mod
+        assert api_mod._cors_origins_stripped != ["*"]
 
 
 # =====================================================================
@@ -978,12 +980,13 @@ class TestEdgeCases:
         assert resp.status_code == 200
 
     def test_concurrent_state_changes(self, client, api_mod):
-        """Ensure health endpoint reflects latest state after mutation."""
-        assert client.get("/health").json()["brain"] is False
+        """Ensure /api/health/detail reflects latest state after mutation."""
+        api_mod.API_TOKEN = ""  # open access for test
+        assert client.get("/api/health/detail").json()["brain"] is False
         api_mod.state.brain = _make_mock_brain()
-        assert client.get("/health").json()["brain"] is True
+        assert client.get("/api/health/detail").json()["brain"] is True
         api_mod.state.brain = None
-        assert client.get("/health").json()["brain"] is False
+        assert client.get("/api/health/detail").json()["brain"] is False
 
     def test_action_exclude_none_fields(self, client, api_mod):
         """ActionRequest should exclude None fields in response."""
@@ -1058,8 +1061,9 @@ class TestRequestValidation:
 # =====================================================================
 class TestResponseFormat:
     def test_health_response_keys(self, client):
+        """Public /health returns only status, uptime_s, version (no internal state)."""
         body = client.get("/health").json()
-        expected_keys = {"status", "uptime_s", "brain", "driver", "channels"}
+        expected_keys = {"status", "uptime_s", "version"}
         assert expected_keys == set(body.keys())
 
     def test_command_response_keys(self, client, api_mod):
