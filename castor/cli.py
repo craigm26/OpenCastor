@@ -1324,6 +1324,31 @@ def cmd_schedule(args) -> None:
         print("  Usage: castor schedule <list|add|remove|install>")
 
 
+def cmd_stop(args) -> None:
+    """castor stop — gracefully stop the running gateway via PID file (#556)."""
+    import signal as _signal
+    from pathlib import Path
+
+    pid_file = Path.home() / ".opencastor" / "gateway.pid"
+    if not pid_file.exists():
+        print("  No gateway.pid found — gateway may not be running.")
+        return
+    try:
+        pid = int(pid_file.read_text().strip())
+    except (ValueError, OSError) as exc:
+        print(f"  Could not read PID file: {exc}")
+        return
+    try:
+        os.kill(pid, _signal.SIGTERM)
+        print(f"  Sent SIGTERM to gateway (pid {pid}).")
+        pid_file.unlink(missing_ok=True)
+    except ProcessLookupError:
+        print(f"  Gateway (pid {pid}) is not running — cleaning up stale PID file.")
+        pid_file.unlink(missing_ok=True)
+    except PermissionError:
+        print(f"  Permission denied when stopping pid {pid}.")
+
+
 def cmd_search(args) -> None:
     """castor search — full-text search over stored robot memory logs."""
     from castor.memory_search import print_search_results, search_logs
@@ -3533,6 +3558,9 @@ def main() -> None:
         help="Only print suggested preset name + confidence",
     )
 
+    # castor stop — send SIGTERM to running gateway (#556)
+    sub.add_parser("stop", help="Stop the running gateway (reads ~/.opencastor/gateway.pid)")
+
     # castor daemon — systemd auto-start service management
     p_daemon = sub.add_parser(
         "daemon",
@@ -3826,6 +3854,7 @@ def main() -> None:
         "flash": cmd_flash,
         "hub": cmd_hub,
         "scan": cmd_scan,
+        "stop": cmd_stop,
         "daemon": cmd_daemon,
         "deploy": cmd_deploy,
         # Issue #348

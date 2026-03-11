@@ -7347,7 +7347,58 @@ def _setup_signal_handlers() -> None:
     signal.signal(signal.SIGINT, _handle_signal)
 
 
+def _assert_port_free(host: str, port: int) -> None:
+    """Raise RuntimeError if *port* on *host* is already in use (#556)."""
+    import socket as _socket
+
+    with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
+        s.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+        try:
+            s.bind((host, port))
+        except OSError:
+            raise RuntimeError(
+                f"Port {port} already in use. "
+                f"Stop the existing gateway with: castor stop\n"
+                f"Or kill the process: fuser -k {port}/tcp"
+            ) from None
+
+
+def _write_pid_file() -> "Path":
+    """Write current PID to ~/.opencastor/gateway.pid, killing stale process (#556)."""
+    from pathlib import Path as _Path
+
+    pid_dir = _Path.home() / ".opencastor"
+    pid_dir.mkdir(parents=True, exist_ok=True)
+    pid_file = pid_dir / "gateway.pid"
+    if pid_file.exists():
+        try:
+            old_pid = int(pid_file.read_text().strip())
+            try:
+                import psutil  # type: ignore[import]
+
+                if psutil.pid_exists(old_pid):
+                    logger.warning(
+                        "Killing stale gateway (pid %d) — use 'castor stop' for clean shutdown",
+                        old_pid,
+                    )
+                    os.kill(old_pid, signal.SIGTERM)
+                    time.sleep(1)
+            except ImportError:
+                pass  # psutil optional — skip stale check
+        except (ValueError, ProcessLookupError, OSError):
+            pass
+    pid_file.write_text(str(os.getpid()))
+    return pid_file
+
+
+def _cleanup_pid_file(pid_file: "Path") -> None:
+    """Remove gateway PID file on exit (#556)."""
+    with contextlib.suppress(OSError):
+        pid_file.unlink()
+
+
 def main():
+    import atexit
     import uvicorn
 
     load_dotenv_if_available()
@@ -7360,6 +7411,11 @@ def main():
     args = parser.parse_args()
 
     os.environ["OPENCASTOR_CONFIG"] = args.config
+
+    # Pre-flight checks (#556)
+    _assert_port_free(args.host, args.port)
+    pid_file = _write_pid_file()
+    atexit.register(_cleanup_pid_file, pid_file)
 
     uvicorn.run(
         "castor.api:app",
