@@ -31,6 +31,7 @@ from fastapi import (
     FastAPI,
     File,
     HTTPException,
+    Query,
     Request,
     UploadFile,
     WebSocket,
@@ -7050,14 +7051,35 @@ async def test_status():
 
 
 @app.get("/api/hardware/scan", dependencies=[Depends(verify_token)])
-async def hardware_scan():
-    """Scan for connected HLabs and other supported USB hardware.
+async def hardware_scan(
+    refresh: bool = Query(False, description="Force fresh scan, bypass cache"),
+):
+    """Scan for all connected hardware and suggest a preset configuration.
 
-    Returns detected device lists keyed by device class, plus a timestamp.
+    Returns full detect_hardware() output plus a suggested RCAN preset.
     """
-    from castor.hardware_detect import detect_all_hlabs
+    from castor.hardware_detect import (
+        detect_hardware,
+        invalidate_hardware_cache,
+        suggest_preset,
+    )
 
-    return {"devices": detect_all_hlabs(), "timestamp": time.time()}
+    if refresh:
+        invalidate_hardware_cache()
+    hw = detect_hardware()
+    preset, confidence, reason = suggest_preset(hw)
+    return {
+        "devices": {
+            **hw,
+            "suggested_preset": {
+                "preset": preset,
+                "confidence": confidence,
+                "reason": reason,
+            },
+        },
+        "timestamp": time.time(),
+        "cached": not refresh,
+    }
 
 
 # ---------------------------------------------------------------------------
