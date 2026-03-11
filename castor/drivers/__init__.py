@@ -5,6 +5,7 @@ from .base import DriverBase as DriverBase
 logger = logging.getLogger("OpenCastor.Drivers")
 
 _EXACT_PROTOCOLS = {
+    "acb",
     "composite",
     "pca9685_rc",
     "simulation",
@@ -80,7 +81,11 @@ def get_driver(config: dict):
             logger.warning(f"Failed to load external driver class '{fq_class}': {exc}")
             return None
 
-    if protocol == "composite":
+    if protocol == "acb":
+        from castor.drivers.acb_driver import AcbDriver
+
+        return AcbDriver(driver_config)
+    elif protocol == "composite":
         from castor.drivers.composite import CompositeDriver
 
         return CompositeDriver(config)

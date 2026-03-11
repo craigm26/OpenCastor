@@ -7041,6 +7041,193 @@ async def test_status():
         }
 
 
+# ---------------------------------------------------------------------------
+# HLabs hardware scan (#520)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/hardware/scan", dependencies=[Depends(verify_token)])
+async def hardware_scan():
+    """Scan for connected HLabs and other supported USB hardware.
+
+    Returns detected device lists keyed by device class, plus a timestamp.
+    """
+    from castor.hardware_detect import detect_all_hlabs
+
+    return {"devices": detect_all_hlabs(), "timestamp": time.time()}
+
+
+# ---------------------------------------------------------------------------
+# ACB driver telemetry (#524)
+# ---------------------------------------------------------------------------
+
+
+def _find_acb_driver(driver_id: str):
+    """Look up an AcbDriver instance by ID from the active driver tree.
+
+    Handles single AcbDriver and CompositeDriver sub-driver lookup.
+
+    Returns the AcbDriver or None.
+    """
+    from castor.drivers.acb_driver import AcbDriver
+    from castor.drivers.composite import CompositeDriver
+
+    if state.driver is None:
+        return None
+
+    if isinstance(state.driver, AcbDriver) and state.driver._driver_id == driver_id:
+        return state.driver
+
+    if isinstance(state.driver, CompositeDriver):
+        sub = state.driver._sub_drivers.get(driver_id)
+        if isinstance(sub, AcbDriver):
+            return sub
+
+    return None
+
+
+@app.get("/api/drivers/{driver_id}/telemetry", dependencies=[Depends(verify_token)])
+async def driver_telemetry(driver_id: str):
+    """Return latest encoder telemetry for an ACB driver.
+
+    Path param ``driver_id`` must match the ``id`` field in the RCAN config.
+    """
+    drv = _find_acb_driver(driver_id)
+    if drv is None:
+        raise HTTPException(
+            status_code=404, detail=f"ACB driver '{driver_id}' not found or not an AcbDriver"
+        )
+    return drv.get_telemetry()
+
+
+# ---------------------------------------------------------------------------
+# ACB motor calibration (#521)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/drivers/{driver_id}/calibrate", dependencies=[Depends(verify_token)])
+async def calibrate_driver(driver_id: str, request: Request):
+    """Run motor calibration for the specified ACB driver.
+
+    Requires ``operator`` role or higher.
+    """
+    _check_min_role(request, "operator")
+    drv = _find_acb_driver(driver_id)
+    if drv is None:
+        raise HTTPException(
+            status_code=404, detail=f"ACB driver '{driver_id}' not found or not an AcbDriver"
+        )
+    result = drv.calibrate()
+    return result.to_dict()
+
+
+# ---------------------------------------------------------------------------
+# ACB firmware flash (#523)
+# ---------------------------------------------------------------------------
+
+
+class _FlashRequest(BaseModel):
+    firmware_url: Optional[str] = None
+    version: Optional[str] = None
+    confirm: bool = False
+
+
+@app.post("/api/drivers/{driver_id}/flash", dependencies=[Depends(verify_token)])
+async def flash_driver(driver_id: str, body: _FlashRequest, request: Request):
+    """Trigger firmware flash for an ACB driver.
+
+    Requires ``admin`` role.  The firmware is fetched from ``firmware_url``
+    or the latest GitHub release when ``version="latest"``.
+
+    **Safety warning**: Use a current-limiting PSU during firmware flashing.
+    High current MOSFETs are present on the ACB v2.0 board.
+    """
+    _check_min_role(request, "admin")
+    if not body.confirm:
+        return {
+            "status": "confirm_required",
+            "message": (
+                "Set confirm=true to proceed.  Warning: use a current-limiting PSU "
+                "during firmware flashing — high current MOSFETs are present on the ACB."
+            ),
+        }
+
+    import pathlib as _pathlib
+    import subprocess as _subprocess
+    import urllib.request as _urllib_request
+
+    firmware_url = body.firmware_url
+    version_tag = body.version or "latest"
+
+    cache_dir = _pathlib.Path.home() / ".opencastor" / "firmware"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    # Resolve URL from GitHub releases when not provided directly
+    if not firmware_url:
+        try:
+            api_url = "https://api.github.com/repos/h-laboratories/acb-v2.0/releases/latest"
+            with _urllib_request.urlopen(api_url, timeout=10) as resp:  # noqa: S310
+                import json as _json
+
+                release_data = _json.loads(resp.read())
+            assets = release_data.get("assets", [])
+            bin_assets = [a for a in assets if a.get("name", "").endswith(".bin")]
+            if not bin_assets:
+                return {"status": "error", "message": "No .bin asset found in latest release"}
+            firmware_url = bin_assets[0]["browser_download_url"]
+            version_tag = release_data.get("tag_name", "latest")
+        except Exception as exc:
+            return {"status": "error", "message": f"Failed to fetch release info: {exc}"}
+
+    # Download if not cached
+    cache_file = cache_dir / f"acb-v2.0-{version_tag}.bin"
+    if not cache_file.exists():
+        try:
+            with _urllib_request.urlopen(firmware_url, timeout=30) as resp:  # noqa: S310
+                cache_file.write_bytes(resp.read())
+        except Exception as exc:
+            return {"status": "error", "message": f"Download failed: {exc}"}
+
+    # Check dfu-util availability
+    try:
+        _subprocess.run(["dfu-util", "--version"], capture_output=True, check=True)
+    except (FileNotFoundError, _subprocess.CalledProcessError):
+        return {
+            "status": "error",
+            "message": "dfu-util not found.  Install with: sudo apt install dfu-util",
+        }
+
+    # Flash
+    logger.warning("ACB firmware flash starting — use a current-limiting PSU. Driver=%s", driver_id)
+    try:
+        proc = _subprocess.run(
+            [
+                "dfu-util",
+                "-d",
+                "0483:DF11",
+                "-a",
+                "0",
+                "-s",
+                "0x08000000:leave",
+                "-D",
+                str(cache_file),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        return {
+            "status": "ok" if proc.returncode == 0 else "error",
+            "returncode": proc.returncode,
+            "stdout": proc.stdout[-4000:],
+            "stderr": proc.stderr[-2000:],
+            "firmware": str(cache_file),
+            "version": version_tag,
+        }
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+
+
 @app.on_event("shutdown")
 async def on_shutdown():
     # Close WebRTC peers

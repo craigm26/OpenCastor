@@ -173,6 +173,87 @@ def _detect_platform() -> str:
     return "generic"
 
 
+# ---------------------------------------------------------------------------
+# HLaboratories ACB detection
+# ---------------------------------------------------------------------------
+
+#: USB VID/PID table for known HLaboratories and compatible devices.
+KNOWN_HLABS_DEVICES: dict = {
+    "0483:df11": {
+        "name": "STM32 DFU (firmware flash mode)",
+        "warn": "Device is in DFU mode — flash firmware first before normal use.",
+    },
+    "0483:5740": {"name": "STM32 Virtual COM Port (ACB candidate)"},
+    "0483:5720": {"name": "STM32 USB Serial (ACB candidate)"},
+}
+
+
+def detect_acb_usb() -> list:
+    """Scan USB serial ports for HLaboratories ACB v2.0 devices.
+
+    Uses ``serial.tools.list_ports`` (pyserial) when available; falls back
+    to the raw ``/dev/ttyACM*`` scan otherwise.
+
+    Returns:
+        List of port path strings (e.g. ``["/dev/ttyACM0"]``).
+    """
+    ports: list = []
+
+    try:
+        from serial.tools import list_ports
+
+        for port_info in list_ports.comports():
+            vid = getattr(port_info, "vid", None)
+            pid = getattr(port_info, "pid", None)
+            description = (getattr(port_info, "description", "") or "").upper()
+            product = (getattr(port_info, "product", "") or "").upper()
+
+            if vid is None:
+                continue
+
+            vid_pid_key = f"{vid:04x}:{pid:04x}" if pid is not None else ""
+
+            if vid_pid_key == "0483:df11":
+                # DFU mode — warn but don't add to usable ports
+                logger.warning(
+                    "ACB detected in DFU mode on %s — flash firmware first before normal use.",
+                    port_info.device,
+                )
+                continue
+
+            # STM32 VID with ACB/STM32 in description
+            if vid == 0x0483 and (
+                "ACB" in description
+                or "STM32" in description
+                or "ACB" in product
+                or vid_pid_key in KNOWN_HLABS_DEVICES
+            ):
+                ports.append(port_info.device)
+                logger.info("ACB device detected on %s (%s)", port_info.device, description)
+
+    except ImportError:
+        # pyserial not available — fall back to raw /dev scan
+        if sys.platform == "linux":
+            dev_dir = "/dev"
+            if os.path.isdir(dev_dir):
+                for entry in sorted(os.listdir(dev_dir)):
+                    if entry.startswith("ttyACM"):
+                        ports.append(os.path.join(dev_dir, entry))
+
+    return ports
+
+
+def detect_all_hlabs() -> dict:
+    """Run all HLabs hardware detectors.
+
+    Returns:
+        Dict mapping device class to list of port/node strings::
+
+            {"acb": ["/dev/ttyACM0"]}
+    """
+    return {"acb": detect_acb_usb()}
+
+
 def suggest_preset(hw: dict) -> tuple:
     """Suggest a hardware preset based on scan results.
 
