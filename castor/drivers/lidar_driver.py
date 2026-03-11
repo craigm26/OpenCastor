@@ -107,7 +107,10 @@ class LidarDriver:
         config: Optional[Dict[str, Any]] = None,
     ):
         cfg = config or {}
-        self._port: str = port or cfg.get("port") or os.getenv("LIDAR_PORT", "/dev/ttyUSB0")
+        _raw_port = port or cfg.get("port") or os.getenv("LIDAR_PORT", "/dev/ttyUSB0")
+        if str(_raw_port or "").lower() == "auto":
+            _raw_port = self._auto_detect_port()
+        self._port: str = _raw_port or "/dev/ttyUSB0"
         self._baud: int = int(baud or cfg.get("baud") or os.getenv("LIDAR_BAUD", "115200"))
         self._timeout: float = float(
             timeout or cfg.get("timeout") or os.getenv("LIDAR_TIMEOUT", "3")
@@ -151,6 +154,24 @@ class LidarDriver:
         except Exception as exc:
             logger.warning("LidarDriver: could not open %s: %s — mock mode", self._port, exc)
             self._lidar = None
+
+    # ── Port auto-detection ───────────────────────────────────────────────────
+
+    @staticmethod
+    def _auto_detect_port() -> Optional[str]:
+        """Use hardware_detect to find the first LiDAR USB adapter."""
+        try:
+            from castor.hardware_detect import detect_lidar_usb
+
+            devices = detect_lidar_usb()
+            if devices:
+                port = devices[0].get("port")
+                if port:
+                    logger.info("LidarDriver auto-detected port: %s", port)
+                    return port
+        except Exception as exc:
+            logger.warning("LidarDriver auto-detect failed: %s", exc)
+        return None
 
     # ── Mock data generation ──────────────────────────────────────────────────
 

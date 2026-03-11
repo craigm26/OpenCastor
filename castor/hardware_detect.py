@@ -1,10 +1,11 @@
 """
 OpenCastor Hardware Detection -- auto-detect connected hardware.
 
-Scans I2C buses, USB serial ports, and camera devices to suggest
-the most likely hardware preset for the wizard.
+Scans I2C buses, USB serial ports, USB VID/PID descriptors, cameras, and
+network-reachable robots to suggest the most likely hardware preset for the wizard.
 
-Usage (from wizard):
+Usage (from wizard)::
+
     from castor.hardware_detect import detect_hardware, suggest_preset
     results = detect_hardware()
     preset = suggest_preset(results)
@@ -12,23 +13,129 @@ Usage (from wizard):
 
 import logging
 import os
+import socket
 import subprocess
 import sys
 
 logger = logging.getLogger("OpenCastor.HardwareDetect")
 
 
-def scan_i2c() -> list:
-    """Scan I2C buses for attached devices.
+# ---------------------------------------------------------------------------
+# VID/PID Tables
+# ---------------------------------------------------------------------------
 
-    Returns a list of dicts: ``{"bus": int, "address": "0xNN"}``.
+#: USB VID/PID table for known HLaboratories and compatible devices.
+KNOWN_HLABS_DEVICES: dict = {
+    "0483:df11": {
+        "name": "STM32 DFU (firmware flash mode)",
+        "warn": "Device is in DFU mode — flash firmware first before normal use.",
+    },
+    "0483:5740": {"name": "STM32 Virtual COM Port (ACB candidate)"},
+    "0483:5720": {"name": "STM32 USB Serial (ACB candidate)"},
+}
+
+#: Intel RealSense depth cameras.
+KNOWN_REALSENSE_DEVICES: dict = {
+    "8086:0b07": "Intel RealSense D435",
+    "8086:0b3a": "Intel RealSense D435i",
+    "8086:0b5c": "Intel RealSense D455",
+    "8086:0ad3": "Intel RealSense D415",
+    "8086:0b64": "Intel RealSense L515",
+    "8086:0b5b": "Intel RealSense D405",
+    "8086:0b37": "Intel RealSense D430",
+}
+
+#: Luxonis OAK-D depth/AI cameras.
+KNOWN_OAKD_DEVICES: dict = {
+    "03e7:2485": "Luxonis OAK-D (bootloader/lite)",
+    "03e7:2487": "Luxonis OAK-D (running)",
+    "03e7:f63b": "Luxonis OAK-D SR",
+}
+
+#: Arduino family microcontroller boards.
+KNOWN_ARDUINO_DEVICES: dict = {
+    "2341:0043": "Arduino Uno R3",
+    "2341:1002": "Arduino Uno R4 WiFi",
+    "2341:0042": "Arduino Mega 2560",
+    "2341:8036": "Arduino Leonardo",
+    "2341:003d": "Arduino Due",
+    "2341:0243": "Arduino Nano Every",
+    "1a86:7523": "Arduino Nano (CH340 clone)",
+    "1a86:55d4": "Arduino Nano (CH343 clone)",
+    "0403:6001": "Arduino Pro Mini (FTDI)",
+    "1b4f:9205": "SparkFun Pro Micro",
+}
+
+#: Feetech / Waveshare serial bus servo boards (SO-ARM101 candidate).
+KNOWN_FEETECH_DEVICES: dict = {
+    "1a86:7523": "Waveshare Serial Bus Servo Board (CH340G) — SO-ARM101 candidate",
+    "0483:5740": "STM32 Servo Board variant — SO-ARM101 candidate",
+    "10c4:ea60": "CP2102 USB-Serial — possible servo board",
+}
+
+#: Dynamixel U2D2 and OpenCR/OpenCM boards.
+KNOWN_DYNAMIXEL_DEVICES: dict = {
+    "0403:6014": "Dynamixel U2D2 (FT232H)",
+    "16d0:0c17": "Robotis OpenCM 9.04",
+    "0483:5740": "Robotis OpenCR 1.0",
+}
+
+#: ODrive brushless motor controllers.
+KNOWN_ODRIVE_DEVICES: dict = {
+    "1209:0d32": "ODrive v3.x",
+    "1209:0d33": "ODrive Pro",
+    "1209:0d34": "ODrive S1",
+}
+
+#: LiDAR USB adapters (RPLidar, YDLIDAR, Hokuyo, Sick).
+KNOWN_LIDAR_DEVICES: dict = {
+    "10c4:ea60": "RPLidar/YDLIDAR (CP2102) — probe baud to disambiguate",
+    "0483:5740": "YDLIDAR T15 (STM32)",
+    "15d1:0000": "Hokuyo URG",
+    "19a2:5343": "Sick TIM571",
+}
+
+#: I2C address → device name/type mapping for enriched scan output.
+I2C_DEVICE_MAP: dict = {
+    "0x28": {"name": "BNO055", "type": "imu"},
+    "0x29": {"name": "VL53L1X or BNO055 (alt)", "type": "tof_or_imu"},
+    "0x3c": {"name": "SSD1306/SH1106 OLED", "type": "display"},
+    "0x3d": {"name": "SSD1306 OLED (alt addr)", "type": "display"},
+    "0x40": {"name": "PCA9685 PWM Driver", "type": "servo_driver"},
+    "0x48": {"name": "ADS1115 ADC", "type": "adc"},
+    "0x49": {"name": "ADS1115 ADC (addr 1)", "type": "adc"},
+    "0x4a": {"name": "ADS1115 ADC (addr 2)", "type": "adc"},
+    "0x4b": {"name": "ADS1115 ADC (addr 3)", "type": "adc"},
+    "0x68": {"name": "MPU-6050 / ICM-42688", "type": "imu"},
+    "0x69": {"name": "MPU-6050 (alt) / ICM-42688 (alt)", "type": "imu"},
+    "0x6a": {"name": "LSM6DSO / LSM6DSOX", "type": "imu"},
+    "0x6b": {"name": "LSM6DSO (alt addr)", "type": "imu"},
+    "0x76": {"name": "BME280 / BMP280", "type": "environmental"},
+    "0x77": {"name": "BME280 / BMP280 (alt)", "type": "environmental"},
+    "0x1e": {"name": "HMC5883L / QMC5883L", "type": "magnetometer"},
+    "0x18": {"name": "LIS3DH", "type": "accelerometer"},
+    "0x19": {"name": "LIS3DH (alt addr)", "type": "accelerometer"},
+    "0x5d": {"name": "APDS-9960", "type": "gesture_proximity"},
+}
+
+
+# ---------------------------------------------------------------------------
+# I2C / USB / Camera scanners
+# ---------------------------------------------------------------------------
+
+
+def scan_i2c() -> list:
+    """Scan I2C buses for attached devices, enriching with :data:`I2C_DEVICE_MAP`.
+
+    Returns:
+        List of dicts: ``{"bus": int, "address": "0xNN", "device": str, "type": str}``.
+        ``"device"`` and ``"type"`` are ``"unknown"`` when the address is not in the map.
     """
     devices = []
 
     if sys.platform != "linux":
         return devices
 
-    # Find available I2C buses
     i2c_buses = []
     dev_dir = "/dev"
     if os.path.isdir(dev_dir):
@@ -57,7 +164,16 @@ def scan_i2c() -> list:
                     if part != "--" and len(part) == 2:
                         try:
                             int(part, 16)
-                            devices.append({"bus": bus, "address": f"0x{part}"})
+                            addr = f"0x{part}"
+                            info = I2C_DEVICE_MAP.get(addr, {})
+                            devices.append(
+                                {
+                                    "bus": bus,
+                                    "address": addr,
+                                    "device": info.get("name", "unknown"),
+                                    "type": info.get("type", "unknown"),
+                                }
+                            )
                         except ValueError:
                             pass
         except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -69,7 +185,8 @@ def scan_i2c() -> list:
 def scan_usb_serial() -> list:
     """Find USB serial ports (common for Dynamixel, Arduino, etc.).
 
-    Returns a list of port paths, e.g. ``["/dev/ttyUSB0", "/dev/ttyACM0"]``.
+    Returns:
+        List of port paths, e.g. ``["/dev/ttyUSB0", "/dev/ttyACM0"]``.
     """
     ports = []
     if sys.platform != "linux":
@@ -101,11 +218,11 @@ def scan_usb_descriptors() -> list:
 def scan_cameras() -> list:
     """Detect available camera devices.
 
-    Returns a list of dicts: ``{"type": "csi"|"usb", "device": str, "accessible": bool}``.
+    Returns:
+        List of dicts: ``{"type": "csi"|"usb", "device": str, "accessible": bool}``.
     """
     cameras = []
 
-    # Check for CSI camera via video devices
     for entry in sorted(os.listdir("/dev")) if os.path.isdir("/dev") else []:
         if entry.startswith("video"):
             cameras.append(
@@ -116,7 +233,6 @@ def scan_cameras() -> list:
                 }
             )
 
-    # Check for picamera2 availability (CSI)
     try:
         from picamera2 import Picamera2
 
@@ -127,6 +243,410 @@ def scan_cameras() -> list:
         pass
 
     return cameras
+
+
+# ---------------------------------------------------------------------------
+# USB VID/PID helpers
+# ---------------------------------------------------------------------------
+
+
+def _list_usb_ports_with_vidpid() -> list:
+    """Return pyserial port info list; empty list if pyserial unavailable."""
+    try:
+        from serial.tools import list_ports
+
+        return list(list_ports.comports())
+    except ImportError:
+        return []
+
+
+def _match_vid_pid_table(table: dict) -> list:
+    """Return list of dicts for USB serial ports matching *table*.
+
+    Each entry: ``{"port": str, "vid_pid": str, "model": str}``.
+    """
+    matches = []
+    for port_info in _list_usb_ports_with_vidpid():
+        vid = getattr(port_info, "vid", None)
+        pid = getattr(port_info, "pid", None)
+        if vid is None or pid is None:
+            continue
+        key = f"{vid:04x}:{pid:04x}"
+        if key in table:
+            matches.append(
+                {
+                    "port": port_info.device,
+                    "vid_pid": key,
+                    "model": table[key]
+                    if isinstance(table[key], str)
+                    else table[key].get("name", key),
+                }
+            )
+    return matches
+
+
+def _scan_lsusb_for_vid(vid_hex: str) -> list:
+    """Scan ``lsusb`` output for lines containing *vid_hex* (lower-case, no '0x').
+
+    Returns list of raw lsusb lines.
+    """
+    lines = scan_usb_descriptors()
+    return [ln for ln in lines if vid_hex.lower() in ln]
+
+
+# ---------------------------------------------------------------------------
+# New hardware detectors
+# ---------------------------------------------------------------------------
+
+
+def detect_realsense_usb() -> list:
+    """Detect Intel RealSense cameras by USB VID/PID (VID 0x8086).
+
+    Returns:
+        List of dicts: ``{"port": str, "vid_pid": str, "model": str}``.
+        Uses ``lsusb`` fallback when pyserial is not installed.
+    """
+    results = _match_vid_pid_table(KNOWN_REALSENSE_DEVICES)
+    if results:
+        return results
+    # lsusb fallback — RealSense appears as non-serial USB device
+    lines = _scan_lsusb_for_vid("8086")
+    for ln in lines:
+        for key, model in KNOWN_REALSENSE_DEVICES.items():
+            if key.replace(":", " ") in ln or key in ln:
+                results.append({"port": "usb", "vid_pid": key, "model": model})
+    return results
+
+
+def detect_oakd_usb() -> list:
+    """Detect Luxonis OAK-D cameras by USB VID/PID (VID 0x03e7).
+
+    Falls back to ``depthai`` Python API when installed.
+
+    Returns:
+        List of dicts: ``{"port": str, "vid_pid": str, "model": str}``.
+    """
+    results = _match_vid_pid_table(KNOWN_OAKD_DEVICES)
+    if results:
+        return results
+
+    # lsusb fallback
+    lines = _scan_lsusb_for_vid("03e7")
+    for ln in lines:
+        for key, model in KNOWN_OAKD_DEVICES.items():
+            vid_pid_spaced = key.replace(":", " ")
+            if vid_pid_spaced in ln or key in ln:
+                results.append({"port": "usb", "vid_pid": key, "model": model})
+
+    if results:
+        return results
+
+    # depthai API fallback
+    try:
+        import depthai as dai  # type: ignore[import]
+
+        devices = dai.Device.getAllAvailableDevices()
+        for dev in devices:
+            results.append({"port": "depthai", "vid_pid": "03e7:xxxx", "model": str(dev.name)})
+    except Exception:
+        pass
+
+    return results
+
+
+def detect_odrive_usb() -> list:
+    """Detect ODrive motor controllers by USB VID/PID (pid.codes VID 0x1209).
+
+    Returns:
+        List of port path strings (e.g. ``["/dev/ttyACM0"]``).
+    """
+    matches = _match_vid_pid_table(KNOWN_ODRIVE_DEVICES)
+    ports = [m["port"] for m in matches]
+    if ports:
+        logger.info("ODrive detected on: %s", ports)
+    return ports
+
+
+def detect_vesc_usb() -> list:
+    """Detect VESC motor controllers; disambiguates from ACB by product string.
+
+    Returns:
+        List of port path strings.
+    """
+    ports: list = []
+    for port_info in _list_usb_ports_with_vidpid():
+        description = (getattr(port_info, "description", "") or "").upper()
+        product = (getattr(port_info, "product", "") or "").upper()
+        manufacturer = (getattr(port_info, "manufacturer", "") or "").upper()
+        if "VESC" in description or "VESC" in product or "VESC" in manufacturer:
+            ports.append(port_info.device)
+            logger.info("VESC detected on %s (%s)", port_info.device, description)
+    return ports
+
+
+def detect_feetech_usb() -> list:
+    """Detect Feetech/Waveshare serial bus servo boards (SO-ARM101 candidate).
+
+    Matches by VID/PID; further disambiguation by product string when available.
+
+    Returns:
+        List of port path strings.
+    """
+    ports: list = []
+    for port_info in _list_usb_ports_with_vidpid():
+        vid = getattr(port_info, "vid", None)
+        pid = getattr(port_info, "pid", None)
+        if vid is None or pid is None:
+            continue
+        key = f"{vid:04x}:{pid:04x}"
+        description = (getattr(port_info, "description", "") or "").upper()
+        product = (getattr(port_info, "product", "") or "").upper()
+        manufacturer = (getattr(port_info, "manufacturer", "") or "").upper()
+
+        if key in KNOWN_FEETECH_DEVICES:
+            # Skip if product string clearly identifies it as ACB or ODrive
+            if any(
+                tok in description + product + manufacturer for tok in ("ACB", "ODRIVE", "ROBOTIS")
+            ):
+                continue
+            ports.append(port_info.device)
+            logger.info("Feetech servo board detected on %s (VID/PID %s)", port_info.device, key)
+
+    return ports
+
+
+def detect_arduino_usb() -> list:
+    """Detect Arduino family boards by VID/PID table.
+
+    Returns:
+        List of dicts: ``{"port": str, "board": str, "vid_pid": str}``.
+    """
+    results: list = []
+    for port_info in _list_usb_ports_with_vidpid():
+        vid = getattr(port_info, "vid", None)
+        pid = getattr(port_info, "pid", None)
+        if vid is None or pid is None:
+            continue
+        key = f"{vid:04x}:{pid:04x}"
+        if key in KNOWN_ARDUINO_DEVICES:
+            board_name = KNOWN_ARDUINO_DEVICES[key]
+            results.append({"port": port_info.device, "board": board_name, "vid_pid": key})
+            logger.info("Arduino detected on %s: %s", port_info.device, board_name)
+    return results
+
+
+def detect_circuitpython_usb() -> list:
+    """Detect Adafruit CircuitPython boards (VID 0x239A).
+
+    Returns:
+        List of dicts: ``{"port": str, "vid_pid": str, "description": str}``.
+    """
+    results: list = []
+    for port_info in _list_usb_ports_with_vidpid():
+        vid = getattr(port_info, "vid", None)
+        if vid != 0x239A:
+            continue
+        pid = getattr(port_info, "pid", None)
+        pid_str = f"{pid:04x}" if pid is not None else "xxxx"
+        description = getattr(port_info, "description", "") or "CircuitPython board"
+        results.append(
+            {
+                "port": port_info.device,
+                "vid_pid": f"239a:{pid_str}",
+                "description": description,
+            }
+        )
+        logger.info("CircuitPython board detected on %s (%s)", port_info.device, description)
+    return results
+
+
+def detect_dynamixel_usb() -> list:
+    """Detect Dynamixel U2D2 and OpenCR/OpenCM boards by VID/PID.
+
+    Returns:
+        List of dicts: ``{"port": str, "vid_pid": str, "model": str}``.
+    """
+    return _match_vid_pid_table(KNOWN_DYNAMIXEL_DEVICES)
+
+
+def detect_lidar_usb() -> list:
+    """Detect RPLidar and YDLIDAR USB adapters by VID/PID.
+
+    Returns:
+        List of dicts: ``{"port": str, "vid_pid": str, "model": str}``.
+    """
+    return _match_vid_pid_table(KNOWN_LIDAR_DEVICES)
+
+
+def detect_hailo() -> list:
+    """Detect Hailo-8 NPU via ``/dev/hailo0``, ``lspci``, or the ``hailo`` Python package.
+
+    Returns:
+        List of detection strings, e.g. ``["hailo8 via /dev/hailo0"]``.
+    """
+    found: list = []
+
+    # /dev/hailo* character devices
+    dev_dir = "/dev"
+    if os.path.isdir(dev_dir):
+        for entry in os.listdir(dev_dir):
+            if entry.startswith("hailo"):
+                found.append(f"hailo8 via /dev/{entry}")
+                logger.info("Hailo NPU detected: /dev/%s", entry)
+
+    if found:
+        return found
+
+    # lspci fallback
+    try:
+        proc = subprocess.run(
+            ["lspci"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if proc.returncode == 0:
+            for line in proc.stdout.splitlines():
+                if "hailo" in line.lower():
+                    found.append(f"hailo8 via lspci: {line.strip()}")
+                    logger.info("Hailo NPU detected via lspci: %s", line.strip())
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    if found:
+        return found
+
+    # hailo Python package
+    try:
+        import hailo  # type: ignore[import]
+
+        devices = hailo.Device.scan()
+        for dev in devices:
+            found.append(f"hailo8 via sdk: {dev}")
+    except Exception:
+        pass
+
+    return found
+
+
+def detect_coral() -> list:
+    """Detect Google Coral USB TPU and M.2/PCIe Edge TPU.
+
+    Returns:
+        List of detection strings.
+    """
+    found: list = []
+
+    # USB TPU: VID 0x1a6e (Global Unichip), 0x18d1 (Google)
+    for port_info in _list_usb_ports_with_vidpid():
+        vid = getattr(port_info, "vid", None)
+        if vid in (0x1A6E, 0x18D1):
+            description = getattr(port_info, "description", "") or ""
+            if "coral" in description.lower() or "edge tpu" in description.lower() or vid == 0x1A6E:
+                found.append(f"coral_usb:{port_info.device}")
+                logger.info("Coral USB TPU detected on %s", port_info.device)
+
+    # lsusb fallback for USB TPU
+    if not found:
+        lines = scan_usb_descriptors()
+        for ln in lines:
+            if "1a6e" in ln or ("18d1" in ln and "coral" in ln):
+                found.append("coral_usb:lsusb")
+
+    # PCIe/M.2: check /dev/apex_*
+    dev_dir = "/dev"
+    if os.path.isdir(dev_dir):
+        for entry in os.listdir(dev_dir):
+            if entry.startswith("apex"):
+                found.append(f"coral_pcie:/dev/{entry}")
+                logger.info("Coral PCIe Edge TPU detected: /dev/%s", entry)
+
+    return found
+
+
+def detect_imx500_camera() -> list:
+    """Detect Raspberry Pi AI Camera (IMX500) via ``picamera2.global_camera_info()``.
+
+    Returns:
+        List of detection strings, e.g. ``["imx500:cam0"]``.
+    """
+    found: list = []
+    try:
+        from picamera2 import Picamera2  # type: ignore[import]
+
+        for cam_info in Picamera2.global_camera_info():
+            model = str(cam_info.get("Model", "")).lower()
+            if "imx500" in model:
+                cam_id = cam_info.get("Id", "unknown")
+                found.append(f"imx500:{cam_id}")
+                logger.info("IMX500 AI Camera detected: %s", cam_id)
+    except Exception:
+        pass
+    return found
+
+
+def detect_reachy_network(timeout: float = 2.0) -> list:
+    """Detect Pollen Robotics Reachy 2 / Reachy Mini via mDNS or hostname resolution.
+
+    Probes common Reachy hostnames and the mDNS ``_reachy._tcp.local.`` service.
+
+    Args:
+        timeout: Socket connection timeout in seconds.
+
+    Returns:
+        List of host strings that responded (e.g. ``["reachy.local"]``).
+    """
+    found: list = []
+    candidates = ["reachy.local", "reachy2.local", "reachy-mini.local"]
+
+    for host in candidates:
+        try:
+            addr = socket.getaddrinfo(
+                host, 50055, socket.AF_UNSPEC, socket.SOCK_STREAM, 0, socket.AI_ADDRCONFIG
+            )
+            if addr:
+                found.append(host)
+                logger.info("Reachy detected at %s", host)
+        except (socket.gaierror, OSError):
+            pass
+
+    # mDNS via zeroconf (optional)
+    if not found:
+        try:
+            import time as _time
+
+            from zeroconf import ServiceBrowser, Zeroconf  # type: ignore[import]
+
+            zc = Zeroconf()
+            discovered: list = []
+
+            class _Handler:
+                def add_service(self, zc_ref, stype, name):  # noqa: N802
+                    info = zc_ref.get_service_info(stype, name)
+                    if info:
+                        addresses = info.parsed_addresses()
+                        if addresses:
+                            discovered.append(addresses[0])
+
+                def remove_service(self, *_):
+                    pass
+
+                def update_service(self, *_):
+                    pass
+
+            ServiceBrowser(zc, "_reachy._tcp.local.", _Handler())
+            _time.sleep(min(timeout, 1.0))
+            zc.close()
+            found.extend(discovered)
+        except Exception:
+            pass
+
+    return found
+
+
+# ---------------------------------------------------------------------------
+# Top-level detect_hardware / detect_all_hlabs
+# ---------------------------------------------------------------------------
 
 
 def detect_hardware() -> dict:
@@ -140,6 +660,19 @@ def detect_hardware() -> dict:
             "usb_descriptors": [...],
             "cameras": [...],
             "platform": "rpi"|"jetson"|"generic",
+            "realsense": [...],
+            "oakd": [...],
+            "odrive": [...],
+            "vesc": [...],
+            "feetech": [...],
+            "arduino": [...],
+            "circuitpython": [...],
+            "dynamixel": [...],
+            "lidar": [...],
+            "hailo": [...],
+            "coral": [...],
+            "imx500": [...],
+            "reachy": [...],
         }
     """
     result = {
@@ -148,6 +681,19 @@ def detect_hardware() -> dict:
         "usb_descriptors": scan_usb_descriptors(),
         "cameras": scan_cameras(),
         "platform": _detect_platform(),
+        "realsense": detect_realsense_usb(),
+        "oakd": detect_oakd_usb(),
+        "odrive": detect_odrive_usb(),
+        "vesc": detect_vesc_usb(),
+        "feetech": detect_feetech_usb(),
+        "arduino": detect_arduino_usb(),
+        "circuitpython": detect_circuitpython_usb(),
+        "dynamixel": detect_dynamixel_usb(),
+        "lidar": detect_lidar_usb(),
+        "hailo": detect_hailo(),
+        "coral": detect_coral(),
+        "imx500": detect_imx500_camera(),
+        "reachy": detect_reachy_network(),
     }
     return result
 
@@ -160,7 +706,6 @@ def _read_device_tree_model(path: str = "/proc/device-tree/model") -> str:
 
 def _detect_platform() -> str:
     """Detect the current platform (Raspberry Pi, Jetson, or generic)."""
-    # Check for Raspberry Pi
     try:
         model = _read_device_tree_model().lower()
         if "raspberry pi" in model:
@@ -169,23 +714,12 @@ def _detect_platform() -> str:
             return "jetson"
     except (FileNotFoundError, PermissionError):
         pass
-
     return "generic"
 
 
 # ---------------------------------------------------------------------------
 # HLaboratories ACB detection
 # ---------------------------------------------------------------------------
-
-#: USB VID/PID table for known HLaboratories and compatible devices.
-KNOWN_HLABS_DEVICES: dict = {
-    "0483:df11": {
-        "name": "STM32 DFU (firmware flash mode)",
-        "warn": "Device is in DFU mode — flash firmware first before normal use.",
-    },
-    "0483:5740": {"name": "STM32 Virtual COM Port (ACB candidate)"},
-    "0483:5720": {"name": "STM32 USB Serial (ACB candidate)"},
-}
 
 
 def detect_acb_usb() -> list:
@@ -214,14 +748,12 @@ def detect_acb_usb() -> list:
             vid_pid_key = f"{vid:04x}:{pid:04x}" if pid is not None else ""
 
             if vid_pid_key == "0483:df11":
-                # DFU mode — warn but don't add to usable ports
                 logger.warning(
                     "ACB detected in DFU mode on %s — flash firmware first before normal use.",
                     port_info.device,
                 )
                 continue
 
-            # STM32 VID with ACB/STM32 in description
             if vid == 0x0483 and (
                 "ACB" in description
                 or "STM32" in description
@@ -232,7 +764,6 @@ def detect_acb_usb() -> list:
                 logger.info("ACB device detected on %s (%s)", port_info.device, description)
 
     except ImportError:
-        # pyserial not available — fall back to raw /dev scan
         if sys.platform == "linux":
             dev_dir = "/dev"
             if os.path.isdir(dev_dir):
@@ -254,6 +785,11 @@ def detect_all_hlabs() -> dict:
     return {"acb": detect_acb_usb()}
 
 
+# ---------------------------------------------------------------------------
+# Preset suggestion
+# ---------------------------------------------------------------------------
+
+
 def suggest_preset(hw: dict) -> tuple:
     """Suggest a hardware preset based on scan results.
 
@@ -270,34 +806,84 @@ def suggest_preset(hw: dict) -> tuple:
     is_rpi = hw.get("platform") == "rpi"
     usb_desc = " ".join(hw.get("usb_descriptors", []))
 
-    # EV3 may appear over USB/RNDIS with explicit ev3/mindstorms descriptors.
+    # ── Reachy humanoid ────────────────────────────────────────────────────
+    if hw.get("reachy"):
+        return "pollen/reachy2", "high", f"Reachy detected at {hw['reachy'][0]}"
+
+    # ── Feetech servo board (SO-ARM101) ────────────────────────────────────
+    if hw.get("feetech"):
+        return (
+            "lerobot/so-arm101-follower",
+            "high",
+            "Feetech servo board detected (SO-ARM101 candidate)",
+        )
+
+    # ── Dynamixel U2D2 / Koch arm ─────────────────────────────────────────
+    if hw.get("dynamixel"):
+        port = hw["dynamixel"][0].get("port", "unknown")
+        return "lerobot/koch-arm", "high", f"Dynamixel U2D2 on {port}"
+
+    # ── Luxonis OAK-D ─────────────────────────────────────────────────────
+    if hw.get("oakd"):
+        model = hw["oakd"][0].get("model", "OAK-D")
+        preset = "rpi_oakd" if is_rpi else "jetson_oakd"
+        return preset, "high", f"OAK-D detected: {model}"
+
+    # ── Intel RealSense ───────────────────────────────────────────────────
+    if hw.get("realsense"):
+        model = hw["realsense"][0].get("model", "RealSense")
+        preset = "rpi_realsense" if is_rpi else "generic_realsense"
+        return preset, "high", f"RealSense detected: {model}"
+
+    # ── ODrive motor controller ────────────────────────────────────────────
+    if hw.get("odrive"):
+        return "odrive/differential", "high", f"ODrive detected on {hw['odrive'][0]}"
+
+    # ── Hailo NPU ─────────────────────────────────────────────────────────
+    if hw.get("hailo"):
+        return "hailo_vision", "high", "Hailo-8 NPU detected"
+
+    # ── Coral TPU ─────────────────────────────────────────────────────────
+    if hw.get("coral"):
+        return "coral/tpu-inference", "high", "Coral Edge TPU detected"
+
+    # ── Arduino ───────────────────────────────────────────────────────────
+    if hw.get("arduino"):
+        board = hw["arduino"][0].get("board", "unknown")
+        return "arduino/uno", "medium", f"Arduino detected: {board}"
+
+    # ── LEGO EV3 ──────────────────────────────────────────────────────────
     if "ev3" in usb_desc or "mindstorms" in usb_desc:
         return "lego_mindstorms_ev3", "medium", "LEGO EV3 device hint detected over USB"
 
-    # SPIKE Prime commonly appears as LEGO USB descriptors (VID 0694).
+    # ── LEGO SPIKE Prime ──────────────────────────────────────────────────
     if "lego" in usb_desc or "0694:" in usb_desc:
         return "lego_spike_prime", "medium", "LEGO USB device detected (likely SPIKE Prime hub)"
 
-    # PCA9685 at 0x40 + RPi -> rpi_rc_car
+    # ── PCA9685 + RPi → rover kit ─────────────────────────────────────────
     if "0x40" in i2c_addrs and is_rpi:
         if has_camera:
             return "rpi_rc_car", "high", "PCA9685 at 0x40 + RPi + camera detected"
         return "rpi_rc_car", "medium", "PCA9685 at 0x40 + RPi detected (no camera)"
 
-    # ESP32 dev boards often expose CP210x/CH340 serial bridges.
+    # ── ESP32 ─────────────────────────────────────────────────────────────
     if has_serial and any(token in usb_desc for token in ("esp32", "cp210", "ch340")):
         return "esp32_generic", "medium", f"Serial bridge detected ({hw['usb_serial'][0]})"
 
-    # Serial port present -> likely Dynamixel
+    # ── Generic serial → Dynamixel guess ─────────────────────────────────
     if has_serial:
         return "dynamixel_arm", "medium", f"Serial port detected: {hw['usb_serial'][0]}"
 
-    # RPi but no I2C -> generic Amazon kit
+    # ── RPi fallback ──────────────────────────────────────────────────────
     if is_rpi:
         return "amazon_kit_generic", "low", "Raspberry Pi detected, no specific hardware found"
 
-    # No specific hardware detected
     return "rpi_rc_car", "low", "No specific hardware detected, using default preset"
+
+
+# ---------------------------------------------------------------------------
+# Pretty-print
+# ---------------------------------------------------------------------------
 
 
 def print_scan_results(hw: dict, colors_class=None):
@@ -309,20 +895,17 @@ def print_scan_results(hw: dict, colors_class=None):
     end = getattr(colors_class, "ENDC", "")
 
     print(f"\n{bold}Hardware Scan Results{end}\n")
-
-    # Platform
     print(f"  Platform: {blue}{hw['platform']}{end}")
 
-    # I2C
     i2c = hw.get("i2c_devices", [])
     if i2c:
         print(f"\n  {green}I2C Devices ({len(i2c)}){end}")
         for d in i2c:
-            print(f"    Bus {d['bus']}: {d['address']}")
+            name = d.get("device", "unknown")
+            print(f"    Bus {d['bus']}: {d['address']}  [{name}]")
     else:
         print(f"\n  {warn}No I2C devices found{end}")
 
-    # USB Serial
     serial = hw.get("usb_serial", [])
     if serial:
         print(f"\n  {green}USB Serial Ports ({len(serial)}){end}")
@@ -331,7 +914,6 @@ def print_scan_results(hw: dict, colors_class=None):
     else:
         print(f"\n  {warn}No USB serial ports found{end}")
 
-    # Cameras
     cameras = hw.get("cameras", [])
     if cameras:
         print(f"\n  {green}Cameras ({len(cameras)}){end}")
@@ -340,5 +922,22 @@ def print_scan_results(hw: dict, colors_class=None):
             print(f"    {c['type'].upper()}: {c['device']} ({status})")
     else:
         print(f"\n  {warn}No cameras found{end}")
+
+    for category in (
+        "realsense",
+        "oakd",
+        "odrive",
+        "dynamixel",
+        "feetech",
+        "arduino",
+        "hailo",
+        "coral",
+        "reachy",
+    ):
+        items = hw.get(category, [])
+        if items:
+            print(f"\n  {green}{category.upper()} ({len(items)}){end}")
+            for item in items:
+                print(f"    {item}")
 
     print()

@@ -23,6 +23,8 @@ _EXACT_PROTOCOLS = {
     "spike_hub_serial",
     "spike_hub_internal",
     "arduino_serial_json",
+    "feetech",
+    "reachy",
 }
 
 
@@ -151,6 +153,14 @@ def get_driver(config: dict):
         from castor.drivers.arduino_driver import ArduinoSerialDriver
 
         return ArduinoSerialDriver(driver_config)
+    elif protocol == "feetech":
+        from castor.drivers.feetech_driver import FeetechDriver
+
+        return FeetechDriver(driver_config)
+    elif protocol == "reachy":
+        from castor.drivers.reachy_driver import ReachyDriver
+
+        return ReachyDriver(driver_config)
     else:
         logger.warning(f"Unknown driver protocol: {protocol}. Running without hardware.")
         return None

@@ -122,6 +122,8 @@ class ODriveDriver(DriverBase):
 
         elif self._protocol == "vesc" and HAS_VESC:
             port = config.get("port", "/dev/ttyUSB0")
+            if str(port or "").lower() == "auto":
+                port = self._auto_detect_vesc_port() or "/dev/ttyUSB0"
             try:
                 self._vesc_serial = _serial.Serial(port, baudrate=115200, timeout=0.05)
                 self._mode = "hardware"
@@ -133,6 +135,26 @@ class ODriveDriver(DriverBase):
             logger.info("ODrive/VESC driver running in mock mode (protocol=%s)", self._protocol)
 
     # ── Helpers ────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _auto_detect_vesc_port():
+        """Use hardware_detect to find the first VESC serial port."""
+        try:
+            from castor.hardware_detect import detect_odrive_usb, detect_vesc_usb
+
+            # Prefer explicit VESC detection first
+            vesc_ports = detect_vesc_usb()
+            if vesc_ports:
+                logger.info("ODriveDriver auto-detected VESC port: %s", vesc_ports[0])
+                return vesc_ports[0]
+            # Fall back to ODrive USB
+            odrive_ports = detect_odrive_usb()
+            if odrive_ports:
+                logger.info("ODriveDriver auto-detected ODrive port: %s", odrive_ports[0])
+                return odrive_ports[0]
+        except Exception as exc:
+            logger.warning("ODriveDriver auto-detect failed: %s", exc)
+        return None
 
     def _odrive_axis(self, idx: int):
         """Return the ODrive axis object for *idx* (0 or 1).

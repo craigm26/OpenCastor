@@ -33,7 +33,10 @@ class DynamixelDriver(DriverBase):
     PROTOCOL_VERSION = 2.0
 
     def __init__(self, config: Dict):
-        self.port_name = config.get("port", "/dev/ttyUSB0")
+        _raw_port = config.get("port", "/dev/ttyUSB0")
+        if str(_raw_port or "").lower() == "auto":
+            _raw_port = self._auto_detect_port()
+        self.port_name = _raw_port or "/dev/ttyUSB0"
         self.baud_rate = config.get("baud_rate", 57600)
         self.connected_motors: List[int] = []
 
@@ -50,6 +53,22 @@ class DynamixelDriver(DriverBase):
             logger.info(f"Dynamixel Port Opened: {self.port_name}")
         else:
             logger.error(f"Failed to open Dynamixel Port: {self.port_name}")
+
+    @staticmethod
+    def _auto_detect_port():
+        """Use hardware_detect to find the first Dynamixel U2D2 port."""
+        try:
+            from castor.hardware_detect import detect_dynamixel_usb
+
+            devices = detect_dynamixel_usb()
+            if devices:
+                port = devices[0].get("port")
+                if port:
+                    logger.info("DynamixelDriver auto-detected port: %s", port)
+                    return port
+        except Exception as exc:
+            logger.warning("DynamixelDriver auto-detect failed: %s", exc)
+        return None
 
     def _open_port(self) -> bool:
         if self.portHandler is None:

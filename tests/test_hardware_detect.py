@@ -537,3 +537,610 @@ def test_detect_hardware_full_mock():
     assert hw["i2c_devices"] == [{"bus": 1, "address": "0x40"}]
     assert "/dev/ttyUSB0" in hw["usb_serial"]
     assert any("oak-d" in d for d in hw["usb_descriptors"])
+
+
+# ---------------------------------------------------------------------------
+# New: VID/PID table tests (#529–#540)
+# ---------------------------------------------------------------------------
+
+
+def test_realsense_table_has_d435():
+    from castor.hardware_detect import KNOWN_REALSENSE_DEVICES
+
+    assert "8086:0b07" in KNOWN_REALSENSE_DEVICES
+    assert "D435" in KNOWN_REALSENSE_DEVICES["8086:0b07"]
+
+
+def test_realsense_table_has_d455():
+    from castor.hardware_detect import KNOWN_REALSENSE_DEVICES
+
+    assert "8086:0b5c" in KNOWN_REALSENSE_DEVICES
+
+
+def test_oakd_table_has_running():
+    from castor.hardware_detect import KNOWN_OAKD_DEVICES
+
+    assert "03e7:2487" in KNOWN_OAKD_DEVICES
+
+
+def test_arduino_table_has_uno():
+    from castor.hardware_detect import KNOWN_ARDUINO_DEVICES
+
+    assert "2341:0043" in KNOWN_ARDUINO_DEVICES
+    assert "Uno" in KNOWN_ARDUINO_DEVICES["2341:0043"]
+
+
+def test_arduino_table_has_nano_clone():
+    from castor.hardware_detect import KNOWN_ARDUINO_DEVICES
+
+    assert "1a86:7523" in KNOWN_ARDUINO_DEVICES
+
+
+def test_feetech_table_has_ch340():
+    from castor.hardware_detect import KNOWN_FEETECH_DEVICES
+
+    assert "1a86:7523" in KNOWN_FEETECH_DEVICES
+
+
+def test_dynamixel_table_has_u2d2():
+    from castor.hardware_detect import KNOWN_DYNAMIXEL_DEVICES
+
+    assert "0403:6014" in KNOWN_DYNAMIXEL_DEVICES
+    assert "U2D2" in KNOWN_DYNAMIXEL_DEVICES["0403:6014"]
+
+
+def test_odrive_table_has_v3():
+    from castor.hardware_detect import KNOWN_ODRIVE_DEVICES
+
+    assert "1209:0d32" in KNOWN_ODRIVE_DEVICES
+
+
+def test_lidar_table_has_cp2102():
+    from castor.hardware_detect import KNOWN_LIDAR_DEVICES
+
+    assert "10c4:ea60" in KNOWN_LIDAR_DEVICES
+
+
+# ---------------------------------------------------------------------------
+# I2C_DEVICE_MAP enrichment
+# ---------------------------------------------------------------------------
+
+
+def test_i2c_map_pca9685_servo_driver():
+    from castor.hardware_detect import I2C_DEVICE_MAP
+
+    assert I2C_DEVICE_MAP["0x40"]["type"] == "servo_driver"
+    assert "PCA9685" in I2C_DEVICE_MAP["0x40"]["name"]
+
+
+def test_i2c_map_mpu6050_imu():
+    from castor.hardware_detect import I2C_DEVICE_MAP
+
+    assert I2C_DEVICE_MAP["0x68"]["type"] == "imu"
+
+
+def test_i2c_map_bno055():
+    from castor.hardware_detect import I2C_DEVICE_MAP
+
+    assert "BNO055" in I2C_DEVICE_MAP["0x28"]["name"]
+
+
+def test_i2c_map_oled_display():
+    from castor.hardware_detect import I2C_DEVICE_MAP
+
+    assert I2C_DEVICE_MAP["0x3c"]["type"] == "display"
+
+
+def test_scan_i2c_enriches_pca9685(monkeypatch):
+    """scan_i2c populates device/type from I2C_DEVICE_MAP for 0x40."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    fake_output = (
+        "     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f\n"
+        "00:          -- -- -- -- -- -- -- -- -- -- -- -- --\n"
+        "40: 40 -- -- -- -- -- -- -- -- -- -- -- -- -- -- --\n"
+    )
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mock_result.stdout = fake_output
+
+    with (
+        patch("os.path.isdir", return_value=True),
+        patch("os.listdir", return_value=["i2c-1"]),
+        patch("subprocess.run", return_value=mock_result),
+    ):
+        from castor.hardware_detect import scan_i2c
+
+        devices = scan_i2c()
+
+    pca = [d for d in devices if d["address"] == "0x40"]
+    assert pca, "0x40 not found in result"
+    assert pca[0]["device"] == "PCA9685 PWM Driver"
+    assert pca[0]["type"] == "servo_driver"
+
+
+def test_scan_i2c_unknown_address_returns_unknown(monkeypatch):
+    """scan_i2c returns 'unknown' for addresses not in I2C_DEVICE_MAP."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    fake_output = "     0  1  2  3  4  5  6  7\n50: 5a -- -- -- -- -- -- --\n"
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mock_result.stdout = fake_output
+
+    with (
+        patch("os.path.isdir", return_value=True),
+        patch("os.listdir", return_value=["i2c-1"]),
+        patch("subprocess.run", return_value=mock_result),
+    ):
+        from castor.hardware_detect import scan_i2c
+
+        devices = scan_i2c()
+
+    if devices:
+        assert devices[0]["device"] == "unknown"
+        assert devices[0]["type"] == "unknown"
+
+
+# ---------------------------------------------------------------------------
+# New detector functions — mock mode (no hardware attached)
+# ---------------------------------------------------------------------------
+
+
+def _make_port(
+    device="/dev/ttyACM0", vid=None, pid=None, description="", product="", manufacturer=""
+):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        device=device,
+        vid=vid,
+        pid=pid,
+        description=description,
+        product=product,
+        manufacturer=manufacturer,
+    )
+
+
+def test_detect_realsense_empty_when_no_serial():
+    from castor.hardware_detect import detect_realsense_usb
+
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[]):
+        with patch("castor.hardware_detect.scan_usb_descriptors", return_value=[]):
+            assert detect_realsense_usb() == []
+
+
+def test_detect_realsense_finds_d435():
+    from castor.hardware_detect import detect_realsense_usb
+
+    port = _make_port("/dev/bus/usb/001/003", vid=0x8086, pid=0x0B07)
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]):
+        result = detect_realsense_usb()
+    assert len(result) == 1
+    assert result[0]["model"] == "Intel RealSense D435"
+
+
+def test_detect_oakd_empty_when_no_serial():
+    from castor.hardware_detect import detect_oakd_usb
+
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[]):
+        with patch("castor.hardware_detect.scan_usb_descriptors", return_value=[]):
+            assert detect_oakd_usb() == []
+
+
+def test_detect_oakd_finds_running_device():
+    from castor.hardware_detect import detect_oakd_usb
+
+    port = _make_port("/dev/bus/usb/001/004", vid=0x03E7, pid=0x2487)
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]):
+        result = detect_oakd_usb()
+    assert len(result) == 1
+    assert "OAK-D" in result[0]["model"]
+
+
+def test_detect_odrive_empty_when_no_serial():
+    from castor.hardware_detect import detect_odrive_usb
+
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[]):
+        assert detect_odrive_usb() == []
+
+
+def test_detect_odrive_finds_v3():
+    from castor.hardware_detect import detect_odrive_usb
+
+    port = _make_port("/dev/ttyACM1", vid=0x1209, pid=0x0D32)
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]):
+        result = detect_odrive_usb()
+    assert "/dev/ttyACM1" in result
+
+
+def test_detect_vesc_empty_when_no_serial():
+    from castor.hardware_detect import detect_vesc_usb
+
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[]):
+        assert detect_vesc_usb() == []
+
+
+def test_detect_vesc_finds_by_description():
+    from castor.hardware_detect import detect_vesc_usb
+
+    port = _make_port("/dev/ttyUSB0", vid=0x0483, pid=0x5740, description="VESC Motor Controller")
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]):
+        assert "/dev/ttyUSB0" in detect_vesc_usb()
+
+
+def test_detect_feetech_empty_when_no_serial():
+    from castor.hardware_detect import detect_feetech_usb
+
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[]):
+        assert detect_feetech_usb() == []
+
+
+def test_detect_feetech_finds_ch340():
+    from castor.hardware_detect import detect_feetech_usb
+
+    port = _make_port("/dev/ttyUSB1", vid=0x1A86, pid=0x7523, description="USB Serial")
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]):
+        assert "/dev/ttyUSB1" in detect_feetech_usb()
+
+
+def test_detect_feetech_skips_acb_product():
+    """ACB-branded STM32 port must not be identified as Feetech."""
+    from castor.hardware_detect import detect_feetech_usb
+
+    port = _make_port("/dev/ttyACM0", vid=0x0483, pid=0x5740, description="ACB Motor Board")
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]):
+        assert detect_feetech_usb() == []
+
+
+def test_detect_arduino_empty_when_no_serial():
+    from castor.hardware_detect import detect_arduino_usb
+
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[]):
+        assert detect_arduino_usb() == []
+
+
+def test_detect_arduino_finds_uno():
+    from castor.hardware_detect import detect_arduino_usb
+
+    port = _make_port("/dev/ttyACM0", vid=0x2341, pid=0x0043)
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]):
+        result = detect_arduino_usb()
+    assert len(result) == 1
+    assert result[0]["board"] == "Arduino Uno R3"
+    assert result[0]["port"] == "/dev/ttyACM0"
+
+
+def test_detect_circuitpython_empty_when_no_serial():
+    from castor.hardware_detect import detect_circuitpython_usb
+
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[]):
+        assert detect_circuitpython_usb() == []
+
+
+def test_detect_circuitpython_finds_adafruit_vid():
+    from castor.hardware_detect import detect_circuitpython_usb
+
+    port = _make_port("/dev/ttyACM1", vid=0x239A, pid=0x0031, description="Feather M4 Express")
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]):
+        result = detect_circuitpython_usb()
+    assert len(result) == 1
+    assert result[0]["vid_pid"].startswith("239a:")
+
+
+def test_detect_dynamixel_empty_when_no_serial():
+    from castor.hardware_detect import detect_dynamixel_usb
+
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[]):
+        assert detect_dynamixel_usb() == []
+
+
+def test_detect_dynamixel_finds_u2d2():
+    from castor.hardware_detect import detect_dynamixel_usb
+
+    port = _make_port("/dev/ttyUSB0", vid=0x0403, pid=0x6014, description="U2D2")
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]):
+        result = detect_dynamixel_usb()
+    assert len(result) == 1
+    assert result[0]["port"] == "/dev/ttyUSB0"
+    assert "U2D2" in result[0]["model"]
+
+
+def test_detect_lidar_empty_when_no_serial():
+    from castor.hardware_detect import detect_lidar_usb
+
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[]):
+        assert detect_lidar_usb() == []
+
+
+def test_detect_lidar_finds_cp2102():
+    from castor.hardware_detect import detect_lidar_usb
+
+    port = _make_port("/dev/ttyUSB0", vid=0x10C4, pid=0xEA60, description="CP2102")
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]):
+        result = detect_lidar_usb()
+    assert len(result) == 1
+    assert result[0]["port"] == "/dev/ttyUSB0"
+
+
+def test_detect_hailo_empty_when_no_device(monkeypatch):
+    monkeypatch.setattr("os.path.isdir", lambda p: p == "/dev")
+    monkeypatch.setattr("os.listdir", lambda _: [])
+
+    def fake_run(*a, **kw):
+        return MagicMock(returncode=0, stdout="")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    from castor.hardware_detect import detect_hailo
+
+    assert detect_hailo() == []
+
+
+def test_detect_hailo_finds_dev_node(monkeypatch):
+    monkeypatch.setattr("os.path.isdir", lambda p: p == "/dev")
+    monkeypatch.setattr("os.listdir", lambda _: ["hailo0", "video0"])
+    from castor.hardware_detect import detect_hailo
+
+    result = detect_hailo()
+    assert any("hailo0" in h for h in result)
+
+
+def test_detect_coral_empty_when_no_device():
+    from castor.hardware_detect import detect_coral
+
+    with (
+        patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[]),
+        patch("castor.hardware_detect.scan_usb_descriptors", return_value=[]),
+        patch("os.listdir", return_value=[]),
+    ):
+        assert detect_coral() == []
+
+
+def test_detect_coral_finds_usb_tpu():
+    from castor.hardware_detect import detect_coral
+
+    port = _make_port("/dev/bus/usb/001/005", vid=0x1A6E, pid=0x089A, description="Coral USB")
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]):
+        result = detect_coral()
+    assert any("coral_usb" in c for c in result)
+
+
+def test_detect_coral_finds_pcie(monkeypatch):
+    monkeypatch.setattr("os.path.isdir", lambda p: p == "/dev")
+    monkeypatch.setattr("os.listdir", lambda _: ["apex0"])
+    from castor.hardware_detect import detect_coral
+
+    with (
+        patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[]),
+        patch("castor.hardware_detect.scan_usb_descriptors", return_value=[]),
+    ):
+        result = detect_coral()
+    assert any("coral_pcie" in c for c in result)
+
+
+def test_detect_reachy_empty_when_unreachable():
+    import socket as _socket
+
+    from castor.hardware_detect import detect_reachy_network
+
+    with patch("socket.getaddrinfo", side_effect=_socket.gaierror("no such host")):
+        assert detect_reachy_network(timeout=0.1) == []
+
+
+def test_detect_reachy_finds_host():
+    import socket as _socket
+
+    from castor.hardware_detect import detect_reachy_network
+
+    def mock_getaddrinfo(host, *a, **kw):
+        if host == "reachy.local":
+            return [(_socket.AF_INET, None, None, None, ("192.168.1.100", 50055))]
+        raise _socket.gaierror("not found")
+
+    with patch("socket.getaddrinfo", side_effect=mock_getaddrinfo):
+        result = detect_reachy_network(timeout=0.1)
+    assert "reachy.local" in result
+
+
+# ---------------------------------------------------------------------------
+# suggest_preset — new hardware branches
+# ---------------------------------------------------------------------------
+
+
+def test_suggest_preset_reachy():
+    from castor.hardware_detect import suggest_preset
+
+    hw = {"reachy": ["reachy.local"], "platform": "generic"}
+    preset, conf, reason = suggest_preset(hw)
+    assert preset == "pollen/reachy2"
+    assert conf == "high"
+    assert "Reachy" in reason
+
+
+def test_suggest_preset_feetech():
+    from castor.hardware_detect import suggest_preset
+
+    hw = {"feetech": ["/dev/ttyUSB0"], "platform": "generic"}
+    preset, conf, _ = suggest_preset(hw)
+    assert preset == "lerobot/so-arm101-follower"
+    assert conf == "high"
+
+
+def test_suggest_preset_dynamixel_gives_koch():
+    from castor.hardware_detect import suggest_preset
+
+    hw = {
+        "dynamixel": [{"port": "/dev/ttyUSB0", "model": "U2D2", "vid_pid": "0403:6014"}],
+        "platform": "generic",
+    }
+    preset, conf, _ = suggest_preset(hw)
+    assert preset == "lerobot/koch-arm"
+    assert conf == "high"
+
+
+def test_suggest_preset_oakd_rpi():
+    from castor.hardware_detect import suggest_preset
+
+    hw = {
+        "oakd": [{"port": "usb", "model": "Luxonis OAK-D (running)", "vid_pid": "03e7:2487"}],
+        "platform": "rpi",
+    }
+    preset, conf, _ = suggest_preset(hw)
+    assert preset == "rpi_oakd"
+    assert conf == "high"
+
+
+def test_suggest_preset_oakd_generic():
+    from castor.hardware_detect import suggest_preset
+
+    hw = {
+        "oakd": [{"port": "usb", "model": "Luxonis OAK-D (running)", "vid_pid": "03e7:2487"}],
+        "platform": "generic",
+    }
+    preset, _, _ = suggest_preset(hw)
+    assert preset == "jetson_oakd"
+
+
+def test_suggest_preset_realsense_generic():
+    from castor.hardware_detect import suggest_preset
+
+    hw = {
+        "realsense": [{"port": "usb", "model": "Intel RealSense D435", "vid_pid": "8086:0b07"}],
+        "platform": "generic",
+    }
+    preset, conf, _ = suggest_preset(hw)
+    assert preset == "generic_realsense"
+    assert conf == "high"
+
+
+def test_suggest_preset_realsense_rpi():
+    from castor.hardware_detect import suggest_preset
+
+    hw = {
+        "realsense": [{"port": "usb", "model": "Intel RealSense D435", "vid_pid": "8086:0b07"}],
+        "platform": "rpi",
+    }
+    preset, _, _ = suggest_preset(hw)
+    assert preset == "rpi_realsense"
+
+
+def test_suggest_preset_odrive():
+    from castor.hardware_detect import suggest_preset
+
+    hw = {"odrive": ["/dev/ttyACM1"], "platform": "generic"}
+    preset, conf, _ = suggest_preset(hw)
+    assert preset == "odrive/differential"
+    assert conf == "high"
+
+
+def test_suggest_preset_hailo():
+    from castor.hardware_detect import suggest_preset
+
+    hw = {"hailo": ["hailo8 via /dev/hailo0"], "platform": "generic"}
+    preset, conf, _ = suggest_preset(hw)
+    assert preset == "hailo_vision"
+    assert conf == "high"
+
+
+def test_suggest_preset_coral():
+    from castor.hardware_detect import suggest_preset
+
+    hw = {"coral": ["coral_usb:/dev/bus/usb/001/005"], "platform": "generic"}
+    preset, conf, _ = suggest_preset(hw)
+    assert preset == "coral/tpu-inference"
+    assert conf == "high"
+
+
+def test_suggest_preset_arduino():
+    from castor.hardware_detect import suggest_preset
+
+    hw = {
+        "arduino": [{"port": "/dev/ttyACM0", "board": "Arduino Uno R3", "vid_pid": "2341:0043"}],
+        "platform": "generic",
+    }
+    preset, conf, reason = suggest_preset(hw)
+    assert preset == "arduino/uno"
+    assert conf == "medium"
+    assert "Arduino" in reason
+
+
+def test_suggest_preset_reachy_priority_over_dynamixel():
+    """Reachy detection takes priority over Dynamixel."""
+    from castor.hardware_detect import suggest_preset
+
+    hw = {
+        "reachy": ["reachy.local"],
+        "dynamixel": [{"port": "/dev/ttyUSB0", "model": "U2D2", "vid_pid": "0403:6014"}],
+        "platform": "generic",
+    }
+    preset, _, _ = suggest_preset(hw)
+    assert preset == "pollen/reachy2"
+
+
+def test_suggest_preset_feetech_priority_over_arduino():
+    """Feetech detection takes priority over Arduino."""
+    from castor.hardware_detect import suggest_preset
+
+    hw = {
+        "feetech": ["/dev/ttyUSB0"],
+        "arduino": [{"port": "/dev/ttyACM0", "board": "Arduino Uno R3", "vid_pid": "2341:0043"}],
+        "platform": "generic",
+    }
+    preset, _, _ = suggest_preset(hw)
+    assert preset == "lerobot/so-arm101-follower"
+
+
+# ---------------------------------------------------------------------------
+# detect_hardware — new keys present
+# ---------------------------------------------------------------------------
+
+
+def test_detect_hardware_includes_new_keys():
+    """detect_hardware returns all new detector keys."""
+    import castor.hardware_detect as hd
+
+    new_keys = [
+        "realsense",
+        "oakd",
+        "odrive",
+        "vesc",
+        "feetech",
+        "arduino",
+        "circuitpython",
+        "dynamixel",
+        "lidar",
+        "hailo",
+        "coral",
+        "imx500",
+        "reachy",
+    ]
+    # Patch all scanners to avoid any real hardware access
+    patches = {
+        "scan_i2c": [],
+        "scan_usb_serial": [],
+        "scan_usb_descriptors": [],
+        "scan_cameras": [],
+        "_detect_platform": "generic",
+        "detect_realsense_usb": [],
+        "detect_oakd_usb": [],
+        "detect_odrive_usb": [],
+        "detect_vesc_usb": [],
+        "detect_feetech_usb": [],
+        "detect_arduino_usb": [],
+        "detect_circuitpython_usb": [],
+        "detect_dynamixel_usb": [],
+        "detect_lidar_usb": [],
+        "detect_hailo": [],
+        "detect_coral": [],
+        "detect_imx500_camera": [],
+        "detect_reachy_network": [],
+    }
+    with patch.multiple(
+        "castor.hardware_detect",
+        **{
+            k: (MagicMock(return_value=v) if k != "_detect_platform" else MagicMock(return_value=v))
+            for k, v in patches.items()
+        },
+    ):
+        hw = hd.detect_hardware()
+
+    for key in new_keys:
+        assert key in hw, f"Key '{key}' missing from detect_hardware() result"
