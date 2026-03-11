@@ -53,7 +53,7 @@ class ClaudeOAuthClient:
     def create_message(
         self,
         model: str,
-        system: str,
+        system: "str | list[dict]",
         messages: list[dict],
         max_tokens: int = 1024,
     ) -> dict:
@@ -61,12 +61,24 @@ class ClaudeOAuthClient:
 
         Returns a dict with 'content' (list of content blocks) matching
         the Anthropic Messages API response format.
+
+        ``system`` may be a plain string or a list of cache_control content
+        blocks (``[{"type": "text", "text": "...", "cache_control": {...}}]``).
+        The CLI transport concatenates the text of all blocks in order.
         """
         # Build the prompt: system + user messages concatenated
         # Claude CLI -p mode takes a single prompt string
         prompt_parts = []
         if system:
-            prompt_parts.append(f"<system>\n{system}\n</system>\n")
+            if isinstance(system, list):
+                # cache_control content blocks — extract and join text
+                system_text = "\n".join(
+                    block.get("text", "") for block in system if block.get("type") == "text"
+                )
+            else:
+                system_text = system
+            if system_text:
+                prompt_parts.append(f"<system>\n{system_text}\n</system>\n")
 
         for msg in messages:
             role = msg.get("role", "user")

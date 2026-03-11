@@ -219,14 +219,14 @@ class AnthropicProvider(BaseProvider):
     def _think_via_cli(self, instruction: str) -> Thought:
         """Call Claude via OAuth CLI client (uses Max/Pro subscription).
 
-        TODO: The CLI path passes system as a plain string and does not yet support
-        cache_control content blocks. Upgrade ClaudeOAuthClient to accept a list[dict]
-        system prompt to enable caching on this code path too.
+        Passes cache_control content blocks when available so the CLI path
+        benefits from the same prompt-caching structure as the direct API path.
         """
+        system_arg = getattr(self, "_cached_system_blocks", None) or self.system_prompt
         try:
             response = self._cli_client.create_message(
                 model=self.model_name,
-                system=self.system_prompt,  # plain string — cache_control not yet supported here
+                system=system_arg,
                 messages=[{"role": "user", "content": instruction}],
                 max_tokens=1024,
             )
