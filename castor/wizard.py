@@ -2446,13 +2446,28 @@ def _build_agent_config(provider_key, model_info):
 
 
 def generate_preset_config(preset_name, robot_name, agent_config, secondary_models=None):
-    """Generate config for a known hardware preset."""
-    preset_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        "config",
-        "presets",
-        f"{preset_name}.rcan.yaml",
-    )
+    """Generate config for a known hardware preset.
+
+    Resolves preset files in two locations (checked in order):
+
+    1. ``config/presets/{preset_name}.rcan.yaml`` — legacy flat preset directory.
+    2. ``castor/profiles/{preset_name}.yaml`` — new slash-style profile IDs
+       (e.g. ``pollen/reachy2`` → ``castor/profiles/pollen/reachy2.yaml``).
+
+    Falls back to an inline RC-car default if neither file exists.
+    """
+    castor_pkg_dir = os.path.dirname(__file__)
+    repo_root = os.path.dirname(castor_pkg_dir)
+
+    # 1. Legacy config/presets/ lookup (flat, underscore IDs)
+    preset_path = os.path.join(repo_root, "config", "presets", f"{preset_name}.rcan.yaml")
+
+    # 2. New castor/profiles/ lookup (slash-style IDs like "pollen/reachy2")
+    if not os.path.exists(preset_path):
+        profile_path = os.path.join(castor_pkg_dir, "profiles", f"{preset_name}.yaml")
+        if os.path.exists(profile_path):
+            preset_path = profile_path
+
     if os.path.exists(preset_path):
         with open(preset_path) as f:
             config = yaml.safe_load(f)

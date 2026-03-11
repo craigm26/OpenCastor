@@ -138,22 +138,21 @@ class ODriveDriver(DriverBase):
 
     @staticmethod
     def _auto_detect_vesc_port():
-        """Use hardware_detect to find the first VESC serial port."""
-        try:
-            from castor.hardware_detect import detect_odrive_usb, detect_vesc_usb
+        """Use hardware_detect to find the first VESC serial port.
 
-            # Prefer explicit VESC detection first
+        Only returns ports that :func:`detect_vesc_usb` positively identifies
+        as VESC devices. The previous ODrive-USB fallback has been removed to
+        prevent accidentally opening an ODrive port as a VESC serial link.
+        """
+        try:
+            from castor.hardware_detect import detect_vesc_usb
+
             vesc_ports = detect_vesc_usb()
             if vesc_ports:
                 logger.info("ODriveDriver auto-detected VESC port: %s", vesc_ports[0])
                 return vesc_ports[0]
-            # Fall back to ODrive USB
-            odrive_ports = detect_odrive_usb()
-            if odrive_ports:
-                logger.info("ODriveDriver auto-detected ODrive port: %s", odrive_ports[0])
-                return odrive_ports[0]
         except Exception as exc:
-            logger.warning("ODriveDriver auto-detect failed: %s", exc)
+            logger.warning("ODriveDriver VESC auto-detect failed: %s", exc)
         return None
 
     def _odrive_axis(self, idx: int):

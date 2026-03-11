@@ -17,6 +17,10 @@ import socket
 import subprocess
 import sys
 
+# Module-level cache for lsusb output — avoids running lsusb multiple times
+# per detect_hardware() call. Reset by invalidate_usb_descriptors_cache().
+_USB_DESCRIPTORS_CACHE: list | None = None
+
 logger = logging.getLogger("OpenCastor.HardwareDetect")
 
 
@@ -200,7 +204,20 @@ def scan_usb_serial() -> list:
 
 
 def scan_usb_descriptors() -> list:
-    """Return raw ``lsusb`` descriptor lines (lower-cased) when available."""
+    """Return raw ``lsusb`` descriptor lines (lower-cased) when available.
+
+    Result is cached for the lifetime of the process so that multiple
+    detectors calling this within a single :func:`detect_hardware` scan
+    do not invoke ``lsusb`` repeatedly.
+    """
+    return _scan_usb_descriptors_cached()
+
+
+def _scan_usb_descriptors_cached() -> list:
+    """Internal implementation — call once and cache in module-level var."""
+    global _USB_DESCRIPTORS_CACHE
+    if _USB_DESCRIPTORS_CACHE is not None:
+        return _USB_DESCRIPTORS_CACHE
     try:
         proc = subprocess.run(
             ["lsusb"],
@@ -209,10 +226,21 @@ def scan_usb_descriptors() -> list:
             timeout=5,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
+        _USB_DESCRIPTORS_CACHE = []
         return []
     if proc.returncode != 0:
+        _USB_DESCRIPTORS_CACHE = []
         return []
-    return [line.strip().lower() for line in proc.stdout.splitlines() if line.strip()]
+    _USB_DESCRIPTORS_CACHE = [
+        line.strip().lower() for line in proc.stdout.splitlines() if line.strip()
+    ]
+    return _USB_DESCRIPTORS_CACHE
+
+
+def invalidate_usb_descriptors_cache() -> None:
+    """Clear the ``scan_usb_descriptors`` cache (useful in tests or after hot-plug)."""
+    global _USB_DESCRIPTORS_CACHE
+    _USB_DESCRIPTORS_CACHE = None
 
 
 def scan_cameras() -> list:
@@ -404,9 +432,13 @@ def detect_feetech_usb() -> list:
         manufacturer = (getattr(port_info, "manufacturer", "") or "").upper()
 
         if key in KNOWN_FEETECH_DEVICES:
-            # Skip if product string clearly identifies it as ACB or ODrive
-            if any(
-                tok in description + product + manufacturer for tok in ("ACB", "ODRIVE", "ROBOTIS")
+            combined = description + product + manufacturer
+            # Skip if product string clearly identifies it as ACB, ODrive, or Robotis
+            if any(tok in combined for tok in ("ACB", "ODRIVE", "ROBOTIS")):
+                continue
+            # Skip CH340 devices that are clearly Arduino boards (not servo boards)
+            if key == "1a86:7523" and any(
+                tok in combined for tok in ("ARDUINO", "UNO", "MEGA", "NANO", "LEONARDO", "DUE")
             ):
                 continue
             ports.append(port_info.device)
@@ -588,29 +620,40 @@ def detect_imx500_camera() -> list:
 def detect_reachy_network(timeout: float = 2.0) -> list:
     """Detect Pollen Robotics Reachy 2 / Reachy Mini via mDNS or hostname resolution.
 
-    Probes common Reachy hostnames and the mDNS ``_reachy._tcp.local.`` service.
+    Probes common Reachy hostnames concurrently (threaded, bounded by *timeout*)
+    and the mDNS ``_reachy._tcp.local.`` service.
 
     Args:
-        timeout: Socket connection timeout in seconds.
+        timeout: Maximum total wall-clock seconds to spend on discovery.
 
     Returns:
         List of host strings that responded (e.g. ``["reachy.local"]``).
     """
+    import threading
+
     found: list = []
     candidates = ["reachy.local", "reachy2.local", "reachy-mini.local"]
+    lock = threading.Lock()
 
-    for host in candidates:
+    def _probe(host: str) -> None:
         try:
             addr = socket.getaddrinfo(
                 host, 50055, socket.AF_UNSPEC, socket.SOCK_STREAM, 0, socket.AI_ADDRCONFIG
             )
             if addr:
-                found.append(host)
+                with lock:
+                    found.append(host)
                 logger.info("Reachy detected at %s", host)
         except (socket.gaierror, OSError):
             pass
 
-    # mDNS via zeroconf (optional)
+    threads = [threading.Thread(target=_probe, args=(h,), daemon=True) for h in candidates]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=timeout)
+
+    # mDNS via zeroconf (optional) — only if hostname probes found nothing
     if not found:
         try:
             import time as _time
@@ -808,7 +851,10 @@ def suggest_preset(hw: dict) -> tuple:
 
     # ── Reachy humanoid ────────────────────────────────────────────────────
     if hw.get("reachy"):
-        return "pollen/reachy2", "high", f"Reachy detected at {hw['reachy'][0]}"
+        host = hw["reachy"][0]
+        is_mini = "mini" in host.lower()
+        profile = "pollen/reachy-mini" if is_mini else "pollen/reachy2"
+        return profile, "high", f"Reachy {'Mini ' if is_mini else ''}detected at {host}"
 
     # ── Feetech servo board (SO-ARM101) ────────────────────────────────────
     if hw.get("feetech"):
@@ -927,11 +973,15 @@ def print_scan_results(hw: dict, colors_class=None):
         "realsense",
         "oakd",
         "odrive",
+        "vesc",
         "dynamixel",
         "feetech",
         "arduino",
+        "circuitpython",
+        "lidar",
         "hailo",
         "coral",
+        "imx500",
         "reachy",
     ):
         items = hw.get(category, [])

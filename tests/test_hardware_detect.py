@@ -6,6 +6,25 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _clear_usb_descriptor_cache():
+    """Reset the scan_usb_descriptors module-level cache before every test.
+
+    The cache prevents lsusb from being invoked multiple times per
+    detect_hardware() call, but it must be cleared between test runs so
+    that tests that mock subprocess.run see their mock rather than the
+    cached real value.
+    """
+    from castor.hardware_detect import invalidate_usb_descriptors_cache
+
+    invalidate_usb_descriptors_cache()
+    yield
+    invalidate_usb_descriptors_cache()
+
+
 # ---------------------------------------------------------------------------
 # scan_i2c
 # ---------------------------------------------------------------------------
