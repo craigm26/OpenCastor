@@ -96,7 +96,7 @@ rcan = [
 ]
 dynamixel = ["dynamixel-sdk>=3.7.31"]
 hlabs = ["python-can>=4.0"]  # HLaboratories ACB v2.0 CAN Bus support (pyserial is a core dep)
-lerobot = ["scservo-sdk>=1.0", "dynamixel-sdk>=3.8"]  # Feetech STS3215 + Dynamixel for LeRobot kits
+lerobot = ["feetech-servo-sdk", "dynamixel-sdk>=3.8"]  # Feetech STS3215 + Dynamixel for LeRobot kits
 reachy = ["reachy2-sdk>=1.0", "zeroconf>=0.120"]  # Pollen Robotics Reachy 2 / Mini
 esp32 = ["websocket-client>=1.7.0"]
 ev3 = ["python-ev3dev2>=2.1.0.post1; sys_platform == 'linux'"]

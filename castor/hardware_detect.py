@@ -16,10 +16,19 @@ import os
 import socket
 import subprocess
 import sys
+import time as _time
+
+# Suppress libcamera / picamera2 noise before any camera-related imports (#558)
+os.environ.setdefault("LIBCAMERA_LOG_LEVELS", "*:FATAL")
 
 # Module-level cache for lsusb output — avoids running lsusb multiple times
 # per detect_hardware() call. Reset by invalidate_usb_descriptors_cache().
 _USB_DESCRIPTORS_CACHE: list | None = None
+
+# Module-level TTL cache for detect_hardware() result (#553)
+_HARDWARE_CACHE: dict | None = None
+_HARDWARE_CACHE_TS: float = 0.0
+_HARDWARE_CACHE_TTL: float = 30.0
 
 logger = logging.getLogger("OpenCastor.HardwareDetect")
 
@@ -358,12 +367,13 @@ def detect_oakd_usb() -> list:
     if results:
         return results
 
-    # lsusb fallback
+    # lsusb fallback — normalise to lowercase so hex case doesn't matter (#546)
     lines = _scan_lsusb_for_vid("03e7")
     for ln in lines:
+        ln_lower = ln.lower()
         for key, model in KNOWN_OAKD_DEVICES.items():
             vid_pid_spaced = key.replace(":", " ")
-            if vid_pid_spaced in ln or key in ln:
+            if vid_pid_spaced in ln_lower or key in ln_lower:
                 results.append({"port": "usb", "vid_pid": key, "model": model})
 
     if results:

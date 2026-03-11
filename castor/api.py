@@ -472,12 +472,15 @@ async def get_status(request: Request):
         getattr(_active_brain_obj, "model_name", None) if _active_brain_obj else None
     )
 
+    import castor as _castor_pkg
+
     payload = {
         "config_loaded": state.config is not None,
         "robot_name": (
             state.config.get("metadata", {}).get("robot_name") if state.config else None
         ),
         "ruri": state.ruri,
+        "version": _castor_pkg.__version__,
         "providers": list_available_providers(),
         "channels_available": list_available_channels(),
         "channels_active": list(state.channels.keys()),

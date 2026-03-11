@@ -28,7 +28,7 @@ from castor.drivers.base import DriverBase
 logger = logging.getLogger("OpenCastor.FeetechDriver")
 
 try:
-    from scservo_sdk import (  # type: ignore[import]
+    from feetech_servo_sdk import (  # type: ignore[import]
         GroupSyncRead,
         GroupSyncWrite,
         PacketHandler,
