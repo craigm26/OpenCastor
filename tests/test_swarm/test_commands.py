@@ -76,11 +76,29 @@ def _make_httpx_client_mock(response: MagicMock) -> MagicMock:
 
 
 class TestLoadSwarmYaml:
-    def test_load_swarm_yaml(self):
-        """Real swarm.yaml should load and contain at least one node."""
+    def test_load_swarm_yaml(self, tmp_path):
+        """load_swarm_config should parse a valid swarm.yaml and return nodes."""
+        import yaml
         from castor.commands.swarm import load_swarm_config
 
-        nodes = load_swarm_config()
+        # config/swarm.yaml is gitignored (contains real tokens); test with a fixture
+        fixture = tmp_path / "swarm.yaml"
+        fixture.write_text(
+            yaml.dump(
+                {
+                    "nodes": [
+                        {
+                            "name": "test-node",
+                            "host": "test-node.local",
+                            "port": 8000,
+                            "token": "test-token-fixture",
+                            "tags": ["test"],
+                        }
+                    ]
+                }
+            )
+        )
+        nodes = load_swarm_config(config_path=str(fixture))
         assert isinstance(nodes, list), "load_swarm_config() must return a list"
         assert len(nodes) >= 1, "swarm.yaml must contain at least one node"
         # Each node must have a 'name' key

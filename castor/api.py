@@ -4746,13 +4746,22 @@ async def webrtc_offer(body: _WebRTCOfferRequest):
 
 @app.get("/setup")
 async def setup_wizard():
-    """Serve the web-based setup wizard UI."""
+    """Serve the web-based setup wizard UI.
+
+    Injects OPENCASTOR_API_TOKEN as window.__OC_TOKEN so the wizard JS can
+    attach Authorization headers to /setup/api/* calls when auth is enabled.
+    The token is only sent to this same-origin page — not exposed externally.
+    """
     from fastapi.responses import HTMLResponse
 
     try:
         from castor.web_wizard import _HTML_TEMPLATE
 
-        return HTMLResponse(content=_HTML_TEMPLATE)
+        token_script = (
+            f"<script>window.__OC_TOKEN = {repr(API_TOKEN or '')};</script>"
+        )
+        html = _HTML_TEMPLATE.replace("</head>", f"{token_script}\n</head>", 1)
+        return HTMLResponse(content=html)
     except Exception as exc:
         return HTMLResponse(
             content=f"<html><body><h1>Setup Wizard Error</h1><pre>{exc}</pre></body></html>",

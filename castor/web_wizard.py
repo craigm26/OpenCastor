@@ -89,6 +89,14 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 let catalog = null;
 let sessionId = null;
 
+/** Return Authorization header if a token was injected by the server. */
+function getAuthHeaders(extra) {
+  const token = window.__OC_TOKEN || '';
+  const headers = Object.assign({}, extra || {});
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  return headers;
+}
+
 function text(el, msg, cls='') {
   el.className = 'result ' + cls;
   el.textContent = msg;
@@ -156,7 +164,7 @@ function populateStacks() {
 }
 
 async function loadCatalog() {
-  const res = await fetch('/setup/api/catalog');
+  const res = await fetch('/setup/api/catalog', { headers: getAuthHeaders() });
   if (!res.ok) throw new Error('Failed to load setup catalog');
   catalog = await res.json();
   populateProviders('anthropic');
@@ -169,19 +177,19 @@ async function loadCatalog() {
 async function ensureSession() {
   const cached = window.localStorage.getItem('opencastor_setup_session_id');
   if (cached) {
-    const resumed = await fetch(`/setup/api/session/${cached}`);
+    const resumed = await fetch(`/setup/api/session/${cached}`, { headers: getAuthHeaders() });
     if (resumed.ok) {
       const payload = await resumed.json();
       if (payload.status === 'in_progress') {
         sessionId = cached;
-        await fetch(`/setup/api/session/${cached}/resume`, { method: 'POST' });
+        await fetch(`/setup/api/session/${cached}/resume`, { method: 'POST', headers: getAuthHeaders() });
         return;
       }
     }
   }
   const started = await fetch('/setup/api/session/start', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers: getAuthHeaders({'Content-Type': 'application/json'}),
     body: JSON.stringify({ robot_name: document.getElementById('robot_name').value }),
   });
   if (!started.ok) throw new Error('Failed to start setup session');
@@ -194,7 +202,7 @@ async function stageSelect(stage, values) {
   if (!sessionId) return;
   await fetch(`/setup/api/session/${sessionId}/select`, {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers: getAuthHeaders({'Content-Type': 'application/json'}),
     body: JSON.stringify({ stage, values }),
   });
 }
@@ -210,7 +218,7 @@ async function runPreflight() {
 
   const res = await fetch('/setup/api/preflight', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers: getAuthHeaders({'Content-Type': 'application/json'}),
     body: JSON.stringify({
       provider,
       model_profile: model,
@@ -259,7 +267,7 @@ async function verifyConfig() {
   text(result, 'Verifying config...');
   const res = await fetch('/setup/api/verify-config', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers: getAuthHeaders({'Content-Type': 'application/json'}),
     body: JSON.stringify(body),
   });
   const payload = await res.json();
@@ -297,7 +305,7 @@ async function generateConfig() {
   text(result, 'Generating config...');
   const res = await fetch('/setup/api/generate-config', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers: getAuthHeaders({'Content-Type': 'application/json'}),
     body: JSON.stringify(body),
   });
   const payload = await res.json();
