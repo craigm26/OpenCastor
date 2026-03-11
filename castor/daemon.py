@@ -112,6 +112,9 @@ SystemCallFilter=~@mount @swap @clock @cpu-emulation @obsolete
 SystemCallErrorNumber=EPERM
 """
 
+    # Use python -m castor.cli so the venv path is not hardcoded (#549)
+    python_bin = f"{venv_root}/bin/python"
+
     return f"""\
 [Unit]
 Description=OpenCastor Gateway — {Path(config_abs).stem}
@@ -124,9 +127,15 @@ Type=simple
 User={user}
 WorkingDirectory={working_dir}
 Environment=PYTHONUNBUFFERED=1
-ExecStart={castor_bin} gateway --config {config_abs}
+Environment=OPENCASTOR_VENV={venv_root}
+ExecStartPre=/bin/sh -c 'fuser -k 8000/tcp 2>/dev/null || true'
+ExecStart={python_bin} -m castor.cli gateway --config {config_abs}
 Restart=on-failure
 RestartSec=5s
+KillMode=control-group
+KillSignal=SIGTERM
+TimeoutStopSec=15
+SendSIGKILL=yes
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier={SERVICE_NAME}
@@ -402,6 +411,9 @@ def generate_dashboard_service_file(
     dashboard_py = str(castor_pkg / "dashboard.py")
     workdir = _systemd_path(working_dir or str(castor_pkg.parent))
 
+    # Use python -m streamlit so the venv path is not hardcoded (#549, #550)
+    python_bin = f"{venv_root}/bin/python"
+
     return f"""\
 [Unit]
 Description=OpenCastor Dashboard (CastorDash)
@@ -415,13 +427,19 @@ Type=simple
 User={user}
 WorkingDirectory={workdir}
 Environment=PYTHONUNBUFFERED=1
-ExecStart={streamlit_bin} run {dashboard_py} \\
+Environment=OPENCASTOR_VENV={venv_root}
+ExecStartPre=/bin/sh -c 'fuser -k {port}/tcp 2>/dev/null || true'
+ExecStart={python_bin} -m streamlit run {dashboard_py} \\
     --server.port {port} \\
     --server.address 0.0.0.0 \\
     --server.headless true \\
     --server.fileWatcherType none
 Restart=always
 RestartSec=5s
+KillMode=control-group
+KillSignal=SIGTERM
+TimeoutStopSec=15
+SendSIGKILL=yes
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier={DASHBOARD_SERVICE_NAME}
