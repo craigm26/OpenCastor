@@ -11,18 +11,14 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _clear_usb_descriptor_cache():
-    """Reset the scan_usb_descriptors module-level cache before every test.
-
-    The cache prevents lsusb from being invoked multiple times per
-    detect_hardware() call, but it must be cleared between test runs so
-    that tests that mock subprocess.run see their mock rather than the
-    cached real value.
-    """
-    from castor.hardware_detect import invalidate_usb_descriptors_cache
+    """Reset the scan_usb_descriptors and detect_hardware caches before every test."""
+    from castor.hardware_detect import invalidate_hardware_cache, invalidate_usb_descriptors_cache
 
     invalidate_usb_descriptors_cache()
+    invalidate_hardware_cache()
     yield
     invalidate_usb_descriptors_cache()
+    invalidate_hardware_cache()
 
 
 # ---------------------------------------------------------------------------
@@ -1163,3 +1159,182 @@ def test_detect_hardware_includes_new_keys():
 
     for key in new_keys:
         assert key in hw, f"Key '{key}' missing from detect_hardware() result"
+
+
+# ---------------------------------------------------------------------------
+# #546 OAK-D SR hex case fix
+# ---------------------------------------------------------------------------
+
+
+def test_detect_oakd_lsusb_uppercase_hex(monkeypatch):
+    """OAK-D SR (PID f63b) must be detected via lsusb fallback.
+
+    scan_usb_descriptors() lowercases cache entries, so the normalised
+    line must still be matched by detect_oakd_usb().
+    """
+    import castor.hardware_detect as hd
+
+    # Simulate the lowercased cache that scan_usb_descriptors() actually stores
+    fake_lsusb = ["bus 001 device 002: id 03e7:f63b luxonis oak-d sr"]
+    monkeypatch.setattr(hd, "_USB_DESCRIPTORS_CACHE", fake_lsusb)
+    monkeypatch.setattr(hd, "_list_usb_ports_with_vidpid", lambda: [])
+
+    results = hd.detect_oakd_usb()
+    models = [r["model"] for r in results]
+    assert "Luxonis OAK-D SR" in models
+
+
+def test_detect_oakd_sr_pid_f63b_maps_to_correct_model():
+    """KNOWN_OAKD_DEVICES table has the correct entry for PID f63b."""
+    import castor.hardware_detect as hd
+
+    assert "03e7:f63b" in hd.KNOWN_OAKD_DEVICES
+    assert hd.KNOWN_OAKD_DEVICES["03e7:f63b"] == "Luxonis OAK-D SR"
+
+
+# ---------------------------------------------------------------------------
+# #553 detect_hardware() TTL cache
+# ---------------------------------------------------------------------------
+
+
+def test_detect_hardware_returns_cached_result(monkeypatch):
+    """Two successive calls without refresh return the same dict object."""
+    import castor.hardware_detect as hd
+
+    call_count = {"n": 0}
+    original = hd._run_all_detectors
+
+    def counting_detectors():
+        call_count["n"] += 1
+        return original()
+
+    monkeypatch.setattr(hd, "_run_all_detectors", counting_detectors)
+    hd.invalidate_hardware_cache()
+
+    r1 = hd.detect_hardware()
+    r2 = hd.detect_hardware()
+    assert r1 is r2
+    assert call_count["n"] == 1
+
+
+def test_detect_hardware_refresh_bypasses_cache(monkeypatch):
+    """detect_hardware(refresh=True) always re-runs detectors."""
+    import castor.hardware_detect as hd
+
+    call_count = {"n": 0}
+    original = hd._run_all_detectors
+
+    def counting_detectors():
+        call_count["n"] += 1
+        return original()
+
+    monkeypatch.setattr(hd, "_run_all_detectors", counting_detectors)
+    hd.invalidate_hardware_cache()
+
+    hd.detect_hardware()
+    hd.detect_hardware(refresh=True)
+    assert call_count["n"] == 2
+
+
+def test_invalidate_hardware_cache_forces_fresh(monkeypatch):
+    """After invalidate_hardware_cache(), next call re-runs detectors."""
+    import castor.hardware_detect as hd
+
+    call_count = {"n": 0}
+    original = hd._run_all_detectors
+
+    def counting_detectors():
+        call_count["n"] += 1
+        return original()
+
+    monkeypatch.setattr(hd, "_run_all_detectors", counting_detectors)
+    hd.invalidate_hardware_cache()
+
+    hd.detect_hardware()
+    hd.invalidate_hardware_cache()
+    hd.detect_hardware()
+    assert call_count["n"] == 2
+
+
+# ---------------------------------------------------------------------------
+# #552 scan_cameras() v4l2 device name
+# ---------------------------------------------------------------------------
+
+
+def test_scan_cameras_includes_name_field(monkeypatch, tmp_path):
+    """Each camera entry must have a 'name' key."""
+    import castor.hardware_detect as hd
+
+    # Create a fake sysfs name file
+    sys_dir = tmp_path / "sys" / "class" / "video4linux" / "video0"
+    sys_dir.mkdir(parents=True)
+    (sys_dir / "name").write_text("FakeCam HD\n")
+
+    monkeypatch.setattr(os.path, "isdir", lambda p: p == "/dev" or os.path.isdir.__wrapped__(p) if hasattr(os.path.isdir, "__wrapped__") else True)
+    monkeypatch.setattr(os, "listdir", lambda p: ["video0"] if p == "/dev" else [])
+    monkeypatch.setattr(os, "access", lambda p, m: True)
+
+    real_get_name = hd._get_v4l2_device_name
+
+    def patched_get_name(entry):
+        path = str(sys_dir / "name") if entry == "video0" else None
+        if path:
+            try:
+                with open(path) as f:
+                    return f.read().strip()
+            except OSError:
+                return None
+        return real_get_name(entry)
+
+    monkeypatch.setattr(hd, "_get_v4l2_device_name", patched_get_name)
+    # Avoid picamera2 import
+    monkeypatch.setitem(sys.modules, "picamera2", None)
+
+    cameras = hd.scan_cameras()
+    assert len(cameras) >= 1
+    assert "name" in cameras[0]
+    assert cameras[0]["name"] == "FakeCam HD"
+
+
+def test_get_v4l2_device_name_returns_none_on_missing():
+    """_get_v4l2_device_name returns None when sysfs path doesn't exist."""
+    import castor.hardware_detect as hd
+
+    result = hd._get_v4l2_device_name("video_nonexistent_999")
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# #555 suggest_extras()
+# ---------------------------------------------------------------------------
+
+
+def test_suggest_extras_returns_package_for_oakd(monkeypatch):
+    """When oakd is detected and depthai is not installed, suggest it."""
+    import castor.hardware_detect as hd
+
+    hw = {"oakd": [{"port": "usb", "vid_pid": "03e7:2487", "model": "OAK-D"}]}
+
+    # Make depthai un-importable
+    monkeypatch.setitem(sys.modules, "depthai", None)
+
+    extras = hd.suggest_extras(hw)
+    assert "depthai" in extras
+
+
+def test_suggest_extras_empty_when_no_hardware():
+    """No hardware detected → no extras suggested."""
+    import castor.hardware_detect as hd
+
+    hw = {k: [] for k in hd._HARDWARE_EXTRAS}
+    extras = hd.suggest_extras(hw)
+    assert extras == []
+
+
+def test_suggest_extras_deduplicates():
+    """suggest_extras should not return duplicate package names."""
+    import castor.hardware_detect as hd
+
+    hw = {"feetech": [{"port": "/dev/ttyACM0"}]}
+    extras = hd.suggest_extras(hw)
+    assert len(extras) == len(set(extras))

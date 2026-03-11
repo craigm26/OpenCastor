@@ -64,7 +64,6 @@ def generate_service_file(
     else:
         working_dir = _systemd_path(working_dir)
     venv_root = _systemd_path(venv_path).rstrip("/")
-    castor_bin = f"{venv_root}/bin/castor"
     security_profile = (security_profile or _get_security_profile(config_abs)).strip().lower()
 
     if security_profile not in {"hardened", "permissive"}:
@@ -406,7 +405,6 @@ def generate_dashboard_service_file(
     """Generate a systemd .service file for the CastorDash Streamlit dashboard."""
     user = user or os.environ.get("USER", "pi")
     venv_root = _systemd_path(venv_path or sys.prefix).rstrip("/")
-    streamlit_bin = f"{venv_root}/bin/streamlit"
     castor_pkg = Path(__file__).resolve().parent
     dashboard_py = str(castor_pkg / "dashboard.py")
     workdir = _systemd_path(working_dir or str(castor_pkg.parent))
