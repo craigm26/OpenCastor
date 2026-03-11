@@ -27,6 +27,7 @@ REQUIRED_TOP_LEVEL: List[str] = [
 # Optional top-level keys recognised by RCAN v1.2+
 OPTIONAL_TOP_LEVEL: List[str] = [
     "security_level",  # v1.2: deployment security posture (e.g. "standard", "high")
+    "profile",  # HLabs / hardware profile name (e.g. "hlabs/acb-single")
     "reactive",
     "tiered_brain",
     "agent_roster",
