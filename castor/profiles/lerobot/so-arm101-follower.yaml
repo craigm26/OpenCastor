@@ -1,0 +1,22 @@
+profile: lerobot/so-arm101-follower
+robot_type: arm_6dof
+
+# SO-ARM101 follower arm (Feetech STS3215 servos, 6-DOF)
+# Designed to replicate movements from a leader arm (teleoperation).
+# Install: pip install opencastor[lerobot]
+
+drivers:
+  - id: arm
+    protocol: feetech
+    port: auto
+    baud: 1000000
+    servo_ids: [1, 2, 3, 4, 5, 6]
+    joint_names:
+      - shoulder_pan
+      - shoulder_lift
+      - elbow_flex
+      - wrist_flex
+      - wrist_roll
+      - gripper
+    operating_mode: position
+    torque_enable: true

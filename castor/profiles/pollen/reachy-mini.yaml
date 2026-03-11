@@ -1,0 +1,13 @@
+profile: pollen/reachy-mini
+robot_type: humanoid_mini
+
+# Pollen Robotics Reachy Mini desktop humanoid.
+# Connects via Ethernet (gRPC). No mobile base.
+# Install: pip install opencastor[reachy]
+
+drivers:
+  - id: reachy
+    protocol: reachy
+    host: auto
+    arms: [right]
+    head: true

@@ -1,0 +1,13 @@
+profile: pollen/reachy2
+robot_type: humanoid
+
+# Pollen Robotics Reachy 2 humanoid robot.
+# Connects via Ethernet (gRPC). Auto-discovers reachy.local via mDNS.
+# Install: pip install opencastor[reachy]
+
+drivers:
+  - id: reachy
+    protocol: reachy
+    host: auto
+    arms: [left, right]
+    head: true

@@ -1,0 +1,14 @@
+profile: odrive/differential
+robot_type: differential_drive
+
+# ODrive v3.x/Pro differential-drive robot.
+# Connects via USB; auto-detected by odrive.find_any().
+# Install: pip install odrive
+
+drivers:
+  - id: brushless
+    protocol: odrive
+    axis0: 0
+    axis1: 1
+    max_velocity: 20.0
+    control_mode: velocity

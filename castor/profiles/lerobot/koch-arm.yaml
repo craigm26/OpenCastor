@@ -1,0 +1,20 @@
+profile: lerobot/koch-arm
+robot_type: arm_6dof
+
+# Koch v1.1 arm (Dynamixel XL430-W250 + XL330-M288, 6-DOF)
+# Compatible with LeRobot data format.
+# Install: pip install opencastor[lerobot]
+
+drivers:
+  - id: arm
+    protocol: dynamixel
+    port: auto
+    baud_rate: 1000000
+    motor_ids: [1, 2, 3, 4, 5, 6]
+    joint_names:
+      - shoulder_pan
+      - shoulder_lift
+      - elbow_flex
+      - wrist_flex
+      - wrist_roll
+      - gripper

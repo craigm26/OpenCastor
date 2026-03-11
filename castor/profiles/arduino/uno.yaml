@@ -1,0 +1,13 @@
+profile: arduino/uno
+robot_type: microcontroller
+
+# Arduino Uno (R3 / R4) generic serial JSON driver.
+# Firmware on the Arduino should accept JSON commands and respond with JSON status.
+# Install: pip install pyserial
+
+drivers:
+  - id: arduino
+    protocol: arduino_serial_json
+    port: auto
+    baud: 115200
+    timeout: 1.0

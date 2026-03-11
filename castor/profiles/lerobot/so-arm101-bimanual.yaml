@@ -1,0 +1,36 @@
+profile: lerobot/so-arm101-bimanual
+robot_type: arm_bimanual
+
+# SO-ARM101 bimanual setup: left leader + right follower on separate serial buses.
+# Install: pip install opencastor[lerobot]
+
+drivers:
+  - id: left_arm
+    protocol: feetech
+    port: auto
+    baud: 1000000
+    servo_ids: [1, 2, 3, 4, 5, 6]
+    joint_names:
+      - left_shoulder_pan
+      - left_shoulder_lift
+      - left_elbow_flex
+      - left_wrist_flex
+      - left_wrist_roll
+      - left_gripper
+    operating_mode: position
+    torque_enable: false
+
+  - id: right_arm
+    protocol: feetech
+    port: auto
+    baud: 1000000
+    servo_ids: [7, 8, 9, 10, 11, 12]
+    joint_names:
+      - right_shoulder_pan
+      - right_shoulder_lift
+      - right_elbow_flex
+      - right_wrist_flex
+      - right_wrist_roll
+      - right_gripper
+    operating_mode: position
+    torque_enable: true

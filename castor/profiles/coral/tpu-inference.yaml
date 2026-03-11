@@ -1,0 +1,16 @@
+profile: coral/tpu-inference
+robot_type: vision_accelerator
+
+# Google Coral Edge TPU (USB or PCIe M.2).
+# Used as a vision co-processor alongside a primary robot driver.
+# Install: pip install pycoral tflite-runtime
+
+# No native OpenCastor driver — use as a vision plugin via castor.tools.
+# The platform key enables Coral-optimised model loading in vision tools.
+platform:
+  accelerator: coral
+  runtime: pycoral
+
+drivers:
+  - id: mock_base
+    protocol: simulation
