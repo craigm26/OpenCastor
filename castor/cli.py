@@ -1446,25 +1446,93 @@ def cmd_update_check(args) -> None:
 
 
 def cmd_upgrade(args) -> None:
-    """castor upgrade — upgrade castor to the latest PyPI release."""
+    """castor upgrade — upgrade OpenCastor to the latest version (#554)."""
     import subprocess
     import sys
+    from pathlib import Path
+
+    import castor
 
     verbose = getattr(args, "verbose", False)
-    pip_cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "opencastor"]
+    check_only = getattr(args, "check_only", False)
+    venv = getattr(args, "venv", None)
+
+    print(f"  Current version: {castor.__version__}")
+
+    # Detect git install
+    repo = Path(__file__).parent.parent
+    is_git = (repo / ".git").exists()
+
+    if check_only:
+        if is_git:
+            result = subprocess.run(
+                ["git", "fetch", "origin", "main", "--dry-run"],
+                cwd=repo,
+                capture_output=True,
+                text=True,
+            )
+            print(f"  Repo: {repo}")
+            result2 = subprocess.run(
+                ["git", "log", "HEAD..origin/main", "--oneline"],
+                cwd=repo,
+                capture_output=True,
+                text=True,
+            )
+            commits = result2.stdout.strip()
+            if commits:
+                print(f"  Pending commits:\n{commits}")
+            else:
+                print("  Already up to date.")
+        else:
+            print("  Not a git install — check PyPI for latest version.")
+        return
+
+    if is_git:
+        print("  Pulling latest from origin/main...")
+        pull = subprocess.run(
+            ["git", "pull", "origin", "main"],
+            cwd=repo,
+            capture_output=not verbose,
+            text=True,
+        )
+        if pull.returncode != 0:
+            print(f"  git pull failed: {pull.stderr}")
+            return
+        if verbose and pull.stdout:
+            print(pull.stdout)
+
+    python = (venv.rstrip("/") + "/bin/python") if venv else sys.executable
+    pip_cmd = [python, "-m", "pip", "install", "-e", str(repo)]
     if verbose:
         pip_cmd.append("-v")
-    result = subprocess.run(pip_cmd)
-    if result.returncode == 0:
-        print("  Upgrade complete. Running health check...")
-        from castor.doctor import print_report, run_all_checks
-
-        print_report(run_all_checks())
     else:
-        msg = "  Upgrade failed."
-        if not verbose:
-            msg += " Re-run with --verbose for details."
-        print(msg)
+        pip_cmd.append("-q")
+
+    print(f"  Installing with: {python}")
+    result = subprocess.run(pip_cmd, capture_output=not verbose)
+    if result.returncode != 0:
+        print("  Upgrade failed. Re-run with --verbose for details.")
+        return
+
+    # Restart services (best-effort)
+    subprocess.run(
+        ["systemctl", "--user", "restart", "castor-gateway.service"],
+        capture_output=True,
+    )
+    subprocess.run(
+        ["systemctl", "--user", "restart", "castor-dashboard.service"],
+        capture_output=True,
+    )
+
+    # Reload to get new version string
+    import importlib
+    try:
+        importlib.reload(castor)
+    except Exception:
+        pass
+
+    print(f"  Upgraded to: {castor.__version__}")
+    print("  Run 'castor doctor' to verify.")
 
 
 def cmd_validate(args) -> None:
@@ -2777,8 +2845,14 @@ def main() -> None:
     p_migrate.add_argument("--dry-run", action="store_true", help="Show changes without modifying")
 
     # castor upgrade
-    p_upgrade = sub.add_parser("upgrade", help="Upgrade OpenCastor and run health check")
+    p_upgrade = sub.add_parser("upgrade", help="Upgrade OpenCastor to latest version")
     p_upgrade.add_argument("--verbose", "-v", action="store_true", help="Show pip output")
+    p_upgrade.add_argument(
+        "--check", action="store_true", dest="check_only", help="Show available updates without upgrading"
+    )
+    p_upgrade.add_argument(
+        "--venv", default=None, metavar="PATH", help="Path to venv (default: current Python)"
+    )
 
     # castor install-service
     p_svc = sub.add_parser(
