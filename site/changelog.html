@@ -133,12 +133,50 @@
     <div class="container">
       <div class="changelog-timeline">
 
-        <!-- v2026.3.10.1 -->
+        <!-- v2026.3.11.0 -->
         <div class="changelog-release current reveal">
+          <div class="release-header">
+            <span class="release-version">v2026.3.11.0</span>
+            <span class="release-date">March 11, 2026</span>
+            <span class="release-badge-current">Current</span>
+          </div>
+          <div class="release-items">
+            <div class="release-item">
+              <div class="release-item-icon">🔌</div>
+              <div class="release-item-body">
+                <h4>Plug-and-Play Hardware Auto-Detection</h4>
+                <p><code>castor scan</code> now identifies 12+ hardware types by USB VID/PID, I2C address, PCIe, and mDNS network discovery: Intel RealSense D4xx/L515, Luxonis OAK-D family, ODrive v3/Pro/S1, VESC, Hailo-8 NPU, Google Coral USB/M.2, Arduino (official + CH340/FTDI clones), Adafruit CircuitPython, Dynamixel U2D2, RPLidar, Raspberry Pi AI Camera (IMX500), and Pollen Robotics Reachy. I2C address lookup for 10+ common sensors. USB descriptors memoized — <code>lsusb</code> called once per scan. Hot-plug support via <code>invalidate_usb_descriptors_cache()</code>.</p>
+              </div>
+            </div>
+            <div class="release-item">
+              <div class="release-item-icon">🦾</div>
+              <div class="release-item-body">
+                <h4>Feetech STS3215 Driver + LeRobot Profiles</h4>
+                <p>New <code>FeetechDriver</code> for Feetech SCS/STS serial bus servos used in SO-ARM100/101 and LeRobot kits. <code>port: auto</code> detects the CH340 USB adapter automatically. Pre-built RCAN profiles: <code>lerobot/so-arm101-follower</code>, <code>lerobot/so-arm101-leader</code>, <code>lerobot/so-arm101-bimanual</code>, <code>lerobot/koch-arm</code> (Dynamixel XL430/XL330 via U2D2), <code>lerobot/aloha</code> (bimanual). Install: <code>pip install opencastor[lerobot]</code>. Fixes CH340 clone misrouting to Arduino Nano.</p>
+              </div>
+            </div>
+            <div class="release-item">
+              <div class="release-item-icon">🤖</div>
+              <div class="release-item-body">
+                <h4>Pollen Robotics Reachy Driver</h4>
+                <p>New <code>ReachyDriver</code> for Reachy 2 and Reachy Mini via <code>reachy2-sdk</code> (gRPC). <code>host: auto</code> uses concurrent mDNS hostname probes (<code>reachy.local</code> / <code>reachy-mini.local</code>) with no blocking <code>getaddrinfo</code> calls. Profiles: <code>pollen/reachy2.yaml</code>, <code>pollen/reachy-mini.yaml</code>. Install: <code>pip install opencastor[reachy]</code>.</p>
+              </div>
+            </div>
+            <div class="release-item">
+              <div class="release-item-icon">🔧</div>
+              <div class="release-item-body">
+                <h4>Bug Fixes</h4>
+                <p><code>detect_feetech_usb()</code> no longer misroutes Arduino Nano CH340 clones to LeRobot SO-ARM101 profile. <code>_auto_detect_vesc_port()</code> ODrive-USB fallback removed (prevented ODrive port being opened as VESC serial). <code>print_scan_results()</code> now includes all detected categories. <code>suggest_preset()</code> correctly distinguishes Reachy Mini from Reachy 2.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- v2026.3.10.1 -->
+        <div class="changelog-release reveal">
           <div class="release-header">
             <span class="release-version">v2026.3.10.1</span>
             <span class="release-date">March 10, 2026</span>
-            <span class="release-badge-current">Current</span>
           </div>
           <div class="release-items">
             <div class="release-item">

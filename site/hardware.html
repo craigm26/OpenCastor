@@ -291,6 +291,30 @@
             <p>Open-source 3-phase BLDC motor controller. STM32G474, 12V–30V, 40A max, CAN Bus 1Mbit/s. Auto-detected via USB. Calibration wizard, 50Hz telemetry, firmware flash via DFU. <code>pip install opencastor[hlabs]</code></p>
             <div class="hw-card-meta">protocol: hlabs_acb · USB-C / CAN · New in v2026.3.10.1</div>
           </div>
+          <div class="hw-card reveal reveal-d4">
+            <div class="hw-card-top">
+              <div class="hw-card-icon">🦾</div><span class="status status-green">Supported</span>
+            </div>
+            <h3>SO-ARM101 / Feetech STS3215</h3>
+            <p>6-DOF serial bus servo arm used in Hugging Face LeRobot kits. Auto-detected via CH340 USB adapter. <code>port: auto</code> wiring. RCAN profiles for follower, leader, and bimanual setups. <code>pip install opencastor[lerobot]</code></p>
+            <div class="hw-card-meta">protocol: feetech · USB serial · New in v2026.3.11.0</div>
+          </div>
+          <div class="hw-card reveal reveal-d5">
+            <div class="hw-card-top">
+              <div class="hw-card-icon">🤖</div><span class="status status-green">Supported</span>
+            </div>
+            <h3>Pollen Robotics Reachy 2</h3>
+            <p>Full-size humanoid with dual 7-DOF arms and stereo cameras. Connects via gRPC over Ethernet/Wi-Fi. <code>host: auto</code> mDNS discovery — no IP config required. <code>pip install opencastor[reachy]</code></p>
+            <div class="hw-card-meta">protocol: reachy · gRPC / mDNS · New in v2026.3.11.0</div>
+          </div>
+          <div class="hw-card reveal reveal-d6">
+            <div class="hw-card-top">
+              <div class="hw-card-icon">🤖</div><span class="status status-green">Supported</span>
+            </div>
+            <h3>Pollen Robotics Reachy Mini</h3>
+            <p>Desktop humanoid with 5-DOF animated head, speaker, and microphone. Same gRPC API as Reachy 2. Auto-discovered via <code>reachy-mini.local</code> mDNS. <code>pip install opencastor[reachy]</code></p>
+            <div class="hw-card-meta">protocol: reachy · gRPC / mDNS · New in v2026.3.11.0</div>
+          </div>
         </div>
       </div>
     </section>
