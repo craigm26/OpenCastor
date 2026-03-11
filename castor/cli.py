@@ -2178,7 +2178,9 @@ def cmd_flash(args) -> None:
                     return
                 print(f"  SHA-256 verified: {actual_hash[:16]}...")
             else:
-                print("  WARNING: No .sha256 asset found for this release — skipping checksum verification.")
+                print(
+                    "  WARNING: No .sha256 asset found for this release — skipping checksum verification."
+                )
         except Exception as exc:
             print(f"  Failed to fetch firmware: {exc}")
             return
