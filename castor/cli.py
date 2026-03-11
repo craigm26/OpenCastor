@@ -1920,6 +1920,106 @@ def cmd_fix(args) -> None:
     run_fix(config_path=getattr(args, "config", None))
 
 
+def cmd_flash(args) -> None:
+    """castor flash — flash ACB v2.0 firmware via DFU-util (#523).
+
+    WARNING: Use a current-limiting PSU during firmware flashing.
+    High current MOSFETs are present on the ACB v2.0 board.
+    """
+    import subprocess
+    import urllib.request
+
+    firmware_path = getattr(args, "firmware", None)
+    version = getattr(args, "version", None) or "latest"
+    confirm = getattr(args, "confirm", False)
+
+    print()
+    print("  \u26a0\ufe0f  WARNING: Use a current-limiting PSU during firmware flashing.")
+    print("        High current MOSFETs are present on the ACB v2.0 board.")
+    print()
+
+    if not confirm:
+        try:
+            ans = input("  Proceed with flash? [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\n  Aborted.")
+            return
+        if ans not in ("y", "yes"):
+            print("  Aborted.")
+            return
+
+    # Check DFU device
+    try:
+        result = subprocess.run(["dfu-util", "-l"], capture_output=True, text=True, timeout=10)
+        if "0483:df11" not in result.stdout.lower() and "0483:df11" not in result.stderr.lower():
+            print("  No DFU device found (VID:0483 PID:DF11).")
+            print("  Hold the BOOT button on the ACB, then connect USB — then re-run this command.")
+            return
+    except FileNotFoundError:
+        print("  dfu-util not found.  Install with: sudo apt install dfu-util")
+        return
+    except Exception as exc:
+        print(f"  dfu-util error: {exc}")
+        return
+
+    import pathlib
+
+    cache_dir = pathlib.Path.home() / ".opencastor" / "firmware"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    if firmware_path:
+        fw_path = pathlib.Path(firmware_path)
+    else:
+        print(f"  Fetching latest ACB firmware release (version={version})...")
+        try:
+            api_url = "https://api.github.com/repos/h-laboratories/acb-v2.0/releases/latest"
+            with urllib.request.urlopen(api_url, timeout=10) as resp:  # noqa: S310
+                import json as _json
+
+                release_data = _json.loads(resp.read())
+            assets = release_data.get("assets", [])
+            bin_assets = [a for a in assets if a.get("name", "").endswith(".bin")]
+            if not bin_assets:
+                print("  No .bin asset found in latest GitHub release.")
+                return
+            fw_url = bin_assets[0]["browser_download_url"]
+            tag = release_data.get("tag_name", "latest")
+            fw_path = cache_dir / f"acb-v2.0-{tag}.bin"
+            if not fw_path.exists():
+                print(f"  Downloading {fw_url} ...")
+                with urllib.request.urlopen(fw_url, timeout=30) as resp:  # noqa: S310
+                    fw_path.write_bytes(resp.read())
+                print(f"  Cached to {fw_path}")
+            else:
+                print(f"  Using cached {fw_path}")
+        except Exception as exc:
+            print(f"  Failed to fetch firmware: {exc}")
+            return
+
+    print(f"  Flashing {fw_path} to device...")
+    try:
+        proc = subprocess.run(
+            [
+                "dfu-util",
+                "-d",
+                "0483:DF11",
+                "-a",
+                "0",
+                "-s",
+                "0x08000000:leave",
+                "-D",
+                str(fw_path),
+            ],
+            timeout=120,
+        )
+        if proc.returncode == 0:
+            print("  Flash complete.  Waiting for device to reconnect...")
+        else:
+            print(f"  Flash failed (exit code {proc.returncode}).")
+    except Exception as exc:
+        print(f"  Flash error: {exc}")
+
+
 def cmd_hub(args) -> None:
     """castor hub — community recipe hub: browse, share, and install robot configs."""
     from castor.hub import (
@@ -3389,6 +3489,26 @@ def main() -> None:
     )
 
     # castor hub
+    p_flash = sub.add_parser(
+        "flash",
+        help="Flash ACB v2.0 firmware via DFU-util",
+        epilog=(
+            "Examples:\n"
+            "  castor flash --id motor_0\n"
+            "  castor flash --id motor_0 --version latest --confirm\n"
+            "  castor flash --id motor_0 --firmware acb-v1.2.bin --confirm\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_flash.add_argument("--id", default="acb", help="Driver ID to flash (default: acb)")
+    p_flash.add_argument("--firmware", default=None, help="Path to .bin firmware file")
+    p_flash.add_argument(
+        "--version", default="latest", help="Firmware version tag to fetch (default: latest)"
+    )
+    p_flash.add_argument(
+        "--confirm", action="store_true", help="Skip interactive confirmation prompt"
+    )
+
     p_hub = sub.add_parser(
         "hub",
         help="Community recipe hub — browse, share, and install configs",
@@ -3620,6 +3740,7 @@ def main() -> None:
         "monitor": _cmd_monitor,
         "safety": cmd_safety,
         "login": cmd_login,
+        "flash": cmd_flash,
         "hub": cmd_hub,
         "scan": cmd_scan,
         "daemon": cmd_daemon,
