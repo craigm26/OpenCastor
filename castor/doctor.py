@@ -667,13 +667,51 @@ def check_rrn_valid(rrn: Optional[str] = None) -> tuple[str, str, str]:
         return ("WARN", "check_rrn_valid", f"RRN {rrn} could not be resolved: {e}")
 
 
+def check_hardware_deps(hw: dict | None = None) -> list:
+    """Check that optional hardware dependencies are installed (#548).
+
+    Args:
+        hw: Pre-computed result from :func:`castor.hardware_detect.detect_hardware`.
+            When ``None`` the check runs ``detect_hardware()`` itself.
+
+    Returns:
+        List of ``(ok, name, detail)`` tuples compatible with :func:`run_all_checks`.
+    """
+    if hw is None:
+        try:
+            from castor.hardware_detect import detect_hardware
+
+            hw = detect_hardware()
+        except Exception as exc:
+            return [(False, "hardware_deps", f"detect_hardware() failed: {exc}")]
+
+    try:
+        from castor.hardware_detect import suggest_extras
+
+        extras = suggest_extras(hw)
+    except Exception as exc:
+        return [(False, "hardware_deps", f"suggest_extras() failed: {exc}")]
+
+    if not extras:
+        return [(True, "hardware_deps", "All hardware deps installed")]
+
+    return [
+        (
+            False,
+            f"dep_{pkg.replace('-', '_')}",
+            f"Optional package not installed: {pkg} — run: pip install {pkg}",
+        )
+        for pkg in extras
+    ]
+
+
 def run_all_checks(config_path: Optional[str] = None) -> list[tuple[bool, str, str]]:
     """Run all checks and return list of (ok, name, detail) tuples.
 
     Check order (first-class RCAN checks run after system checks):
       1. System: CPU temp, GPU memory, RAM, swap, disk
       2. RCAN:   registry reachability, RRN validation, compliance version
-      3. Optional: BLE driver, memory DB size, Signal channel
+      3. Optional: BLE driver, memory DB size, Signal channel, hardware deps
     """
     checks = [
         # ── System checks ─────────────────────────────────────────────────────
@@ -697,6 +735,13 @@ def run_all_checks(config_path: Optional[str] = None) -> list[tuple[bool, str, s
             results.append(fn())
         except Exception as exc:
             results.append((False, fn.__name__, f"error: {exc}"))
+
+    # Hardware dep checks return a list — extend results
+    try:
+        results.extend(check_hardware_deps())
+    except Exception as exc:
+        results.append((False, "hardware_deps", f"error: {exc}"))
+
     return results
 
 

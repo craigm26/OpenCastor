@@ -1238,8 +1238,59 @@ def cmd_safety(args) -> None:
 
 
 def cmd_scan(args) -> None:
-    """castor scan — placeholder."""
-    print("castor scan: coming soon.")
+    """castor scan — detect connected hardware and suggest a preset."""
+    import json as _json
+
+    from castor.hardware_detect import (
+        detect_hardware,
+        invalidate_hardware_cache,
+        print_scan_results,
+        suggest_extras,
+        suggest_preset,
+    )
+
+    refresh = getattr(args, "refresh", False)
+    json_out = getattr(args, "json", False)
+    preset_only = getattr(args, "preset_only", False)
+
+    if refresh:
+        invalidate_hardware_cache()
+
+    hw = detect_hardware()
+    preset, confidence, reason = suggest_preset(hw)
+
+    if json_out:
+        print(
+            _json.dumps(
+                {
+                    **hw,
+                    "suggested_preset": {
+                        "preset": preset,
+                        "confidence": confidence,
+                        "reason": reason,
+                    },
+                },
+                default=str,
+                indent=2,
+            )
+        )
+        return
+
+    if preset_only:
+        print(f"{preset} ({confidence}): {reason}")
+        return
+
+    print_scan_results(hw)
+    print(f"\n  Suggested preset: {preset} ({confidence})")
+    print(f"  Reason: {reason}")
+
+    extras = suggest_extras(hw)
+    if extras:
+        print("\n  Hardware detected — consider installing:")
+        for pkg in extras:
+            print(f"    pip install {pkg}")
+
+    print("\n  Run 'castor wizard' to generate a full RCAN config.\n")
 
 
 def cmd_schedule(args) -> None:
@@ -3469,6 +3520,17 @@ def main() -> None:
         action="store_true",
         default=True,
         help="Print suggested RCAN config snippets (default: true)",
+    )
+    p_scan.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Force fresh scan, bypass TTL cache",
+    )
+    p_scan.add_argument(
+        "--preset-only",
+        action="store_true",
+        dest="preset_only",
+        help="Only print suggested preset name + confidence",
     )
 
     # castor daemon — systemd auto-start service management
