@@ -4798,9 +4798,7 @@ async def setup_wizard():
     try:
         from castor.web_wizard import _HTML_TEMPLATE
 
-        token_script = (
-            f"<script>window.__OC_TOKEN = {repr(API_TOKEN or '')};</script>"
-        )
+        token_script = f"<script>window.__OC_TOKEN = {repr(API_TOKEN or '')};</script>"
         html = _HTML_TEMPLATE.replace("</head>", f"{token_script}\n</head>", 1)
         return HTMLResponse(content=html)
     except Exception as exc:
