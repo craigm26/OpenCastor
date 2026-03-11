@@ -7399,6 +7399,7 @@ def _cleanup_pid_file(pid_file: "Path") -> None:
 
 def main():
     import atexit
+
     import uvicorn
 
     load_dotenv_if_available()

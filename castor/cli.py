@@ -1526,6 +1526,7 @@ def cmd_upgrade(args) -> None:
 
     # Reload to get new version string
     import importlib
+
     try:
         importlib.reload(castor)
     except Exception:
@@ -2848,7 +2849,10 @@ def main() -> None:
     p_upgrade = sub.add_parser("upgrade", help="Upgrade OpenCastor to latest version")
     p_upgrade.add_argument("--verbose", "-v", action="store_true", help="Show pip output")
     p_upgrade.add_argument(
-        "--check", action="store_true", dest="check_only", help="Show available updates without upgrading"
+        "--check",
+        action="store_true",
+        dest="check_only",
+        help="Show available updates without upgrading",
     )
     p_upgrade.add_argument(
         "--venv", default=None, metavar="PATH", help="Path to venv (default: current Python)"
