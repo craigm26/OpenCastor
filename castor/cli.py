@@ -2171,7 +2171,7 @@ def cmd_flash(args) -> None:
                 actual_hash = hashlib.sha256(fw_path.read_bytes()).hexdigest()
                 if not hmac.compare_digest(actual_hash, expected_hash):
                     fw_path.unlink(missing_ok=True)  # delete corrupted cache
-                    print(f"  ERROR: Firmware checksum mismatch!")
+                    print("  ERROR: Firmware checksum mismatch!")
                     print(f"    expected: {expected_hash}")
                     print(f"    got:      {actual_hash}")
                     print("  Aborting flash — firmware may be corrupted or tampered.")
