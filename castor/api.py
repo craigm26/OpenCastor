@@ -5464,7 +5464,7 @@ class _SetupVerifyConfigRequest(BaseModel):
     session_id: Optional[str] = None
 
 
-@app.post("/setup/api/session/start")
+@app.post("/setup/api/session/start", dependencies=[Depends(verify_token)])
 async def setup_session_start(body: _SetupSessionStartRequest):
     """Start a resumable setup-v3 session."""
     try:
@@ -5473,7 +5473,7 @@ async def setup_session_start(body: _SetupSessionStartRequest):
         raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
 
 
-@app.get("/setup/api/session/{session_id}")
+@app.get("/setup/api/session/{session_id}", dependencies=[Depends(verify_token)])
 async def setup_session_get(session_id: str):
     """Return setup session state."""
     try:
@@ -5484,7 +5484,7 @@ async def setup_session_get(session_id: str):
         raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
 
 
-@app.post("/setup/api/session/{session_id}/select")
+@app.post("/setup/api/session/{session_id}/select", dependencies=[Depends(verify_token)])
 async def setup_session_select(session_id: str, body: _SetupSessionSelectRequest):
     """Update setup session selections for a specific stage."""
     try:
@@ -5495,7 +5495,7 @@ async def setup_session_select(session_id: str, body: _SetupSessionSelectRequest
         raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
 
 
-@app.post("/setup/api/session/{session_id}/resume")
+@app.post("/setup/api/session/{session_id}/resume", dependencies=[Depends(verify_token)])
 async def setup_session_resume(session_id: str):
     """Resume an existing setup session."""
     try:
@@ -5506,7 +5506,7 @@ async def setup_session_resume(session_id: str):
         raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
 
 
-@app.post("/setup/api/remediate")
+@app.post("/setup/api/remediate", dependencies=[Depends(verify_token)])
 async def setup_remediate(body: _SetupRemediationRequest):
     """Execute a guided remediation action."""
     try:
@@ -5522,7 +5522,7 @@ async def setup_remediate(body: _SetupRemediationRequest):
         raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
 
 
-@app.post("/setup/api/verify-config")
+@app.post("/setup/api/verify-config", dependencies=[Depends(verify_token)])
 async def setup_verify_config(body: _SetupVerifyConfigRequest):
     """Dry-run verification before writing config."""
     try:
@@ -5540,7 +5540,7 @@ async def setup_verify_config(body: _SetupVerifyConfigRequest):
         raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
 
 
-@app.get("/setup/api/metrics")
+@app.get("/setup/api/metrics", dependencies=[Depends(verify_token)])
 async def setup_metrics():
     """Local setup reliability metrics aggregation."""
     try:
@@ -5549,7 +5549,7 @@ async def setup_metrics():
         raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
 
 
-@app.get("/setup/api/catalog")
+@app.get("/setup/api/catalog", dependencies=[Depends(verify_token)])
 async def setup_catalog():
     """Return setup catalog used by web and CLI setup flows."""
     try:
@@ -5558,7 +5558,7 @@ async def setup_catalog():
         raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
 
 
-@app.post("/setup/api/preflight")
+@app.post("/setup/api/preflight", dependencies=[Depends(verify_token)])
 async def setup_preflight(body: _SetupPreflightRequest):
     """Run setup preflight checks for a provider/model profile."""
     try:
@@ -5573,7 +5573,7 @@ async def setup_preflight(body: _SetupPreflightRequest):
         raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
 
 
-@app.post("/setup/api/generate-config")
+@app.post("/setup/api/generate-config", dependencies=[Depends(verify_token)])
 async def setup_generate_config(body: _SetupGenerateConfigRequest):
     """Generate and save RCAN config from setup selections."""
     try:
@@ -5619,7 +5619,7 @@ async def setup_generate_config(body: _SetupGenerateConfigRequest):
         raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
 
 
-@app.post("/setup/api/test-provider")
+@app.post("/setup/api/test-provider", dependencies=[Depends(verify_token)])
 async def setup_test_provider(body: _SetupTestProviderRequest):
     """Test an API key without saving it (used by the web wizard)."""
     try:
@@ -5674,7 +5674,7 @@ class _SetupSaveConfigRequest(BaseModel):
     session_id: Optional[str] = None
 
 
-@app.post("/setup/api/save-config")
+@app.post("/setup/api/save-config", dependencies=[Depends(verify_token)])
 async def setup_save_config(body: _SetupSaveConfigRequest):
     """Save a generated RCAN config and optional .env vars (web wizard step 4)."""
     try:
