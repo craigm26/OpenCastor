@@ -97,3 +97,86 @@ def test_suggest_preset_non_u2d2_dynamixel_gives_koch():
     preset, conf, reason = suggest_preset(hw)
     assert preset == "lerobot/koch-arm"
     assert conf == "high"
+
+
+# ---------------------------------------------------------------------------
+# #539 — RPLidar / YDLIDAR VID/PID detection
+# ---------------------------------------------------------------------------
+
+
+def test_detect_rplidar_usb_rplidar_by_product():
+    """CP2102 device with RPLIDAR product string → model=rplidar."""
+    port = _make_port(0x10C4, 0xEA60, "/dev/ttyUSB0", product="RPLIDAR")
+    with patch(
+        "castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]
+    ):
+        from castor.hardware_detect import detect_rplidar_usb
+        result = detect_rplidar_usb()
+    assert result["detected"] is True
+    assert result["model"] == "rplidar"
+
+
+def test_detect_rplidar_usb_ydlidar_by_product():
+    """CP2102 device with YDLIDAR product string → model=ydlidar."""
+    port = _make_port(0x10C4, 0xEA60, "/dev/ttyUSB0", product="YDLIDAR")
+    with patch(
+        "castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]
+    ):
+        from castor.hardware_detect import detect_rplidar_usb
+        result = detect_rplidar_usb()
+    assert result["detected"] is True
+    assert result["model"] == "ydlidar"
+
+
+def test_detect_rplidar_usb_unknown_lidar():
+    """CP2102 device with no discriminating product string → model=unknown_lidar."""
+    port = _make_port(0x10C4, 0xEA60, "/dev/ttyUSB0", product="USB Serial")
+    with patch(
+        "castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]
+    ):
+        from castor.hardware_detect import detect_rplidar_usb
+        result = detect_rplidar_usb()
+    assert result["detected"] is True
+    assert result["model"] == "unknown_lidar"
+
+
+def test_detect_rplidar_usb_no_device():
+    """No matching device → detected=False."""
+    with patch(
+        "castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[]
+    ):
+        from castor.hardware_detect import detect_rplidar_usb
+        result = detect_rplidar_usb()
+    assert result["detected"] is False
+
+
+def test_suggest_preset_lidar_navigation_rplidar():
+    """suggest_preset returns 'lidar_navigation' when rplidar detected."""
+    from castor.hardware_detect import suggest_preset
+    hw = {
+        "rplidar": {"detected": True, "model": "rplidar"},
+        "i2c_devices": [], "usb_serial": [], "cameras": [], "platform": "generic",
+        "usb_descriptors": [], "realsense": [], "oakd": [], "odrive": [], "vesc": [],
+        "feetech": [], "arduino": [], "circuitpython": [], "lidar": [],
+        "hailo": [], "coral": [], "imx500": [], "reachy": [],
+    }
+    preset, conf, reason = suggest_preset(hw)
+    assert preset == "lidar_navigation"
+
+
+def test_suggest_extras_rplidar():
+    """suggest_extras returns ['rplidar'] when rplidar model detected."""
+    from castor.hardware_detect import suggest_extras
+    hw = {"rplidar": {"detected": True, "model": "rplidar"}}
+    with patch("builtins.__import__", side_effect=ImportError):
+        extras = suggest_extras(hw)
+    assert "rplidar" in extras
+
+
+def test_suggest_extras_ydlidar():
+    """suggest_extras returns ['ydlidar'] when ydlidar model detected."""
+    from castor.hardware_detect import suggest_extras
+    hw = {"rplidar": {"detected": True, "model": "ydlidar"}}
+    with patch("builtins.__import__", side_effect=ImportError):
+        extras = suggest_extras(hw)
+    assert "ydlidar" in extras

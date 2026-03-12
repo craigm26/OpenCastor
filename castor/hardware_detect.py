@@ -109,6 +109,10 @@ KNOWN_LIDAR_DEVICES: dict = {
     "19a2:5343": "Sick TIM571",
 }
 
+#: VID/PID pairs associated with RPLidar / YDLIDAR USB adapters.
+_LIDAR_CP2102_VID_PID = (0x10C4, 0xEA60)   # Slamtec / YDLIDAR CP2102
+_LIDAR_STM32_VID_PID = (0x0483, 0x5740)    # STM32 VCP (newer RPLidar / YDLIDAR T15)
+
 #: I2C address → device name/type mapping for enriched scan output.
 I2C_DEVICE_MAP: dict = {
     "0x28": {"name": "BNO055", "type": "imu"},
@@ -549,6 +553,50 @@ def detect_lidar_usb() -> list:
     return _match_vid_pid_table(KNOWN_LIDAR_DEVICES)
 
 
+def detect_rplidar_usb() -> dict:
+    """Detect RPLidar and YDLIDAR USB adapters, distinguishing model by product string.
+
+    Covers:
+    - CP2102 (VID 0x10C4 / PID 0xEA60) — used by both Slamtec RPLidar and YDLIDAR.
+    - STM32 VCP (VID 0x0483 / PID 0x5740) — used by newer RPLidar and YDLIDAR T15.
+
+    Disambiguation heuristic: product/description string containing ``"YDLIDAR"`` →
+    ydlidar; ``"RPLIDAR"`` or ``"SLAMTEC"`` → rplidar; anything else → unknown_lidar.
+
+    Returns:
+        Dict: ``{"detected": bool, "model": "rplidar"|"ydlidar"|"unknown_lidar"}``.
+        ``detected`` is ``False`` and ``model`` is ``None`` when nothing matches.
+    """
+    _lidar_vid_pids = {_LIDAR_CP2102_VID_PID, _LIDAR_STM32_VID_PID}
+    for port_info in _list_usb_ports_with_vidpid():
+        vid = getattr(port_info, "vid", None)
+        pid = getattr(port_info, "pid", None)
+        if (vid, pid) not in _lidar_vid_pids:
+            continue
+        combined = (
+            (getattr(port_info, "description", "") or "")
+            + (getattr(port_info, "product", "") or "")
+            + (getattr(port_info, "manufacturer", "") or "")
+        ).upper()
+        if "YDLIDAR" in combined:
+            model = "ydlidar"
+        elif "RPLIDAR" in combined or "SLAMTEC" in combined:
+            model = "rplidar"
+        else:
+            model = "unknown_lidar"
+        logger.info("LiDAR detected: %s on %s", model, port_info.device)
+        return {"detected": True, "model": model}
+
+    # lsusb fallback — no product string available, classify as unknown_lidar
+    lines = scan_usb_descriptors()
+    for ln in lines:
+        if "10c4:ea60" in ln or "0483:5740" in ln:
+            logger.info("LiDAR detected via lsusb (model unknown): %s", ln)
+            return {"detected": True, "model": "unknown_lidar"}
+
+    return {"detected": False, "model": None}
+
+
 def detect_hailo() -> list:
     """Detect Hailo-8 NPU via ``/dev/hailo0``, ``lspci``, or the ``hailo`` Python package.
 
@@ -748,6 +796,7 @@ def _run_all_detectors() -> dict:
         "circuitpython": detect_circuitpython_usb(),
         "dynamixel": detect_dynamixel_usb(),
         "lidar": detect_lidar_usb(),
+        "rplidar": detect_rplidar_usb(),
         "hailo": detect_hailo(),
         "coral": detect_coral(),
         "imx500": detect_imx500_camera(),
@@ -946,6 +995,12 @@ def suggest_preset(hw: dict) -> tuple:
     if hw.get("coral"):
         return "coral/tpu-inference", "high", "Coral Edge TPU detected"
 
+    # ── LiDAR ─────────────────────────────────────────────────────────────
+    rplidar_result = hw.get("rplidar")
+    if isinstance(rplidar_result, dict) and rplidar_result.get("detected"):
+        model = rplidar_result.get("model", "unknown_lidar")
+        return "lidar_navigation", "high", f"LiDAR detected: {model}"
+
     # ── Arduino ───────────────────────────────────────────────────────────
     if hw.get("arduino"):
         board = hw["arduino"][0].get("board", "unknown")
@@ -1082,4 +1137,16 @@ def suggest_extras(hw: dict) -> list[str]:
                     __import__(import_name)
                 except ImportError:
                     suggestions.append(pkg)
+
+    # ── rplidar / ydlidar: package name depends on detected model ──────────
+    rplidar_result = hw.get("rplidar")
+    if isinstance(rplidar_result, dict) and rplidar_result.get("detected"):
+        model = rplidar_result.get("model", "unknown_lidar")
+        pkg = "ydlidar" if model == "ydlidar" else "rplidar"
+        try:
+            __import__(pkg.replace("-", "_"))
+        except ImportError:
+            if pkg not in suggestions:
+                suggestions.append(pkg)
+
     return list(dict.fromkeys(suggestions))  # deduplicate, preserve order
