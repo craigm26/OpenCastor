@@ -463,3 +463,87 @@ def test_suggest_extras_rpi_ai_camera():
     with patch("builtins.__import__", side_effect=ImportError):
         extras = suggest_extras(hw)
     assert "picamera2" in extras
+
+
+# ---------------------------------------------------------------------------
+# #541 — LeRobot hardware profile detection
+# ---------------------------------------------------------------------------
+
+
+def test_detect_lerobot_feetech_single_port():
+    """1 Feetech board + 1 serial port → compatible=True, profile='so_arm101'."""
+    port = _make_port(0x1A86, 0x7523, "/dev/ttyUSB0")
+    with (
+        patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]),
+        patch("castor.hardware_detect.os.path.isdir", return_value=True),
+        patch("castor.hardware_detect.os.listdir", return_value=["ttyUSB0"]),
+    ):
+        from castor.hardware_detect import detect_lerobot_hardware
+
+        result = detect_lerobot_hardware()
+    assert result["compatible"] is True
+    assert result["profile"] == "so_arm101"
+
+
+def test_detect_lerobot_feetech_dual_port():
+    """1 Feetech board + 2 serial ports → compatible=True, profile='aloha'."""
+    port = _make_port(0x1A86, 0x7523, "/dev/ttyUSB0")
+    with (
+        patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]),
+        patch("castor.hardware_detect.os.path.isdir", return_value=True),
+        patch("castor.hardware_detect.os.listdir", return_value=["ttyUSB0", "ttyUSB1"]),
+    ):
+        from castor.hardware_detect import detect_lerobot_hardware
+
+        result = detect_lerobot_hardware()
+    assert result["compatible"] is True
+    assert result["profile"] == "aloha"
+
+
+def test_detect_lerobot_no_feetech():
+    """No Feetech board → compatible=False, profile=None."""
+    with patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[]):
+        from castor.hardware_detect import detect_lerobot_hardware
+
+        result = detect_lerobot_hardware()
+    assert result["compatible"] is False
+    assert result["profile"] is None
+
+
+def test_detect_lerobot_feetech_no_serial_ports():
+    """Feetech board detected but no serial ports → compatible=False."""
+    port = _make_port(0x1A86, 0x7523, "/dev/ttyUSB0")
+    with (
+        patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]),
+        patch("castor.hardware_detect.os.path.isdir", return_value=True),
+        patch("castor.hardware_detect.os.listdir", return_value=[]),
+    ):
+        from castor.hardware_detect import detect_lerobot_hardware
+
+        result = detect_lerobot_hardware()
+    assert result["compatible"] is False
+    assert result["profile"] is None
+
+
+def test_detect_hardware_includes_lerobot_key():
+    """detect_hardware() result dict has 'lerobot' key."""
+    with patch(
+        "castor.hardware_detect._run_all_detectors",
+        return_value={"lerobot": {"compatible": False, "profile": None}},
+    ):
+        from castor.hardware_detect import detect_hardware
+
+        result = detect_hardware(refresh=True)
+    assert "lerobot" in result
+
+
+def test_suggest_extras_lerobot():
+    """suggest_extras returns lerobot packages when compatible=True."""
+    from castor.hardware_detect import suggest_extras
+
+    hw = {"lerobot": {"compatible": True, "profile": "so_arm101"}}
+    with patch("builtins.__import__", side_effect=ImportError):
+        extras = suggest_extras(hw)
+    assert "gym-pusht" in extras
+    assert "gym-aloha" in extras
+    assert "feetech-servo-sdk" in extras

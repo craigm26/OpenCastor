@@ -847,6 +847,30 @@ def detect_rpi_ai_camera() -> dict:
     return {"detected": detected, "model": "imx500", "npu": npu}
 
 
+def detect_lerobot_hardware() -> dict:
+    """Detect LeRobot-compatible hardware (Feetech SO-ARM101 / ALOHA).
+
+    Heuristic:
+    - Feetech servo board must be detected (via :func:`detect_feetech_usb`).
+    - At least one ``/dev/ttyUSB*`` or ``/dev/ttyACM*`` port must exist.
+    - Two or more serial ports → ALOHA profile (dual arm); one → SO-ARM101.
+
+    Returns:
+        Dict: ``{"compatible": bool, "profile": "so_arm101"|"aloha"|None}``.
+    """
+    feetech_ports = detect_feetech_usb()
+    if not feetech_ports:
+        return {"compatible": False, "profile": None}
+
+    serial_ports = scan_usb_serial()
+    if not serial_ports:
+        return {"compatible": False, "profile": None}
+
+    profile = "aloha" if len(serial_ports) >= 2 else "so_arm101"
+    logger.info("LeRobot hardware detected: profile=%s, ports=%s", profile, serial_ports)
+    return {"compatible": True, "profile": profile}
+
+
 def detect_reachy_network(timeout: float = 2.0) -> list:
     """Detect Pollen Robotics Reachy 2 / Reachy Mini via mDNS or hostname resolution.
 
@@ -946,6 +970,7 @@ def _run_all_detectors() -> dict:
         "imx500": detect_imx500_camera(),
         "rpi_ai_camera": detect_rpi_ai_camera(),
         "reachy": detect_reachy_network(),
+        "lerobot": detect_lerobot_hardware(),
     }
 
 
@@ -1313,5 +1338,19 @@ def suggest_extras(hw: dict) -> list[str]:
         except ImportError:
             if "picamera2" not in suggestions:
                 suggestions.append("picamera2")
+
+    # ── lerobot ────────────────────────────────────────────────────────────
+    lerobot_result = hw.get("lerobot")
+    if isinstance(lerobot_result, dict) and lerobot_result.get("compatible"):
+        for pkg, import_name in [
+            ("gym-pusht", "gym_pusht"),
+            ("gym-aloha", "gym_aloha"),
+            ("feetech-servo-sdk", "feetech_servo_sdk"),
+        ]:
+            try:
+                __import__(import_name)
+            except ImportError:
+                if pkg not in suggestions:
+                    suggestions.append(pkg)
 
     return list(dict.fromkeys(suggestions))  # deduplicate, preserve order
