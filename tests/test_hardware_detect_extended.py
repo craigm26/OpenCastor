@@ -180,3 +180,30 @@ def test_suggest_extras_ydlidar():
     with patch("builtins.__import__", side_effect=ImportError):
         extras = suggest_extras(hw)
     assert "ydlidar" in extras
+
+
+def test_detect_rplidar_usb_lsusb_fallback():
+    """When serial ports return no match, lsusb fallback detects CP2102 → unknown_lidar."""
+    with (
+        patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[]),
+        patch(
+            "castor.hardware_detect.scan_usb_descriptors",
+            return_value=["bus 001 device 003: id 10c4:ea60 silicon laboratories"],
+        ),
+    ):
+        from castor.hardware_detect import detect_rplidar_usb
+        result = detect_rplidar_usb()
+    assert result["detected"] is True
+    assert result["model"] == "unknown_lidar"
+
+
+def test_detect_rplidar_usb_stm32_vid_pid():
+    """STM32 VCP device (0483:5740) with YDLIDAR product string → model=ydlidar."""
+    port = _make_port(0x0483, 0x5740, "/dev/ttyACM0", product="YDLIDAR T15")
+    with patch(
+        "castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]
+    ):
+        from castor.hardware_detect import detect_rplidar_usb
+        result = detect_rplidar_usb()
+    assert result["detected"] is True
+    assert result["model"] == "ydlidar"
