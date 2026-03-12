@@ -95,8 +95,8 @@ KNOWN_FEETECH_DEVICES: dict = {
 
 #: Dynamixel U2D2 and OpenCR/OpenCM boards.
 KNOWN_DYNAMIXEL_DEVICES: dict = {
-    "0403:6014": "Dynamixel U2D2 (FT232R)",        # Standard U2D2
-    "0403:6015": "Dynamixel U2D2-H (FT232H)",      # High-speed U2D2-H
+    "0403:6014": "Dynamixel U2D2 (FT232R)",  # Standard U2D2
+    "0403:6015": "Dynamixel U2D2-H (FT232H)",  # High-speed U2D2-H
     "16d0:0c17": "Robotis OpenCM 9.04",
     "0483:5740": "Robotis OpenCR 1.0",
 }
@@ -117,8 +117,8 @@ KNOWN_LIDAR_DEVICES: dict = {
 }
 
 #: VID/PID pairs associated with RPLidar / YDLIDAR USB adapters.
-_LIDAR_CP2102_VID_PID = (0x10C4, 0xEA60)   # Slamtec / YDLIDAR CP2102
-_LIDAR_STM32_VID_PID = (0x0483, 0x5740)    # STM32 VCP (newer RPLidar / YDLIDAR T15)
+_LIDAR_CP2102_VID_PID = (0x10C4, 0xEA60)  # Slamtec / YDLIDAR CP2102
+_LIDAR_STM32_VID_PID = (0x0483, 0x5740)  # STM32 VCP (newer RPLidar / YDLIDAR T15)
 _LIDAR_VID_PIDS: frozenset = frozenset({_LIDAR_CP2102_VID_PID, _LIDAR_STM32_VID_PID})
 
 #: I2C address → device name/type mapping for enriched scan output.
@@ -212,6 +212,10 @@ def detect_i2c_devices() -> list:
     """Scan I2C buses for attached devices using smbus2 (preferred) or sysfs parsing.
 
     Uses :data:`I2C_DEVICE_MAP` to enrich found addresses with human-readable names.
+
+    .. note::
+        When using smbus2, only addresses in :data:`I2C_DEVICE_MAP` are probed.
+        For a full 0x03–0x77 sweep, use :func:`scan_i2c` (requires ``i2cdetect``).
 
     Returns:
         List of dicts: ``{"bus": int, "address": str, "device_name": str}``.
