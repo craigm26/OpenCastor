@@ -6,6 +6,17 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 
 ---
 
+## [2026.3.14.0] — 2026-03-11
+
+### Added
+- **#537** Dynamixel U2D2-H explicit VID/PID (`0x0403:0x6015`) + `suggest_preset()` returns `dynamixel_arm` for U2D2 VID/PIDs
+- **#538** `detect_i2c_devices()` with `smbus2` primary / sysfs fallback; `HAS_SMBUS` lazy import; `suggest_extras()` → `smbus2`
+- **#539** `detect_rplidar_usb()` distinguishes RPLidar from YDLIDAR by product string; model-specific `suggest_extras`; `suggest_preset()` → `lidar_navigation`
+- **#540** `detect_rpi_ai_camera()` via `libcamera-hello` + device-tree + v4l sysfs; NPU firmware check at `/lib/firmware/imx500/`; `suggest_extras()` → `picamera2`
+- **#541** `detect_lerobot_hardware()` for SO-ARM101/ALOHA profiles; `[lerobot]` extra gains `gym-pusht` and `gym-aloha`
+
+---
+
 ## [2026.3.12.0] — 2026-03-11
 
 ### Added
