@@ -207,3 +207,13 @@ def test_detect_rplidar_usb_stm32_vid_pid():
         result = detect_rplidar_usb()
     assert result["detected"] is True
     assert result["model"] == "ydlidar"
+
+
+def test_suggest_extras_unknown_lidar_skips():
+    """suggest_extras skips package recommendation when model=unknown_lidar."""
+    from castor.hardware_detect import suggest_extras
+    hw = {"rplidar": {"detected": True, "model": "unknown_lidar"}}
+    with patch("builtins.__import__", side_effect=ImportError):
+        extras = suggest_extras(hw)
+    assert "rplidar" not in extras
+    assert "ydlidar" not in extras

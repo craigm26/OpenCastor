@@ -104,7 +104,7 @@ KNOWN_ODRIVE_DEVICES: dict = {
 #: LiDAR USB adapters (RPLidar, YDLIDAR, Hokuyo, Sick).
 KNOWN_LIDAR_DEVICES: dict = {
     "10c4:ea60": "RPLidar/YDLIDAR (CP2102) — probe baud to disambiguate",
-    "0483:5740": "YDLIDAR T15 (STM32)",
+    "0483:5740": "YDLIDAR T15 / RPLidar S3 (STM32 VCP)",  # shared VID/PID; see detect_rplidar_usb()
     "15d1:0000": "Hokuyo URG",
     "19a2:5343": "Sick TIM571",
 }
@@ -112,6 +112,7 @@ KNOWN_LIDAR_DEVICES: dict = {
 #: VID/PID pairs associated with RPLidar / YDLIDAR USB adapters.
 _LIDAR_CP2102_VID_PID = (0x10C4, 0xEA60)   # Slamtec / YDLIDAR CP2102
 _LIDAR_STM32_VID_PID = (0x0483, 0x5740)    # STM32 VCP (newer RPLidar / YDLIDAR T15)
+_LIDAR_VID_PIDS: frozenset = frozenset({_LIDAR_CP2102_VID_PID, _LIDAR_STM32_VID_PID})
 
 #: I2C address → device name/type mapping for enriched scan output.
 I2C_DEVICE_MAP: dict = {
@@ -567,11 +568,10 @@ def detect_rplidar_usb() -> dict:
         Dict: ``{"detected": bool, "model": "rplidar"|"ydlidar"|"unknown_lidar"}``.
         ``detected`` is ``False`` and ``model`` is ``None`` when nothing matches.
     """
-    _lidar_vid_pids = {_LIDAR_CP2102_VID_PID, _LIDAR_STM32_VID_PID}
     for port_info in _list_usb_ports_with_vidpid():
         vid = getattr(port_info, "vid", None)
         pid = getattr(port_info, "pid", None)
-        if (vid, pid) not in _lidar_vid_pids:
+        if (vid, pid) not in _LIDAR_VID_PIDS:
             continue
         combined = (
             (getattr(port_info, "description", "") or "")
@@ -1142,11 +1142,17 @@ def suggest_extras(hw: dict) -> list[str]:
     rplidar_result = hw.get("rplidar")
     if isinstance(rplidar_result, dict) and rplidar_result.get("detected"):
         model = rplidar_result.get("model", "unknown_lidar")
-        pkg = "ydlidar" if model == "ydlidar" else "rplidar"
-        try:
-            __import__(pkg.replace("-", "_"))
-        except ImportError:
-            if pkg not in suggestions:
-                suggestions.append(pkg)
+        if model == "ydlidar":
+            pkg = "ydlidar"
+        elif model == "rplidar":
+            pkg = "rplidar"
+        else:
+            pkg = None  # unknown_lidar — cannot determine package safely
+        if pkg:
+            try:
+                __import__(pkg)
+            except ImportError:
+                if pkg not in suggestions:
+                    suggestions.append(pkg)
 
     return list(dict.fromkeys(suggestions))  # deduplicate, preserve order
