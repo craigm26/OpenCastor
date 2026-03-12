@@ -790,6 +790,63 @@ def detect_imx500_camera() -> list:
     return found
 
 
+def detect_rpi_ai_camera() -> dict:
+    """Detect Raspberry Pi AI Camera (Sony IMX500) via libcamera and sysfs.
+
+    Detection strategy (in priority order):
+
+    1. Run ``libcamera-hello --list-cameras`` (timeout 3 s) — parse stdout for "imx500".
+    2. Read ``/proc/device-tree/model`` — check for "imx500" mention.
+    3. Scan ``/sys/class/video4linux/`` device name files for "imx500".
+
+    NPU firmware is considered active when ``/lib/firmware/imx500/`` exists.
+
+    Returns:
+        Dict: ``{"detected": bool, "model": "imx500", "npu": bool}``.
+    """
+    detected = False
+    npu = os.path.isdir("/lib/firmware/imx500")
+
+    # 1. libcamera-hello
+    try:
+        proc = subprocess.run(
+            ["libcamera-hello", "--list-cameras"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        if proc.returncode == 0 and "imx500" in proc.stdout.lower():
+            detected = True
+            logger.info("RPi AI Camera (IMX500) detected via libcamera-hello")
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+
+    # 2. device-tree model
+    if not detected:
+        try:
+            content = _read_device_tree_model().lower()
+            if "imx500" in content:
+                detected = True
+                logger.info("RPi AI Camera (IMX500) detected via device-tree model")
+        except (FileNotFoundError, PermissionError):
+            pass
+
+    # 3. /sys/class/video4linux/
+    if not detected:
+        v4l_dir = "/sys/class/video4linux"
+        if os.path.isdir(v4l_dir):
+            for entry in os.listdir(v4l_dir):
+                name = _get_v4l2_device_name(entry) or ""
+                if "imx500" in name.lower():
+                    detected = True
+                    logger.info(
+                        "RPi AI Camera (IMX500) detected via /sys/class/video4linux/%s", entry
+                    )
+                    break
+
+    return {"detected": detected, "model": "imx500", "npu": npu}
+
+
 def detect_reachy_network(timeout: float = 2.0) -> list:
     """Detect Pollen Robotics Reachy 2 / Reachy Mini via mDNS or hostname resolution.
 
@@ -887,6 +944,7 @@ def _run_all_detectors() -> dict:
         "hailo": detect_hailo(),
         "coral": detect_coral(),
         "imx500": detect_imx500_camera(),
+        "rpi_ai_camera": detect_rpi_ai_camera(),
         "reachy": detect_reachy_network(),
     }
 
@@ -1246,5 +1304,14 @@ def suggest_extras(hw: dict) -> list[str]:
     if hw.get("i2c"):
         if not HAS_SMBUS and "smbus2" not in suggestions:
             suggestions.append("smbus2")
+
+    # ── rpi_ai_camera: picamera2 ───────────────────────────────────────────
+    rpi_cam = hw.get("rpi_ai_camera")
+    if isinstance(rpi_cam, dict) and rpi_cam.get("detected"):
+        try:
+            __import__("picamera2")
+        except ImportError:
+            if "picamera2" not in suggestions:
+                suggestions.append("picamera2")
 
     return list(dict.fromkeys(suggestions))  # deduplicate, preserve order

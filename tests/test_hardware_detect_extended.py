@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -354,3 +355,104 @@ def test_suggest_extras_i2c():
     with patch("castor.hardware_detect.HAS_SMBUS", False):
         extras = suggest_extras(hw)
     assert "smbus2" in extras
+
+
+# ---------------------------------------------------------------------------
+# #540 — RPi AI Camera (IMX500) detection
+# ---------------------------------------------------------------------------
+
+
+def test_detect_rpi_ai_camera_via_libcamera():
+    """libcamera-hello output containing 'imx500' → detected=True, model='imx500'."""
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+    mock_proc.stdout = "Available cameras\n--------------\n0 : imx500 [4056x3040]\n"
+    with (
+        patch("subprocess.run", return_value=mock_proc),
+        patch("os.path.isdir", return_value=False),
+    ):
+        from castor.hardware_detect import detect_rpi_ai_camera
+
+        result = detect_rpi_ai_camera()
+    assert result["detected"] is True
+    assert result["model"] == "imx500"
+
+
+def test_detect_rpi_ai_camera_npu_detected():
+    """NPU firmware dir present → npu=True."""
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+    mock_proc.stdout = "imx500 [4056x3040]"
+
+    def _isdir(p):
+        return "/lib/firmware/imx500" in p
+
+    with (
+        patch("subprocess.run", return_value=mock_proc),
+        patch("os.path.isdir", side_effect=_isdir),
+    ):
+        from castor.hardware_detect import detect_rpi_ai_camera
+
+        result = detect_rpi_ai_camera()
+    assert result["npu"] is True
+
+
+def test_detect_rpi_ai_camera_not_found():
+    """libcamera output without imx500 → detected=False."""
+    mock_proc = MagicMock()
+    mock_proc.returncode = 0
+    mock_proc.stdout = "No cameras available\n"
+    with (
+        patch("subprocess.run", return_value=mock_proc),
+        patch("os.path.isdir", return_value=False),
+    ):
+        from castor.hardware_detect import detect_rpi_ai_camera
+
+        result = detect_rpi_ai_camera()
+    assert result["detected"] is False
+
+
+def test_detect_rpi_ai_camera_libcamera_missing():
+    """subprocess.FileNotFoundError (libcamera not installed) → detected=False."""
+    with (
+        patch("subprocess.run", side_effect=FileNotFoundError),
+        patch("os.path.isdir", return_value=False),
+    ):
+        from castor.hardware_detect import detect_rpi_ai_camera
+
+        result = detect_rpi_ai_camera()
+    assert result["detected"] is False
+
+
+def test_detect_rpi_ai_camera_timeout():
+    """subprocess.TimeoutExpired → detected=False (graceful)."""
+    with (
+        patch("subprocess.run", side_effect=subprocess.TimeoutExpired("libcamera-hello", 3)),
+        patch("os.path.isdir", return_value=False),
+    ):
+        from castor.hardware_detect import detect_rpi_ai_camera
+
+        result = detect_rpi_ai_camera()
+    assert result["detected"] is False
+
+
+def test_detect_hardware_includes_rpi_ai_camera_key():
+    """detect_hardware() result dict has 'rpi_ai_camera' key."""
+    with patch(
+        "castor.hardware_detect._run_all_detectors",
+        return_value={"rpi_ai_camera": {"detected": False, "model": "imx500", "npu": False}},
+    ):
+        from castor.hardware_detect import detect_hardware
+
+        result = detect_hardware(refresh=True)
+    assert "rpi_ai_camera" in result
+
+
+def test_suggest_extras_rpi_ai_camera():
+    """suggest_extras returns ['picamera2'] when rpi_ai_camera detected."""
+    from castor.hardware_detect import suggest_extras
+
+    hw = {"rpi_ai_camera": {"detected": True, "model": "imx500", "npu": False}}
+    with patch("builtins.__import__", side_effect=ImportError):
+        extras = suggest_extras(hw)
+    assert "picamera2" in extras
