@@ -395,30 +395,32 @@
 <section class="section" id="release">
   <div class="container">
     <div class="section-header center reveal">
-      <p class="section-label">v2026.3.12.0 — March 11, 2026</p>
+      <p class="section-label">v2026.3.12.0 — March 12, 2026</p>
       <h2 class="section-title">What's New</h2>
     </div>
     <div class="feature-grid">
       <div class="card reveal">
-        <div class="card-icon" style="background: var(--cyan-light);">🔧</div>
-        <h3>v2026.3.12.0 — Install DX</h3>
-        <p>castor scan, doctor, upgrade, stop commands. Gateway PID file + port guard. Venv-agnostic systemd. OAK-D SR fix. Upgrade docs.</p>
+        <div class="card-icon" style="background: var(--green-light);">🔌</div>
+        <h3>v2026.3.12.0 — Smarter Hardware Detection</h3>
+        <p>Five new detectors: Dynamixel U2D2 (explicit VID/PID), RPLidar vs YDLIDAR differentiation, Raspberry Pi AI Camera + IMX500 NPU, SO-ARM101 bimanual auto-profile, expanded I2C sensor table (7 devices).</p>
         <a href="changelog.html#v2026.3.12.0">Release notes →</a>
       </div>
       <div class="card reveal reveal-d1">
-        <div class="card-icon" style="background: var(--green-light);">🔌</div>
-        <h3>Plug-and-Play Hardware Detection</h3>
-        <p>12+ hardware types auto-detected on <code>castor scan</code>: RealSense, OAK-D, ODrive, VESC, Hailo-8, Coral TPU, Arduino, CircuitPython, Dynamixel, RPLidar, Reachy, and more. No manual port config. <code>port: auto</code> wiring across all major drivers.</p>
+        <div class="card-icon" style="background: var(--purple-light);">🦾</div>
+        <h3>SO-ARM101 — Plug and Play</h3>
+        <p>Connect your LeRobot SO-ARM101. Run <code>castor scan</code> — it auto-detects Feetech boards, counts arms, and suggests follower / leader / bimanual preset. <code>pip install opencastor[lerobot]</code>.</p>
+        <a href="hardware.html#so-arm101">SO-ARM101 guide →</a>
       </div>
       <div class="card reveal reveal-d2">
-        <div class="card-icon" style="background: var(--purple-light);">🦾</div>
-        <h3>LeRobot Kit Support</h3>
-        <p>Native Feetech STS3215 driver for SO-ARM101 and LeRobot arms. RCAN profiles for SO-ARM101, Koch arm, and ALOHA bimanual. Deploy trained policies via OpenCastor in minutes. <code>pip install opencastor[lerobot]</code>.</p>
+        <div class="card-icon" style="background: var(--cyan-light);">🔧</div>
+        <h3>v2026.3.11.1 — Install DX</h3>
+        <p>castor scan, doctor, upgrade, stop commands. Gateway PID file + port guard. Venv-agnostic systemd. OAK-D SR fix. Upgrade docs.</p>
+        <a href="changelog.html#v2026.3.11.1">Release notes →</a>
       </div>
       <div class="card reveal reveal-d3">
         <div class="card-icon" style="background: var(--orange-light);">📋</div>
         <h3>Full Changelog</h3>
-        <p>View the complete release notes including all bug fixes, API changes, and migration notes.</p>
+        <p>View complete release notes including all bug fixes, API changes, and migration notes.</p>
         <a href="/changelog" class="btn-secondary" style="margin-top:1rem;display:inline-block;">View Changelog →</a>
       </div>
     </div>

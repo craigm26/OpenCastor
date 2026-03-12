@@ -107,6 +107,50 @@
         your own config.</p>
     </section>
 
+    <!-- SO-ARM101 Featured Quickstart -->
+    <section class="section" id="so-arm101" style="padding-top:40px; background: var(--surface-elevated, #f8f9ff);">
+      <div class="container">
+        <div class="section-header reveal">
+          <p class="section-label">LeRobot / Hugging Face</p>
+          <h2 class="section-title">SO-ARM101 — Zero Config, Plug and Play</h2>
+          <p class="section-desc">Connect your SO-ARM101. OpenCastor auto-detects it and suggests the right config — follower, leader, or bimanual pair.</p>
+        </div>
+        <div class="hw-grid" style="grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+          <div class="card reveal" style="background: white;">
+            <div class="card-icon" style="background: var(--purple-light, #f3e8ff);">🦾</div>
+            <h3>1. Install</h3>
+            <pre style="background:#1e1e2e;color:#cdd6f4;padding:1rem;border-radius:8px;font-size:0.85rem;overflow-x:auto;">pip install opencastor[lerobot]</pre>
+          </div>
+          <div class="card reveal reveal-d1" style="background: white;">
+            <div class="card-icon" style="background: var(--green-light, #dcfce7);">🔍</div>
+            <h3>2. Scan</h3>
+            <pre style="background:#1e1e2e;color:#cdd6f4;padding:1rem;border-radius:8px;font-size:0.85rem;overflow-x:auto;">castor scan
+# ✓ Feetech STS3215 board on /dev/ttyUSB0
+# ✓ Detected: 1 arm → preset: so_arm101_follower
+# Tip: connect 2 boards for bimanual preset</pre>
+          </div>
+          <div class="card reveal reveal-d2" style="background: white;">
+            <div class="card-icon" style="background: var(--cyan-light, #e0f2fe);">⚙️</div>
+            <h3>3. Configure</h3>
+            <pre style="background:#1e1e2e;color:#cdd6f4;padding:1rem;border-radius:8px;font-size:0.85rem;overflow-x:auto;">castor wizard --preset so_arm101
+# Guides: follower / leader / bimanual
+# Writes so_arm101.rcan.yaml automatically</pre>
+          </div>
+          <div class="card reveal reveal-d3" style="background: white;">
+            <div class="card-icon" style="background: var(--orange-light, #fff7ed);">🚀</div>
+            <h3>4. Run</h3>
+            <pre style="background:#1e1e2e;color:#cdd6f4;padding:1rem;border-radius:8px;font-size:0.85rem;overflow-x:auto;">castor gateway --config so_arm101.rcan.yaml
+# API live at :8000
+# Send commands via WhatsApp, Telegram, REST</pre>
+          </div>
+        </div>
+        <p class="reveal" style="margin-top:1.5rem; text-align:center; color: var(--text-secondary);">
+          Uses Feetech STS3215 servos over Waveshare Serial Bus Servo Driver Board (CH340 USB).
+          RCAN profiles: <code>lerobot/so-arm101-follower</code>, <code>lerobot/so-arm101-leader</code>, <code>lerobot/aloha-bimanual</code>.
+        </p>
+      </div>
+    </section>
+
     <!-- Supported Platforms -->
     <section class="section" style="padding-top:40px">
       <div class="container">
@@ -291,13 +335,13 @@
             <p>Open-source 3-phase BLDC motor controller. STM32G474, 12V–30V, 40A max, CAN Bus 1Mbit/s. Auto-detected via USB. Calibration wizard, 50Hz telemetry, firmware flash via DFU. <code>pip install opencastor[hlabs]</code></p>
             <div class="hw-card-meta">protocol: hlabs_acb · USB-C / CAN · New in v2026.3.10.1</div>
           </div>
-          <div class="hw-card reveal reveal-d4">
+          <div class="hw-card reveal reveal-d4" id="so-arm101-card">
             <div class="hw-card-top">
               <div class="hw-card-icon">🦾</div><span class="status status-green">Supported</span>
             </div>
             <h3>SO-ARM101 / Feetech STS3215</h3>
-            <p>6-DOF serial bus servo arm used in Hugging Face LeRobot kits. Auto-detected via CH340 USB adapter. <code>port: auto</code> wiring. RCAN profiles for follower, leader, and bimanual setups. <code>pip install opencastor[lerobot]</code></p>
-            <div class="hw-card-meta">protocol: feetech · USB serial · New in v2026.3.11.0</div>
+            <p>6-DOF serial bus servo arm from Hugging Face LeRobot kits. Auto-detected by USB VID/PID — <code>castor scan</code> counts boards and suggests follower / leader / bimanual preset automatically. <code>pip install opencastor[lerobot]</code></p>
+            <div class="hw-card-meta">protocol: feetech · USB serial · Updated v2026.3.12.0 · <a href="#so-arm101">Quickstart ↑</a></div>
           </div>
           <div class="hw-card reveal reveal-d5">
             <div class="hw-card-top">
