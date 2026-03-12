@@ -21,6 +21,13 @@ import time as _time
 # Suppress libcamera / picamera2 noise before any camera-related imports (#558)
 os.environ.setdefault("LIBCAMERA_LOG_LEVELS", "*:FATAL")
 
+try:
+    import smbus2 as _smbus2_mod  # noqa: F401
+
+    HAS_SMBUS = True
+except ImportError:
+    HAS_SMBUS = False
+
 # Module-level cache for lsusb output — avoids running lsusb multiple times
 # per detect_hardware() call. Reset by invalidate_usb_descriptors_cache().
 _USB_DESCRIPTORS_CACHE: list | None = None
@@ -197,6 +204,81 @@ def scan_i2c() -> list:
                             pass
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
+
+    return devices
+
+
+def detect_i2c_devices() -> list:
+    """Scan I2C buses for attached devices using smbus2 (preferred) or sysfs parsing.
+
+    Uses :data:`I2C_DEVICE_MAP` to enrich found addresses with human-readable names.
+
+    Returns:
+        List of dicts: ``{"bus": int, "address": str, "device_name": str}``.
+        Returns ``[]`` on non-Linux platforms or when no I2C buses are found.
+    """
+    if sys.platform != "linux":
+        return []
+
+    devices: list = []
+
+    # Collect available bus numbers from /dev/i2c-*
+    i2c_buses: list = []
+    dev_dir = "/dev"
+    if os.path.isdir(dev_dir):
+        for entry in os.listdir(dev_dir):
+            if entry.startswith("i2c-"):
+                try:
+                    i2c_buses.append(int(entry.split("-")[1]))
+                except (ValueError, IndexError):
+                    pass
+
+    if HAS_SMBUS:
+        import smbus2  # noqa: PLC0415
+
+        for bus_num in sorted(i2c_buses):
+            for addr_hex, info in I2C_DEVICE_MAP.items():
+                addr_int = int(addr_hex, 16)
+                try:
+                    with smbus2.SMBus(bus_num) as bus:
+                        bus.read_byte(addr_int)
+                    devices.append(
+                        {
+                            "bus": bus_num,
+                            "address": addr_hex,
+                            "device_name": info.get("name", "unknown"),
+                        }
+                    )
+                    logger.debug(
+                        "I2C device found: bus=%d addr=%s (%s)",
+                        bus_num,
+                        addr_hex,
+                        info.get("name"),
+                    )
+                except OSError:
+                    pass  # No ACK — device not present
+    else:
+        # Fallback: parse /sys/bus/i2c/devices/ directory names (format: "BUS-ADDR")
+        sys_i2c = "/sys/bus/i2c/devices"
+        if os.path.isdir(sys_i2c):
+            for entry in os.listdir(sys_i2c):
+                parts = entry.split("-")
+                if len(parts) != 2:
+                    continue
+                try:
+                    bus_num = int(parts[0])
+                    addr_int = int(parts[1], 16)
+                    addr_hex = f"0x{addr_int:02x}"
+                    info = I2C_DEVICE_MAP.get(addr_hex, {})
+                    devices.append(
+                        {
+                            "bus": bus_num,
+                            "address": addr_hex,
+                            "device_name": info.get("name", "unknown"),
+                        }
+                    )
+                except (ValueError, IndexError):
+                    pass
 
     return devices
 
@@ -783,6 +865,7 @@ def _run_all_detectors() -> dict:
     """Execute all hardware scans and return a combined result dict (uncached)."""
     return {
         "i2c_devices": scan_i2c(),
+        "i2c": detect_i2c_devices(),
         "usb_serial": scan_usb_serial(),
         "usb_descriptors": scan_usb_descriptors(),
         "cameras": scan_cameras(),
@@ -1154,5 +1237,10 @@ def suggest_extras(hw: dict) -> list[str]:
             except ImportError:
                 if pkg not in suggestions:
                     suggestions.append(pkg)
+
+    # ── i2c_devices: smbus2 ────────────────────────────────────────────────
+    if hw.get("i2c"):
+        if not HAS_SMBUS and "smbus2" not in suggestions:
+            suggestions.append("smbus2")
 
     return list(dict.fromkeys(suggestions))  # deduplicate, preserve order

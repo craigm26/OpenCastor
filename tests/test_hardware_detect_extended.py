@@ -217,3 +217,89 @@ def test_suggest_extras_unknown_lidar_skips():
         extras = suggest_extras(hw)
     assert "rplidar" not in extras
     assert "ydlidar" not in extras
+
+
+# ---------------------------------------------------------------------------
+# #538 — I2C device lookup table
+# ---------------------------------------------------------------------------
+
+
+def test_detect_i2c_devices_returns_empty_on_non_linux(monkeypatch):
+    import sys
+    monkeypatch.setattr(sys, "platform", "darwin")
+    from castor.hardware_detect import detect_i2c_devices
+    result = detect_i2c_devices()
+    assert result == []
+
+
+def test_detect_i2c_devices_sysfs_fallback():
+    """Without smbus2, parse /sys/bus/i2c/devices/ for known addresses."""
+    import sys as _sys
+    if _sys.platform != "linux":
+        pytest.skip("Linux only")
+    with (
+        patch("castor.hardware_detect.HAS_SMBUS", False),
+        patch("os.path.isdir", return_value=True),
+        patch(
+            "os.listdir",
+            side_effect=lambda p: ["1-0040"] if "devices" in p else ["i2c-1"],
+        ),
+    ):
+        from castor.hardware_detect import detect_i2c_devices
+        result = detect_i2c_devices()
+    assert isinstance(result, list)
+    if result:
+        assert "device_name" in result[0]
+        assert "bus" in result[0]
+        assert "address" in result[0]
+
+
+def test_detect_i2c_devices_known_address_bme280():
+    """Sysfs entry '1-0076' → bus=1, address='0x76', device_name contains BME280."""
+    import sys as _sys
+    if _sys.platform != "linux":
+        pytest.skip("Linux only")
+    with (
+        patch("castor.hardware_detect.HAS_SMBUS", False),
+        patch("os.path.isdir", return_value=True),
+        patch("os.listdir", side_effect=lambda p: ["1-0076"] if "devices" in p else ["i2c-1"]),
+    ):
+        from castor.hardware_detect import detect_i2c_devices
+        result = detect_i2c_devices()
+    assert len(result) == 1
+    assert result[0]["bus"] == 1
+    assert result[0]["address"] == "0x76"
+    assert "BME280" in result[0]["device_name"] or "BMP280" in result[0]["device_name"]
+
+
+def test_detect_i2c_devices_unknown_address():
+    """Sysfs entry with unknown address → device_name = 'unknown'."""
+    import sys as _sys
+    if _sys.platform != "linux":
+        pytest.skip("Linux only")
+    with (
+        patch("castor.hardware_detect.HAS_SMBUS", False),
+        patch("os.path.isdir", return_value=True),
+        patch("os.listdir", side_effect=lambda p: ["1-00ff"] if "devices" in p else ["i2c-1"]),
+    ):
+        from castor.hardware_detect import detect_i2c_devices
+        result = detect_i2c_devices()
+    assert len(result) == 1
+    assert result[0]["device_name"] == "unknown"
+
+
+def test_detect_hardware_includes_i2c_key():
+    """detect_hardware() result dict has 'i2c' key."""
+    with patch("castor.hardware_detect._run_all_detectors", return_value={"i2c": []}):
+        from castor.hardware_detect import detect_hardware
+        result = detect_hardware(refresh=True)
+    assert "i2c" in result
+
+
+def test_suggest_extras_i2c():
+    """suggest_extras returns ['smbus2'] when i2c devices found."""
+    from castor.hardware_detect import suggest_extras
+    hw = {"i2c": [{"bus": 1, "address": "0x40", "device_name": "PCA9685 PWM Driver"}]}
+    with patch("castor.hardware_detect.HAS_SMBUS", False):
+        extras = suggest_extras(hw)
+    assert "smbus2" in extras
