@@ -11,10 +11,10 @@ declaration.  Individual features like mDNS and JWT remain opt-in
 within that section.
 """
 
+from castor.rcan import telemetry_fields
 from castor.rcan.capabilities import Capability, CapabilityRegistry
 from castor.rcan.invoke import InvokeRequest, InvokeResult, SkillRegistry
 from castor.rcan.message import MessageType, Priority, RCANMessage
-from castor.rcan import telemetry_fields
 from castor.rcan.rbac import CapabilityBroker, CapabilityLease, RCANPrincipal, RCANRole, Scope
 from castor.rcan.router import MessageRouter
 from castor.rcan.ruri import RURI

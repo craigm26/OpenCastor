@@ -2143,7 +2143,7 @@ def _programmatic_register(
             print(f"  {Colors.BOLD}URI:{Colors.ENDC}  {result.get('uri', '')}")
             print(
                 f"  {Colors.BOLD}View:{Colors.ENDC} "
-                f"{Colors.BLUE}https://rcan.dev/registry/{rrn}{Colors.ENDC}\n"
+                f"{Colors.BLUE}https://robotregistryfoundation.org/registry/{rrn}{Colors.ENDC}\n"
             )
             return rrn
         else:
@@ -2159,7 +2159,7 @@ def _programmatic_register(
         print(f"{Colors.FAIL}failed{Colors.ENDC}")
         print(f"  Error: {exc}")
         print(
-            f"  You can register manually at: {Colors.BLUE}https://rcan.dev/registry{Colors.ENDC}\n"
+            f"  You can register manually at: {Colors.BLUE}https://robotregistryfoundation.org/registry{Colors.ENDC}\n"
         )
         return None
 
@@ -2181,9 +2181,9 @@ def _print_manual_registration_url(
         params = urlencode(
             {"manufacturer": mfr, "model": mdl, "version": version, "source": "wizard"}
         )
-        url = f"https://rcan.dev/registry/register?{params}"
+        url = f"https://robotregistryfoundation.org/registry/register?{params}"
     except Exception:
-        url = "https://rcan.dev/registry"
+        url = "https://robotregistryfoundation.org/registry"
 
     print("\n  Register manually (takes ~30s):")
     print(f"  {Colors.BLUE}{url}{Colors.ENDC}")
@@ -3070,7 +3070,9 @@ def main():
         _console.print("[bold green]Setup Complete![/]\n")
         _console.print(f"  Config file:  [cyan]{filename}[/]")
         if rrn:
-            _console.print(f"  Robot ID:     [bold green]{rrn}[/] — rcan.dev/registry/{rrn}")
+            _console.print(
+                f"  Robot ID:     [bold green]{rrn}[/] — robotregistryfoundation.org/registry/{rrn}"
+            )
         _console.print(f"  AI Provider:  {agent_config['label']}")
         _console.print(f"  Model:        {agent_config['model']}")
 
@@ -3097,7 +3099,7 @@ def main():
         if not rrn:
             _console.print(
                 "\n  Register your robot:     [cyan]castor register --config {filename}[/]"
-                " or [link=https://rcan.dev/registry]rcan.dev/registry[/]"
+                " or [link=https://robotregistryfoundation.org/registry]robotregistryfoundation.org/registry[/]"
             )
         _console.print("\n  Or with Docker:          [cyan]docker compose up[/]")
         _console.print("  Check RCAN compliance:   [cyan]castor compliance --config {filename}[/]")

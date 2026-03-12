@@ -368,7 +368,7 @@ function stepRegister() { return `
   <h2>Register with rcan.dev <span class="badge badge-accent">Free</span></h2>
   <p class="subtitle">
     Get a globally unique Robot Registry Number (RRN) — like an ISBN for your robot.
-    Listed at <a href="https://rcan.dev/registry" target="_blank" style="color:var(--accent)">rcan.dev/registry</a>.
+    Listed at <a href="https://robotregistryfoundation.org/registry" target="_blank" style="color:var(--accent)">robotregistryfoundation.org/registry</a>.
   </p>
   <div class="field">
     <label>Manufacturer</label>
@@ -416,7 +416,7 @@ function stepDone() { return `
   <p class="subtitle" style="margin-top:0.5rem">OpenCastor is configured and ready to run.</p>
   ${state.rrn ? `<div class="alert alert-success" style="text-align:left;margin-top:1rem">
     🤖 Robot registered: <strong>${state.rrn}</strong><br>
-    <a href="https://rcan.dev/registry/${state.rrn}" target="_blank" style="color:var(--accent)">
+    <a href="https://robotregistryfoundation.org/registry/${state.rrn}" target="_blank" style="color:var(--accent)">
       View at rcan.dev →
     </a>
   </div>` : ""}
@@ -587,7 +587,7 @@ class WizardHandler(BaseHTTPRequestHandler):
                     v = state.get("version", "v1")
                     d = state.get("deviceId", "")
                     url = (
-                        f"https://rcan.dev/registry/register"
+                        f"https://robotregistryfoundation.org/registry/register"
                         f"?manufacturer={m}&model={mod}&version={v}&device_id={d}&source=wizard-web"
                     )
                     self._json(

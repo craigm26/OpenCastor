@@ -619,7 +619,7 @@ def cmd_inspect(args) -> None:
             _pr(f"  RRN:    {reg.get('rrn', '?')}")
             _pr(f"  URI:    {reg.get('uri', reg.get('rcan_uri', '?'))}")
             _pr(f"  Tier:   {reg.get('verification_tier', '?')}")
-            _pr(f"  View:   https://rcan.dev/registry/{reg.get('rrn', '')}")
+            _pr(f"  View:   https://robotregistryfoundation.org/registry/{reg.get('rrn', '')}")
 
     if "config" in output:
         cfg = output["config"]
@@ -798,7 +798,7 @@ def cmd_register(args) -> None:
     existing_rrn = meta.get("rrn")
     if existing_rrn:
         print(f"\n⚠️  This robot already has an RRN: {existing_rrn}")
-        print(f"   View at: https://rcan.dev/registry/{existing_rrn}")
+        print(f"   View at: https://robotregistryfoundation.org/registry/{existing_rrn}")
         ans = input("Re-register anyway? [y/N]: ").strip().lower()
         if ans not in ("y", "yes"):
             sys.exit(0)
@@ -820,13 +820,13 @@ def cmd_register(args) -> None:
                         "source": "castor-cli",
                     }
                 )
-                url = f"https://rcan.dev/registry/register?{params}"
+                url = f"https://robotregistryfoundation.org/registry/register?{params}"
                 import webbrowser
 
                 webbrowser.open(url)
                 print(f"\n   Opened: {url}")
             except Exception:
-                print("\n   Register at: https://rcan.dev/registry")
+                print("\n   Register at: https://robotregistryfoundation.org/registry")
             sys.exit(0)
 
     # SDK compat pre-registration check
@@ -874,7 +874,7 @@ def cmd_register(args) -> None:
             print("\n🤖 Robot registered!")
             print(f"   RRN:  {rrn}")
             print(f"   URI:  {result.get('uri', '')}")
-            print(f"   View: https://rcan.dev/registry/{rrn}\n")
+            print(f"   View: https://robotregistryfoundation.org/registry/{rrn}\n")
 
             # Patch config file
             meta["rrn"] = rrn
@@ -901,7 +901,7 @@ def cmd_register(args) -> None:
         sys.exit(1)
     except Exception as e:
         print(f"❌  Registration failed: {e}")
-        print("   Try manually at: https://rcan.dev/registry")
+        print("   Try manually at: https://robotregistryfoundation.org/registry")
         sys.exit(1)
 
 

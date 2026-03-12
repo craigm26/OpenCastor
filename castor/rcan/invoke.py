@@ -29,12 +29,17 @@ class InvokeRequest:
     reply_to: Optional[str] = None  # RURI to send INVOKE_RESULT to
 
     def to_message(self, source_ruri: str, target_ruri: str) -> Dict[str, Any]:
-        """Serialize to RCAN message format."""
+        """Serialize to RCAN message format.
+
+        Uses ``msg_id`` as the wire-format correlation field per §19.3 of the
+        RCAN specification.  The Python attribute is kept as ``invoke_id`` for
+        backward-compatibility with existing call-sites.
+        """
         return {
             "type": "INVOKE",
             "source_ruri": source_ruri,
             "target_ruri": target_ruri,
-            "invoke_id": self.invoke_id,
+            "msg_id": self.invoke_id,  # §19.3 — wire field is msg_id
             "payload": {
                 "skill": self.skill,
                 "params": self.params,
@@ -56,12 +61,16 @@ class InvokeResult:
     duration_ms: Optional[float] = None
 
     def to_message(self, source_ruri: str, target_ruri: str) -> Dict[str, Any]:
-        """Serialize to RCAN message format."""
+        """Serialize to RCAN message format.
+
+        Uses ``reply_to`` as the wire-format correlation field per §19.4 of the
+        RCAN specification, echoing the ``msg_id`` from the originating INVOKE.
+        """
         return {
             "type": "INVOKE_RESULT",
             "source_ruri": source_ruri,
             "target_ruri": target_ruri,
-            "invoke_id": self.invoke_id,
+            "reply_to": self.invoke_id,  # §19.4 — correlates to INVOKE msg_id
             "payload": {
                 "status": self.status,
                 "result": self.result,
