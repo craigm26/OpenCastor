@@ -472,6 +472,10 @@ def test_suggest_extras_rpi_ai_camera():
 
 def test_detect_lerobot_feetech_single_port():
     """1 Feetech board + 1 serial port → compatible=True, profile='so_arm101'."""
+    import sys as _sys
+
+    if _sys.platform != "linux":
+        pytest.skip("Linux only")
     port = _make_port(0x1A86, 0x7523, "/dev/ttyUSB0")
     with (
         patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]),
@@ -487,6 +491,10 @@ def test_detect_lerobot_feetech_single_port():
 
 def test_detect_lerobot_feetech_dual_port():
     """1 Feetech board + 2 serial ports → compatible=True, profile='aloha'."""
+    import sys as _sys
+
+    if _sys.platform != "linux":
+        pytest.skip("Linux only")
     port = _make_port(0x1A86, 0x7523, "/dev/ttyUSB0")
     with (
         patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]),
@@ -512,6 +520,10 @@ def test_detect_lerobot_no_feetech():
 
 def test_detect_lerobot_feetech_no_serial_ports():
     """Feetech board detected but no serial ports → compatible=False."""
+    import sys as _sys
+
+    if _sys.platform != "linux":
+        pytest.skip("Linux only")
     port = _make_port(0x1A86, 0x7523, "/dev/ttyUSB0")
     with (
         patch("castor.hardware_detect._list_usb_ports_with_vidpid", return_value=[port]),
