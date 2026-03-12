@@ -88,7 +88,8 @@ KNOWN_FEETECH_DEVICES: dict = {
 
 #: Dynamixel U2D2 and OpenCR/OpenCM boards.
 KNOWN_DYNAMIXEL_DEVICES: dict = {
-    "0403:6014": "Dynamixel U2D2 (FT232H)",
+    "0403:6014": "Dynamixel U2D2 (FT232R)",        # Standard U2D2
+    "0403:6015": "Dynamixel U2D2-H (FT232H)",      # High-speed U2D2-H
     "16d0:0c17": "Robotis OpenCM 9.04",
     "0483:5740": "Robotis OpenCR 1.0",
 }
@@ -913,10 +914,13 @@ def suggest_preset(hw: dict) -> tuple:
             "Feetech servo board detected (SO-ARM101 candidate)",
         )
 
-    # ── Dynamixel U2D2 / Koch arm ─────────────────────────────────────────
+    # ── Dynamixel U2D2 ───────────────────────────────────────────────────
     if hw.get("dynamixel"):
+        vp = hw["dynamixel"][0].get("vid_pid", "")
         port = hw["dynamixel"][0].get("port", "unknown")
-        return "lerobot/koch-arm", "high", f"Dynamixel U2D2 on {port}"
+        if vp in ("0403:6014", "0403:6015"):
+            return "dynamixel_arm", "high", f"Dynamixel U2D2 on {port}"
+        return "lerobot/koch-arm", "high", f"Dynamixel controller on {port}"
 
     # ── Luxonis OAK-D ─────────────────────────────────────────────────────
     if hw.get("oakd"):
