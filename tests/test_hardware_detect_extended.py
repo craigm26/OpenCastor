@@ -285,9 +285,9 @@ def test_detect_i2c_devices_sysfs_fallback():
         pytest.skip("Linux only")
     with (
         patch("castor.hardware_detect.HAS_SMBUS", False),
-        patch("os.path.isdir", return_value=True),
+        patch("castor.hardware_detect.os.path.isdir", return_value=True),
         patch(
-            "os.listdir",
+            "castor.hardware_detect.os.listdir",
             side_effect=lambda p: ["1-0040"] if "devices" in p else ["i2c-1"],
         ),
     ):
@@ -308,8 +308,11 @@ def test_detect_i2c_devices_known_address_bme280():
         pytest.skip("Linux only")
     with (
         patch("castor.hardware_detect.HAS_SMBUS", False),
-        patch("os.path.isdir", return_value=True),
-        patch("os.listdir", side_effect=lambda p: ["1-0076"] if "devices" in p else ["i2c-1"]),
+        patch("castor.hardware_detect.os.path.isdir", return_value=True),
+        patch(
+            "castor.hardware_detect.os.listdir",
+            side_effect=lambda p: ["1-0076"] if "devices" in p else ["i2c-1"],
+        ),
     ):
         from castor.hardware_detect import detect_i2c_devices
 
@@ -328,8 +331,11 @@ def test_detect_i2c_devices_unknown_address():
         pytest.skip("Linux only")
     with (
         patch("castor.hardware_detect.HAS_SMBUS", False),
-        patch("os.path.isdir", return_value=True),
-        patch("os.listdir", side_effect=lambda p: ["1-00ff"] if "devices" in p else ["i2c-1"]),
+        patch("castor.hardware_detect.os.path.isdir", return_value=True),
+        patch(
+            "castor.hardware_detect.os.listdir",
+            side_effect=lambda p: ["1-00ff"] if "devices" in p else ["i2c-1"],
+        ),
     ):
         from castor.hardware_detect import detect_i2c_devices
 
@@ -369,7 +375,7 @@ def test_detect_rpi_ai_camera_via_libcamera():
     mock_proc.stdout = "Available cameras\n--------------\n0 : imx500 [4056x3040]\n"
     with (
         patch("subprocess.run", return_value=mock_proc),
-        patch("os.path.isdir", return_value=False),
+        patch("castor.hardware_detect.os.path.isdir", return_value=False),
     ):
         from castor.hardware_detect import detect_rpi_ai_camera
 
@@ -389,7 +395,7 @@ def test_detect_rpi_ai_camera_npu_detected():
 
     with (
         patch("subprocess.run", return_value=mock_proc),
-        patch("os.path.isdir", side_effect=_isdir),
+        patch("castor.hardware_detect.os.path.isdir", side_effect=_isdir),
     ):
         from castor.hardware_detect import detect_rpi_ai_camera
 
@@ -398,13 +404,14 @@ def test_detect_rpi_ai_camera_npu_detected():
 
 
 def test_detect_rpi_ai_camera_not_found():
-    """libcamera output without imx500 → detected=False."""
+    """All detection paths return nothing → detected=False."""
     mock_proc = MagicMock()
     mock_proc.returncode = 0
     mock_proc.stdout = "No cameras available\n"
     with (
         patch("subprocess.run", return_value=mock_proc),
-        patch("os.path.isdir", return_value=False),
+        patch("castor.hardware_detect.os.path.isdir", return_value=False),
+        patch("castor.hardware_detect._read_device_tree_model", side_effect=FileNotFoundError),
     ):
         from castor.hardware_detect import detect_rpi_ai_camera
 
@@ -416,7 +423,7 @@ def test_detect_rpi_ai_camera_libcamera_missing():
     """subprocess.FileNotFoundError (libcamera not installed) → detected=False."""
     with (
         patch("subprocess.run", side_effect=FileNotFoundError),
-        patch("os.path.isdir", return_value=False),
+        patch("castor.hardware_detect.os.path.isdir", return_value=False),
     ):
         from castor.hardware_detect import detect_rpi_ai_camera
 
@@ -428,7 +435,7 @@ def test_detect_rpi_ai_camera_timeout():
     """subprocess.TimeoutExpired → detected=False (graceful)."""
     with (
         patch("subprocess.run", side_effect=subprocess.TimeoutExpired("libcamera-hello", 3)),
-        patch("os.path.isdir", return_value=False),
+        patch("castor.hardware_detect.os.path.isdir", return_value=False),
     ):
         from castor.hardware_detect import detect_rpi_ai_camera
 
