@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -82,4 +81,19 @@ def test_suggest_preset_dynamixel_arm_for_u2d2():
     }
     preset, conf, reason = suggest_preset(hw)
     assert preset == "dynamixel_arm"
+    assert conf == "high"
+
+
+def test_suggest_preset_non_u2d2_dynamixel_gives_koch():
+    """suggest_preset returns 'lerobot/koch-arm' for non-U2D2 Dynamixel (e.g. OpenCR)."""
+    from castor.hardware_detect import suggest_preset
+    hw = {
+        "dynamixel": [{"port": "/dev/ttyUSB0", "vid_pid": "0483:5740", "model": "Robotis OpenCR 1.0"}],
+        "i2c_devices": [], "usb_serial": [], "cameras": [], "platform": "generic",
+        "usb_descriptors": [], "realsense": [], "oakd": [], "odrive": [], "vesc": [],
+        "feetech": [], "arduino": [], "circuitpython": [], "lidar": [], "hailo": [],
+        "coral": [], "imx500": [], "reachy": [],
+    }
+    preset, conf, reason = suggest_preset(hw)
+    assert preset == "lerobot/koch-arm"
     assert conf == "high"

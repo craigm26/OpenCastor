@@ -980,6 +980,7 @@ def test_suggest_preset_feetech():
 
 
 def test_suggest_preset_dynamixel_gives_koch():
+    """suggest_preset returns 'dynamixel_arm' for U2D2 VID/PID (0403:6014)."""
     from castor.hardware_detect import suggest_preset
 
     hw = {
@@ -987,7 +988,7 @@ def test_suggest_preset_dynamixel_gives_koch():
         "platform": "generic",
     }
     preset, conf, _ = suggest_preset(hw)
-    assert preset == "lerobot/koch-arm"
+    assert preset == "dynamixel_arm"
     assert conf == "high"
 
 
