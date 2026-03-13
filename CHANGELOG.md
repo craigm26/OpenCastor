@@ -6,6 +6,13 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 
 ---
 
+## [2026.3.13.12] — 2026-03-13
+
+### Added
+- `sdk/js/src/index.ts`: typed `invoke()`, `invokeCancel()`, `registryRegister()`, and `registryResolve()` methods with full interface definitions — implements RCAN §19 INVOKE/INVOKE_CANCEL and §21 REGISTRY_REGISTER/REGISTRY_RESOLVE; includes `timeoutMs` + `replyTo` overrides (#650)
+
+---
+
 ## [2026.3.13.11] — 2026-03-13
 
 ### Fixed
