@@ -1,4 +1,4 @@
-"""castor.sdk — Auto-generated OpenAPI Python client SDK (issue #264).
+"""castor.sdk — OpenAPI Python client SDK for the OpenCastor RCAN broker.
 
 Usage::
 
