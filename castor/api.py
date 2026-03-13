@@ -158,7 +158,9 @@ def _check_webhook_rate(sender_id: str) -> None:
         if len(_webhook_history[sender_id]) >= _WEBHOOK_RATE_LIMIT:
             raise HTTPException(
                 status_code=429,
-                detail=f"Webhook rate limit exceeded ({_WEBHOOK_RATE_LIMIT} req/min). Try again later.",
+                detail=(
+                    f"Webhook rate limit exceeded ({_WEBHOOK_RATE_LIMIT} req/min). Try again later."
+                ),
                 headers={"Retry-After": "60"},
             )
         _webhook_history[sender_id].append(now)
@@ -1279,7 +1281,10 @@ async def whoami(request: Request):
 
 @app.get("/api/audit", dependencies=[Depends(verify_token)])
 async def get_audit_log():
-    """Expose the WorkAuthority audit log (requested, approved, denied, executed, revoked events)."""
+    """Expose the WorkAuthority audit log.
+
+    Events: requested, approved, denied, executed, revoked.
+    """
     if not state.fs:
         raise HTTPException(status_code=503, detail="Filesystem not initialized")
     try:
