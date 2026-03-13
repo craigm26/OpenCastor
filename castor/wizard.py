@@ -2353,21 +2353,33 @@ def choose_hardware():
             print()
         else:
             print(f"\n  {Colors.WARNING}[AUTO-DETECT]{Colors.ENDC} {reason}")
+            # Hint for Docker users whose USB devices aren't passed through
+            import os
+
+            if os.path.exists("/.dockerenv"):
+                print("  (Running in Docker — USB devices not visible unless passed with --device)")
+                print(
+                    "  Re-run with: docker run -it --rm --device=/dev/bus/usb -v ./config:/app/config opencastor castor wizard"
+                )
+                print()
             print("  Falling back to manual selection.\n")
     except Exception:
         pass
 
+    # Build menu dynamically from setup_catalog so new hardware is always shown
+    from castor.setup_catalog import get_hardware_presets
+
+    presets = get_hardware_presets()
     print("Select your hardware kit:")
     print("  [1] Custom (Advanced)")
-    print("  [2] RPi RC Car + PCA9685 + CSI Camera (Recommended)")
-    print("  [3] Waveshare AlphaBot ($45)")
-    print("  [4] Adeept RaspTank ($55)")
-    print("  [5] Freenove 4WD Car ($49)")
-    print("  [6] SunFounder PiCar-X ($60)")
-    print("  [7] ESP32 Generic Wi-Fi Bot")
-    print("  [8] LEGO Mindstorms EV3")
-    print("  [9] LEGO SPIKE Prime")
-    print("  [10] Dynamixel Arm")
+    for i, preset in enumerate(presets, start=2):
+        # Highlight LeRobot / arm kits visually
+        tag = ""
+        if "SO-ARM101" in preset.label or "ALOHA" in preset.label:
+            tag = " 🦾 LeRobot"
+        elif "HLabs" in preset.label:
+            tag = " ⚡ HLabs"
+        print(f"  [{i}] {preset.label}{tag}")
 
     choice = input_default("Selection", "2")
     return PRESETS.get(choice)

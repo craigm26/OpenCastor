@@ -5,6 +5,9 @@ rcan_version: "1.3"
 
 metadata:
   robot_name: my-robot
+  robot_uuid: 00000000-0000-0000-0000-000000000000
+  author: your-name
+  license: MIT
   manufacturer: custom
   model: custom-v1
   version: v1
@@ -13,7 +16,15 @@ agent:
   provider: anthropic           # or: google, openai, mock
   model: claude-sonnet-4-5      # or: gemini-2.5-flash, gpt-4o
 
-drivers: []
+drivers:
+  - protocol: mock
+
+physics:
+  type: custom
+  dof: 2
+
+network:
+  telemetry_stream: false
 
 safety:
   max_linear_velocity_ms: 0.5
@@ -21,4 +32,4 @@ safety:
   estop_enabled: true
 
 rcan_protocol:
-  enabled: true
+  port: 8000

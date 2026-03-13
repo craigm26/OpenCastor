@@ -445,6 +445,13 @@ _HARDWARE_PRESETS: List[HardwarePreset] = [
     HardwarePreset(id="lego_mindstorms_ev3", label="LEGO Mindstorms EV3"),
     HardwarePreset(id="lego_spike_prime", label="LEGO SPIKE Prime"),
     HardwarePreset(id="dynamixel_arm", label="Dynamixel Arm"),
+    HardwarePreset(id="so_arm101", label="SO-ARM101 (HuggingFace LeRobot, 5-DOF)"),
+    HardwarePreset(
+        id="so_arm101_bimanual", label="SO-ARM101 Bimanual / ALOHA (leader + follower pair)"
+    ),
+    HardwarePreset(id="hlabs_acb_single", label="HLabs ACB v2.0 (single BLDC motor)"),
+    HardwarePreset(id="hlabs_acb_arm_3dof", label="HLabs ACB v2.0 Arm (3-DOF)"),
+    HardwarePreset(id="hlabs_acb_biped_6dof", label="HLabs ACB v2.0 Biped (6-DOF)"),
 ]
 
 _STACK_PROFILES: List[StackProfile] = [
@@ -543,6 +550,11 @@ def get_hardware_preset_map() -> Dict[str, Optional[str]]:
         "8": "lego_mindstorms_ev3",
         "9": "lego_spike_prime",
         "10": "dynamixel_arm",
+        "11": "so_arm101",
+        "12": "so_arm101_bimanual",
+        "13": "hlabs_acb_single",
+        "14": "hlabs_acb_arm_3dof",
+        "15": "hlabs_acb_biped_6dof",
     }
 
 

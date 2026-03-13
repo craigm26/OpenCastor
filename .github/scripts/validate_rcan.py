@@ -12,7 +12,7 @@ import yaml
 from jsonschema import ValidationError, validate
 
 # Accepted rcan_version values — update this set when the spec advances.
-ACCEPTED_RCAN_VERSIONS = {"1.0.0-alpha", "1.1.0", "1.2", "1.2.0"}
+ACCEPTED_RCAN_VERSIONS = {"1.0.0-alpha", "1.1.0", "1.2", "1.2.0", "1.3"}
 
 
 def load_yaml(path):
