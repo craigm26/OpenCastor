@@ -21,7 +21,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional
 
 logger = logging.getLogger("OpenCastor.Usage")
 
@@ -38,7 +38,7 @@ _SESSION_ID: str = str(uuid.uuid4())
 # Per-1M token prices from provider pricing pages; divided by 1000 → per-1k.
 # Free-tier / local models carry zero cost.
 
-_COST_TABLE: Dict[str, Dict[str, tuple]] = {
+_COST_TABLE: dict[str, dict[str, tuple]] = {
     "google": {
         "gemini-2.0-flash": (0.0, 0.0),
         "gemini-2.5-flash-lite": (0.0, 0.0),
@@ -222,13 +222,13 @@ class UsageTracker:
         except Exception as exc:
             logger.debug("UsageTracker.log_usage failed: %s", exc)
 
-    def get_session_totals(self) -> Dict[str, Dict]:
+    def get_session_totals(self) -> dict[str, dict]:
         """Return per-provider token and cost totals for the current session.
 
         Returns:
             Dict mapping ``provider`` → ``{tokens_in, tokens_out, total_tokens, cost_usd, calls}``
         """
-        result: Dict[str, Dict] = {}
+        result: dict[str, dict] = {}
         try:
             with self._conn() as conn:
                 rows = conn.execute(
@@ -257,7 +257,7 @@ class UsageTracker:
             logger.debug("UsageTracker.get_session_totals failed: %s", exc)
         return result
 
-    def get_daily_totals(self, days: int = 7) -> List[Dict]:
+    def get_daily_totals(self, days: int = 7) -> list[dict]:
         """Return per-day token and cost aggregates over the past N days.
 
         Args:
@@ -269,7 +269,7 @@ class UsageTracker:
             ``cost_usd``, ``calls``.
         """
         since = time.time() - days * 86400.0
-        rows_out: List[Dict] = []
+        rows_out: list[dict] = []
         try:
             with self._conn() as conn:
                 rows = conn.execute(
@@ -302,14 +302,14 @@ class UsageTracker:
             logger.debug("UsageTracker.get_daily_totals failed: %s", exc)
         return rows_out
 
-    def get_all_time_totals(self) -> Dict:
+    def get_all_time_totals(self) -> dict:
         """Return lifetime aggregated totals across all sessions.
 
         Returns:
             Dict with keys: ``tokens_in``, ``tokens_out``, ``total_tokens``,
             ``cost_usd``, ``calls``.
         """
-        result: Dict = {
+        result: dict = {
             "tokens_in": 0,
             "tokens_out": 0,
             "total_tokens": 0,
@@ -340,7 +340,7 @@ class UsageTracker:
             logger.debug("UsageTracker.get_all_time_totals failed: %s", exc)
         return result
 
-    def get_today_totals(self) -> Dict:
+    def get_today_totals(self) -> dict:
         """Return today's aggregated totals (all providers combined).
 
         Convenience method used by the dashboard.
@@ -350,7 +350,7 @@ class UsageTracker:
             ``cost_usd``, ``calls``.
         """
         since_midnight = time.time() - (time.time() % 86400)
-        result: Dict = {
+        result: dict = {
             "tokens_in": 0,
             "tokens_out": 0,
             "total_tokens": 0,

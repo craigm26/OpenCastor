@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from castor.rcan.rbac import RCANPrincipal, RCANRole, Scope
 from castor.secret_provider import get_jwt_secret_provider
@@ -91,9 +91,9 @@ class RCANTokenManager:
         self,
         subject: str,
         role: RCANRole = RCANRole.GUEST,
-        scopes: Optional[List[str]] = None,
+        scopes: Optional[list[str]] = None,
         audience: str = "rcan://*.*.*",
-        fleet: Optional[List[str]] = None,
+        fleet: Optional[list[str]] = None,
         ttl_seconds: int = 86400,
     ) -> str:
         """Issue a signed JWT token.
@@ -122,7 +122,7 @@ class RCANTokenManager:
         if scopes is None:
             scopes = Scope.for_role(role).to_strings()
 
-        claims: Dict[str, Any] = {
+        claims: dict[str, Any] = {
             "sub": subject,
             "iss": self.issuer,
             "aud": audience,
@@ -201,7 +201,7 @@ class RCANTokenManager:
         logger.debug("Verified JWT for %s (role=%s)", principal.name, role.name)
         return principal
 
-    def decode_claims(self, token: str) -> Dict[str, Any]:
+    def decode_claims(self, token: str) -> dict[str, Any]:
         """Decode a JWT token without verification (for inspection only)."""
         if not HAS_JWT:
             raise RuntimeError("PyJWT is not installed")

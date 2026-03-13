@@ -23,7 +23,7 @@ REST API (integrated via channels -- no dedicated endpoint needed):
 import logging
 import os
 import re
-from typing import Dict, Optional, Tuple
+from typing import Optional
 
 logger = logging.getLogger("OpenCastor.I18n")
 
@@ -34,7 +34,7 @@ CASTOR_LANGUAGE = os.getenv("CASTOR_LANGUAGE", "auto")
 # Each entry uses lowercase normalised keys.
 # ---------------------------------------------------------------------------
 
-_TO_ENGLISH: Dict[str, Dict[str, str]] = {
+_TO_ENGLISH: dict[str, dict[str, str]] = {
     "es": {
         "adelante": "go forward",
         "avanzar": "go forward",
@@ -187,7 +187,7 @@ _TO_ENGLISH: Dict[str, Dict[str, str]] = {
 }
 
 # Reverse tables: english -> native (for response translation)
-_FROM_ENGLISH: Dict[str, Dict[str, str]] = {}
+_FROM_ENGLISH: dict[str, dict[str, str]] = {}
 for _lang, _table in _TO_ENGLISH.items():
     _FROM_ENGLISH[_lang] = {v: k for k, v in _table.items()}
 
@@ -201,7 +201,7 @@ _LANG_PATTERNS = [
 ]
 
 # Common words per language for Latin-script detection
-_LATIN_MARKERS: Dict[str, Tuple[str, ...]] = {
+_LATIN_MARKERS: dict[str, tuple[str, ...]] = {
     "es": ("adelante", "atrás", "izquierda", "derecha", "para", "avanza", "detente"),
     "fr": ("avance", "reculer", "gauche", "droite", "arrête", "tourne"),
     "de": ("vorwärts", "rückwärts", "links", "rechts", "stopp", "anhalten"),
@@ -241,7 +241,7 @@ class Translator:
 
         return "en"
 
-    def to_english(self, text: str, source_lang: Optional[str] = None) -> Tuple[str, str]:
+    def to_english(self, text: str, source_lang: Optional[str] = None) -> tuple[str, str]:
         """Translate *text* to English.
 
         Args:
@@ -294,7 +294,7 @@ class Translator:
 
         return text
 
-    def supported_languages(self) -> Dict[str, int]:
+    def supported_languages(self) -> dict[str, int]:
         """Return a dict of {lang_code: phrase_count} for all supported languages."""
         return {lang: len(table) for lang, table in _TO_ENGLISH.items()}
 

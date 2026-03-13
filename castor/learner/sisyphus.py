@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from .apply_stage import MAX_RETRIES, ApplyStage
 from .dev_stage import DevStage
@@ -38,7 +38,7 @@ class ImprovementResult:
     retries: int = 0
     error: Optional[str] = None
     duration_ms: Optional[float] = None
-    stage_durations: Dict[str, float] = field(default_factory=dict)
+    stage_durations: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {

@@ -21,7 +21,7 @@ import math
 import os
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 try:
     import numpy as np
@@ -317,7 +317,7 @@ class IMUDriver:
         self._fall_detected: bool = False  # latch: True after a fall event until reset
 
         # Issue #413 — heading history ring buffer
-        self._heading_history: List[Tuple[float, float]] = []  # (ts, yaw_deg)
+        self._heading_history: list[tuple[float, float]] = []  # (ts, yaw_deg)
         self._heading_history_max: int = 3600  # max entries (~1 per second for 1 hour)
 
         # Issue #425 — activity classifier mock state
@@ -1043,7 +1043,7 @@ class IMUDriver:
 
     # ── Issue #413 — heading history ──────────────────────────────────────────
 
-    def heading_history(self, window_s: float = 60.0) -> Dict[str, Any]:
+    def heading_history(self, window_s: float = 60.0) -> dict[str, Any]:
         """Return timestamped yaw readings over a time window (Issue #413).
 
         Calls orientation() to record the current heading, then returns

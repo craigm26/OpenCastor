@@ -30,7 +30,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.Recorder")
 
@@ -67,7 +67,7 @@ class RecordingMeta:
         end = self.ended_at or time.time()
         return round(end - self.started_at, 2)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
@@ -111,7 +111,7 @@ class VideoRecorder:
 
         # Load index from disk
         self._index_path = self._dir / "index.json"
-        self._index: Dict[str, Dict[str, Any]] = self._load_index()
+        self._index: dict[str, dict[str, Any]] = self._load_index()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -200,7 +200,7 @@ class VideoRecorder:
 
             return False
 
-    def stop(self) -> Optional[Dict[str, Any]]:
+    def stop(self) -> Optional[dict[str, Any]]:
         """Stop the current recording and flush to disk.
 
         Returns:
@@ -237,7 +237,7 @@ class VideoRecorder:
         return self._current is not None
 
     @property
-    def current_info(self) -> Optional[Dict[str, Any]]:
+    def current_info(self) -> Optional[dict[str, Any]]:
         """Metadata for the active recording, or None."""
         with self._lock:
             return self._current.to_dict() if self._current else None
@@ -275,7 +275,7 @@ class VideoRecorder:
                 entry["annotations"] = []
 
             annotation_id = str(uuid.uuid4())
-            annotation: Dict[str, Any] = {
+            annotation: dict[str, Any] = {
                 "id": annotation_id,
                 "timestamp_s": timestamp_s,
                 "label": label,
@@ -298,7 +298,7 @@ class VideoRecorder:
             )
             return annotation_id
 
-    def get_annotations(self, rec_id: str) -> Optional[List[Dict[str, Any]]]:
+    def get_annotations(self, rec_id: str) -> Optional[list[dict[str, Any]]]:
         """Return all annotations for a recording, sorted by timestamp ascending.
 
         Args:
@@ -344,7 +344,7 @@ class VideoRecorder:
     # Listing
     # ------------------------------------------------------------------
 
-    def list_recordings(self) -> List[Dict[str, Any]]:
+    def list_recordings(self) -> list[dict[str, Any]]:
         """Return all recordings sorted newest-first."""
         recs = list(self._index.values())
         # Re-stat sizes
@@ -358,7 +358,7 @@ class VideoRecorder:
                 )
         return sorted(recs, key=lambda r: r.get("created_at", 0), reverse=True)
 
-    def get_recording(self, rec_id: str) -> Optional[Dict[str, Any]]:
+    def get_recording(self, rec_id: str) -> Optional[dict[str, Any]]:
         """Return metadata for a specific recording."""
         return self._index.get(rec_id)
 
@@ -384,7 +384,7 @@ class VideoRecorder:
     # Index persistence
     # ------------------------------------------------------------------
 
-    def _load_index(self) -> Dict[str, Dict[str, Any]]:
+    def _load_index(self) -> dict[str, dict[str, Any]]:
         try:
             if self._index_path.exists():
                 return json.loads(self._index_path.read_text())

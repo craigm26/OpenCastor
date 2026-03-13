@@ -9,7 +9,7 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 
 class AgentStatus(Enum):
@@ -42,11 +42,11 @@ class BaseAgent(ABC):
     #: Unique agent name — must be overridden in subclasses.
     name: str = "base"
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
-        self.config: Dict[str, Any] = config or {}
+    def __init__(self, config: Optional[dict[str, Any]] = None) -> None:
+        self.config: dict[str, Any] = config or {}
         self.status: AgentStatus = AgentStatus.IDLE
         self._start_time: Optional[float] = None
-        self._errors: List[str] = []
+        self._errors: list[str] = []
         self._task: Optional[asyncio.Task] = None  # type: ignore[type-arg]
         self._stop_event: asyncio.Event = asyncio.Event()
         self._logger = logging.getLogger(f"OpenCastor.Agents.{self.name}")
@@ -92,7 +92,7 @@ class BaseAgent(ABC):
             raise
 
     @abstractmethod
-    async def observe(self, sensor_data: Dict[str, Any]) -> Any:
+    async def observe(self, sensor_data: dict[str, Any]) -> Any:
         """Process raw sensor data and return structured output.
 
         Args:
@@ -104,7 +104,7 @@ class BaseAgent(ABC):
         ...
 
     @abstractmethod
-    async def act(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def act(self, context: dict[str, Any]) -> dict[str, Any]:
         """Produce an action dict from current context.
 
         Args:
@@ -115,7 +115,7 @@ class BaseAgent(ABC):
         """
         ...
 
-    def health(self) -> Dict[str, Any]:
+    def health(self) -> dict[str, Any]:
         """Return a snapshot of agent health.
 
         Returns:

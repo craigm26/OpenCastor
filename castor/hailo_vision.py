@@ -11,7 +11,7 @@ import logging
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 
@@ -62,7 +62,7 @@ class ObstacleEvent:
     confidence: float
     label: str
     area: float
-    bbox: List[float]
+    bbox: list[float]
 
 
 class HailoDetection:
@@ -70,7 +70,7 @@ class HailoDetection:
 
     __slots__ = ("class_id", "class_name", "score", "bbox")
 
-    def __init__(self, class_id: int, score: float, bbox: List[float]):
+    def __init__(self, class_id: int, score: float, bbox: list[float]):
         self.class_id = class_id
         self.class_name = COCO_NAMES.get(class_id, f"class_{class_id}")
         self.score = score
@@ -150,7 +150,7 @@ class HailoVision:
         except Exception as e:
             logger.warning(f"Hailo-8 init failed: {e}")
 
-    def detect(self, frame: np.ndarray) -> List[HailoDetection]:
+    def detect(self, frame: np.ndarray) -> list[HailoDetection]:
         """Run object detection on a BGR frame."""
         if not self.available:
             return []
@@ -200,7 +200,7 @@ class HailoVision:
             logger.debug(f"Hailo detection error: {e}")
             return []
 
-    def detect_obstacles(self, frame: np.ndarray) -> Dict[str, Any]:
+    def detect_obstacles(self, frame: np.ndarray) -> dict[str, Any]:
         """High-level obstacle detection for the reactive layer."""
         detections = self.detect(frame)
         obstacles = [d for d in detections if d.is_obstacle()]

@@ -33,7 +33,7 @@ import threading
 import time
 from concurrent.futures import wait as _futures_wait
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.Behaviors")
 
@@ -64,7 +64,7 @@ class BehaviorRunner:
         driver=None,
         brain=None,
         speaker=None,
-        config: Optional[Dict[str, Any]] = None,
+        config: Optional[dict[str, Any]] = None,
     ):
         self.driver = driver
         self.brain = brain
@@ -75,7 +75,7 @@ class BehaviorRunner:
         self._current_name: Optional[str] = None
 
         # Dispatch table: step type -> handler method
-        self._step_handlers: Dict[str, Any] = {
+        self._step_handlers: dict[str, Any] = {
             "waypoint": self._step_waypoint,
             "wait": self._step_wait,
             "think": self._step_think,
@@ -132,12 +132,12 @@ class BehaviorRunner:
         self._stop_event: _threading.Event = _threading.Event()
 
         # Issue #368: runtime variable store (reset on stop())
-        self._vars: Dict[str, Any] = {}
+        self._vars: dict[str, Any] = {}
 
         # Issue #379: named event store for event_trigger step
         import threading as _threading2
 
-        self._events: Dict[str, Any] = {}  # name → threading.Event
+        self._events: dict[str, Any] = {}  # name → threading.Event
         self._events_lock: _threading2.Lock = _threading2.Lock()
 
         # Issue #387: robot tag set for tag-based step filtering

@@ -5,7 +5,7 @@ the ManipulatorSpecialist, and publishes results to ``swarm.manipulation_result`
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from .base import BaseAgent
 from .shared_state import SharedState
@@ -30,7 +30,7 @@ class ManipulatorAgent(BaseAgent):
 
     def __init__(
         self,
-        config: Optional[Dict[str, Any]] = None,
+        config: Optional[dict[str, Any]] = None,
         shared_state: Optional[SharedState] = None,
     ):
         super().__init__(config)
@@ -45,12 +45,12 @@ class ManipulatorAgent(BaseAgent):
         except Exception as exc:
             logger.warning("ManipulatorSpecialist unavailable: %s", exc)
 
-    async def observe(self, sensor_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def observe(self, sensor_data: dict[str, Any]) -> dict[str, Any]:
         """Read pending manipulation task from SharedState or sensor_data."""
         task = self._state.get("swarm.manipulation_task") or sensor_data.get("manipulation_task")
         return {"pending_task": task}
 
-    async def act(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def act(self, context: dict[str, Any]) -> dict[str, Any]:
         """Execute the pending manipulation task and publish the result."""
         task_data = context.get("pending_task")
 

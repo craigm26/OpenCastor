@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from castor.drivers.base import DriverBase
 
@@ -52,7 +52,7 @@ class ROS2Driver(DriverBase):
     This lets the rest of OpenCastor boot on a non-ROS machine.
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, config: Optional[dict[str, Any]] = None) -> None:
         cfg = config or {}
         self._cmd_vel_topic: str = cfg.get("cmd_vel_topic", "/cmd_vel")
         self._odom_topic: str = cfg.get("odom_topic", "/odom")
@@ -63,7 +63,7 @@ class ROS2Driver(DriverBase):
         self._node: Optional[Any] = None
         self._publisher: Optional[Any] = None
         self._spin_thread: Optional[threading.Thread] = None
-        self._last_odom: Optional[Dict[str, Any]] = None
+        self._last_odom: Optional[dict[str, Any]] = None
         self._closed = False
 
         if HAS_RCLPY:
@@ -171,11 +171,11 @@ class ROS2Driver(DriverBase):
                 logger.debug("rclpy shutdown error: %s", exc)
         logger.info("ROS2 driver closed")
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> dict[str, Any]:
         """Return driver health: ok, mode, and last odom if available."""
         mode = "hardware" if (HAS_RCLPY and self._publisher is not None) else "mock"
         ok = mode == "hardware"
-        result: Dict[str, Any] = {"ok": ok, "mode": mode, "error": None}
+        result: dict[str, Any] = {"ok": ok, "mode": mode, "error": None}
         if self._last_odom:
             result["odom"] = self._last_odom
         if not HAS_RCLPY:
@@ -183,6 +183,6 @@ class ROS2Driver(DriverBase):
         return result
 
     @property
-    def last_odom(self) -> Optional[Dict[str, Any]]:
+    def last_odom(self) -> Optional[dict[str, Any]]:
         """Last received odometry position {x, y, z}, or None."""
         return self._last_odom

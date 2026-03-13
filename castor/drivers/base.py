@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Dict
 
 __all__ = ["DriverBase"]
 
@@ -12,7 +11,7 @@ class DriverBase(ABC):
     gracefully to a mock/logging mode rather than raising import errors.
     """
 
-    def health_check(self) -> Dict:
+    def health_check(self) -> dict:
         """Check whether the hardware is accessible and responsive.
 
         Returns a dict with keys:

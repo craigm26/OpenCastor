@@ -1,5 +1,4 @@
 import logging
-from typing import Dict, List
 
 from .base import DriverBase
 
@@ -32,13 +31,13 @@ class DynamixelDriver(DriverBase):
 
     PROTOCOL_VERSION = 2.0
 
-    def __init__(self, config: Dict):
+    def __init__(self, config: dict):
         _raw_port = config.get("port", "/dev/ttyUSB0")
         if str(_raw_port or "").lower() == "auto":
             _raw_port = self._auto_detect_port()
         self.port_name = _raw_port or "/dev/ttyUSB0"
         self.baud_rate = config.get("baud_rate", 57600)
-        self.connected_motors: List[int] = []
+        self.connected_motors: list[int] = []
 
         if not HAS_DYNAMIXEL:
             logger.warning("Dynamixel SDK unavailable, driver in mock mode")
@@ -78,7 +77,7 @@ class DynamixelDriver(DriverBase):
                 return True
         return False
 
-    def engage(self, motor_ids: List[int]):
+    def engage(self, motor_ids: list[int]):
         """Turn on torque for specific motors."""
         if self.portHandler is None:
             return
@@ -94,7 +93,7 @@ class DynamixelDriver(DriverBase):
             else:
                 self.connected_motors.append(mid)
 
-    def disengage(self, motor_ids: List[int]):
+    def disengage(self, motor_ids: list[int]):
         """Relax torque (Safe Mode)."""
         if self.portHandler is None:
             return

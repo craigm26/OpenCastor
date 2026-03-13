@@ -46,7 +46,8 @@ from __future__ import annotations
 import concurrent.futures
 import logging
 import time
-from typing import Any, Dict, Iterator, List, Tuple
+from typing import Any
+from collections.abc import Iterator
 
 from castor.providers.base import BaseProvider, Thought
 
@@ -107,7 +108,7 @@ def _actions_agree(a: Thought, b: Thought) -> bool:
     return True
 
 
-def _merge_move(thoughts: List[Thought]) -> Thought:
+def _merge_move(thoughts: list[Thought]) -> Thought:
     """Average linear/angular across agreeing ``move`` thoughts."""
     total_linear = sum(float(t.action.get("linear", 0)) for t in thoughts if t.action)
     total_angular = sum(float(t.action.get("angular", 0)) for t in thoughts if t.action)
@@ -125,17 +126,17 @@ def _merge_move(thoughts: List[Thought]) -> Thought:
 
 
 def _pick_winner(
-    thoughts: List[Tuple[int, Thought]],
+    thoughts: list[tuple[int, Thought]],
     quorum: int,
     primary_idx: int,
-) -> Tuple[Thought, str]:
+) -> tuple[Thought, str]:
     """Find the first action type that reaches *quorum* agreements.
 
     Returns ``(winning_thought, reason)`` where *reason* is a short string
     describing how the winner was chosen.
     """
     # Group by action type
-    groups: Dict[str, List[Tuple[int, Thought]]] = {}
+    groups: dict[str, list[tuple[int, Thought]]] = {}
     for idx, t in thoughts:
         atype = _action_type(t)
         groups.setdefault(atype, []).append((idx, t))
@@ -145,7 +146,7 @@ def _pick_winner(
         if len(members) < quorum:
             continue
         # Pairwise agreement check within the group
-        agreeing: List[Thought] = []
+        agreeing: list[Thought] = []
         for _, t in members:
             if all(_actions_agree(t, prev) for prev in agreeing):
                 agreeing.append(t)
@@ -171,11 +172,11 @@ class ConsensusProvider(BaseProvider):
     Wraps multiple child providers and returns the action that reaches quorum.
     """
 
-    def __init__(self, config: Dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any]) -> None:
         super().__init__(config)
 
         # Build child providers from consensus_providers list
-        raw_list: List[Dict[str, Any]] = config.get("consensus_providers", [])
+        raw_list: list[dict[str, Any]] = config.get("consensus_providers", [])
         if not raw_list:
             raise ValueError(
                 "ConsensusProvider requires at least one entry in "
@@ -187,7 +188,7 @@ class ConsensusProvider(BaseProvider):
         primary_model = str(config.get("primary_model", "")).lower()
         self._primary_idx = 0
 
-        self._children: List[BaseProvider] = []
+        self._children: list[BaseProvider] = []
         for i, child_cfg in enumerate(raw_list):
             # Merge parent config keys the child needs (api_key env vars etc.)
             merged = {**config, **child_cfg}
@@ -238,7 +239,7 @@ class ConsensusProvider(BaseProvider):
         image_bytes: bytes,
         instruction: str,
         surface: str,
-    ) -> Tuple[int, Thought]:
+    ) -> tuple[int, Thought]:
         try:
             t0 = time.monotonic()
             thought = child.think(image_bytes, instruction, surface)
@@ -269,7 +270,7 @@ class ConsensusProvider(BaseProvider):
 
         self._propagate_caps()
 
-        results: List[Tuple[int, Thought]] = []
+        results: list[tuple[int, Thought]] = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(self._children)) as executor:
             futures = {
                 executor.submit(
@@ -322,7 +323,7 @@ class ConsensusProvider(BaseProvider):
 
         self._propagate_caps()
 
-        results: List[Tuple[int, Thought]] = []
+        results: list[tuple[int, Thought]] = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(self._children)) as executor:
             futures = {
                 executor.submit(
@@ -384,10 +385,10 @@ class ConsensusProvider(BaseProvider):
             "error": None if all_ok else "one or more child providers unhealthy",
         }
 
-    def get_usage_stats(self) -> Dict[str, Any]:
+    def get_usage_stats(self) -> dict[str, Any]:
         """Aggregate usage stats across all children."""
         self._propagate_caps()
-        stats: Dict[str, Any] = {"provider": "consensus", "children": []}
+        stats: dict[str, Any] = {"provider": "consensus", "children": []}
         for idx, child in enumerate(self._children):
             try:
                 child_stats = child.get_usage_stats()

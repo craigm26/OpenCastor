@@ -40,7 +40,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.Memory")
 
@@ -184,13 +184,13 @@ class EpisodeMemory:
         self,
         instruction: str = "",
         raw_thought: str = "",
-        action: Optional[Dict] = None,
+        action: Optional[dict] = None,
         latency_ms: float = 0.0,
         image_hash: str = "",
         outcome: str = "ok",
         source: str = "loop",
         image_bytes: Optional[bytes] = None,
-        tags: Optional[List[str]] = None,
+        tags: Optional[list[str]] = None,
     ) -> str:
         """Insert a new episode.  Returns the generated episode UUID.
 
@@ -254,7 +254,7 @@ class EpisodeMemory:
     # ── Semantic search helpers (#301) ────────────────────────────────────────
 
     @staticmethod
-    def _embed_text(text: str) -> Optional[List[float]]:
+    def _embed_text(text: str) -> Optional[list[float]]:
         """Return a unit-normalised embedding for *text*, or ``None`` if ST unavailable."""
         if not text.strip():
             return None
@@ -269,15 +269,15 @@ class EpisodeMemory:
             return None
 
     @staticmethod
-    def _cosine(a: List[float], b: List[float]) -> float:
+    def _cosine(a: list[float], b: list[float]) -> float:
         """Return cosine similarity between two pre-normalised vectors."""
         if len(a) != len(b):
             return 0.0
         return sum(x * y for x, y in zip(a, b, strict=False))
 
     def _search_semantic(
-        self, query: str, limit: int, tags: Optional[List[str]] = None
-    ) -> List[Dict]:
+        self, query: str, limit: int, tags: Optional[list[str]] = None
+    ) -> list[dict]:
         """Return episodes whose stored embeddings are most similar to *query*.
 
         Falls back to keyword search when SentenceTransformers are unavailable
@@ -338,7 +338,7 @@ class EpisodeMemory:
                     (excess,),
                 )
 
-    def add_tags(self, episode_id: str, tags: List[str]) -> bool:
+    def add_tags(self, episode_id: str, tags: list[str]) -> bool:
         """Append *tags* to the tag list of an existing episode.
 
         Existing tags are preserved; duplicates are silently deduplicated.
@@ -356,7 +356,7 @@ class EpisodeMemory:
             row = con.execute("SELECT tags FROM episodes WHERE id = ?", (episode_id,)).fetchone()
             if row is None:
                 return False
-            existing: List[str] = [t for t in (row["tags"] or "").split(",") if t]
+            existing: list[str] = [t for t in (row["tags"] or "").split(",") if t]
             merged = list(dict.fromkeys(existing + tags))  # deduplicate, preserve order
             con.execute(
                 "UPDATE episodes SET tags = ? WHERE id = ?",
@@ -371,8 +371,8 @@ class EpisodeMemory:
         limit: int = 20,
         action_type: Optional[str] = None,
         source: Optional[str] = None,
-        tags: Optional[List[str]] = None,
-    ) -> List[Dict]:
+        tags: Optional[list[str]] = None,
+    ) -> list[dict]:
         """Return the most recent episodes as a list of dicts.
 
         Args:
@@ -417,20 +417,20 @@ class EpisodeMemory:
 
         return results
 
-    def get_episode(self, ep_id: str) -> Optional[Dict]:
+    def get_episode(self, ep_id: str) -> Optional[dict]:
         """Return a single episode by ID, or None if not found."""
         with self._conn() as con:
             row = con.execute("SELECT * FROM episodes WHERE id = ?", (ep_id,)).fetchone()
         return self._row_to_dict(row) if row else None
 
-    def replay_episode(self, episode_id: str) -> Optional[Dict]:
+    def replay_episode(self, episode_id: str) -> Optional[dict]:
         """Return a single episode by ID, or None if not found.
 
         Semantically named alias for :meth:`get_episode` for use in replay workflows.
         """
         return self.get_episode(episode_id)
 
-    def replay_similar(self, query: str, top_k: int = 5) -> List[Dict]:
+    def replay_similar(self, query: str, top_k: int = 5) -> list[dict]:
         """Return the *top_k* episodes most similar to *query*, each annotated
         with a ``similarity_score`` field (float 0–1, descending).
 
@@ -471,7 +471,7 @@ class EpisodeMemory:
                 r["similarity_score"] = 0.0
             return results
 
-        scored: List[tuple] = []
+        scored: list[tuple] = []
         for row in rows:
             try:
                 emb = json.loads(row["embedding_json"])
@@ -505,7 +505,7 @@ class EpisodeMemory:
             return None
         return row["image_blob"]
 
-    def episodes_with_images(self, limit: int = 20) -> List[Dict]:
+    def episodes_with_images(self, limit: int = 20) -> list[dict]:
         """Return recent episodes that have a stored image thumbnail.
 
         Each dict contains ``{id, ts, instruction, action_type, has_image}``
@@ -531,7 +531,7 @@ class EpisodeMemory:
                 (limit,),
             ).fetchall()
 
-        result: List[Dict] = []
+        result: list[dict] = []
         for row in rows:
             action_type = ""
             if row["action_json"]:
@@ -555,8 +555,8 @@ class EpisodeMemory:
         query: str,
         limit: int = 20,
         mode: str = "keyword",
-        tags: Optional[List[str]] = None,
-    ) -> List[Dict]:
+        tags: Optional[list[str]] = None,
+    ) -> list[dict]:
         """Search episodes by keyword or semantic similarity.
 
         Args:
@@ -643,7 +643,7 @@ class EpisodeMemory:
             )
             return cur.rowcount > 0
 
-    def query_flagged(self, limit: int = 100) -> List[Dict]:
+    def query_flagged(self, limit: int = 100) -> list[dict]:
         """Return episodes that have been flagged for review.
 
         Args:
@@ -718,7 +718,7 @@ class EpisodeMemory:
         with self._conn() as con:
             rows = con.execute(sql, params).fetchall()
 
-        columns: Dict[str, list] = {
+        columns: dict[str, list] = {
             "id": [],
             "ts": [],
             "instruction": [],
@@ -867,7 +867,7 @@ class EpisodeMemory:
         if not episodes:
             return ""
 
-        lines: List[str] = []
+        lines: list[str] = []
         for ep in episodes:
             action_type = ""
             if ep.get("action") and isinstance(ep["action"], dict):
@@ -898,7 +898,7 @@ class EpisodeMemory:
 
         return summary_text
 
-    def get_latest_summary(self) -> Optional[Dict]:
+    def get_latest_summary(self) -> Optional[dict]:
         """Return the most recently stored summary row, or ``None``.
 
         Returns:
@@ -917,7 +917,7 @@ class EpisodeMemory:
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
+    def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         d = dict(row)
         if d.get("action_json"):
             try:
@@ -944,12 +944,12 @@ class EpisodeMemory:
     # ── Issue #342: K-means episode clustering (stdlib only) ──────────────────
 
     @staticmethod
-    def _kmeans_distance_sq(a: List[float], b: List[float]) -> float:
+    def _kmeans_distance_sq(a: list[float], b: list[float]) -> float:
         """Return squared Euclidean distance between two float vectors."""
         return sum((x - y) ** 2 for x, y in zip(a, b, strict=False))
 
     @staticmethod
-    def _kmeans_centroid(vectors: List[List[float]]) -> List[float]:
+    def _kmeans_centroid(vectors: list[list[float]]) -> list[float]:
         """Compute the mean centroid of a list of float vectors."""
         if not vectors:
             return []
@@ -964,7 +964,7 @@ class EpisodeMemory:
     # Issue #367 — action-tag frequency histogram
     # ------------------------------------------------------------------
 
-    def tag_frequency(self, window_s: float = 3600.0, top_k: int = 10) -> List[Dict]:
+    def tag_frequency(self, window_s: float = 3600.0, top_k: int = 10) -> list[dict]:
         """Return a histogram of action-type tags in the recent episode window.
 
         Reads episodes stored within the last *window_s* seconds and counts
@@ -992,7 +992,7 @@ class EpisodeMemory:
 
             import json as _json
 
-            counts: Dict[str, int] = {}
+            counts: dict[str, int] = {}
             for (action_json,) in rows:
                 try:
                     action = _json.loads(action_json) if action_json else {}
@@ -1020,7 +1020,7 @@ class EpisodeMemory:
         path: str,
         window_s: float = 3600.0,
         top_k: int = 20,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Export action-tag frequency histogram to a CSV file (Issue #410).
 
         Calls tag_frequency() and writes results to a CSV with columns:
@@ -1053,7 +1053,7 @@ class EpisodeMemory:
         max_age_s: Optional[float] = None,
         max_count: Optional[int] = None,
         keep_flagged: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Auto-expire old episodes according to retention rules (Issue #415).
 
         Applies rules in this order:
@@ -1154,7 +1154,7 @@ class EpisodeMemory:
         tag: str,
         bucket_s: float = 3600.0,
         window_s: float = 86400.0,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Return per-tag episode counts bucketed over a time window.
 
         Scans episodes within the last *window_s* seconds and divides them
@@ -1183,7 +1183,7 @@ class EpisodeMemory:
 
             # Build bucket boundaries
             n_buckets = max(1, int(_math.ceil(window_s / bucket_s)))
-            buckets: List[Dict[str, Any]] = []
+            buckets: list[dict[str, Any]] = []
             for i in range(n_buckets):
                 bstart = cutoff + i * bucket_s
                 bend = bstart + bucket_s
@@ -1230,7 +1230,7 @@ class EpisodeMemory:
         outcome: str,
         limit: int = 50,
         exact: bool = False,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Return episodes whose outcome matches the given string.
 
         Args:
@@ -1272,7 +1272,7 @@ class EpisodeMemory:
         outcome: str,
         bucket_s: float = 3600.0,
         window_s: float = 86400.0,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Return per-outcome episode counts bucketed over a time window.
 
         Scans episodes within the last *window_s* seconds and divides them
@@ -1301,7 +1301,7 @@ class EpisodeMemory:
 
             # Build bucket boundaries
             n_buckets = max(1, int(_math.ceil(window_s / bucket_s)))
-            buckets: List[Dict[str, Any]] = []
+            buckets: list[dict[str, Any]] = []
             for i in range(n_buckets):
                 bstart = cutoff + i * bucket_s
                 bend = bstart + bucket_s
@@ -1337,7 +1337,7 @@ class EpisodeMemory:
         path: str,
         window_s: float = 86400.0,
         limit: int = 1000,
-    ) -> Dict:
+    ) -> dict:
         """Export recent episodes to a CSV file.
 
         Writes a header row followed by one row per episode.  Columns:
@@ -1425,7 +1425,7 @@ class EpisodeMemory:
         limit: int = 500,
         max_iter: int = 100,
         random_seed: int = 42,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Group episodes using k-means clustering over action-type frequency vectors.
 
         Implements k-means from scratch using stdlib only (no sklearn/numpy).
@@ -1476,8 +1476,8 @@ class EpisodeMemory:
         type_idx = {t: i for i, t in enumerate(action_types)}
 
         # Build feature vectors: count occurrences of each action type per episode
-        vectors: List[List[float]] = []
-        ep_ids: List[str] = []
+        vectors: list[list[float]] = []
+        ep_ids: list[str] = []
 
         for ep in episodes:
             ep_ids.append(ep["id"])
@@ -1499,7 +1499,7 @@ class EpisodeMemory:
 
         # Pick first centroid at random
         first_idx = rng.randint(0, len(vectors) - 1)
-        centroids: List[List[float]] = [vectors[first_idx][:]]
+        centroids: list[list[float]] = [vectors[first_idx][:]]
 
         for _ in range(k - 1):
             # For each vector, compute its distance to the nearest existing centroid
@@ -1540,7 +1540,7 @@ class EpisodeMemory:
                     centroids[c_idx] = vectors[rng.randint(0, len(vectors) - 1)][:]
 
         # Find representative episode per cluster (closest to centroid)
-        representative_ids: Dict[str, str] = {}
+        representative_ids: dict[str, str] = {}
         for c_idx in range(k):
             cluster_members = [
                 (i, ep_ids[i], vectors[i]) for i, lbl in enumerate(labels) if lbl == c_idx

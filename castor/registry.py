@@ -35,7 +35,8 @@ installed entry points.  ``castor plugin list`` shows the result.
 
 import logging
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional
+from typing import Optional
+from collections.abc import Callable
 
 try:
     from importlib.metadata import entry_points
@@ -68,7 +69,7 @@ class PluginEntry:
 
 
 # Built-in names used for introspection (list_* methods).
-_BUILTIN_PROVIDER_NAMES: List[str] = [
+_BUILTIN_PROVIDER_NAMES: list[str] = [
     "google",
     "openai",
     "anthropic",
@@ -82,7 +83,7 @@ _BUILTIN_PROVIDER_NAMES: List[str] = [
     "mlx-lm",
     "vllm-mlx",
 ]
-_BUILTIN_DRIVER_NAMES: List[str] = [
+_BUILTIN_DRIVER_NAMES: list[str] = [
     "pca9685_rc",
     "pca9685",
     "dynamixel",
@@ -114,11 +115,11 @@ class ComponentRegistry:
 
     def __init__(self) -> None:
         # Plugin-registered implementations only; built-ins are not stored here.
-        self._providers: Dict[str, type] = {}
-        self._drivers: Dict[str, type] = {}
-        self._channels: Dict[str, type] = {}
+        self._providers: dict[str, type] = {}
+        self._drivers: dict[str, type] = {}
+        self._channels: dict[str, type] = {}
         # Discovered entry-point plugins (populated by discover_plugins())
-        self._plugin_entries: List[PluginEntry] = []
+        self._plugin_entries: list[PluginEntry] = []
 
     # ------------------------------------------------------------------
     # Registration (used by plugins and other external callers)
@@ -250,7 +251,7 @@ class ComponentRegistry:
     # Entry-point plugin discovery  (Issue #237)
     # ------------------------------------------------------------------
 
-    def discover_plugins(self) -> List[PluginEntry]:
+    def discover_plugins(self) -> list[PluginEntry]:
         """Scan installed entry points and register discovered plugins.
 
         Reads three entry-point groups:
@@ -277,7 +278,7 @@ class ComponentRegistry:
             logger.warning("importlib.metadata unavailable — plugin discovery skipped")
             return []
 
-        discovered: List[PluginEntry] = []
+        discovered: list[PluginEntry] = []
 
         group_map = {
             _EP_GROUP_PROVIDERS: (self._providers, self.add_provider),
@@ -311,7 +312,7 @@ class ComponentRegistry:
 
         return discovered
 
-    def list_all_plugins(self) -> List[PluginEntry]:
+    def list_all_plugins(self) -> list[PluginEntry]:
         """Return a copy of all discovered entry-point plugin entries.
 
         Returns:
@@ -323,15 +324,15 @@ class ComponentRegistry:
     # Introspection
     # ------------------------------------------------------------------
 
-    def list_providers(self) -> List[str]:
+    def list_providers(self) -> list[str]:
         """Return sorted list of all known provider names (built-ins + plugins)."""
         return sorted(set(_BUILTIN_PROVIDER_NAMES) | set(self._providers.keys()))
 
-    def list_drivers(self) -> List[str]:
+    def list_drivers(self) -> list[str]:
         """Return sorted list of all known driver protocol names (built-ins + plugins)."""
         return sorted(set(_BUILTIN_DRIVER_NAMES) | set(self._drivers.keys()))
 
-    def list_channels(self) -> List[str]:
+    def list_channels(self) -> list[str]:
         """Return sorted list of all known channel names (available built-ins + plugins)."""
         try:
             from castor.channels import get_available_channels
@@ -341,15 +342,15 @@ class ComponentRegistry:
             built_ins = set()
         return sorted(built_ins | set(self._channels.keys()))
 
-    def list_plugin_providers(self) -> List[str]:
+    def list_plugin_providers(self) -> list[str]:
         """Return sorted list of plugin-registered provider names."""
         return sorted(self._providers.keys())
 
-    def list_plugin_drivers(self) -> List[str]:
+    def list_plugin_drivers(self) -> list[str]:
         """Return sorted list of plugin-registered driver names."""
         return sorted(self._drivers.keys())
 
-    def list_plugin_channels(self) -> List[str]:
+    def list_plugin_channels(self) -> list[str]:
         """Return sorted list of plugin-registered channel names."""
         return sorted(self._channels.keys())
 

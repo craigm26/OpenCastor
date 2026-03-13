@@ -34,7 +34,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Callable, Dict, Optional
+from typing import Optional
+from collections.abc import Callable
 
 from castor.channels.base import BaseChannel
 
@@ -58,7 +59,7 @@ class HomeAssistantChannel(BaseChannel):
 
     def __init__(
         self,
-        config: Optional[Dict] = None,
+        config: Optional[dict] = None,
         on_message: Optional[Callable] = None,
     ) -> None:
         super().__init__(config or {}, on_message=on_message)

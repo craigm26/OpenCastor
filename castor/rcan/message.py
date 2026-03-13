@@ -30,7 +30,7 @@ import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from enum import IntEnum
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 
 class MessageType(IntEnum):
@@ -80,13 +80,13 @@ class RCANMessage:
     type: int
     source: str
     target: str
-    payload: Dict[str, Any] = field(default_factory=dict)
+    payload: dict[str, Any] = field(default_factory=dict)
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: float = field(default_factory=time.time)
     priority: int = field(default=Priority.NORMAL)
     ttl: int = field(default=0)
     reply_to: Optional[str] = field(default=None)
-    scope: List[str] = field(default_factory=list)
+    scope: list[str] = field(default_factory=list)
     version: str = field(default="1.0.0")
 
     # ------------------------------------------------------------------
@@ -97,9 +97,9 @@ class RCANMessage:
         cls,
         source: str,
         target: str,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         priority: int = Priority.NORMAL,
-        scope: Optional[List[str]] = None,
+        scope: Optional[list[str]] = None,
     ) -> RCANMessage:
         """Create a COMMAND message."""
         return cls(
@@ -116,7 +116,7 @@ class RCANMessage:
         cls,
         source: str,
         target: str,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
     ) -> RCANMessage:
         """Create a STATUS message."""
         return cls(
@@ -133,7 +133,7 @@ class RCANMessage:
         source: str,
         target: str,
         reply_to: str,
-        payload: Optional[Dict[str, Any]] = None,
+        payload: Optional[dict[str, Any]] = None,
     ) -> RCANMessage:
         """Create an ACK for a prior message."""
         return cls(
@@ -187,7 +187,7 @@ class RCANMessage:
         """
         if decision not in ("approve", "deny"):
             raise ValueError(f"AUTHORIZE decision must be 'approve' or 'deny', got {decision!r}")
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "ref_message_id": ref_message_id,
             "principal": principal,
             "decision": decision,
@@ -227,7 +227,7 @@ class RCANMessage:
             timeout_remaining_ms: Milliseconds until the gate times out.
             **kwargs:            Additional fields forwarded to the message payload.
         """
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "pending_id": pending_id,
             "action_type": action_type,
             "description": description,
@@ -246,7 +246,7 @@ class RCANMessage:
     # ------------------------------------------------------------------
     # Serialisation
     # ------------------------------------------------------------------
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialise to a plain dict (JSON-ready)."""
         d = asdict(self)
         # Convert enum ints to their names for readability
@@ -255,7 +255,7 @@ class RCANMessage:
         return d
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> RCANMessage:
+    def from_dict(cls, data: dict[str, Any]) -> RCANMessage:
         """Deserialise from a dict.
 
         Accepts both integer type/priority values and string names.

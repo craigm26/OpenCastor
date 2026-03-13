@@ -11,7 +11,8 @@ import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Optional
+from collections.abc import Callable
 
 logger = logging.getLogger("OpenCastor.SharedState")
 
@@ -38,7 +39,7 @@ class Intent:
     created_at: float = field(default_factory=time.time)
     paused: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["created_at_iso"] = datetime.fromtimestamp(self.created_at).isoformat()
         if self.deadline_ts is not None:
@@ -51,7 +52,7 @@ class IntentQueue:
 
     def __init__(self) -> None:
         self._lock: threading.RLock = threading.RLock()
-        self._queue: List[Intent] = []
+        self._queue: list[Intent] = []
         self._current_id: Optional[str] = None
 
     @staticmethod
@@ -71,7 +72,7 @@ class IntentQueue:
             return True
         return False
 
-    def enqueue(self, intent: Intent) -> Dict[str, Any]:
+    def enqueue(self, intent: Intent) -> dict[str, Any]:
         with self._lock:
             self._queue = [i for i in self._queue if i.intent_id != intent.intent_id]
             self._queue.append(intent)
@@ -95,7 +96,7 @@ class IntentQueue:
             self._current_id = None
             return None
 
-    def list_intents(self) -> List[Dict[str, Any]]:
+    def list_intents(self) -> list[dict[str, Any]]:
         with self._lock:
             ranked = sorted(
                 self._queue,
@@ -178,9 +179,9 @@ class SharedState:
 
     def __init__(self) -> None:
         self._lock: threading.RLock = threading.RLock()
-        self._store: Dict[str, _Entry] = {}
+        self._store: dict[str, _Entry] = {}
         # key → {sub_id → callback}
-        self._subscribers: Dict[str, Dict[str, Callable]] = {}
+        self._subscribers: dict[str, dict[str, Callable]] = {}
         self._intents = IntentQueue()
 
     # ------------------------------------------------------------------
@@ -267,7 +268,7 @@ class SharedState:
     # Introspection
     # ------------------------------------------------------------------
 
-    def keys(self) -> List[str]:
+    def keys(self) -> list[str]:
         """Return all non-expired keys currently in the store."""
         with self._lock:
             expired = [k for k, e in self._store.items() if e.is_expired()]
@@ -275,7 +276,7 @@ class SharedState:
                 del self._store[k]
             return list(self._store.keys())
 
-    def snapshot(self) -> Dict[str, Any]:
+    def snapshot(self) -> dict[str, Any]:
         """Return a deep copy of all current non-expired key/value pairs.
 
         Expired entries are pruned during the snapshot.
@@ -284,7 +285,7 @@ class SharedState:
         import copy
 
         with self._lock:
-            result: Dict[str, Any] = {}
+            result: dict[str, Any] = {}
             expired = []
             for k, entry in self._store.items():
                 if entry.is_expired():
@@ -299,14 +300,14 @@ class SharedState:
     # Intent orchestration
     # ------------------------------------------------------------------
 
-    def add_intent(self, intent: Intent) -> Dict[str, Any]:
+    def add_intent(self, intent: Intent) -> dict[str, Any]:
         """Add an intent to the queue and evaluate preemption."""
         result = self._intents.enqueue(intent)
         self.set("swarm.current_intent_id", result.get("current"))
         self.set("swarm.intent_queue", self._intents.list_intents())
         return result
 
-    def list_intents(self) -> List[Dict[str, Any]]:
+    def list_intents(self) -> list[dict[str, Any]]:
         """Return all intents in queue order with active intent first."""
         return self._intents.list_intents()
 
@@ -328,17 +329,17 @@ class SharedState:
             self.set("swarm.intent_queue", self._intents.list_intents())
         return ok
 
-    def current_intent(self) -> Optional[Dict[str, Any]]:
+    def current_intent(self) -> Optional[dict[str, Any]]:
         """Return the current active intent, if present."""
         current = self._intents.current()
         return current.to_dict() if current else None
 
-    def set_specialist_checkpoint(self, specialist: str, checkpoint: Dict[str, Any]) -> None:
+    def set_specialist_checkpoint(self, specialist: str, checkpoint: dict[str, Any]) -> None:
         """Persist a resume checkpoint for a long-running specialist."""
         key = f"swarm.checkpoint.{specialist}"
         payload = {"specialist": specialist, "updated_at": time.time(), **checkpoint}
         self.set(key, payload)
 
-    def get_specialist_checkpoint(self, specialist: str) -> Optional[Dict[str, Any]]:
+    def get_specialist_checkpoint(self, specialist: str) -> Optional[dict[str, Any]]:
         """Get the last checkpoint for the specialist."""
         return self.get(f"swarm.checkpoint.{specialist}")

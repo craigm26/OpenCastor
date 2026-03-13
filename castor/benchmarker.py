@@ -12,7 +12,8 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Awaitable, Callable, List
+from typing import Any
+from collections.abc import Awaitable, Callable
 
 logger = logging.getLogger("OpenCastor.Benchmarker")
 
@@ -30,7 +31,7 @@ class BenchmarkResult:
     provider: str
     model: str
     n: int
-    latencies_ms: List[float] = field(default_factory=list)
+    latencies_ms: list[float] = field(default_factory=list)
     errors: int = 0
 
     @property
@@ -80,7 +81,7 @@ async def run_benchmark(
     return result
 
 
-def print_results(results: List[BenchmarkResult]) -> None:
+def print_results(results: list[BenchmarkResult]) -> None:
     if HAS_RICH:
         con = Console()
         t = Table(title="Benchmark Results", show_header=True, header_style="bold dim")

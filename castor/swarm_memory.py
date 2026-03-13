@@ -34,7 +34,7 @@ import logging
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.SwarmMemory")
 
@@ -44,7 +44,7 @@ logger = logging.getLogger("OpenCastor.SwarmMemory")
 # ---------------------------------------------------------------------------
 
 
-def load_swarm_nodes(yaml_path: str) -> List[Dict[str, Any]]:
+def load_swarm_nodes(yaml_path: str) -> list[dict[str, Any]]:
     """Load node list from a swarm YAML registry file.
 
     Args:
@@ -73,7 +73,7 @@ def load_swarm_nodes(yaml_path: str) -> List[Dict[str, Any]]:
         return []
 
 
-def _node_base_url(node: Dict[str, Any]) -> str:
+def _node_base_url(node: dict[str, Any]) -> str:
     """Return the base HTTP URL for a swarm node.
 
     Args:
@@ -192,7 +192,7 @@ class SwarmMemorySync:
         episodes = self._mem.query_recent(limit=last_n)
         payload_list = [dict(ep) for ep in episodes]
         nodes = load_swarm_nodes(self._yaml_path)
-        results: Dict[str, Any] = {}
+        results: dict[str, Any] = {}
 
         for node in nodes:
             name = node.get("name", "unknown")
@@ -212,7 +212,7 @@ class SwarmMemorySync:
 
         return results
 
-    def receive(self, episodes: List[dict]) -> dict:
+    def receive(self, episodes: list[dict]) -> dict:
         """Accept episodes from a remote node and store locally (deduping by ID).
 
         Args:
@@ -247,7 +247,7 @@ class SwarmMemorySync:
 
         return {"received": stored, "skipped": skipped}
 
-    def fetch_from_node(self, node_name: str, limit: int = 50) -> List[dict]:
+    def fetch_from_node(self, node_name: str, limit: int = 50) -> list[dict]:
         """Fetch episodes from a named remote swarm node.
 
         Args:

@@ -25,7 +25,8 @@ Compound Pipelines
 import logging
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Optional, Union
+from collections.abc import Callable
 
 from castor.fs.namespace import Namespace
 
@@ -72,7 +73,7 @@ class ContextWindow:
         self.ns.write("/tmp/context/summary", "")
         self.ns.write("/tmp/context/turn_count", 0)
 
-    def push(self, role: str, content: str, metadata: Optional[Dict] = None):
+    def push(self, role: str, content: str, metadata: Optional[dict] = None):
         """Add an entry to the context window.
 
         Args:
@@ -93,7 +94,7 @@ class ContextWindow:
             self.ns.write("/tmp/context/turn_count", count)
             self._maybe_summarise()
 
-    def get_window(self) -> List[Dict]:
+    def get_window(self) -> list[dict]:
         """Return the current context window entries."""
         with self._lock:
             return self.ns.read("/tmp/context/window") or []
@@ -162,7 +163,7 @@ class ContextWindow:
         )
 
     @staticmethod
-    def _default_summariser(entries: List[Dict]) -> str:
+    def _default_summariser(entries: list[dict]) -> str:
         """Simple summariser: concatenate observations."""
         lines = []
         for e in entries:
@@ -232,8 +233,8 @@ class Pipeline:
         self.ns = ns
         self.principal = principal
         self._safety = safety
-        self._stages: List[PipelineStage] = []
-        self._results: List[Any] = []
+        self._stages: list[PipelineStage] = []
+        self._results: list[Any] = []
 
     def _do_read(self, path: str):
         if self._safety:
@@ -325,6 +326,6 @@ class Pipeline:
         return data
 
     @property
-    def results(self) -> List[Dict]:
+    def results(self) -> list[dict]:
         """Inspection: results from the last run."""
         return list(self._results)

@@ -25,7 +25,8 @@ API:
 import logging
 import threading
 import time
-from typing import Callable, Optional
+from typing import Optional
+from collections.abc import Callable
 
 from castor.command_interpreter import get_command_interpreter
 

@@ -24,7 +24,7 @@ import os
 import threading
 import time
 import urllib.request
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from urllib.error import URLError
 
 logger = logging.getLogger("OpenCastor.Webhooks")
@@ -53,7 +53,7 @@ def _sign_payload(payload: bytes, secret: str) -> str:
 def _dispatch_one(
     url: str,
     event: str,
-    data: Dict[str, Any],
+    data: dict[str, Any],
     secret: Optional[str],
     timeout: int,
     retry: int,
@@ -112,8 +112,8 @@ class WebhookDispatcher:
             - ``retry`` (int retries on failure, default 1)
     """
 
-    def __init__(self, webhooks: Optional[List[Dict[str, Any]]] = None):
-        self._hooks: List[Dict[str, Any]] = []
+    def __init__(self, webhooks: Optional[list[dict[str, Any]]] = None):
+        self._hooks: list[dict[str, Any]] = []
         for hook in webhooks or []:
             url = hook.get("url", "").strip()
             if not url:
@@ -139,7 +139,7 @@ class WebhookDispatcher:
     def add_hook(
         self,
         url: str,
-        events: Optional[List[str]] = None,
+        events: Optional[list[str]] = None,
         secret: Optional[str] = None,
         timeout_s: int = _DEFAULT_TIMEOUT,
         retry: int = 1,
@@ -164,7 +164,7 @@ class WebhookDispatcher:
         self._hooks = [h for h in self._hooks if h["url"] != url]
         return len(self._hooks) < before
 
-    def list_hooks(self) -> List[Dict[str, Any]]:
+    def list_hooks(self) -> list[dict[str, Any]]:
         """Return registered hooks (without secret values)."""
         return [
             {
@@ -177,7 +177,7 @@ class WebhookDispatcher:
             for h in self._hooks
         ]
 
-    def emit(self, event: str, data: Optional[Dict[str, Any]] = None) -> int:
+    def emit(self, event: str, data: Optional[dict[str, Any]] = None) -> int:
         """Fire webhooks matching *event* asynchronously.
 
         Args:
@@ -214,7 +214,7 @@ class WebhookDispatcher:
 
         return dispatched
 
-    def emit_sync(self, event: str, data: Optional[Dict[str, Any]] = None) -> List[bool]:
+    def emit_sync(self, event: str, data: Optional[dict[str, Any]] = None) -> list[bool]:
         """Synchronous version of :meth:`emit` — blocks until all POSTs finish.
 
         Useful for testing or shutdown hooks.
@@ -252,7 +252,7 @@ def get_dispatcher() -> WebhookDispatcher:
     return _dispatcher
 
 
-def init_from_config(config: Dict[str, Any]) -> WebhookDispatcher:
+def init_from_config(config: dict[str, Any]) -> WebhookDispatcher:
     """Initialize the global dispatcher from RCAN config.
 
     Call once at gateway startup.

@@ -47,7 +47,8 @@ import logging
 import random
 import threading
 import time
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Optional
+from collections.abc import Iterator
 
 from castor.providers.base import BaseProvider, Thought
 
@@ -62,11 +63,11 @@ class ProviderPool(BaseProvider):
                 each formatted like a standard provider config dict.
     """
 
-    def __init__(self, config: Dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any]) -> None:
         self._config = config
         self._strategy: str = config.get("pool_strategy", "round_robin").lower()
         self._fallback: bool = bool(config.get("pool_fallback", True))
-        pool_configs: List[Dict[str, Any]] = config.get("pool", [])
+        pool_configs: list[dict[str, Any]] = config.get("pool", [])
 
         # Health-aware routing config (#297)
         self._health_interval_s: float = float(config.get("pool_health_check_interval_s", 0))
@@ -83,13 +84,13 @@ class ProviderPool(BaseProvider):
         # Adaptive strategy config (#320)
         self._adaptive_alpha: float = float(config.get("pool_adaptive_alpha", 0.1))
         self._adaptive_window_n: int = int(config.get("pool_adaptive_window_n", 20))
-        self._ema_latency: Dict[int, float] = {}  # per-provider EMA latency ms
-        self._obs_count: Dict[int, int] = {}  # per-provider observation count
+        self._ema_latency: dict[int, float] = {}  # per-provider EMA latency ms
+        self._obs_count: dict[int, int] = {}  # per-provider observation count
 
         # Request replay config (#326)
         self._record_path: Optional[str] = config.get("pool_record_path")
         self._replay_path: Optional[str] = config.get("pool_replay_path")
-        self._replay_map: Dict[str, Any] = {}  # sha256-prefix(instruction) → Thought
+        self._replay_map: dict[str, Any] = {}  # sha256-prefix(instruction) → Thought
 
         # Burst detection config (#331) — 0 disables burst demotion
         self._burst_latency_ms: float = float(config.get("pool_burst_latency_ms", 5000))
@@ -107,9 +108,9 @@ class ProviderPool(BaseProvider):
 
         # Issue #345: Cost tracking — per-provider cumulative token/USD accounting
         # Config: pool_cost_per_1k_tokens — dict mapping provider name to USD per 1k tokens
-        self._cost_per_1k: Dict[str, float] = dict(config.get("pool_cost_per_1k_tokens", {}))
+        self._cost_per_1k: dict[str, float] = dict(config.get("pool_cost_per_1k_tokens", {}))
         # provider_index → {tokens_total, cost_usd_total, calls}
-        self._cost_tracker: Dict[int, Dict[str, float]] = {}
+        self._cost_tracker: dict[int, dict[str, float]] = {}
 
         # Issue #340: Shadow mode — forward every request to a secondary provider in parallel,
         # log the response for comparison, but always return the primary's response.
@@ -122,10 +123,10 @@ class ProviderPool(BaseProvider):
             raise ValueError("ProviderPool: 'pool' list must contain at least one entry")
 
         # Lazy-init child providers (so missing keys fail at think() time, not import)
-        self._providers: List[BaseProvider] = []
-        self._weights: List[float] = []  # aligned with _providers; for "weighted" strategy
-        self._priorities: List[int] = []  # aligned with _providers; for "cascade" strategy
-        self._init_errors: List[str] = []
+        self._providers: list[BaseProvider] = []
+        self._weights: list[float] = []  # aligned with _providers; for "weighted" strategy
+        self._priorities: list[int] = []  # aligned with _providers; for "cascade" strategy
+        self._init_errors: list[str] = []
 
         from castor.providers import get_provider
 
@@ -155,28 +156,28 @@ class ProviderPool(BaseProvider):
         # Round-robin cycle iterator
         self._cycle = itertools.cycle(range(len(self._providers)))
         # Circuit breaker state (#312)
-        self._cb_failures: Dict[int, int] = {}  # consecutive failures per provider
-        self._cb_open_until: Dict[int, float] = {}  # epoch when circuit re-closes
+        self._cb_failures: dict[int, int] = {}  # consecutive failures per provider
+        self._cb_open_until: dict[int, float] = {}  # epoch when circuit re-closes
         self._current_index = 0
 
         # Sticky session state (#359): conversation_id → (provider_index, expiry_epoch)
-        self._sticky_map: Dict[str, Tuple[int, float]] = {}
+        self._sticky_map: dict[str, tuple[int, float]] = {}
 
         # Burst detection state (#331): provider index → epoch when demotion expires
-        self._burst_demoted_until: Dict[int, float] = {}
+        self._burst_demoted_until: dict[int, float] = {}
         # A/B test state (#338): per-group counters {0: {success, fail}, 1: {success, fail}}
-        self._ab_stats: Dict[int, Dict[str, int]] = {
+        self._ab_stats: dict[int, dict[str, int]] = {
             0: {"success": 0, "fail": 0},
             1: {"success": 0, "fail": 0},
         }
 
         # Health-aware routing state (#297)
         # Maps provider index → timestamp when marked degraded
-        self._degraded: Dict[int, float] = {}
+        self._degraded: dict[int, float] = {}
 
         # Cascade strategy state (#299)
         # Provider indices sorted by priority (ascending = tried first)
-        self._cascade_order: List[int] = sorted(
+        self._cascade_order: list[int] = sorted(
             range(len(self._providers)), key=lambda i: self._priorities[i]
         )
         self._cascade_current: int = 0  # index into _cascade_order (not provider index)
@@ -268,7 +269,7 @@ class ProviderPool(BaseProvider):
                             getattr(provider, "model_name", "?"),
                         )
 
-    def _get_healthy_indices(self) -> List[int]:
+    def _get_healthy_indices(self) -> list[int]:
         """Return indices of providers that are neither degraded nor circuit-open nor burst-demoted."""
         now = time.time()
         healthy = []
@@ -463,7 +464,7 @@ class ProviderPool(BaseProvider):
         """Return 0 or 1 based on configured split."""
         return 0 if random.random() < self._ab_split else 1
 
-    def _ab_provider_for_group(self, group: int) -> Tuple[int, BaseProvider]:
+    def _ab_provider_for_group(self, group: int) -> tuple[int, BaseProvider]:
         """Return (index, provider) for the given A/B group."""
         n = len(self._providers)
         if n == 1:
@@ -486,7 +487,7 @@ class ProviderPool(BaseProvider):
     # Sticky session helpers (#359)
     # ------------------------------------------------------------------
 
-    def _get_sticky_provider(self, conversation_id: str) -> Optional[Tuple[int, BaseProvider]]:
+    def _get_sticky_provider(self, conversation_id: str) -> Optional[tuple[int, BaseProvider]]:
         """Return (index, provider) for a sticky conversation, or None if unbound/expired."""
         if not self._sticky_session or not conversation_id:
             return None
@@ -553,14 +554,14 @@ class ProviderPool(BaseProvider):
         except Exception as exc:
             logger.debug("ProviderPool._record_cost: %s", exc)
 
-    def cost_summary(self) -> Dict[str, Any]:
+    def cost_summary(self) -> dict[str, Any]:
         """Return cumulative token usage and USD cost per pool provider.
 
         Returns:
             Dict mapping pool index (str) to ``{"tokens_total", "cost_usd_total", "calls",
             "provider_name"}``, plus a ``"total"`` entry summing all providers.
         """
-        summary: Dict[str, Any] = {}
+        summary: dict[str, Any] = {}
         total_tokens = 0.0
         total_cost = 0.0
         total_calls = 0.0
@@ -589,7 +590,7 @@ class ProviderPool(BaseProvider):
         }
         return summary
 
-    def provider_stats(self) -> Dict[str, Any]:
+    def provider_stats(self) -> dict[str, Any]:
         """Return per-provider call count, error count, and latency summary (Issue #405).
 
         Returns:
@@ -627,7 +628,7 @@ class ProviderPool(BaseProvider):
             "pool_size": len(self._providers),
         }
 
-    def latency_percentiles(self) -> Dict[str, Any]:
+    def latency_percentiles(self) -> dict[str, Any]:
         """Return p50/p95/p99 latency per pool provider (Issue #414).
 
         Reads from the MetricsRegistry ProviderLatencyTracker.
@@ -653,7 +654,7 @@ class ProviderPool(BaseProvider):
 
         return {"providers": result, "pool_size": len(self._providers)}
 
-    def cost_report(self) -> Dict[str, Any]:
+    def cost_report(self) -> dict[str, Any]:
         """Return a per-provider cost breakdown including percentage of total spend (Issue #427).
 
         Iterates over ``self._providers`` and reads cost data from ``self._cost_tracker``
@@ -701,7 +702,7 @@ class ProviderPool(BaseProvider):
             "pool_size": len(self._providers),
         }
 
-    def reset_stats(self) -> Dict[str, Any]:
+    def reset_stats(self) -> dict[str, Any]:
         """Reset all per-provider counters and state to zero (Issue #416).
 
         Clears: cost_tracker, cb_failures, cb_open_until, degraded,
@@ -883,12 +884,12 @@ class ProviderPool(BaseProvider):
             self._current_index = idx
         return self._providers[idx]
 
-    def _provider_order_from(self, start: int) -> List[BaseProvider]:
+    def _provider_order_from(self, start: int) -> list[BaseProvider]:
         """Return providers in order starting from ``start``, for fallback."""
         n = len(self._providers)
         return [self._providers[(start + i) % n] for i in range(n)]
 
-    def _provider_order_indices_from(self, start: int) -> List[Tuple[int, BaseProvider]]:
+    def _provider_order_indices_from(self, start: int) -> list[tuple[int, BaseProvider]]:
         """Return (index, provider) pairs starting from ``start``, for CB-aware fallback."""
         n = len(self._providers)
         return [((start + i) % n, self._providers[(start + i) % n]) for i in range(n)]
@@ -1068,7 +1069,7 @@ class ProviderPool(BaseProvider):
             f"ProviderPool: all {len(candidates)} stream providers failed. Last: {last_exc}"
         ) from last_exc
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> dict[str, Any]:
         """Return aggregated health from all pool members."""
         results = []
         for i, p in enumerate(self._providers):
@@ -1081,7 +1082,7 @@ class ProviderPool(BaseProvider):
                 results.append({"ok": False, "pool_index": i, "error": str(exc), "degraded": True})
 
         all_ok = all(r.get("ok") for r in results)
-        health: Dict[str, Any] = {
+        health: dict[str, Any] = {
             "ok": all_ok,
             "strategy": self._strategy,
             "pool_size": len(self._providers),
@@ -1182,7 +1183,7 @@ class ProviderPool(BaseProvider):
     # Issue #370 — pre-flight warm-up health check
     # ------------------------------------------------------------------
 
-    def warm_providers(self, timeout_s: float = 10.0) -> Dict[str, bool]:
+    def warm_providers(self, timeout_s: float = 10.0) -> dict[str, bool]:
         """Run health_check() on all pool members in parallel and log results.
 
         Stores results in ``self._warm_results`` and returns a mapping of
@@ -1196,7 +1197,7 @@ class ProviderPool(BaseProvider):
         """
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        results: Dict[str, bool] = {}
+        results: dict[str, bool] = {}
 
         def _check(idx: int, provider: Any) -> tuple:
             try:
@@ -1229,7 +1230,7 @@ class ProviderPool(BaseProvider):
             results.setdefault(str(i), False)
 
         with self._lock:
-            self._warm_results: Dict[str, bool] = results
+            self._warm_results: dict[str, bool] = results
 
         return results
 

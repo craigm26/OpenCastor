@@ -27,7 +27,7 @@ import json
 import logging
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from castor.drivers.base import DriverBase
 
@@ -60,7 +60,7 @@ class ArduinoSerialDriver(DriverBase):
     * ``invert_right``– flip right-motor polarity (default false)
     """
 
-    def __init__(self, config: Dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any]) -> None:
         self.config = config
         self._port = str(config.get("port", "/dev/ttyACM0")).strip()
         self._baud = int(config.get("baud", 115200))

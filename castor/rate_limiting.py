@@ -34,7 +34,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Optional
 
 from fastapi import HTTPException
 
@@ -70,7 +70,7 @@ class RateLimitConfig:
         limits: List of :class:`EndpointLimit` instances.
     """
 
-    limits: List[EndpointLimit] = field(default_factory=list)
+    limits: list[EndpointLimit] = field(default_factory=list)
 
     @classmethod
     def from_rcan(cls, config: dict) -> RateLimitConfig:
@@ -116,7 +116,7 @@ class RateLimitConfig:
                 return lim
         return None
 
-    def to_dict(self) -> List[dict]:
+    def to_dict(self) -> list[dict]:
         """Serialise limits to a JSON-serialisable list of dicts.
 
         Returns:
@@ -149,11 +149,11 @@ class RateLimiter:
         self._config = config
         self._lock = threading.Lock()
         # ip_history[endpoint][ip] → deque of timestamps
-        self._ip_history: Dict[str, Dict[str, collections.deque]] = collections.defaultdict(
+        self._ip_history: dict[str, dict[str, collections.deque]] = collections.defaultdict(
             lambda: collections.defaultdict(collections.deque)
         )
         # user_history[endpoint][user] → deque of timestamps
-        self._user_history: Dict[str, Dict[str, collections.deque]] = collections.defaultdict(
+        self._user_history: dict[str, dict[str, collections.deque]] = collections.defaultdict(
             lambda: collections.defaultdict(collections.deque)
         )
 

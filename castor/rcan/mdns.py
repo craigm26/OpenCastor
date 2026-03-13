@@ -23,7 +23,8 @@ import logging
 import socket
 import threading
 import time
-from typing import Callable, Dict, List, Optional
+from typing import Optional
+from collections.abc import Callable
 
 logger = logging.getLogger("OpenCastor.RCAN.mDNS")
 
@@ -54,7 +55,7 @@ class RCANServiceBroadcaster:
         ruri: str,
         robot_name: str = "OpenCastor Robot",
         port: int = 8000,
-        capabilities: Optional[List[str]] = None,
+        capabilities: Optional[list[str]] = None,
         model: str = "unknown",
         status_fn: Optional[Callable[[], str]] = None,
     ):
@@ -140,12 +141,12 @@ class RCANServiceBrowser:
 
     def __init__(
         self,
-        on_found: Optional[Callable[[Dict], None]] = None,
+        on_found: Optional[Callable[[dict], None]] = None,
         on_removed: Optional[Callable[[str], None]] = None,
     ):
         self._on_found = on_found
         self._on_removed = on_removed
-        self._peers: Dict[str, Dict] = {}
+        self._peers: dict[str, dict] = {}
         self._lock = threading.Lock()
         self._zeroconf: Optional[object] = None
         self._browser: Optional[object] = None
@@ -155,7 +156,7 @@ class RCANServiceBrowser:
         return HAS_ZEROCONF
 
     @property
-    def peers(self) -> Dict[str, Dict]:
+    def peers(self) -> dict[str, dict]:
         """Return a snapshot of discovered peers."""
         with self._lock:
             return dict(self._peers)
@@ -224,7 +225,7 @@ def _get_local_ip() -> str:
         return "127.0.0.1"
 
 
-def _parse_service_info(info) -> Dict:
+def _parse_service_info(info) -> dict:
     """Extract a peer dict from a zeroconf ServiceInfo."""
     props = {}
     if info.properties:

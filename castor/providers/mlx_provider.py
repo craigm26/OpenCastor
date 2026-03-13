@@ -28,7 +28,8 @@ import base64
 import json
 import logging
 import os
-from typing import Any, Dict, Generator, Optional
+from typing import Any, Optional
+from collections.abc import Generator
 
 from .base import BaseProvider, Thought
 
@@ -50,7 +51,7 @@ class MLXProvider(BaseProvider):
     server (vLLM-MLX, MLX-OpenAI-Server).
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self._use_server = False
         self._mlx_model = None

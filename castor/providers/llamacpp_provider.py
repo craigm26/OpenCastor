@@ -22,7 +22,8 @@ import logging
 import os
 import urllib.error
 import urllib.request
-from typing import Any, Dict, Generator, Optional
+from typing import Any, Optional
+from collections.abc import Generator
 
 from .base import BaseProvider, Thought
 
@@ -56,7 +57,7 @@ class LlamaCppOOMError(LlamaCppError):
 class LlamaCppProvider(BaseProvider):
     """Local LLM via llama.cpp (Ollama API or direct GGUF)."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self._direct_model = None
         self._use_ollama = True
@@ -71,7 +72,7 @@ class LlamaCppProvider(BaseProvider):
         else:
             self._init_ollama(model, base_url)
 
-    def _init_direct(self, model: str, config: Dict[str, Any]) -> None:
+    def _init_direct(self, model: str, config: dict[str, Any]) -> None:
         """Load a GGUF model directly via llama-cpp-python."""
         if not os.path.exists(model):
             raise LlamaCppModelNotFoundError(
@@ -90,7 +91,7 @@ class LlamaCppProvider(BaseProvider):
         clip_path = config.get("clip_model_path")
 
         try:
-            kwargs: Dict[str, Any] = {
+            kwargs: dict[str, Any] = {
                 "model_path": model,
                 "n_ctx": n_ctx,
                 "n_gpu_layers": n_gpu,

@@ -37,7 +37,7 @@ import random
 import sqlite3
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.BatteryDriver")
 
@@ -139,7 +139,7 @@ class BatteryDriver:
       BATTERY_HISTORY_WINDOW_S — history retention window in seconds (default 86400.0)
     """
 
-    def __init__(self, config: Dict[str, Any] | None = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         cfg = config or {}
 
         # ── Resolve bus ───────────────────────────────────────────────────────
@@ -219,7 +219,7 @@ class BatteryDriver:
         # smbus2 returns little-endian on x86; swap bytes to big-endian
         return int.from_bytes(raw.to_bytes(2, "little"), "big")
 
-    def _read_hardware(self) -> Dict[str, Any]:
+    def _read_hardware(self) -> dict[str, Any]:
         """Read voltage, current, and power from INA219 registers."""
         # Bus voltage: bits 15:3 are the raw value; shift right by 3 then × 4 mV
         bus_raw = self._read_word(_REG_BUS_VOLTAGE)
@@ -243,7 +243,7 @@ class BatteryDriver:
             "power_mw": power_mw,
         }
 
-    def _mock_read(self) -> Dict[str, Any]:
+    def _mock_read(self) -> dict[str, Any]:
         """Return plausible randomised values near 11.8 V / 500 mA."""
         voltage_v = round(random.uniform(11.5, 12.5), 3)
         current_ma = round(random.uniform(400.0, 600.0), 2)
@@ -278,7 +278,7 @@ class BatteryDriver:
             logger.warning("BatteryDriver: could not open history DB: %s", exc)
             return False
 
-    def _log_history(self, data: Dict[str, Any]) -> None:
+    def _log_history(self, data: dict[str, Any]) -> None:
         """Append one reading to the history DB.
 
         Silently swallows all exceptions so that a DB failure never
@@ -321,7 +321,7 @@ class BatteryDriver:
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    def read(self) -> Dict[str, Any]:
+    def read(self) -> dict[str, Any]:
         """Read battery state from INA219 (or mock).
 
         Returns:
@@ -357,7 +357,7 @@ class BatteryDriver:
         self._log_history(data)
         return data
 
-    def get_history(self, window_s: float = 86400.0, limit: int = 1000) -> List[Dict[str, Any]]:
+    def get_history(self, window_s: float = 86400.0, limit: int = 1000) -> list[dict[str, Any]]:
         """Return recent battery readings from the history DB.
 
         Args:
@@ -395,7 +395,7 @@ class BatteryDriver:
             logger.warning("BatteryDriver: get_history error: %s", exc)
             return []
 
-    def get_charge_cycles(self, window_s: float = 86400.0) -> List[Dict[str, Any]]:
+    def get_charge_cycles(self, window_s: float = 86400.0) -> list[dict[str, Any]]:
         """Detect charge/discharge/idle cycles from history.
 
         Scans the stored readings within *window_s* seconds (oldest-first) and
@@ -448,7 +448,7 @@ class BatteryDriver:
                     return "discharge"
                 return "idle"
 
-            cycles: List[Dict[str, Any]] = []
+            cycles: list[dict[str, Any]] = []
             seg_start_ts: float = rows[0][0]
             seg_start_pct: float = rows[0][2] if rows[0][2] is not None else 0.0
             seg_type: str = _sign_category(rows[0][1])
@@ -490,7 +490,7 @@ class BatteryDriver:
             logger.warning("BatteryDriver: get_charge_cycles error: %s", exc)
             return []
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> dict[str, Any]:
         """Return driver health information.
 
         Returns:
@@ -537,7 +537,7 @@ class BatteryDriver:
 # ── Singleton factory ─────────────────────────────────────────────────────────
 
 
-def get_battery(config: Dict[str, Any] | None = None) -> BatteryDriver:
+def get_battery(config: dict[str, Any] | None = None) -> BatteryDriver:
     """Return the process-wide BatteryDriver singleton.
 
     Thread-safe: the first call instantiates the driver; subsequent calls

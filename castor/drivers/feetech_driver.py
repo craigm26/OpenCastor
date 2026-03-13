@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Optional
 
 from castor.drivers.base import DriverBase
 
@@ -60,8 +60,8 @@ class FeetechCalibrationResult:
     """Result of a Feetech servo calibration sequence."""
 
     success: bool
-    home_positions: Dict[int, int] = field(default_factory=dict)
-    joint_names: Dict[int, str] = field(default_factory=dict)
+    home_positions: dict[int, int] = field(default_factory=dict)
+    joint_names: dict[int, str] = field(default_factory=dict)
     error: Optional[str] = None
 
     def to_dict(self) -> dict:
@@ -95,20 +95,20 @@ class FeetechDriver(DriverBase):
         self._config = config
         self._port: Optional[str] = config.get("port", "/dev/ttyACM0")
         self._baud: int = int(config.get("baud", 1_000_000))
-        self._servo_ids: List[int] = [int(i) for i in config.get("servo_ids", [1])]
+        self._servo_ids: list[int] = [int(i) for i in config.get("servo_ids", [1])]
         self._operating_mode: str = config.get("operating_mode", "position")
         self._mode = "mock"
 
         # Build joint name mapping: id → name
-        joint_names: List[str] = config.get("joint_names", [])
-        self._joint_names: Dict[int, str] = {
+        joint_names: list[str] = config.get("joint_names", [])
+        self._joint_names: dict[int, str] = {
             sid: (joint_names[idx] if idx < len(joint_names) else f"joint_{sid}")
             for idx, sid in enumerate(self._servo_ids)
         }
-        self._id_by_name: Dict[str, int] = {v: k for k, v in self._joint_names.items()}
+        self._id_by_name: dict[str, int] = {v: k for k, v in self._joint_names.items()}
 
         # Home offsets set by calibrate()
-        self._home_offsets: Dict[int, int] = {sid: _POS_CENTER for sid in self._servo_ids}
+        self._home_offsets: dict[int, int] = {sid: _POS_CENTER for sid in self._servo_ids}
 
         self._port_handler = None
         self._packet_handler = None
@@ -182,7 +182,7 @@ class FeetechDriver(DriverBase):
             logger.debug("MOCK Feetech move: linear=%.3f angular=%.3f", linear, angular)
             return
 
-        positions: Dict[str, float] = {}
+        positions: dict[str, float] = {}
         if self._servo_ids:
             # shoulder_pan is the first servo (id 1 by convention)
             first_name = self._joint_names.get(self._servo_ids[0], "shoulder_pan")
@@ -223,7 +223,7 @@ class FeetechDriver(DriverBase):
                 "servos": {sid: "mock" for sid in self._servo_ids},
             }
 
-        servo_status: Dict[int, str] = {}
+        servo_status: dict[int, str] = {}
         all_ok = True
         for sid in self._servo_ids:
             try:
@@ -250,7 +250,7 @@ class FeetechDriver(DriverBase):
     # Extended API
     # ------------------------------------------------------------------
 
-    def set_joint_positions(self, positions: Dict[str, float]) -> None:
+    def set_joint_positions(self, positions: dict[str, float]) -> None:
         """Write goal positions to servos by joint name.
 
         Args:
@@ -275,7 +275,7 @@ class FeetechDriver(DriverBase):
             except Exception as exc:
                 logger.warning("set_joint_positions failed for %s (id=%d): %s", name, sid, exc)
 
-    def get_joint_positions(self) -> Dict[str, float]:
+    def get_joint_positions(self) -> dict[str, float]:
         """Read present positions from all servos.
 
         Returns:
@@ -284,7 +284,7 @@ class FeetechDriver(DriverBase):
         if self._mode == "mock":
             return {name: 0.0 for name in self._joint_names.values()}
 
-        result: Dict[str, float] = {}
+        result: dict[str, float] = {}
         for sid in self._servo_ids:
             name = self._joint_names.get(sid, f"joint_{sid}")
             try:
@@ -334,7 +334,7 @@ class FeetechDriver(DriverBase):
                 joint_names=dict(self._joint_names),
             )
 
-        home: Dict[int, int] = {}
+        home: dict[int, int] = {}
         for sid in self._servo_ids:
             try:
                 ticks, res, err = self._packet_handler.read2ByteTxRx(

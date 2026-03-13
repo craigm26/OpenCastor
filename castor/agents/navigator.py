@@ -8,7 +8,7 @@ RCAN-compatible action dict via attractive/repulsive potential fields.
 import logging
 import math
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 from castor.world import WorldModel
 
@@ -56,7 +56,7 @@ class NavigationPlan:
         replan_reason: Human-readable explanation when ``is_blocked`` is True.
     """
 
-    waypoints: List[Waypoint] = field(default_factory=list)
+    waypoints: list[Waypoint] = field(default_factory=list)
     estimated_distance_m: float = 0.0
     is_blocked: bool = False
     replan_reason: Optional[str] = None
@@ -95,7 +95,7 @@ class NavigatorAgent(BaseAgent):
 
     def __init__(
         self,
-        config: Optional[Dict[str, Any]] = None,
+        config: Optional[dict[str, Any]] = None,
         shared_state: Optional[SharedState] = None,
     ) -> None:
         super().__init__(config)
@@ -106,7 +106,7 @@ class NavigatorAgent(BaseAgent):
         self._goal_x: float = float(goal_cfg.get("x", 0.0))
         self._goal_y: float = float(goal_cfg.get("y", 1.0))
 
-    async def observe(self, sensor_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def observe(self, sensor_data: dict[str, Any]) -> dict[str, Any]:
         """Read the latest SceneGraph from SharedState.
 
         Args:
@@ -118,7 +118,7 @@ class NavigatorAgent(BaseAgent):
         scene = self._state.get("scene_graph")
         return {"scene_graph": scene}
 
-    async def act(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def act(self, context: dict[str, Any]) -> dict[str, Any]:
         """Compute a NavigationPlan and return an RCAN-compatible action dict.
 
         Goal coordinates can be overridden per-call via ``context["goal_x"]``
@@ -223,12 +223,12 @@ class NavigatorAgent(BaseAgent):
             is_blocked=False,
         )
 
-    def _attractive_force(self, goal_x: float, goal_y: float) -> Tuple[float, float]:
+    def _attractive_force(self, goal_x: float, goal_y: float) -> tuple[float, float]:
         """Compute normalised goal-attractive force vector."""
         mag = math.sqrt(goal_x**2 + goal_y**2) + 1e-9
         return GOAL_ATTRACT * goal_x / mag, GOAL_ATTRACT * goal_y / mag
 
-    def _repulsive_force(self, scene: "SceneGraph") -> Tuple[float, float]:
+    def _repulsive_force(self, scene: "SceneGraph") -> tuple[float, float]:
         """Sum repulsive force vectors from all nearby obstacle detections.
 
         Obstacles with known distance < OBSTACLE_INFLUENCE_M contribute;
@@ -262,7 +262,7 @@ class NavigatorAgent(BaseAgent):
         self,
         plan: NavigationPlan,
         world: Optional[WorldModel],
-        context: Dict[str, Any],
+        context: dict[str, Any],
     ) -> NavigationPlan:
         """Modify plan using world-model constraints and route queries."""
         if world is None:
@@ -289,7 +289,7 @@ class NavigatorAgent(BaseAgent):
     # RCAN action output
     # ------------------------------------------------------------------
 
-    def _plan_to_action(self, plan: NavigationPlan) -> Dict[str, Any]:
+    def _plan_to_action(self, plan: NavigationPlan) -> dict[str, Any]:
         """Convert a :class:`NavigationPlan` to an RCAN-compatible action dict.
 
         Args:

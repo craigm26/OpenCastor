@@ -26,7 +26,7 @@ import logging
 import os
 import threading
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from castor.quantum_commitment import CommitmentEngine  # noqa: F401
@@ -200,7 +200,7 @@ class AuditLog:
     # Chain verification
     # ------------------------------------------------------------------
 
-    def verify_quantum_chain(self) -> Tuple[bool, Optional[int]]:
+    def verify_quantum_chain(self) -> tuple[bool, Optional[int]]:
         """Verify the cryptographic commitment chain (QuantumLink-Sim).
 
         Separate from ``verify_chain()`` which checks the SHA-256 hash chain
@@ -215,7 +215,7 @@ class AuditLog:
             return True, None
         return self._commitment_engine.verify_chain()
 
-    def verify_chain(self) -> Tuple[bool, Optional[int]]:
+    def verify_chain(self) -> tuple[bool, Optional[int]]:
         """Walk the log and verify every hash link.
 
         Returns:

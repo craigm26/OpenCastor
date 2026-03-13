@@ -16,7 +16,8 @@ import shutil
 import threading
 import time
 from dataclasses import asdict, dataclass, field
-from typing import Callable, Dict, List, Optional
+from typing import Optional
+from collections.abc import Callable
 
 logger = logging.getLogger("OpenCastor.Safety.Monitor")
 
@@ -46,10 +47,10 @@ class MonitorSnapshot:
     cpu_load_1m: Optional[float] = None
     cpu_count: Optional[int] = None
     force_n: Optional[float] = None
-    readings: List[SensorReading] = field(default_factory=list)
+    readings: list[SensorReading] = field(default_factory=list)
     overall_status: str = "normal"
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return asdict(self)
 
 
@@ -111,7 +112,7 @@ def read_memory_percent() -> Optional[float]:
     """Read memory usage percentage from /proc/meminfo."""
     try:
         with open("/proc/meminfo") as f:
-            info: Dict[str, int] = {}
+            info: dict[str, int] = {}
             for line in f:
                 parts = line.split()
                 if len(parts) >= 2:
@@ -175,8 +176,8 @@ class SensorMonitor:
         self.interval = interval
         self.consecutive_critical = consecutive_critical
 
-        self._warning_callbacks: List[Callable[[MonitorSnapshot], None]] = []
-        self._critical_callbacks: List[Callable[[MonitorSnapshot], None]] = []
+        self._warning_callbacks: list[Callable[[MonitorSnapshot], None]] = []
+        self._critical_callbacks: list[Callable[[MonitorSnapshot], None]] = []
         self._estop_callback: Optional[Callable[[], None]] = None
 
         self._thread: Optional[threading.Thread] = None
@@ -219,7 +220,7 @@ class SensorMonitor:
     def read_once(self) -> MonitorSnapshot:
         """Take a single snapshot of all sensors."""
         snap = MonitorSnapshot(timestamp=time.time())
-        readings: List[SensorReading] = []
+        readings: list[SensorReading] = []
         worst = "normal"
 
         def classify(

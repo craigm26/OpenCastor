@@ -34,7 +34,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional
 
 from castor.secret_provider import get_jwt_secret_provider
 
@@ -44,7 +44,7 @@ logger = logging.getLogger("OpenCastor.AuthJWT")
 # Role hierarchy
 # ---------------------------------------------------------------------------
 
-ROLES: Dict[str, int] = {
+ROLES: dict[str, int] = {
     "admin": 3,
     "operator": 2,
     "viewer": 1,
@@ -85,7 +85,7 @@ def _get_secret_bundle():
 # ---------------------------------------------------------------------------
 
 
-def parse_users_env() -> Dict[str, Dict[str, str]]:
+def parse_users_env() -> dict[str, dict[str, str]]:
     """Parse the OPENCASTOR_USERS environment variable.
 
     Format::  username:password:role[,username2:password2:role2,...]
@@ -100,7 +100,7 @@ def parse_users_env() -> Dict[str, Dict[str, str]]:
     if not raw:
         return {}
 
-    users: Dict[str, Dict[str, str]] = {}
+    users: dict[str, dict[str, str]] = {}
     for entry in raw.split(","):
         entry = entry.strip()
         if not entry:
@@ -166,7 +166,7 @@ def create_token(
     return _pyjwt.encode(payload, secret, algorithm="HS256", headers=headers)
 
 
-def decode_token(token: str, secret: Optional[str] = None) -> Dict[str, Any]:
+def decode_token(token: str, secret: Optional[str] = None) -> dict[str, Any]:
     """Decode and verify a JWT token.
 
     Args:
@@ -219,8 +219,8 @@ def decode_token(token: str, secret: Optional[str] = None) -> Dict[str, Any]:
 def authenticate_user(
     username: str,
     password: str,
-    users: Optional[Dict[str, Dict[str, str]]] = None,
-) -> Optional[Tuple[str, str]]:
+    users: Optional[dict[str, dict[str, str]]] = None,
+) -> Optional[tuple[str, str]]:
     """Verify username / password against the users database.
 
     Args:

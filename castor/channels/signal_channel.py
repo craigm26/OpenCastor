@@ -33,7 +33,8 @@ import logging
 import os
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Optional
+from collections.abc import Callable
 
 from castor.channels.base import BaseChannel
 
@@ -93,7 +94,7 @@ class SignalChannel(BaseChannel):
 
     # ── Internal HTTP helpers ─────────────────────────────────────────────────
 
-    def _post(self, path: str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _post(self, path: str, payload: dict[str, Any]) -> Optional[dict[str, Any]]:
         """POST a JSON payload to the signal-cli REST API.
 
         Args:
@@ -158,7 +159,7 @@ class SignalChannel(BaseChannel):
 
     # ── Message receive polling ───────────────────────────────────────────────
 
-    def _receive_messages(self) -> List[Dict[str, Any]]:
+    def _receive_messages(self) -> list[dict[str, Any]]:
         """Fetch pending messages from the signal-cli daemon.
 
         Returns:
@@ -187,7 +188,7 @@ class SignalChannel(BaseChannel):
             time.sleep(self._poll_interval_s)
         logger.info("Signal channel: poll loop stopped")
 
-    def _dispatch_envelope(self, envelope: Dict[str, Any]) -> None:
+    def _dispatch_envelope(self, envelope: dict[str, Any]) -> None:
         """Parse a signal-cli message envelope and invoke the on_message callback.
 
         Args:
@@ -256,7 +257,7 @@ class SignalChannel(BaseChannel):
             ``True`` on success, ``False`` on failure.
         """
         target = recipient or self._recipient
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "message": message,
             "number": self._sender,
         }

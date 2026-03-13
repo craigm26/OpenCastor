@@ -31,7 +31,7 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.ActionValidator")
 
@@ -39,7 +39,7 @@ logger = logging.getLogger("OpenCastor.ActionValidator")
 # Built-in JSON schemas for the core action vocabulary
 # ---------------------------------------------------------------------------
 
-_ACTION_SCHEMAS: Dict[str, dict] = {
+_ACTION_SCHEMAS: dict[str, dict] = {
     "move": {
         "type": "object",
         "required": ["type"],
@@ -102,8 +102,8 @@ class ValidationResult:
 
     valid: bool
     action_type: str
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -120,9 +120,9 @@ class ActionValidator:
                         entries take precedence over built-ins of the same name.
     """
 
-    def __init__(self, custom_schemas: Optional[Dict[str, dict]] = None) -> None:
-        self._schemas: Dict[str, dict] = {**_ACTION_SCHEMAS}
-        self._schema_sources: Dict[str, str] = {t: "builtin" for t in _ACTION_SCHEMAS}
+    def __init__(self, custom_schemas: Optional[dict[str, dict]] = None) -> None:
+        self._schemas: dict[str, dict] = {**_ACTION_SCHEMAS}
+        self._schema_sources: dict[str, str] = {t: "builtin" for t in _ACTION_SCHEMAS}
         if custom_schemas:
             self._schemas.update(custom_schemas)
             for t in custom_schemas:
@@ -132,7 +132,7 @@ class ActionValidator:
     # Public API
     # ------------------------------------------------------------------
 
-    def validate(self, action: Dict[str, Any]) -> ValidationResult:
+    def validate(self, action: dict[str, Any]) -> ValidationResult:
         """Validate an action dict.
 
         Args:
@@ -195,7 +195,7 @@ class ActionValidator:
 
         # Step 5 — warn about unknown properties when additionalProperties is
         #           not explicitly set to True
-        warnings: List[str] = []
+        warnings: list[str] = []
         schema_props = schema.get("properties", {})
         allows_additional = schema.get("additionalProperties", False) is True
         if schema_props and not allows_additional:
@@ -206,7 +206,7 @@ class ActionValidator:
 
         return ValidationResult(valid=True, action_type=action_type, warnings=warnings)
 
-    def known_types(self) -> List[str]:
+    def known_types(self) -> list[str]:
         """Return a sorted list of known action type names."""
         return sorted(self._schemas.keys())
 
@@ -229,7 +229,7 @@ _default_validator: Optional[ActionValidator] = None
 _validator_lock = threading.Lock()
 
 
-def get_validator(custom_schemas: Optional[Dict[str, dict]] = None) -> ActionValidator:
+def get_validator(custom_schemas: Optional[dict[str, dict]] = None) -> ActionValidator:
     """Return the singleton :class:`ActionValidator`.
 
     If *custom_schemas* is provided the singleton is (re-)created with those
@@ -243,7 +243,7 @@ def get_validator(custom_schemas: Optional[Dict[str, dict]] = None) -> ActionVal
     return _default_validator
 
 
-def validate_action(action: Dict[str, Any]) -> ValidationResult:
+def validate_action(action: dict[str, Any]) -> ValidationResult:
     """Validate *action* using the default singleton :class:`ActionValidator`.
 
     This is the most convenient entry-point for one-off validation::
@@ -262,7 +262,7 @@ def validate_action(action: Dict[str, Any]) -> ValidationResult:
     return get_validator().validate(action)
 
 
-def init_from_config(config: Dict[str, Any]) -> ActionValidator:
+def init_from_config(config: dict[str, Any]) -> ActionValidator:
     """Initialise the singleton validator with custom schemas from RCAN *config*.
 
     Reads the ``action_schemas`` mapping from the RCAN config dict and merges
@@ -285,7 +285,7 @@ def init_from_config(config: Dict[str, Any]) -> ActionValidator:
     Returns:
         The (re-)initialised :class:`ActionValidator` singleton.
     """
-    raw: Dict[str, dict] = config.get("action_schemas") or {}
+    raw: dict[str, dict] = config.get("action_schemas") or {}
     if raw:
         logger.info(
             "ActionValidator: loading %d custom schema(s) from RCAN config: %s",

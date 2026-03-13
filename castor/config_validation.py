@@ -9,12 +9,11 @@ message rather than a cryptic KeyError deep in provider/driver initialisation.
 from __future__ import annotations
 
 import logging
-from typing import List, Tuple
 
 logger = logging.getLogger("OpenCastor.ConfigValidation")
 
 # Required top-level keys in a .rcan.yaml file
-REQUIRED_TOP_LEVEL: List[str] = [
+REQUIRED_TOP_LEVEL: list[str] = [
     "rcan_version",
     "metadata",
     "agent",
@@ -25,7 +24,7 @@ REQUIRED_TOP_LEVEL: List[str] = [
 ]
 
 # Optional top-level keys recognised by RCAN v1.3+
-OPTIONAL_TOP_LEVEL: List[str] = [
+OPTIONAL_TOP_LEVEL: list[str] = [
     "security_level",  # v1.3: deployment security posture (e.g. "standard", "high")
     "profile",  # HLabs / hardware profile name (e.g. "hlabs/acb-single")
     "reactive",
@@ -41,10 +40,10 @@ OPTIONAL_TOP_LEVEL: List[str] = [
 ]
 
 # Required keys inside the 'agent' block
-REQUIRED_AGENT_KEYS: List[str] = ["model"]
+REQUIRED_AGENT_KEYS: list[str] = ["model"]
 
 # Optional keys inside the 'agent' block (recognised by RCAN v1.3+)
-OPTIONAL_AGENT_KEYS: List[str] = [
+OPTIONAL_AGENT_KEYS: list[str] = [
     "provider",
     "vision_enabled",
     "latency_budget_ms",
@@ -55,10 +54,10 @@ OPTIONAL_AGENT_KEYS: List[str] = [
 ]
 
 # Required keys inside the 'metadata' block
-REQUIRED_METADATA_KEYS: List[str] = ["robot_name"]
+REQUIRED_METADATA_KEYS: list[str] = ["robot_name"]
 
 
-def validate_rcan_config(config: dict) -> Tuple[bool, List[str]]:
+def validate_rcan_config(config: dict) -> tuple[bool, list[str]]:
     """Validate a loaded RCAN config dict.
 
     Checks for required top-level keys, required nested keys, and that the
@@ -79,7 +78,7 @@ def validate_rcan_config(config: dict) -> Tuple[bool, List[str]]:
     if not isinstance(config, dict):
         return False, ["Config must be a dict (check YAML syntax)"]
 
-    errors: List[str] = []
+    errors: list[str] = []
 
     # ── Top-level keys ────────────────────────────────────────────────────────
     for key in REQUIRED_TOP_LEVEL:

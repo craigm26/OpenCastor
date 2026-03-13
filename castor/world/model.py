@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Optional
 
 
 @dataclass
@@ -15,11 +15,11 @@ class EntityRecord:
     kind: str
     position: Optional[tuple[float, float]] = None
     room_id: Optional[str] = None
-    zone_ids: List[str] = field(default_factory=list)
+    zone_ids: list[str] = field(default_factory=list)
     confidence: float = 0.5
     source_agent: str = "unknown"
     observed_at: float = field(default_factory=time.time)
-    attrs: Dict[str, object] = field(default_factory=dict)
+    attrs: dict[str, object] = field(default_factory=dict)
 
     @property
     def age_s(self) -> float:
@@ -28,7 +28,7 @@ class EntityRecord:
 
 @dataclass
 class WaypointRecord(EntityRecord):
-    neighbors: List[str] = field(default_factory=list)
+    neighbors: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -41,12 +41,12 @@ class WorldModel:
       - objects, people, zones
     """
 
-    rooms: Dict[str, EntityRecord] = field(default_factory=dict)
-    waypoints: Dict[str, WaypointRecord] = field(default_factory=dict)
-    obstacles: Dict[str, EntityRecord] = field(default_factory=dict)
-    objects: Dict[str, EntityRecord] = field(default_factory=dict)
-    people: Dict[str, EntityRecord] = field(default_factory=dict)
-    zones: Dict[str, EntityRecord] = field(default_factory=dict)
+    rooms: dict[str, EntityRecord] = field(default_factory=dict)
+    waypoints: dict[str, WaypointRecord] = field(default_factory=dict)
+    obstacles: dict[str, EntityRecord] = field(default_factory=dict)
+    objects: dict[str, EntityRecord] = field(default_factory=dict)
+    people: dict[str, EntityRecord] = field(default_factory=dict)
+    zones: dict[str, EntityRecord] = field(default_factory=dict)
 
     def merge(self, category: str, record: EntityRecord) -> EntityRecord:
         """Upsert with conflict resolution for multi-agent updates."""
@@ -60,7 +60,7 @@ class WorldModel:
     def last_seen(self, name: str) -> Optional[EntityRecord]:
         """Return newest object/person/entity matching *name*."""
         name_norm = name.strip().lower()
-        candidates: List[EntityRecord] = []
+        candidates: list[EntityRecord] = []
         for bucket in (self.objects, self.people, self.obstacles, self.zones):
             for entity in bucket.values():
                 label = str(entity.attrs.get("label", entity.entity_id)).lower()
@@ -74,8 +74,8 @@ class WorldModel:
         self,
         start_waypoint: str,
         end_waypoint: str,
-        avoid_zones: Optional[List[str]] = None,
-    ) -> List[str]:
+        avoid_zones: Optional[list[str]] = None,
+    ) -> list[str]:
         """Compute a BFS waypoint route while avoiding named zones."""
         avoid = {z.lower() for z in (avoid_zones or [])}
         if start_waypoint not in self.waypoints or end_waypoint not in self.waypoints:
@@ -89,7 +89,7 @@ class WorldModel:
         if start_waypoint in blocked or end_waypoint in blocked:
             return []
 
-        queue: List[List[str]] = [[start_waypoint]]
+        queue: list[list[str]] = [[start_waypoint]]
         visited = {start_waypoint}
         while queue:
             path = queue.pop(0)

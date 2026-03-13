@@ -31,7 +31,8 @@ import json
 import logging
 import os
 import time
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Optional
+from collections.abc import Iterator
 
 from .base import BaseProvider, Thought
 
@@ -65,7 +66,7 @@ DEFAULT_MAX_TOKENS = 256
 DEFAULT_PROVIDERS = ["CPUExecutionProvider"]
 
 
-def _resolve_providers(config: Dict[str, Any]) -> List[str]:
+def _resolve_providers(config: dict[str, Any]) -> list[str]:
     env_prov = os.getenv("ONNX_PROVIDERS", "")
     if env_prov:
         return [p.strip() for p in env_prov.split(",") if p.strip()]
@@ -75,7 +76,7 @@ def _resolve_providers(config: Dict[str, Any]) -> List[str]:
     return list(cfg)
 
 
-def _resolve_model_path(config: Dict[str, Any]) -> Optional[str]:
+def _resolve_model_path(config: dict[str, Any]) -> Optional[str]:
     return (
         os.getenv("ONNX_MODEL_PATH")
         or config.get("onnx_model_path")
@@ -100,7 +101,7 @@ class ONNXProvider(BaseProvider):
         - ``system_prompt``: Custom system prompt override
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
 
         self._model_path = _resolve_model_path(config)
@@ -110,8 +111,8 @@ class ONNXProvider(BaseProvider):
 
         self._session: Optional[Any] = None
         self._tokenizer: Optional[Any] = None
-        self._input_names: List[str] = []
-        self._output_names: List[str] = []
+        self._input_names: list[str] = []
+        self._output_names: list[str] = []
         self._mode = "mock"
 
         if not HAS_ONNX:
@@ -183,7 +184,7 @@ class ONNXProvider(BaseProvider):
         if self._session is None or not HAS_NUMPY:
             return json.dumps({"action": "none", "reason": "ONNX mock mode"})
 
-        feeds: Dict[str, Any] = {}
+        feeds: dict[str, Any] = {}
 
         # Build input feeds based on available input names
         prompt = f"{self.system_prompt}\n\nUser: {instruction}\nAssistant:"
@@ -270,7 +271,7 @@ class ONNXProvider(BaseProvider):
         thought = self.think(image_bytes, instruction, surface)
         yield thought.raw_text
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> dict[str, Any]:
         t0 = time.time()
         if self._mode == "mock":
             return {

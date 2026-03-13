@@ -3,7 +3,8 @@ import logging
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Optional
+from collections.abc import Iterator
 
 logger = logging.getLogger("OpenCastor.BaseProvider")
 
@@ -30,7 +31,7 @@ class Thought:
     """Hardware-agnostic representation of a single AI reasoning step."""
 
     raw_text: str
-    action: Optional[Dict] = None  # The strict JSON command (e.g., {"linear": 0.5})
+    action: Optional[dict] = None  # The strict JSON command (e.g., {"linear": 0.5})
     confidence: float = 1.0
     # AI Decision Accountability fields (F1)
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -46,12 +47,12 @@ class Thought:
 class BaseProvider(ABC):
     """Abstract base class for all AI model providers."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         self.config = config
         self.model_name = config.get("model", "default-model")
         self.system_prompt = self._build_system_prompt()
         # Set by api.py after brain init from RCAN config; used in build_messaging_prompt()
-        self._caps: List[str] = []
+        self._caps: list[str] = []
         self._robot_name: str = "robot"
 
     # ── Vision/action system prompt (used when a camera frame is present) ────
@@ -91,10 +92,10 @@ class BaseProvider(ABC):
         cls,
         robot_name: str = "Bob",
         surface: str = "whatsapp",
-        hardware: Optional[Dict[str, str]] = None,
-        capabilities: Optional[List[str]] = None,
+        hardware: Optional[dict[str, str]] = None,
+        capabilities: Optional[list[str]] = None,
         memory_context: str = "",
-        sensor_snapshot: Optional[Dict] = None,
+        sensor_snapshot: Optional[dict] = None,
     ) -> str:
         """
         Build a rich, reusable system prompt for human↔robot text/voice messaging.
@@ -267,7 +268,7 @@ class BaseProvider(ABC):
                 "error": str(exc),
             }
 
-    def get_usage_stats(self) -> Dict[str, Any]:
+    def get_usage_stats(self) -> dict[str, Any]:
         """Return cumulative token-usage statistics for this session.
 
         Returns a dict with provider-specific keys.  The base implementation
@@ -356,7 +357,7 @@ class BaseProvider(ABC):
         except ImportError:
             return True  # graceful fallback if safety module not available
 
-    def _clean_json(self, text: str) -> Optional[Dict]:
+    def _clean_json(self, text: str) -> Optional[dict]:
         """Extract the last valid JSON object from messy LLM output."""
         try:
             clean = text.replace("```json", "").replace("```", "").strip()

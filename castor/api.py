@@ -23,7 +23,7 @@ import signal
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import yaml
 from fastapi import (
@@ -116,8 +116,8 @@ _WEBHOOK_RATE_LIMIT = int(
     os.getenv("OPENCASTOR_WEBHOOK_RATE", "10")
 )  # max webhook calls/minute/sender
 _rate_lock = threading.Lock()
-_command_history: Dict[str, list] = collections.defaultdict(list)  # ip -> [timestamps]
-_webhook_history: Dict[str, list] = collections.defaultdict(list)  # sender_id -> [timestamps]
+_command_history: dict[str, list] = collections.defaultdict(list)  # ip -> [timestamps]
+_webhook_history: dict[str, list] = collections.defaultdict(list)  # sender_id -> [timestamps]
 _active_streams = 0
 
 
@@ -177,7 +177,7 @@ class AppState:
     config: Optional[dict] = None
     brain = None
     driver = None
-    channels: Dict[str, object] = {}
+    channels: dict[str, object] = {}
     last_thought: Optional[dict] = None
     boot_time: float = time.time()
     fs: Optional[CastorFS] = None
@@ -1646,7 +1646,7 @@ async def submit_episode(body: EpisodeSubmitRequest, run_improvement: bool = Fal
         store = EpisodeStore()
         store.save(episode)
 
-        response: Dict[str, Any] = {"episode_id": episode.id, "saved": True}
+        response: dict[str, Any] = {"episode_id": episode.id, "saved": True}
 
         if run_improvement:
             learner = state.learner or SisyphusLoop(config=state.config or {})
@@ -2113,7 +2113,7 @@ class _MissionWaypoint(BaseModel):
 
 
 class _MissionRequest(BaseModel):
-    waypoints: List[_MissionWaypoint]
+    waypoints: list[_MissionWaypoint]
     loop: bool = False
 
 
@@ -2723,7 +2723,7 @@ async def arduino_servo_set(req: _ServoRequest):
 
 class _WebhookAddRequest(BaseModel):
     url: str
-    events: Optional[List[str]] = None
+    events: Optional[list[str]] = None
     secret: Optional[str] = None
     timeout_s: int = 5
     retry: int = 1
@@ -3089,7 +3089,7 @@ async def safety_stats():
 
 
 class _SafetyTestBoundsRequest(BaseModel):
-    action: Dict[str, Any]
+    action: dict[str, Any]
 
 
 @app.post("/api/safety/test-bounds", dependencies=[Depends(verify_token)])
@@ -3152,7 +3152,7 @@ async def ws_safety(websocket: WebSocket):
 
 
 class _TimelapseGenerateRequest(BaseModel):
-    recording_ids: Optional[List[str]] = None
+    recording_ids: Optional[list[str]] = None
     speed_factor: float = 4.0
     output_fps: int = 24
 
@@ -3338,7 +3338,7 @@ async def slam_map_current():
 
 
 @app.post("/api/nav/map/navigate", dependencies=[Depends(verify_token)])
-async def slam_navigate(body: Dict[str, Any]):
+async def slam_navigate(body: dict[str, Any]):
     """POST /api/nav/map/navigate — Plan + execute path to {goal_x, goal_y} (metres)."""
     goal_x = float(body.get("goal_x", 0.0))
     goal_y = float(body.get("goal_y", 0.0))
@@ -5491,14 +5491,14 @@ class _SetupSessionStartRequest(BaseModel):
 
 class _SetupSessionSelectRequest(BaseModel):
     stage: str
-    values: Dict[str, Any] = Field(default_factory=dict)
+    values: dict[str, Any] = Field(default_factory=dict)
 
 
 class _SetupRemediationRequest(BaseModel):
     remediation_id: str
     consent: bool = False
     session_id: Optional[str] = None
-    context: Optional[Dict[str, Any]] = None
+    context: Optional[dict[str, Any]] = None
 
 
 class _SetupVerifyConfigRequest(BaseModel):

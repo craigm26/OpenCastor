@@ -26,7 +26,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 # httpx is a core dependency (requirements.txt: httpx>=0.26.0).
 # Importing at module level makes it patchable in unit tests.
@@ -53,7 +53,7 @@ def _find_swarm_config(config_path: Optional[str] = None) -> Path:
     return _DEFAULT_SWARM_PATH
 
 
-def load_swarm_config(config_path: Optional[str] = None) -> List[Dict[str, Any]]:
+def load_swarm_config(config_path: Optional[str] = None) -> list[dict[str, Any]]:
     """Load swarm.yaml and return the list of node dicts.
 
     Returns an empty list (and logs a warning) if the file cannot be found or
@@ -86,14 +86,14 @@ def load_swarm_config(config_path: Optional[str] = None) -> List[Dict[str, Any]]
 # ---------------------------------------------------------------------------
 
 
-def _node_base_url(node: Dict[str, Any]) -> str:
+def _node_base_url(node: dict[str, Any]) -> str:
     """Build the base URL for a node, preferring ``ip`` over ``host``."""
     host = node.get("ip") or node.get("host", "localhost")
     port = node.get("port", 8000)
     return f"http://{host}:{port}"
 
 
-def _node_headers(node: Dict[str, Any]) -> Dict[str, str]:
+def _node_headers(node: dict[str, Any]) -> dict[str, str]:
     token = node.get("token", "")
     return {"Authorization": f"Bearer {token}"} if token else {}
 
@@ -103,12 +103,12 @@ def _node_headers(node: Dict[str, Any]) -> Dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def _query_node_health(node: Dict[str, Any], timeout: float = 3.0) -> Dict[str, Any]:
+def _query_node_health(node: dict[str, Any], timeout: float = 3.0) -> dict[str, Any]:
     """GET /health for a single node.  Returns a result dict (never raises)."""
     name = node.get("name", "?")
     base = _node_base_url(node)
     start = time.monotonic()
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "name": name,
         "ip": node.get("ip") or node.get("host", "?"),
         "port": node.get("port", 8000),
@@ -150,8 +150,8 @@ def _query_node_health(node: Dict[str, Any], timeout: float = 3.0) -> Dict[str, 
 
 
 def _query_all_nodes_concurrent(
-    nodes: List[Dict[str, Any]], timeout: float = 3.0
-) -> List[Dict[str, Any]]:
+    nodes: list[dict[str, Any]], timeout: float = 3.0
+) -> list[dict[str, Any]]:
     """Query all nodes concurrently using a thread pool."""
     if not nodes:
         return []
@@ -181,7 +181,7 @@ def cmd_swarm_status(
     config_path: Optional[str] = None,
     output_json: bool = False,
     timeout: float = 3.0,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Query every node in swarm.yaml and display a Rich status table.
 
     Parameters
@@ -282,8 +282,8 @@ def cmd_swarm_status(
 
 
 def _post_command_to_node(
-    node: Dict[str, Any], instruction: str, timeout: float = 10.0
-) -> Dict[str, Any]:
+    node: dict[str, Any], instruction: str, timeout: float = 10.0
+) -> dict[str, Any]:
     """POST /api/command to a single node. Returns response dict (never raises)."""
     name = node.get("name", "?")
     base = _node_base_url(node)
@@ -316,7 +316,7 @@ def cmd_swarm_command(
     config_path: Optional[str] = None,
     output_json: bool = False,
     timeout: float = 10.0,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """POST an instruction to all nodes (or a specific node).
 
     Parameters
@@ -346,7 +346,7 @@ def cmd_swarm_command(
     else:
         targets = all_nodes
 
-    results: List[Dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(targets))) as executor:
         futures = {
             executor.submit(_post_command_to_node, n, instruction, timeout): n for n in targets
@@ -392,7 +392,7 @@ def cmd_swarm_command(
 # ---------------------------------------------------------------------------
 
 
-def _post_stop_to_node(node: Dict[str, Any], timeout: float = 5.0) -> Dict[str, Any]:
+def _post_stop_to_node(node: dict[str, Any], timeout: float = 5.0) -> dict[str, Any]:
     """POST /api/stop to a single node. Returns result dict (never raises)."""
     name = node.get("name", "?")
     base = _node_base_url(node)
@@ -413,7 +413,7 @@ def cmd_swarm_stop(
     config_path: Optional[str] = None,
     output_json: bool = False,
     timeout: float = 5.0,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """POST /api/stop to every node in the swarm (emergency broadcast).
 
     Parameters
@@ -433,7 +433,7 @@ def cmd_swarm_stop(
             print(json.dumps([]))
         return []
 
-    results: List[Dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(nodes))) as executor:
         futures = {executor.submit(_post_stop_to_node, n, timeout): n for n in nodes}
         for fut in concurrent.futures.as_completed(futures):
@@ -477,8 +477,8 @@ def cmd_swarm_stop(
 
 
 def _post_reload_to_node(
-    node: Dict[str, Any], config_data: Dict[str, Any], timeout: float = 10.0
-) -> Dict[str, Any]:
+    node: dict[str, Any], config_data: dict[str, Any], timeout: float = 10.0
+) -> dict[str, Any]:
     """POST /api/config/reload to a single node. Returns result dict (never raises)."""
     name = node.get("name", "?")
     base = _node_base_url(node)
@@ -504,7 +504,7 @@ def cmd_swarm_sync(
     swarm_config_path: Optional[str] = None,
     output_json: bool = False,
     timeout: float = 10.0,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Push an updated RCAN config to each node's /api/config/reload endpoint.
 
     Parameters
@@ -549,7 +549,7 @@ def cmd_swarm_sync(
             print(json.dumps([]))
         return []
 
-    results: List[Dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(nodes))) as executor:
         futures = {executor.submit(_post_reload_to_node, n, config_data, timeout): n for n in nodes}
         for fut in concurrent.futures.as_completed(futures):

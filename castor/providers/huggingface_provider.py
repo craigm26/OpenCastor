@@ -11,7 +11,7 @@ or any vision-language model like ``llava-hf/llava-v1.6-mistral-7b-hf``.
 import base64
 import logging
 import os
-from typing import Any, Dict
+from typing import Any
 
 from .base import BaseProvider, ProviderQuotaError, Thought
 
@@ -32,7 +32,7 @@ VISION_MODELS = {
 }
 
 
-def _get_hf_token(config: Dict[str, Any]) -> str | None:
+def _get_hf_token(config: dict[str, Any]) -> str | None:
     """Resolve HF token from env or config."""
     return os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN") or config.get("api_key")
 
@@ -77,7 +77,7 @@ class HuggingFaceProvider(BaseProvider):
     models (LLaVA, Qwen-VL, etc.) images are sent as base64 payloads.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
 
         try:

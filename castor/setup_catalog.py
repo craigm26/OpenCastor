@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Optional
+from collections.abc import Iterable
 
 
 @dataclass(frozen=True)
@@ -61,7 +62,7 @@ class HardwarePreset:
     label: str
 
 
-_PROVIDER_SPECS: Dict[str, ProviderSpec] = {
+_PROVIDER_SPECS: dict[str, ProviderSpec] = {
     "anthropic": ProviderSpec(
         key="anthropic",
         label="Anthropic (Claude)",
@@ -148,7 +149,7 @@ _PROVIDER_SPECS: Dict[str, ProviderSpec] = {
     ),
 }
 
-_PROVIDER_ORDER: List[str] = [
+_PROVIDER_ORDER: list[str] = [
     "anthropic",
     "google",
     "openai",
@@ -162,7 +163,7 @@ _PROVIDER_ORDER: List[str] = [
     "minimax",
 ]
 
-_MODELS: Dict[str, List[Dict[str, Any]]] = {
+_MODELS: dict[str, list[dict[str, Any]]] = {
     "anthropic": [
         {
             "id": "claude-opus-4-6",
@@ -404,7 +405,7 @@ _MODELS: Dict[str, List[Dict[str, Any]]] = {
     ],
 }
 
-_SECONDARY_MODELS: List[Dict[str, Any]] = [
+_SECONDARY_MODELS: list[dict[str, Any]] = [
     {
         "provider": "google",
         "id": "gemini-er-1.5",
@@ -435,7 +436,7 @@ _SECONDARY_MODELS: List[Dict[str, Any]] = [
     },
 ]
 
-_HARDWARE_PRESETS: List[HardwarePreset] = [
+_HARDWARE_PRESETS: list[HardwarePreset] = [
     HardwarePreset(id="rpi_rc_car", label="RPi RC Car + PCA9685 + CSI Camera"),
     HardwarePreset(id="waveshare_alpha", label="Waveshare AlphaBot"),
     HardwarePreset(id="adeept_generic", label="Adeept RaspTank"),
@@ -454,7 +455,7 @@ _HARDWARE_PRESETS: List[HardwarePreset] = [
     HardwarePreset(id="hlabs_acb_biped_6dof", label="HLabs ACB v2.0 Biped (6-DOF)"),
 ]
 
-_STACK_PROFILES: List[StackProfile] = [
+_STACK_PROFILES: list[StackProfile] = [
     StackProfile(
         id="apple_native",
         label="Apple Native (Recommended on eligible Mac)",
@@ -487,25 +488,25 @@ _STACK_PROFILES: List[StackProfile] = [
 ]
 
 
-def get_provider_specs(include_hidden: bool = False) -> Dict[str, ProviderSpec]:
+def get_provider_specs(include_hidden: bool = False) -> dict[str, ProviderSpec]:
     """Return provider specs keyed by provider name."""
     if include_hidden:
         return dict(_PROVIDER_SPECS)
     return {k: v for k, v in _PROVIDER_SPECS.items() if v.setup_visible}
 
 
-def get_provider_order() -> List[str]:
+def get_provider_order() -> list[str]:
     """Return stable provider menu order for setup."""
     return list(_PROVIDER_ORDER)
 
 
-def get_provider_auth_map() -> Dict[str, Dict[str, Any]]:
+def get_provider_auth_map() -> dict[str, dict[str, Any]]:
     """Return legacy auth metadata shape used by wizard/auth flows."""
-    out: Dict[str, Dict[str, Any]] = {}
+    out: dict[str, dict[str, Any]] = {}
     for key, spec in _PROVIDER_SPECS.items():
         if not spec.setup_visible:
             continue
-        entry: Dict[str, Any] = {
+        entry: dict[str, Any] = {
             "env_var": spec.env_var,
             "label": spec.label,
             "desc": spec.desc,
@@ -522,22 +523,22 @@ def get_provider_auth_map() -> Dict[str, Dict[str, Any]]:
     return out
 
 
-def get_provider_models() -> Dict[str, List[Dict[str, Any]]]:
+def get_provider_models() -> dict[str, list[dict[str, Any]]]:
     """Return setup model menu data keyed by provider."""
     return {k: [dict(item) for item in v] for k, v in _MODELS.items()}
 
 
-def get_secondary_models() -> List[Dict[str, Any]]:
+def get_secondary_models() -> list[dict[str, Any]]:
     """Return curated secondary-model options."""
     return [dict(item) for item in _SECONDARY_MODELS]
 
 
-def get_hardware_presets() -> List[HardwarePreset]:
+def get_hardware_presets() -> list[HardwarePreset]:
     """Return available hardware presets for setup."""
     return list(_HARDWARE_PRESETS)
 
 
-def get_hardware_preset_map() -> Dict[str, Optional[str]]:
+def get_hardware_preset_map() -> dict[str, Optional[str]]:
     """Return legacy numeric preset map used by CLI wizard."""
     return {
         "1": None,
@@ -558,10 +559,10 @@ def get_hardware_preset_map() -> Dict[str, Optional[str]]:
     }
 
 
-def get_model_profiles(provider: str) -> List[ModelProfile]:
+def get_model_profiles(provider: str) -> list[ModelProfile]:
     """Return typed model profiles for a provider."""
     items = _MODELS.get(provider, [])
-    profiles: List[ModelProfile] = []
+    profiles: list[ModelProfile] = []
     for item in items:
         profiles.append(
             ModelProfile(
@@ -579,7 +580,7 @@ def get_model_profiles(provider: str) -> List[ModelProfile]:
     return profiles
 
 
-def get_stack_profiles(device_info: Optional[Dict[str, Any]] = None) -> List[StackProfile]:
+def get_stack_profiles(device_info: Optional[dict[str, Any]] = None) -> list[StackProfile]:
     """Return curated stack profiles filtered by compatibility for a device."""
     if not device_info:
         return list(_STACK_PROFILES)
@@ -587,7 +588,7 @@ def get_stack_profiles(device_info: Optional[Dict[str, Any]] = None) -> List[Sta
     platform_name = str(device_info.get("platform", "")).lower()
     architecture = str(device_info.get("architecture", "")).lower()
 
-    filtered: List[StackProfile] = []
+    filtered: list[StackProfile] = []
     for stack in _STACK_PROFILES:
         if not stack.compatibility:
             filtered.append(stack)
@@ -635,9 +636,9 @@ def get_known_provider_names() -> set[str]:
     return names
 
 
-def get_provider_env_var_map() -> Dict[str, Optional[str]]:
+def get_provider_env_var_map() -> dict[str, Optional[str]]:
     """Return map of provider -> auth env var (or None when no key needed)."""
-    out: Dict[str, Optional[str]] = {}
+    out: dict[str, Optional[str]] = {}
     for key, spec in _PROVIDER_SPECS.items():
         out[key] = spec.env_var
     out.setdefault("apple-fm", None)
@@ -653,7 +654,7 @@ def iter_setup_visible_providers() -> Iterable[ProviderSpec]:
             yield specs[key]
 
 
-def get_catalog_schema_info() -> Dict[str, str]:
+def get_catalog_schema_info() -> dict[str, str]:
     """Return setup catalog schema version and stable content hash."""
     payload = {
         "providers": [

@@ -11,7 +11,8 @@ import re
 import time
 from abc import ABC, abstractmethod
 from collections import defaultdict, deque
-from typing import Callable, Deque, Dict, Optional
+from typing import Optional
+from collections.abc import Callable
 
 from castor.command_interpreter import get_command_interpreter
 
@@ -52,10 +53,10 @@ class BaseChannel(ABC):
         self._rate_window: float = rate_cfg.get(
             "window_seconds", config.get("rate_limit_window", _DEFAULT_RATE_WINDOW)
         )
-        self._rate_timestamps: Dict[str, Deque[float]] = defaultdict(deque)
+        self._rate_timestamps: dict[str, deque[float]] = defaultdict(deque)
         self._interpreter = get_command_interpreter()
         self._dry_run_mode: bool = bool(config.get("dry_run_mode", False))
-        self._pending_confirmations: Dict[str, Dict[str, str]] = {}
+        self._pending_confirmations: dict[str, dict[str, str]] = {}
 
     def _check_rate_limit(self, chat_id: str) -> bool:
         """Return True if the message is within the rate limit, False if throttled."""

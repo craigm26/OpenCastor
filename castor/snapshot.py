@@ -23,7 +23,8 @@ import logging
 import platform
 import threading
 import time
-from typing import Any, Callable, Deque, Dict, List, Optional
+from typing import Any, Optional
+from collections.abc import Callable
 
 logger = logging.getLogger("OpenCastor.Snapshot")
 
@@ -31,9 +32,9 @@ _MAX_HISTORY = 100
 _DEFAULT_INTERVAL_S = int(__import__("os").getenv("CASTOR_SNAPSHOT_INTERVAL_S", "60"))
 
 
-def _system_metrics() -> Dict[str, Any]:
+def _system_metrics() -> dict[str, Any]:
     """Collect CPU/RAM/temperature using stdlib where possible."""
-    metrics: Dict[str, Any] = {"platform": platform.machine()}
+    metrics: dict[str, Any] = {"platform": platform.machine()}
     try:
         import psutil  # optional
 
@@ -73,7 +74,7 @@ class SnapshotManager:
     """
 
     def __init__(self, max_history: int = _MAX_HISTORY):
-        self._history: Deque[Dict[str, Any]] = collections.deque(maxlen=max_history)
+        self._history: collections.deque[dict[str, Any]] = collections.deque(maxlen=max_history)
         self._lock = threading.Lock()
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
@@ -115,7 +116,7 @@ class SnapshotManager:
     # Snapshot
     # ------------------------------------------------------------------
 
-    def take(self, state: Any = None) -> Dict[str, Any]:
+    def take(self, state: Any = None) -> dict[str, Any]:
         """Capture a snapshot of the current system state.
 
         Args:
@@ -127,7 +128,7 @@ class SnapshotManager:
         if state is None and self._state_getter:
             state = self._state_getter()
 
-        snap: Dict[str, Any] = {
+        snap: dict[str, Any] = {
             "timestamp": time.time(),
             "timestamp_iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "system": _system_metrics(),
@@ -167,12 +168,12 @@ class SnapshotManager:
 
         return snap
 
-    def latest(self) -> Optional[Dict[str, Any]]:
+    def latest(self) -> Optional[dict[str, Any]]:
         """Return the most recent snapshot, or None."""
         with self._lock:
             return self._history[-1] if self._history else None
 
-    def history(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def history(self, limit: int = 20) -> list[dict[str, Any]]:
         """Return up to *limit* recent snapshots (newest first)."""
         with self._lock:
             items = list(self._history)

@@ -35,7 +35,8 @@ import base64
 import json
 import logging
 import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Optional
+from collections.abc import Callable
 
 logger = logging.getLogger("OpenCastor.Tools")
 
@@ -50,7 +51,7 @@ class ToolDefinition:
         name: str,
         description: str,
         fn: Callable,
-        parameters: Optional[Dict] = None,
+        parameters: Optional[dict] = None,
         returns: str = "any",
     ):
         self.name = name
@@ -153,7 +154,7 @@ class ToolRegistry:
     """
 
     def __init__(self, config: Optional[dict] = None):
-        self._tools: Dict[str, ToolDefinition] = {}
+        self._tools: dict[str, ToolDefinition] = {}
         self._register_builtins()
         if config:
             self._register_from_config(config)
@@ -254,7 +255,7 @@ class ToolRegistry:
         name: str,
         fn: Callable,
         description: str = "",
-        parameters: Optional[Dict] = None,
+        parameters: Optional[dict] = None,
         returns: str = "any",
     ) -> None:
         """Register a callable tool by name."""
@@ -323,15 +324,15 @@ class ToolRegistry:
 
     # ── Schema export ─────────────────────────────────────────────────────────
 
-    def to_openai_tools(self) -> List[dict]:
+    def to_openai_tools(self) -> list[dict]:
         """Return list of OpenAI function-calling tool definitions."""
         return [t.to_openai_schema() for t in self._tools.values()]
 
-    def to_anthropic_tools(self) -> List[dict]:
+    def to_anthropic_tools(self) -> list[dict]:
         """Return list of Anthropic tool definitions."""
         return [t.to_anthropic_schema() for t in self._tools.values()]
 
-    def list_tools(self) -> List[str]:
+    def list_tools(self) -> list[str]:
         """Return names of all registered tools."""
         return list(self._tools.keys())
 

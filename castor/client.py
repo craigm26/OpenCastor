@@ -32,7 +32,8 @@ import json
 import os
 import urllib.error
 import urllib.request
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Optional
+from collections.abc import Iterator
 
 _DEFAULT_URL = os.getenv("OPENCASTOR_API_URL", "http://localhost:8000")
 _DEFAULT_TOKEN = os.getenv("OPENCASTOR_API_TOKEN", "")
@@ -86,7 +87,7 @@ class CastorClient:
     # Internal HTTP
     # ------------------------------------------------------------------
 
-    def _headers(self) -> Dict[str, str]:
+    def _headers(self) -> dict[str, str]:
         h = {"Content-Type": "application/json", "Accept": "application/json"}
         if self._token:
             h["Authorization"] = f"Bearer {self._token}"
@@ -132,19 +133,19 @@ class CastorClient:
     # Health & Status
     # ------------------------------------------------------------------
 
-    def health(self) -> Dict[str, Any]:
+    def health(self) -> dict[str, Any]:
         """GET /health — Quick liveness check."""
         return self._get("/health")
 
-    def status(self) -> Dict[str, Any]:
+    def status(self) -> dict[str, Any]:
         """GET /api/status — Runtime status including providers and channels."""
         return self._get("/api/status")
 
-    def provider_health(self) -> Dict[str, Any]:
+    def provider_health(self) -> dict[str, Any]:
         """GET /api/provider/health — Brain provider health check."""
         return self._get("/api/provider/health")
 
-    def driver_health(self) -> Dict[str, Any]:
+    def driver_health(self) -> dict[str, Any]:
         """GET /api/driver/health — Hardware driver health check."""
         return self._get("/api/driver/health")
 
@@ -152,7 +153,7 @@ class CastorClient:
     # Command & Control
     # ------------------------------------------------------------------
 
-    def command(self, instruction: str, surface: str = "api") -> Dict[str, Any]:
+    def command(self, instruction: str, surface: str = "api") -> dict[str, Any]:
         """POST /api/command — Send instruction to the LLM brain.
 
         Args:
@@ -185,15 +186,15 @@ class CastorClient:
         except urllib.error.HTTPError as exc:
             raise CastorError(exc.code, {"error": exc.reason}) from exc
 
-    def action(self, **kwargs: Any) -> Dict[str, Any]:
+    def action(self, **kwargs: Any) -> dict[str, Any]:
         """POST /api/action — Direct motor command (bypass brain)."""
         return self._post("/api/action", kwargs)
 
-    def stop(self) -> Dict[str, Any]:
+    def stop(self) -> dict[str, Any]:
         """POST /api/stop — Emergency stop."""
         return self._post("/api/stop")
 
-    def estop_clear(self) -> Dict[str, Any]:
+    def estop_clear(self) -> dict[str, Any]:
         """POST /api/estop/clear — Clear emergency stop."""
         return self._post("/api/estop/clear")
 
@@ -201,7 +202,7 @@ class CastorClient:
     # Memory & Episodes
     # ------------------------------------------------------------------
 
-    def memory_episodes(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def memory_episodes(self, limit: int = 20) -> list[dict[str, Any]]:
         """GET /api/memory/episodes — Recent episodes."""
         return self._get("/api/memory/episodes", limit=limit)
 
@@ -209,7 +210,7 @@ class CastorClient:
         """GET /api/memory/export — Download all episodes as JSONL."""
         return self._request("GET", "/api/memory/export", raw=True)
 
-    def memory_clear(self) -> Dict[str, Any]:
+    def memory_clear(self) -> dict[str, Any]:
         """DELETE /api/memory/episodes — Clear all episode memory."""
         return self._delete("/api/memory/episodes")
 
@@ -217,7 +218,7 @@ class CastorClient:
     # Usage
     # ------------------------------------------------------------------
 
-    def usage(self) -> Dict[str, Any]:
+    def usage(self) -> dict[str, Any]:
         """GET /api/usage — Token/cost summary."""
         return self._get("/api/usage")
 
@@ -225,19 +226,19 @@ class CastorClient:
     # Runtime control
     # ------------------------------------------------------------------
 
-    def pause(self) -> Dict[str, Any]:
+    def pause(self) -> dict[str, Any]:
         """POST /api/runtime/pause — Pause the perception-action loop."""
         return self._post("/api/runtime/pause")
 
-    def resume(self) -> Dict[str, Any]:
+    def resume(self) -> dict[str, Any]:
         """POST /api/runtime/resume — Resume the perception-action loop."""
         return self._post("/api/runtime/resume")
 
-    def runtime_status(self) -> Dict[str, Any]:
+    def runtime_status(self) -> dict[str, Any]:
         """GET /api/runtime/status — Loop running/paused state."""
         return self._get("/api/runtime/status")
 
-    def config_reload(self) -> Dict[str, Any]:
+    def config_reload(self) -> dict[str, Any]:
         """POST /api/config/reload — Hot-reload robot.rcan.yaml."""
         return self._post("/api/config/reload")
 
@@ -245,7 +246,7 @@ class CastorClient:
     # Command history
     # ------------------------------------------------------------------
 
-    def command_history(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def command_history(self, limit: int = 20) -> list[dict[str, Any]]:
         """GET /api/command/history — Last N instruction→thought pairs."""
         return self._get("/api/command/history", limit=limit)
 
@@ -253,22 +254,22 @@ class CastorClient:
     # Behaviors
     # ------------------------------------------------------------------
 
-    def behavior_run(self, behavior_file: str, behavior_name: str) -> Dict[str, Any]:
+    def behavior_run(self, behavior_file: str, behavior_name: str) -> dict[str, Any]:
         """POST /api/behavior/run — Start a named behavior sequence."""
         return self._post(
             "/api/behavior/run",
             {"behavior_file": behavior_file, "behavior_name": behavior_name},
         )
 
-    def behavior_stop(self) -> Dict[str, Any]:
+    def behavior_stop(self) -> dict[str, Any]:
         """POST /api/behavior/stop — Stop the running behavior."""
         return self._post("/api/behavior/stop")
 
-    def behavior_status(self) -> Dict[str, Any]:
+    def behavior_status(self) -> dict[str, Any]:
         """GET /api/behavior/status."""
         return self._get("/api/behavior/status")
 
-    def behavior_generate(self, description: str, steps_hint: int = 5) -> Dict[str, Any]:
+    def behavior_generate(self, description: str, steps_hint: int = 5) -> dict[str, Any]:
         """POST /api/behavior/generate — Generate YAML behavior from description."""
         return self._post(
             "/api/behavior/generate",
@@ -281,14 +282,14 @@ class CastorClient:
 
     def nav_waypoint(
         self, distance_m: float, heading_deg: float, speed: float = 0.6
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """POST /api/nav/waypoint — Dead-reckoning move."""
         return self._post(
             "/api/nav/waypoint",
             {"distance_m": distance_m, "heading_deg": heading_deg, "speed": speed},
         )
 
-    def nav_status(self) -> Dict[str, Any]:
+    def nav_status(self) -> dict[str, Any]:
         """GET /api/nav/status — Current navigation job status."""
         return self._get("/api/nav/status")
 
@@ -296,23 +297,23 @@ class CastorClient:
     # Webhooks
     # ------------------------------------------------------------------
 
-    def list_webhooks(self) -> List[Dict[str, Any]]:
+    def list_webhooks(self) -> list[dict[str, Any]]:
         """GET /api/webhooks — List registered outbound webhooks."""
         return self._get("/api/webhooks")
 
     def add_webhook(
         self,
         url: str,
-        events: Optional[List[str]] = None,
+        events: Optional[list[str]] = None,
         secret: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """POST /api/webhooks — Register a new outbound webhook."""
         return self._post(
             "/api/webhooks",
             {"url": url, "events": events or ["*"], "secret": secret},
         )
 
-    def delete_webhook(self, url: str) -> Dict[str, Any]:
+    def delete_webhook(self, url: str) -> dict[str, Any]:
         """DELETE /api/webhooks — Remove a webhook by URL."""
         return self._post("/api/webhooks/delete", {"url": url})
 
@@ -320,15 +321,15 @@ class CastorClient:
     # Recordings
     # ------------------------------------------------------------------
 
-    def recording_start(self, session_name: Optional[str] = None) -> Dict[str, Any]:
+    def recording_start(self, session_name: Optional[str] = None) -> dict[str, Any]:
         """POST /api/recording/start — Start video episode recording."""
         return self._post("/api/recording/start", {"session_name": session_name})
 
-    def recording_stop(self) -> Dict[str, Any]:
+    def recording_stop(self) -> dict[str, Any]:
         """POST /api/recording/stop — Stop recording and flush to disk."""
         return self._post("/api/recording/stop")
 
-    def recording_list(self) -> List[Dict[str, Any]]:
+    def recording_list(self) -> list[dict[str, Any]]:
         """GET /api/recording/list — List saved recordings."""
         return self._get("/api/recording/list")
 
@@ -336,7 +337,7 @@ class CastorClient:
     # Gestures
     # ------------------------------------------------------------------
 
-    def gesture_frame(self, image_base64: str) -> Dict[str, Any]:
+    def gesture_frame(self, image_base64: str) -> dict[str, Any]:
         """POST /api/gesture/frame — Recognize gesture from base64 JPEG."""
         return self._post("/api/gesture/frame", {"image_base64": image_base64})
 
@@ -369,7 +370,7 @@ try:
             self._client: Optional[httpx.AsyncClient] = None
 
         async def __aenter__(self) -> "CastorAsyncClient":
-            headers: Dict[str, str] = {"Accept": "application/json"}
+            headers: dict[str, str] = {"Accept": "application/json"}
             if self._token:
                 headers["Authorization"] = f"Bearer {self._token}"
             self._client = httpx.AsyncClient(
@@ -400,42 +401,42 @@ try:
             resp.raise_for_status()
             return resp.json()
 
-        async def health(self) -> Dict[str, Any]:
+        async def health(self) -> dict[str, Any]:
             return await self._get("/health")
 
-        async def status(self) -> Dict[str, Any]:
+        async def status(self) -> dict[str, Any]:
             return await self._get("/api/status")
 
-        async def command(self, instruction: str) -> Dict[str, Any]:
+        async def command(self, instruction: str) -> dict[str, Any]:
             return await self._post("/api/command", {"instruction": instruction})
 
-        async def stop(self) -> Dict[str, Any]:
+        async def stop(self) -> dict[str, Any]:
             return await self._post("/api/stop")
 
-        async def memory_episodes(self, limit: int = 20) -> List[Dict[str, Any]]:
+        async def memory_episodes(self, limit: int = 20) -> list[dict[str, Any]]:
             return await self._get("/api/memory/episodes", limit=limit)
 
-        async def usage(self) -> Dict[str, Any]:
+        async def usage(self) -> dict[str, Any]:
             return await self._get("/api/usage")
 
-        async def provider_health(self) -> Dict[str, Any]:
+        async def provider_health(self) -> dict[str, Any]:
             return await self._get("/api/provider/health")
 
-        async def pause(self) -> Dict[str, Any]:
+        async def pause(self) -> dict[str, Any]:
             return await self._post("/api/runtime/pause")
 
-        async def resume(self) -> Dict[str, Any]:
+        async def resume(self) -> dict[str, Any]:
             return await self._post("/api/runtime/resume")
 
-        async def recording_start(self, session_name: Optional[str] = None) -> Dict[str, Any]:
+        async def recording_start(self, session_name: Optional[str] = None) -> dict[str, Any]:
             return await self._post("/api/recording/start", {"session_name": session_name})
 
-        async def recording_stop(self) -> Dict[str, Any]:
+        async def recording_stop(self) -> dict[str, Any]:
             return await self._post("/api/recording/stop")
 
         async def nav_waypoint(
             self, distance_m: float, heading_deg: float, speed: float = 0.6
-        ) -> Dict[str, Any]:
+        ) -> dict[str, Any]:
             return await self._post(
                 "/api/nav/waypoint",
                 {"distance_m": distance_m, "heading_deg": heading_deg, "speed": speed},

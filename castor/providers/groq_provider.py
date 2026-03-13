@@ -14,7 +14,7 @@ import base64
 import logging
 import os
 import time
-from typing import Iterator
+from collections.abc import Iterator
 
 from .base import BaseProvider, Thought
 

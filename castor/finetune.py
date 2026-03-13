@@ -29,7 +29,8 @@ REST API:
 import io
 import json
 import logging
-from typing import Any, Dict, Iterator, Literal, Optional
+from typing import Any, Literal, Optional
+from collections.abc import Iterator
 
 logger = logging.getLogger("OpenCastor.Finetune")
 
@@ -41,7 +42,7 @@ _SYSTEM_MSG = (
 )
 
 
-def _episode_to_jsonl(ep: Dict[str, Any]) -> Dict[str, Any]:
+def _episode_to_jsonl(ep: dict[str, Any]) -> dict[str, Any]:
     """Generic JSONL format: one episode per line."""
     return {
         "id": ep.get("id"),
@@ -54,7 +55,7 @@ def _episode_to_jsonl(ep: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _episode_to_alpaca(ep: Dict[str, Any]) -> Dict[str, Any]:
+def _episode_to_alpaca(ep: dict[str, Any]) -> dict[str, Any]:
     """Stanford Alpaca format: {instruction, input, output}."""
     return {
         "instruction": "You are a robot controller. Produce a JSON action for the given command.",
@@ -63,7 +64,7 @@ def _episode_to_alpaca(ep: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _episode_to_sharegpt(ep: Dict[str, Any]) -> Dict[str, Any]:
+def _episode_to_sharegpt(ep: dict[str, Any]) -> dict[str, Any]:
     """ShareGPT format: {conversations: [{from: human|gpt, value: ...}]}."""
     return {
         "conversations": [
@@ -74,7 +75,7 @@ def _episode_to_sharegpt(ep: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _episode_to_chatml(ep: Dict[str, Any]) -> Dict[str, Any]:
+def _episode_to_chatml(ep: dict[str, Any]) -> dict[str, Any]:
     """OpenAI ChatML format: {messages: [{role, content}]}."""
     return {
         "messages": [
@@ -114,7 +115,7 @@ class EpisodeFinetuneExporter:
         limit: int = 1000,
         min_latency_ms: Optional[float] = None,
         require_action: bool = False,
-    ) -> Iterator[Dict[str, Any]]:
+    ) -> Iterator[dict[str, Any]]:
         """Yield converted episode records.
 
         Args:
@@ -181,7 +182,7 @@ class EpisodeFinetuneExporter:
             buf.write(json.dumps(record, ensure_ascii=False) + "\n")
         return buf.getvalue().encode("utf-8")
 
-    def stats(self, limit: int = 10000) -> Dict[str, Any]:
+    def stats(self, limit: int = 10000) -> dict[str, Any]:
         """Return dataset statistics."""
         episodes = self._mem.query_recent(limit=limit)
         total = len(episodes)
@@ -205,7 +206,7 @@ class EpisodeFinetuneExporter:
         limit: int = 1000,
         private: bool = True,
         commit_message: str = "Upload OpenCastor fine-tuning dataset",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Upload the episode dataset to a HuggingFace Hub repository.
 
         Requires ``huggingface-hub`` (already a core dependency).

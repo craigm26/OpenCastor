@@ -10,7 +10,7 @@ import argparse
 import contextlib
 import io
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
@@ -24,14 +24,14 @@ class MCPRequest(BaseModel):
     jsonrpc: str = "2.0"
     id: Optional[Any] = None
     method: str
-    params: Dict[str, Any] = {}
+    params: dict[str, Any] = {}
 
 
-def _jsonrpc_result(req_id: Any, result: Dict[str, Any]) -> Dict[str, Any]:
+def _jsonrpc_result(req_id: Any, result: dict[str, Any]) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": req_id, "result": result}
 
 
-def _jsonrpc_error(req_id: Any, code: int, message: str) -> Dict[str, Any]:
+def _jsonrpc_error(req_id: Any, code: int, message: str) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
 
 
@@ -46,7 +46,7 @@ class _FakeState:
 class _FakeRequest:
     client = _FakeClient()
     state = _FakeState()
-    query_params: Dict[str, str] = {}
+    query_params: dict[str, str] = {}
 
 
 def _require_mcp_auth(auth_header: Optional[str]) -> None:
@@ -57,7 +57,7 @@ def _require_mcp_auth(auth_header: Optional[str]) -> None:
         raise HTTPException(status_code=401, detail="Invalid or missing MCP token")
 
 
-async def _tool_status_health(arguments: Dict[str, Any]) -> Dict[str, Any]:
+async def _tool_status_health(arguments: dict[str, Any]) -> dict[str, Any]:
     from castor import api as gateway_api
 
     fake_request = _FakeRequest()
@@ -67,7 +67,7 @@ async def _tool_status_health(arguments: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-async def _tool_command_dispatch(arguments: Dict[str, Any]) -> Dict[str, Any]:
+async def _tool_command_dispatch(arguments: dict[str, Any]) -> dict[str, Any]:
     instruction = (arguments or {}).get("instruction", "").strip()
     if not instruction:
         raise ValueError("'instruction' is required")
@@ -81,7 +81,7 @@ async def _tool_command_dispatch(arguments: Dict[str, Any]) -> Dict[str, Any]:
     return await gateway_api.send_command(req, _FakeRequest())
 
 
-async def _tool_stop_estop(arguments: Dict[str, Any]) -> Dict[str, Any]:
+async def _tool_stop_estop(arguments: dict[str, Any]) -> dict[str, Any]:
     from castor import api as gateway_api
 
     mode = (arguments or {}).get("mode", "stop")
@@ -90,7 +90,7 @@ async def _tool_stop_estop(arguments: Dict[str, Any]) -> Dict[str, Any]:
     return await gateway_api.emergency_stop()
 
 
-async def _tool_recent_episodes_telemetry(arguments: Dict[str, Any]) -> Dict[str, Any]:
+async def _tool_recent_episodes_telemetry(arguments: dict[str, Any]) -> dict[str, Any]:
     from castor import api as gateway_api
 
     limit = int((arguments or {}).get("limit", 20))
@@ -106,7 +106,7 @@ async def _tool_recent_episodes_telemetry(arguments: Dict[str, Any]) -> Dict[str
     return {"episodes": episodes, "telemetry": telemetry}
 
 
-def _run_cli_handler(handler, *, config_path: str) -> Dict[str, Any]:
+def _run_cli_handler(handler, *, config_path: str) -> dict[str, Any]:
     args = argparse.Namespace(config=config_path, category=None, json=False, strict=False)
     buf = io.StringIO()
     exit_code = 0
@@ -118,7 +118,7 @@ def _run_cli_handler(handler, *, config_path: str) -> Dict[str, Any]:
     return {"exit_code": exit_code, "output": buf.getvalue()}
 
 
-async def _tool_config_validate_lint(arguments: Dict[str, Any]) -> Dict[str, Any]:
+async def _tool_config_validate_lint(arguments: dict[str, Any]) -> dict[str, Any]:
     config_path = (arguments or {}).get("config", "robot.rcan.yaml")
     lint = _run_cli_handler(castor_cli.cmd_lint, config_path=config_path)
     validate = _run_cli_handler(castor_cli.cmd_validate, config_path=config_path)
@@ -194,7 +194,7 @@ _TOOL_SCHEMAS = [
 
 
 @app.get("/health")
-async def healthcheck() -> Dict[str, str]:
+async def healthcheck() -> dict[str, str]:
     return {"status": "ok", "service": "castor-mcp"}
 
 

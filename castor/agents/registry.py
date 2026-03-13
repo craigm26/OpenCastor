@@ -7,7 +7,7 @@ Provides a centralised factory for creating and managing
 import asyncio
 import logging
 import time
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Optional
 
 from .base import BaseAgent
 
@@ -41,11 +41,11 @@ class AgentRegistry:
     """
 
     def __init__(self) -> None:
-        self._classes: Dict[str, Type[BaseAgent]] = {}
-        self._agents: Dict[str, BaseAgent] = {}
-        self._spawn_times: Dict[str, float] = {}
+        self._classes: dict[str, type[BaseAgent]] = {}
+        self._agents: dict[str, BaseAgent] = {}
+        self._spawn_times: dict[str, float] = {}
 
-    def register(self, agent_class: Type[BaseAgent]) -> None:
+    def register(self, agent_class: type[BaseAgent]) -> None:
         """Register an agent class so it can later be spawned by name.
 
         The agent's ``name`` class attribute is used as the registry key.
@@ -57,7 +57,7 @@ class AgentRegistry:
         self._classes[agent_class.name] = agent_class
         logger.debug(f"Registered agent class '{agent_class.name}'")
 
-    def spawn(self, name: str, config: Optional[Dict[str, Any]] = None, **kwargs: Any) -> BaseAgent:
+    def spawn(self, name: str, config: Optional[dict[str, Any]] = None, **kwargs: Any) -> BaseAgent:
         """Instantiate a registered agent by name and store it.
 
         Args:
@@ -94,7 +94,7 @@ class AgentRegistry:
         """
         return self._agents.get(name)
 
-    def list_agents(self) -> List[Dict[str, Any]]:
+    def list_agents(self) -> list[dict[str, Any]]:
         """Return a summary list for all spawned agents.
 
         Returns:
@@ -119,7 +119,7 @@ class AgentRegistry:
             await asyncio.gather(*tasks, return_exceptions=True)
         logger.info("All agents stopped")
 
-    def health_report(self) -> Dict[str, Any]:
+    def health_report(self) -> dict[str, Any]:
         """Return a health dict for every spawned agent.
 
         Returns:

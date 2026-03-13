@@ -11,7 +11,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 try:
     from rich.console import Console
@@ -32,7 +32,7 @@ class CheckResult:
 
 @dataclass
 class DoctorReport:
-    checks: List[CheckResult] = field(default_factory=list)
+    checks: list[CheckResult] = field(default_factory=list)
 
     @property
     def ok_count(self) -> int:

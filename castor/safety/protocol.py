@@ -12,7 +12,8 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Optional
+from collections.abc import Callable
 
 logger = logging.getLogger("OpenCastor.Safety.Protocol")
 
@@ -43,12 +44,12 @@ class SafetyRule:
     description: str
     severity: str  # "warning" | "violation" | "critical"
     enabled: bool = True
-    params: Dict[str, Any] = field(default_factory=dict)
-    check: Callable[[Dict[str, Any], Dict[str, Any]], Optional[RuleViolation]] = field(
+    params: dict[str, Any] = field(default_factory=dict)
+    check: Callable[[dict[str, Any], dict[str, Any]], Optional[RuleViolation]] = field(
         default=lambda action, params: None
     )
 
-    def evaluate(self, action: Dict[str, Any]) -> Optional[RuleViolation]:
+    def evaluate(self, action: dict[str, Any]) -> Optional[RuleViolation]:
         """Run this rule against an action dict. Returns a violation or None."""
         if not self.enabled:
             return None
@@ -61,7 +62,7 @@ class SafetyRule:
 
 
 def _check_max_linear_velocity(
-    action: Dict[str, Any], params: Dict[str, Any]
+    action: dict[str, Any], params: dict[str, Any]
 ) -> Optional[RuleViolation]:
     velocity = action.get("linear_velocity")
     if velocity is None:
@@ -78,7 +79,7 @@ def _check_max_linear_velocity(
 
 
 def _check_max_angular_velocity(
-    action: Dict[str, Any], params: Dict[str, Any]
+    action: dict[str, Any], params: dict[str, Any]
 ) -> Optional[RuleViolation]:
     velocity = action.get("angular_velocity")
     if velocity is None:
@@ -95,7 +96,7 @@ def _check_max_angular_velocity(
 
 
 def _check_estop_response(
-    action: Dict[str, Any], params: Dict[str, Any]
+    action: dict[str, Any], params: dict[str, Any]
 ) -> Optional[RuleViolation]:
     response_ms = action.get("estop_response_ms")
     if response_ms is None:
@@ -111,7 +112,7 @@ def _check_estop_response(
     return None
 
 
-def _check_contact_force(action: Dict[str, Any], params: Dict[str, Any]) -> Optional[RuleViolation]:
+def _check_contact_force(action: dict[str, Any], params: dict[str, Any]) -> Optional[RuleViolation]:
     force = action.get("contact_force")
     if force is None:
         return None
@@ -132,7 +133,7 @@ def _check_contact_force(action: Dict[str, Any], params: Dict[str, Any]) -> Opti
 
 
 def _check_workspace_bounds(
-    action: Dict[str, Any], params: Dict[str, Any]
+    action: dict[str, Any], params: dict[str, Any]
 ) -> Optional[RuleViolation]:
     position = action.get("position")
     if position is None:
@@ -160,7 +161,7 @@ def _check_workspace_bounds(
     return None
 
 
-def _check_thermal(action: Dict[str, Any], params: Dict[str, Any]) -> Optional[RuleViolation]:
+def _check_thermal(action: dict[str, Any], params: dict[str, Any]) -> Optional[RuleViolation]:
     temp = action.get("temperature_c")
     if temp is None:
         return None
@@ -183,7 +184,7 @@ def _check_thermal(action: Dict[str, Any], params: Dict[str, Any]) -> Optional[R
     return None
 
 
-def _check_watchdog(action: Dict[str, Any], params: Dict[str, Any]) -> Optional[RuleViolation]:
+def _check_watchdog(action: dict[str, Any], params: dict[str, Any]) -> Optional[RuleViolation]:
     last_heartbeat_ms = action.get("watchdog_elapsed_ms")
     if last_heartbeat_ms is None:
         return None
@@ -199,7 +200,7 @@ def _check_watchdog(action: Dict[str, Any], params: Dict[str, Any]) -> Optional[
 
 
 def _check_estop_available(
-    action: Dict[str, Any], params: Dict[str, Any]
+    action: dict[str, Any], params: dict[str, Any]
 ) -> Optional[RuleViolation]:
     estop_available = action.get("estop_available")
     if estop_available is None:
@@ -215,7 +216,7 @@ def _check_estop_available(
 
 
 def _check_destructive_auth(
-    action: Dict[str, Any], params: Dict[str, Any]
+    action: dict[str, Any], params: dict[str, Any]
 ) -> Optional[RuleViolation]:
     if not action.get("destructive", False):
         return None
@@ -230,7 +231,7 @@ def _check_destructive_auth(
 
 
 def _check_sensor_consent(
-    action: Dict[str, Any], params: Dict[str, Any]
+    action: dict[str, Any], params: dict[str, Any]
 ) -> Optional[RuleViolation]:
     if not action.get("sensor_active", False):
         return None
@@ -250,7 +251,7 @@ def _check_sensor_consent(
 # Default rules registry
 # ---------------------------------------------------------------------------
 
-_DEFAULT_RULES: List[SafetyRule] = [
+_DEFAULT_RULES: list[SafetyRule] = [
     SafetyRule(
         rule_id="MOTION_001",
         category="motion",
@@ -334,7 +335,7 @@ _DEFAULT_RULES: List[SafetyRule] = [
 ]
 
 
-def _build_default_rules() -> Dict[str, SafetyRule]:
+def _build_default_rules() -> dict[str, SafetyRule]:
     """Return a fresh copy of default rules keyed by rule_id."""
     import copy
 
@@ -354,16 +355,16 @@ class SafetyProtocol:
     """
 
     def __init__(self, config_path: Optional[str] = None, ns: Any = None):
-        self._rules: Dict[str, SafetyRule] = _build_default_rules()
-        self._audit_log: List[Dict[str, Any]] = []
-        self._violations: List[RuleViolation] = []
+        self._rules: dict[str, SafetyRule] = _build_default_rules()
+        self._audit_log: list[dict[str, Any]] = []
+        self._violations: list[RuleViolation] = []
 
         # Load config overrides
         config = self._load_config(config_path, ns)
         if config:
             self._apply_config(config)
 
-    def _load_config(self, config_path: Optional[str], ns: Any) -> Optional[Dict[str, Any]]:
+    def _load_config(self, config_path: Optional[str], ns: Any) -> Optional[dict[str, Any]]:
         """Load YAML config from file path or virtual FS."""
         # Try virtual FS first
         if ns is not None:
@@ -390,7 +391,7 @@ class SafetyProtocol:
 
         return None
 
-    def _apply_config(self, config: Dict[str, Any]) -> None:
+    def _apply_config(self, config: dict[str, Any]) -> None:
         """Apply YAML config overrides to rules."""
         protocol = config.get("safety_protocol", config)
         rules_cfg = protocol.get("rules", {})
@@ -413,9 +414,9 @@ class SafetyProtocol:
 
     # -- Public API --
 
-    def check_action(self, action: Dict[str, Any]) -> List[RuleViolation]:
+    def check_action(self, action: dict[str, Any]) -> list[RuleViolation]:
         """Run all enabled rules against an action. Returns list of violations."""
-        violations: List[RuleViolation] = []
+        violations: list[RuleViolation] = []
         for rule in self._rules.values():
             result = rule.evaluate(action)
             if result is not None:
@@ -451,7 +452,7 @@ class SafetyProtocol:
         """Get a rule by ID."""
         return self._rules.get(rule_id)
 
-    def list_rules(self) -> List[Dict[str, Any]]:
+    def list_rules(self) -> list[dict[str, Any]]:
         """Return a table-friendly list of all rules with status."""
         return [
             {
@@ -465,19 +466,19 @@ class SafetyProtocol:
             for r in self._rules.values()
         ]
 
-    def get_violations_summary(self) -> Dict[str, int]:
+    def get_violations_summary(self) -> dict[str, int]:
         """Return recent violation counts by category."""
-        summary: Dict[str, int] = {}
+        summary: dict[str, int] = {}
         for v in self._violations:
             summary[v.category] = summary.get(v.category, 0) + 1
         return summary
 
-    def get_audit_log(self) -> List[Dict[str, Any]]:
+    def get_audit_log(self) -> list[dict[str, Any]]:
         """Return the audit log."""
         return list(self._audit_log)
 
     @property
-    def rules(self) -> Dict[str, SafetyRule]:
+    def rules(self) -> dict[str, SafetyRule]:
         """Direct access to rules dict."""
         return self._rules
 
@@ -487,7 +488,7 @@ class SafetyProtocol:
 # ---------------------------------------------------------------------------
 
 
-def check_write_protocol(protocol: SafetyProtocol, path: str, data: Any) -> List[RuleViolation]:
+def check_write_protocol(protocol: SafetyProtocol, path: str, data: Any) -> list[RuleViolation]:
     """Translate a /dev/ write into an action dict and check protocol rules.
 
     This bridges the virtual filesystem write path to the protocol engine.
@@ -495,7 +496,7 @@ def check_write_protocol(protocol: SafetyProtocol, path: str, data: Any) -> List
     if not isinstance(data, dict):
         return []
 
-    action: Dict[str, Any] = {}
+    action: dict[str, Any] = {}
 
     if path.startswith("/dev/motor"):
         if "velocity" in data:

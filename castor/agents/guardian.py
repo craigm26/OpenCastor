@@ -8,7 +8,7 @@ OrchestratorAgent consults the guardian report before dispatching actions.
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Optional
 
 from .base import BaseAgent
 from .shared_state import SharedState
@@ -16,7 +16,7 @@ from .shared_state import SharedState
 logger = logging.getLogger("OpenCastor.Agents.Guardian")
 
 # Action types that are always vetoed regardless of context
-_FORBIDDEN_ACTION_TYPES: Set[str] = {"self_destruct", "unsafe_move", "override_estop"}
+_FORBIDDEN_ACTION_TYPES: set[str] = {"self_destruct", "unsafe_move", "override_estop"}
 
 # Default max allowed speed fraction (0.0–1.0)
 _DEFAULT_MAX_SPEED = 0.9
@@ -35,11 +35,11 @@ class SafetyVeto:
     """Record of a safety veto issued by GuardianAgent."""
 
     vetoed_key: str
-    action: Dict[str, Any]
+    action: dict[str, Any]
     reason: str
     timestamp: float = field(default_factory=time.time)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "timestamp": self.timestamp,
             "vetoed_key": self.vetoed_key,
@@ -73,16 +73,16 @@ class GuardianAgent(BaseAgent):
 
     def __init__(
         self,
-        config: Optional[Dict[str, Any]] = None,
+        config: Optional[dict[str, Any]] = None,
         shared_state: Optional[SharedState] = None,
     ):
         super().__init__(config)
         cfg = config or {}
         self._state = shared_state or SharedState()
         self.max_speed: float = cfg.get("max_speed", _DEFAULT_MAX_SPEED)
-        self.monitored_keys: List[str] = cfg.get("monitored_keys", list(_DEFAULT_MONITORED_KEYS))
+        self.monitored_keys: list[str] = cfg.get("monitored_keys", list(_DEFAULT_MONITORED_KEYS))
         self.estop_active: bool = False
-        self.vetoes: List[SafetyVeto] = []
+        self.vetoes: list[SafetyVeto] = []
 
     # ------------------------------------------------------------------
     # E-stop control
@@ -106,7 +106,7 @@ class GuardianAgent(BaseAgent):
     # Validation
     # ------------------------------------------------------------------
 
-    def _validate(self, key: str, action: Dict[str, Any]) -> Optional[SafetyVeto]:
+    def _validate(self, key: str, action: dict[str, Any]) -> Optional[SafetyVeto]:
         """Validate a single action dict. Returns SafetyVeto on violation."""
         action_type = action.get("type") or action.get("action", "")
 
@@ -126,9 +126,9 @@ class GuardianAgent(BaseAgent):
     # BaseAgent interface
     # ------------------------------------------------------------------
 
-    async def observe(self, sensor_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def observe(self, sensor_data: dict[str, Any]) -> dict[str, Any]:
         """Collect pending actions from all monitored SharedState keys."""
-        pending: Dict[str, Any] = {}
+        pending: dict[str, Any] = {}
         for key in self.monitored_keys:
             val = self._state.get(key)
             if val is not None:
@@ -138,11 +138,11 @@ class GuardianAgent(BaseAgent):
             pending["direct"] = sensor_data["proposed_action"]
         return {"pending_actions": pending}
 
-    async def act(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def act(self, context: dict[str, Any]) -> dict[str, Any]:
         """Validate all pending actions; publish guardian report."""
         pending = context.get("pending_actions", {})
-        new_vetoes: List[Dict[str, Any]] = []
-        approved: List[str] = []
+        new_vetoes: list[dict[str, Any]] = []
+        approved: list[str] = []
 
         for key, action in pending.items():
             if not isinstance(action, dict):
@@ -155,7 +155,7 @@ class GuardianAgent(BaseAgent):
             else:
                 approved.append(key)
 
-        report: Dict[str, Any] = {
+        report: dict[str, Any] = {
             "estop_active": self.estop_active,
             "vetoes": new_vetoes,
             "approved": approved,

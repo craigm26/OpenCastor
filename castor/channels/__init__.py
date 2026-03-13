@@ -4,7 +4,8 @@ Discovers and manages messaging channel integrations.
 """
 
 import logging
-from typing import Callable, Dict, List, Optional
+from typing import Optional
+from collections.abc import Callable
 
 from castor.auth import check_channel_ready, resolve_channel_credentials
 
@@ -18,7 +19,7 @@ __all__ = [
 logger = logging.getLogger("OpenCastor.Channels")
 
 # Registry of channel name -> class (lazy-populated)
-_CHANNEL_CLASSES: Dict[str, type] = {}
+_CHANNEL_CLASSES: dict[str, type] = {}
 
 
 def _register_builtin_channels():
@@ -97,14 +98,14 @@ def _register_builtin_channels():
         logger.debug("Signal channel unavailable")
 
 
-def get_available_channels() -> List[str]:
+def get_available_channels() -> list[str]:
     """Return names of channels whose SDKs are installed."""
     if not _CHANNEL_CLASSES:
         _register_builtin_channels()
     return list(_CHANNEL_CLASSES.keys())
 
 
-def get_ready_channels() -> List[str]:
+def get_ready_channels() -> list[str]:
     """Return names of channels that are both installed and have credentials configured."""
     return [ch for ch in get_available_channels() if check_channel_ready(ch)]
 

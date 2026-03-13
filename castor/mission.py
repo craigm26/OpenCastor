@@ -42,7 +42,7 @@ import math
 import threading
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from castor.nav import WaypointNav  # module-level so tests can patch castor.mission.WaypointNav
 
@@ -60,13 +60,13 @@ class MissionRunner:
     #: Maximum number of completed jobs to keep in history.
     MAX_HISTORY = 50
 
-    def __init__(self, driver: Any, config: Dict[str, Any]) -> None:
+    def __init__(self, driver: Any, config: dict[str, Any]) -> None:
         self._driver = driver
         self._config = config
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
-        self._status: Dict[str, Any] = {
+        self._status: dict[str, Any] = {
             "running": False,
             "job_id": None,
             "step": 0,
@@ -78,15 +78,15 @@ class MissionRunner:
             "error": None,
         }
         # job_id → {"waypoints": [...], "loop": bool} — capped at MAX_HISTORY entries
-        self._history: Dict[str, Dict[str, Any]] = {}
+        self._history: dict[str, dict[str, Any]] = {}
         # Dead-reckoning position: updated after each waypoint
-        self._position: Dict[str, float] = {"x_m": 0.0, "y_m": 0.0, "heading_deg": 0.0}
+        self._position: dict[str, float] = {"x_m": 0.0, "y_m": 0.0, "heading_deg": 0.0}
         # Geo-fence bounds (or None for no fencing): {x_min, x_max, y_min, y_max} in metres
-        self._geofence: Optional[Dict[str, float]] = self._parse_geofence(config)
+        self._geofence: Optional[dict[str, float]] = self._parse_geofence(config)
         # Mission ETA tracking
         self._elapsed_s: float = 0.0
         self._eta_s: Optional[float] = None
-        self._waypoint_durations: List[float] = []
+        self._waypoint_durations: list[float] = []
         self._mission_start_time: Optional[float] = None
 
     # ------------------------------------------------------------------
@@ -95,7 +95,7 @@ class MissionRunner:
 
     def start(
         self,
-        waypoints: List[Dict[str, Any]],
+        waypoints: list[dict[str, Any]],
         *,
         loop: bool = False,
     ) -> str:
@@ -158,7 +158,7 @@ class MissionRunner:
         logger.info("Mission %s started: %d waypoints, loop=%s", job_id[:8], len(waypoints), loop)
         return job_id
 
-    def get_waypoints(self, job_id: str) -> Optional[List[Dict[str, Any]]]:
+    def get_waypoints(self, job_id: str) -> Optional[list[dict[str, Any]]]:
         """Return the waypoints for a past or current mission by *job_id*.
 
         Returns ``None`` if the job_id is not found in history.
@@ -172,14 +172,14 @@ class MissionRunner:
             return None
         return list(entry["waypoints"])
 
-    def list_history(self) -> List[Dict[str, Any]]:
+    def list_history(self) -> list[dict[str, Any]]:
         """Return a list of ``{job_id, total, loop}`` summaries for past missions."""
         return [
             {"job_id": jid, "total": len(v["waypoints"]), "loop": v["loop"]}
             for jid, v in self._history.items()
         ]
 
-    def position(self) -> Dict[str, float]:
+    def position(self) -> dict[str, float]:
         """Return the current dead-reckoning position ``{x_m, y_m, heading_deg}``."""
         with self._lock:
             return dict(self._position)
@@ -189,7 +189,7 @@ class MissionRunner:
         with self._lock:
             self._position = {"x_m": 0.0, "y_m": 0.0, "heading_deg": 0.0}
 
-    def set_geofence(self, bounds: Optional[Dict[str, float]]) -> None:
+    def set_geofence(self, bounds: Optional[dict[str, float]]) -> None:
         """Set or clear the geo-fence boundary.
 
         Args:
@@ -212,7 +212,7 @@ class MissionRunner:
                 self._status["running"] = False
                 self._status["error"] = "cancelled"
 
-    def status(self) -> Dict[str, Any]:
+    def status(self) -> dict[str, Any]:
         """Return a snapshot of the current mission status including ETA fields."""
         with self._lock:
             step = self._status["step"]
@@ -241,7 +241,7 @@ class MissionRunner:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _parse_geofence(config: Dict[str, Any]) -> Optional[Dict[str, float]]:
+    def _parse_geofence(config: dict[str, Any]) -> Optional[dict[str, float]]:
         """Extract geo-fence config from the RCAN config dict."""
         gf = (config.get("mission") or {}).get("geofence")
         if not gf:
@@ -281,7 +281,7 @@ class MissionRunner:
 
     def _run(
         self,
-        waypoints: List[Dict[str, Any]],
+        waypoints: list[dict[str, Any]],
         loop: bool,
         job_id: str,
     ) -> None:

@@ -26,7 +26,7 @@ import logging
 import os
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from urllib import request as _urllib_request
 
 logger = logging.getLogger("OpenCastor.FleetTelemetry")
@@ -63,7 +63,7 @@ class RobotSnapshot:
         base_url: str,
         ok: bool,
         metrics_text: str = "",
-        health: Optional[Dict] = None,
+        health: Optional[dict] = None,
         latency_ms: float = 0.0,
         error: str = "",
     ) -> None:
@@ -104,7 +104,7 @@ class RobotSnapshot:
                     continue
         return None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialise to a JSON-ready dict.
 
         Returns a compact summary suitable for the fleet dashboard.
@@ -144,19 +144,19 @@ class FleetAggregator:
 
     def __init__(
         self,
-        robots: List[Dict[str, str]],
+        robots: list[dict[str, str]],
         threads: int = 8,
         ttl_s: float = _CACHE_TTL_SECONDS,
     ) -> None:
         self._robots = robots
         self._threads = threads
         self._ttl_s = ttl_s
-        self._cache: Dict[str, RobotSnapshot] = {}
+        self._cache: dict[str, RobotSnapshot] = {}
         self._lock = threading.Lock()
         self._last_fetch: float = 0.0
 
     @classmethod
-    def from_config(cls, config: Dict) -> FleetAggregator:
+    def from_config(cls, config: dict) -> FleetAggregator:
         """Build a :class:`FleetAggregator` from an RCAN config dict.
 
         Reads the ``fleet.peers`` list:
@@ -186,7 +186,7 @@ class FleetAggregator:
             robots.append({"name": name, "url": url, "token": token})
         return cls(robots)
 
-    def fetch_all(self, force: bool = False) -> List[RobotSnapshot]:
+    def fetch_all(self, force: bool = False) -> list[RobotSnapshot]:
         """Fetch telemetry from all robots in parallel.
 
         Returns cached results if they are younger than *ttl_s*, unless
@@ -203,10 +203,10 @@ class FleetAggregator:
             with self._lock:
                 return list(self._cache.values())
 
-        snapshots: List[RobotSnapshot] = []
+        snapshots: list[RobotSnapshot] = []
         lock = threading.Lock()
 
-        def _fetch(robot: Dict) -> None:
+        def _fetch(robot: dict) -> None:
             snap = self._fetch_robot(robot)
             with lock:
                 snapshots.append(snap)
@@ -223,7 +223,7 @@ class FleetAggregator:
 
         return snapshots
 
-    def to_dict(self, force: bool = False) -> Dict[str, Any]:
+    def to_dict(self, force: bool = False) -> dict[str, Any]:
         """Return a JSON-serialisable aggregate snapshot.
 
         Args:
@@ -241,7 +241,7 @@ class FleetAggregator:
             "timestamp": round(time.time(), 1),
         }
 
-    def _fetch_robot(self, robot: Dict) -> RobotSnapshot:
+    def _fetch_robot(self, robot: dict) -> RobotSnapshot:
         """Fetch metrics and health from a single robot.
 
         Args:
@@ -267,7 +267,7 @@ class FleetAggregator:
             )
 
         # Try health endpoint (non-fatal if missing)
-        health: Dict = {}
+        health: dict = {}
         try:
             health_raw = self._get(f"{url}/health", token)
             health = json.loads(health_raw) if isinstance(health_raw, str) else health_raw
@@ -307,7 +307,7 @@ class FleetAggregator:
         return len(self._robots)
 
     @property
-    def robot_names(self) -> List[str]:
+    def robot_names(self) -> list[str]:
         """Sorted list of robot names."""
         return sorted(r.get("name", "") for r in self._robots)
 
@@ -320,7 +320,7 @@ _fleet_agg: Optional[FleetAggregator] = None
 _fleet_lock = threading.Lock()
 
 
-def get_fleet_aggregator(config: Optional[Dict] = None) -> FleetAggregator:
+def get_fleet_aggregator(config: Optional[dict] = None) -> FleetAggregator:
     """Return the global :class:`FleetAggregator` singleton.
 
     Args:

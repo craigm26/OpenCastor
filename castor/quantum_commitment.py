@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.QuantumCommitment")
 
@@ -64,7 +64,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 
-def build_commitment_engine(config: Dict[str, Any]) -> Optional[CommitmentEngine]:
+def build_commitment_engine(config: dict[str, Any]) -> Optional[CommitmentEngine]:
     """Build a CommitmentEngine from the RCAN config dict.
 
     Returns ``None`` if:

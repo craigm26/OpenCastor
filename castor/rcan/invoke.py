@@ -13,7 +13,8 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Optional
+from collections.abc import Callable
 
 from castor.rcan.message import MessageType
 
@@ -25,12 +26,12 @@ class InvokeRequest:
     """INVOKE message payload (§19.2)."""
 
     skill: str  # Skill/behavior name (e.g. "nav.go_to", "arm.pick")
-    params: Dict[str, Any] = field(default_factory=dict)
+    params: dict[str, Any] = field(default_factory=dict)
     invoke_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timeout_ms: int = 30_000  # Default 30s timeout
     reply_to: Optional[str] = None  # RURI to send INVOKE_RESULT to
 
-    def to_message(self, source_ruri: str, target_ruri: str) -> Dict[str, Any]:
+    def to_message(self, source_ruri: str, target_ruri: str) -> dict[str, Any]:
         """Serialize to RCAN message format.
 
         Uses ``msg_id`` as the wire-format correlation field per §19.3 of the
@@ -58,11 +59,11 @@ class InvokeResult:
 
     invoke_id: str
     status: str  # "success" | "error" | "timeout" | "not_found"
-    result: Dict[str, Any] = field(default_factory=dict)
+    result: dict[str, Any] = field(default_factory=dict)
     error: Optional[str] = None
     duration_ms: Optional[float] = None
 
-    def to_message(self, source_ruri: str, target_ruri: str) -> Dict[str, Any]:
+    def to_message(self, source_ruri: str, target_ruri: str) -> dict[str, Any]:
         """Serialize to RCAN message format.
 
         Uses ``reply_to`` as the wire-format correlation field per §19.4 of the
@@ -101,7 +102,7 @@ class SkillRegistry:
     """
 
     def __init__(self) -> None:
-        self._skills: Dict[str, Callable] = {}
+        self._skills: dict[str, Callable] = {}
 
     def register(self, name: str) -> Callable:
         """Decorator to register a skill by name."""

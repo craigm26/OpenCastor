@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from castor.drivers.base import DriverBase
 
@@ -33,7 +33,7 @@ except ImportError:
 class SpikeHubDriver(DriverBase):
     """Drive LEGO SPIKE Prime over serial (with BLE fallback hooks)."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         self.config = config
         self._mode = "mock"
         self._error: Optional[str] = "driver not connected"
@@ -207,7 +207,7 @@ class SpikeHubDriver(DriverBase):
                 pass
             self._serial = None
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> dict[str, Any]:
         if self._mode == "ble-hook":
             return {
                 "ok": HAS_BLEAK,

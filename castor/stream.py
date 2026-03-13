@@ -22,7 +22,7 @@ Install::
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.Stream.WebRTC")
 
@@ -44,7 +44,7 @@ except ImportError:
     logger.debug("aiortc not installed — WebRTC stream unavailable. Fallback: MJPEG")
 
 # Registry of active peer connections (for cleanup on shutdown)
-_peer_connections: List[Any] = []
+_peer_connections: list[Any] = []
 
 
 # ---------------------------------------------------------------------------
@@ -156,8 +156,8 @@ async def handle_webrtc_offer(
     offer_sdp: str,
     offer_type: str,
     camera_index: int = 0,
-    ice_servers: Optional[List[Dict]] = None,
-) -> Dict[str, str]:
+    ice_servers: Optional[list[dict]] = None,
+) -> dict[str, str]:
     """Process a WebRTC SDP offer and return an answer.
 
     Args:

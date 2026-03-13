@@ -10,7 +10,7 @@ import logging
 import os
 import time
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.Safety.State")
 
@@ -21,20 +21,20 @@ class SafetyStateSnapshot:
 
     timestamp: float = 0.0
     estop_active: bool = False
-    locked_out_principals: List[str] = field(default_factory=list)
-    active_violations: Dict[str, int] = field(default_factory=dict)
+    locked_out_principals: list[str] = field(default_factory=list)
+    active_violations: dict[str, int] = field(default_factory=dict)
     motor_rate_usage: float = 0.0  # 0.0–1.0 fraction of rate limit used
     active_work_orders: int = 0
     anti_subversion_flags: int = 0
     uptime_seconds: float = 0.0
     safety_score: float = 1.0  # 0.0–1.0 composite health
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain dict."""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "SafetyStateSnapshot":
+    def from_dict(cls, d: dict[str, Any]) -> "SafetyStateSnapshot":
         """Deserialize from a dict, ignoring unknown keys."""
         known = {f.name for f in cls.__dataclass_fields__.values()}
         return cls(**{k: v for k, v in d.items() if k in known})
@@ -135,7 +135,7 @@ class SafetyTelemetry:
         except Exception:
             pass
 
-    def read_history(self, limit: int = 100) -> List[Dict[str, Any]]:
+    def read_history(self, limit: int = 100) -> list[dict[str, Any]]:
         """Read the last ``limit`` snapshots from the rolling log file."""
         if not os.path.exists(self._log_path):
             return []
@@ -159,7 +159,7 @@ class SafetyTelemetry:
         self._persist(snap)
         return snap
 
-    def snapshot_dict(self, safety_layer: Any) -> Dict[str, Any]:
+    def snapshot_dict(self, safety_layer: Any) -> dict[str, Any]:
         """Return the current snapshot as a plain dict."""
         return self.snapshot(safety_layer).to_dict()
 

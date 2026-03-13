@@ -19,7 +19,8 @@ import logging
 import os
 import threading
 import time
-from typing import Callable, Optional
+from typing import Optional
+from collections.abc import Callable
 
 logger = logging.getLogger("OpenCastor.INA219")
 

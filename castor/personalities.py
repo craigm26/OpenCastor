@@ -37,7 +37,7 @@ RCAN config::
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.Personalities")
 
@@ -52,9 +52,9 @@ class PersonalityProfile:
     emoji_mode: bool = False
     response_style: str = "balanced"  # terse | balanced | verbose
     greeting: str = "Ready."
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "description": self.description,
@@ -69,7 +69,7 @@ class PersonalityProfile:
 # Built-in personality profiles
 # ---------------------------------------------------------------------------
 
-_BUILTIN_PROFILES: List[PersonalityProfile] = [
+_BUILTIN_PROFILES: list[PersonalityProfile] = [
     PersonalityProfile(
         name="assistant",
         description="Helpful, professional, and precise. The default robot persona.",
@@ -167,7 +167,7 @@ class PersonalityRegistry:
     """
 
     def __init__(self, default_name: str = "assistant"):
-        self._profiles: Dict[str, PersonalityProfile] = {p.name: p for p in _BUILTIN_PROFILES}
+        self._profiles: dict[str, PersonalityProfile] = {p.name: p for p in _BUILTIN_PROFILES}
         self._active_name: str = default_name
         if default_name not in self._profiles:
             logger.warning(
@@ -217,7 +217,7 @@ class PersonalityRegistry:
         self._profiles[profile.name.lower()] = profile
         logger.info("Registered custom personality '%s'", profile.name)
 
-    def register_from_dict(self, data: Dict[str, Any]) -> PersonalityProfile:
+    def register_from_dict(self, data: dict[str, Any]) -> PersonalityProfile:
         """Create and register a profile from a config dict."""
         profile = PersonalityProfile(
             name=data["name"].lower(),
@@ -235,7 +235,7 @@ class PersonalityRegistry:
     # Querying
     # ------------------------------------------------------------------
 
-    def list_profiles(self) -> List[Dict[str, Any]]:
+    def list_profiles(self) -> list[dict[str, Any]]:
         """Return all profiles with an ``active`` flag."""
         result = []
         for name, profile in sorted(self._profiles.items()):
@@ -248,7 +248,7 @@ class PersonalityRegistry:
         """Return a profile by name, or None if not found."""
         return self._profiles.get(name.lower())
 
-    def init_from_config(self, config: Dict[str, Any]) -> None:
+    def init_from_config(self, config: dict[str, Any]) -> None:
         """Load custom personalities from RCAN config ``personalities:`` block."""
         block = config.get("personalities", {})
         default = block.get("default", "assistant")

@@ -7,7 +7,7 @@ import time
 from multiprocessing import Process
 from multiprocessing.connection import Client, Listener, wait
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 
 class DriverIPCAdapter:
@@ -99,7 +99,7 @@ class DriverIPCAdapter:
                 conn.send({"method": method, "args": args, "kwargs": kwargs})
                 if not conn.poll(timeout):
                     raise TimeoutError(f"RPC timeout waiting for {method} from {self.sub_id}")
-                resp: Dict[str, Any] = conn.recv()
+                resp: dict[str, Any] = conn.recv()
             finally:
                 conn.close()
 

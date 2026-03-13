@@ -19,7 +19,7 @@ import json
 import logging
 import statistics
 import time
-from typing import Dict, List, Optional
+from typing import Optional
 
 logger = logging.getLogger("OpenCastor.Benchmark")
 
@@ -27,7 +27,7 @@ logger = logging.getLogger("OpenCastor.Benchmark")
 
 # Three prompts that span the most common robot-control scenarios.
 # All are text-only (image_bytes is a blank frame) so no camera is needed.
-_PROMPT_SUITE: List[str] = [
+_PROMPT_SUITE: list[str] = [
     'What is 2+2? Reply with JSON: {"answer": 4}',
     (
         "You are a robot. Move forward 1 meter. "
@@ -41,7 +41,7 @@ _BLANK_FRAME: bytes = b"\x00" * 4
 
 # ── Per-provider default model map ────────────────────────────────────────────
 
-_DEFAULT_MODELS: Dict[str, str] = {
+_DEFAULT_MODELS: dict[str, str] = {
     "google": "gemini-2.0-flash",
     "openai": "gpt-4.1-mini",
     "anthropic": "claude-haiku-4-5",
@@ -182,10 +182,10 @@ def _compute_metrics(result: dict) -> dict:
 
 
 def run_provider_benchmark(
-    providers_to_test: List[str],
+    providers_to_test: list[str],
     rounds: int = 3,
     config: Optional[dict] = None,
-) -> List[dict]:
+) -> list[dict]:
     """Run the standard prompt suite against each provider and return results.
 
     Args:
@@ -197,7 +197,7 @@ def run_provider_benchmark(
         List of result dicts, one per provider, each containing raw timings
         and computed metrics.
     """
-    all_results: List[dict] = []
+    all_results: list[dict] = []
 
     for provider_name in providers_to_test:
         logger.info("Benchmarking provider: %s (%d round(s))", provider_name, rounds)
@@ -212,7 +212,7 @@ def run_provider_benchmark(
 # ── Rich table output ──────────────────────────────────────────────────────────
 
 
-def print_benchmark_table(results: List[dict]) -> None:
+def print_benchmark_table(results: list[dict]) -> None:
     """Print a Rich summary table of benchmark results to stdout."""
     try:
         from rich.console import Console
@@ -270,7 +270,7 @@ def print_benchmark_table(results: List[dict]) -> None:
     )
 
 
-def _print_plain_table(results: List[dict]) -> None:
+def _print_plain_table(results: list[dict]) -> None:
     """Fallback plain-text output when Rich is not available."""
     header = (
         f"  {'Provider':<14} {'Model':<24} {'p50 ms':>8} {'p95 ms':>8} "
@@ -364,7 +364,7 @@ def cmd_provider_benchmark(
             logger.error("Could not write output file %s: %s", output, exc)
 
 
-def _persist_benchmark_results(results: List[dict]) -> None:
+def _persist_benchmark_results(results: list[dict]) -> None:
     """Append benchmark results as a single JSONL entry to ~/.castor/benchmarks.jsonl."""
     import pathlib
     import time

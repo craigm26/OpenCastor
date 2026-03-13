@@ -31,7 +31,7 @@ import logging
 import math
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import numpy as np
 
@@ -124,7 +124,7 @@ class SLAMMapper:
     def __init__(self, cell_size_m: float = _CELL_SIZE_M):
         self._cell_size = cell_size_m
         self._grid = OccupancyGrid()
-        self._pose: Dict[str, float] = {"x": 0.0, "y": 0.0, "theta": 0.0, "confidence": 1.0}
+        self._pose: dict[str, float] = {"x": 0.0, "y": 0.0, "theta": 0.0, "confidence": 1.0}
         self._mapping = False
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
@@ -166,12 +166,12 @@ class SLAMMapper:
         with self._lock:
             return self._grid.to_png()
 
-    def get_pose(self) -> Dict[str, float]:
+    def get_pose(self) -> dict[str, float]:
         """Return current robot pose estimate."""
         with self._lock:
             return dict(self._pose)
 
-    def navigate_to(self, goal_x: float, goal_y: float) -> Dict[str, Any]:
+    def navigate_to(self, goal_x: float, goal_y: float) -> dict[str, Any]:
         """Plan a path to the goal and return waypoints.
 
         Uses simple Bresenham line in grid space (mock path planning).

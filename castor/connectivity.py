@@ -10,7 +10,8 @@ from __future__ import annotations
 import logging
 import socket
 import threading
-from typing import Callable, Optional
+from typing import Optional
+from collections.abc import Callable
 
 logger = logging.getLogger("OpenCastor.Connectivity")
 

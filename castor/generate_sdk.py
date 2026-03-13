@@ -34,7 +34,7 @@ import textwrap
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.SDK.Generator")
 
@@ -310,7 +310,7 @@ class SDKGenerator:
 
         title = schema.get("info", {}).get("title", "OpenCastor")
         version = schema.get("info", {}).get("version", "unknown")
-        paths: Dict[str, Any] = schema.get("paths", {})
+        paths: dict[str, Any] = schema.get("paths", {})
 
         header = textwrap.dedent(
             f'''\

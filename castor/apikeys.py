@@ -31,7 +31,7 @@ import os
 import secrets
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.ApiKeys")
 
@@ -52,7 +52,7 @@ class ApiKeyManager:
 
     def __init__(self, store_path: Path = _STORE_PATH):
         self._path = store_path
-        self._keys: Dict[str, Dict[str, Any]] = {}
+        self._keys: dict[str, dict[str, Any]] = {}
         self._load()
 
     # ------------------------------------------------------------------
@@ -143,7 +143,7 @@ class ApiKeyManager:
                 return entry["role"]
         return None
 
-    def list(self) -> List[Dict[str, Any]]:
+    def list(self) -> list[dict[str, Any]]:
         """Return all keys (hash excluded) sorted by creation time."""
         now = time.time()
         result = []
@@ -156,7 +156,7 @@ class ApiKeyManager:
         result.sort(key=lambda x: x.get("created_at", 0))
         return result
 
-    def get(self, key_id: str) -> Optional[Dict[str, Any]]:
+    def get(self, key_id: str) -> Optional[dict[str, Any]]:
         """Return key metadata (no hash) for a key ID."""
         entry = self._keys.get(key_id)
         if entry is None:

@@ -25,7 +25,7 @@ WebSocket:
 import collections
 import logging
 import time
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.SafetyTelemetry")
 
@@ -50,9 +50,9 @@ class SafetyEventLogger:
     """
 
     def __init__(self, max_events: int = _MAX_EVENTS):
-        self._events: Deque[Dict[str, Any]] = collections.deque(maxlen=max_events)
-        self._counters: Dict[str, int] = {t: 0 for t in _EVENT_TYPES}
-        self._subscribers: List[Any] = []  # WebSocket connections (weakrefs)
+        self._events: collections.deque[dict[str, Any]] = collections.deque(maxlen=max_events)
+        self._counters: dict[str, int] = {t: 0 for t in _EVENT_TYPES}
+        self._subscribers: list[Any] = []  # WebSocket connections (weakrefs)
 
     # ------------------------------------------------------------------
     # Logging
@@ -62,9 +62,9 @@ class SafetyEventLogger:
         self,
         event_type: str,
         detail: str = "",
-        action: Optional[Dict[str, Any]] = None,
+        action: Optional[dict[str, Any]] = None,
         severity: str = "warning",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Record a safety event.
 
         Args:
@@ -78,7 +78,7 @@ class SafetyEventLogger:
             The event dict that was recorded.
         """
         canonical = event_type if event_type in _EVENT_TYPES else "other"
-        event: Dict[str, Any] = {
+        event: dict[str, Any] = {
             "id": f"{int(time.time() * 1000)}_{len(self._events)}",
             "event_type": canonical,
             "detail": detail,
@@ -101,7 +101,7 @@ class SafetyEventLogger:
     # Querying
     # ------------------------------------------------------------------
 
-    def recent(self, limit: int = 50, event_type: Optional[str] = None) -> List[Dict[str, Any]]:
+    def recent(self, limit: int = 50, event_type: Optional[str] = None) -> list[dict[str, Any]]:
         """Return recent events newest-first.
 
         Args:
@@ -113,7 +113,7 @@ class SafetyEventLogger:
             events = [e for e in events if e["event_type"] == event_type]
         return list(reversed(events))[:limit]
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """Return safety statistics.
 
         Returns:
@@ -123,7 +123,7 @@ class SafetyEventLogger:
         now = time.time()
         cutoff_24h = now - 86400
 
-        last_24h: Dict[str, int] = {t: 0 for t in _EVENT_TYPES}
+        last_24h: dict[str, int] = {t: 0 for t in _EVENT_TYPES}
         for ev in self._events:
             if ev["timestamp"] >= cutoff_24h:
                 last_24h[ev["event_type"]] = last_24h.get(ev["event_type"], 0) + 1

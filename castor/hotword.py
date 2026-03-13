@@ -30,7 +30,8 @@ import logging
 import os
 import threading
 import time
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Optional
+from collections.abc import Callable
 
 logger = logging.getLogger("OpenCastor.Hotword")
 
@@ -140,7 +141,7 @@ class WakeWordDetector:
         logger.info("WakeWordDetector stopped")
 
     @property
-    def status(self) -> Dict[str, Any]:
+    def status(self) -> dict[str, Any]:
         return {
             "active": self._active,
             "engine": self._engine,

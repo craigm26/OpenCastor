@@ -18,12 +18,12 @@ import logging
 import math
 import re
 from collections import Counter
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.EpisodeSearch")
 
 
-def _tokenize(text: str) -> List[str]:
+def _tokenize(text: str) -> list[str]:
     """Lowercase, strip punctuation, split on whitespace."""
     return re.findall(r"[a-z0-9]+", text.lower())
 
@@ -44,8 +44,8 @@ class EpisodeSimilaritySearch:
         else:
             self._mem = memory
         self._max_index_size = max_index_size
-        self._index: List[Dict[str, Any]] = []
-        self._idf: Dict[str, float] = {}
+        self._index: list[dict[str, Any]] = []
+        self._idf: dict[str, float] = {}
         self._built: bool = False
 
     # ------------------------------------------------------------------
@@ -61,7 +61,7 @@ class EpisodeSimilaritySearch:
             self._built = True
             return
 
-        docs: List[List[str]] = []
+        docs: list[list[str]] = []
         for ep in episodes:
             docs.append(_tokenize(ep.get("instruction", "") or ""))
 
@@ -75,7 +75,7 @@ class EpisodeSimilaritySearch:
         self._index = []
         for ep, tokens in zip(episodes, docs, strict=False):
             tf = Counter(tokens)
-            vec: Dict[str, float] = {}
+            vec: dict[str, float] = {}
             for term, count in tf.items():
                 tfidf = (count / max(len(tokens), 1)) * self._idf.get(term, 0.0)
                 if tfidf > 0:
@@ -106,7 +106,7 @@ class EpisodeSimilaritySearch:
         query: str,
         limit: int = 10,
         min_score: float = 0.01,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Search episodes by instruction similarity.
 
         Args:
@@ -129,7 +129,7 @@ class EpisodeSimilaritySearch:
             return []
 
         qtf = Counter(query_tokens)
-        qvec: Dict[str, float] = {}
+        qvec: dict[str, float] = {}
         for term, count in qtf.items():
             tfidf = (count / len(query_tokens)) * self._idf.get(term, 0.0)
             if tfidf > 0:
@@ -140,7 +140,7 @@ class EpisodeSimilaritySearch:
         qnorm = math.sqrt(sum(v * v for v in qvec.values())) or 1.0
         qvec = {t: v / qnorm for t, v in qvec.items()}
 
-        scored: List[tuple] = []
+        scored: list[tuple] = []
         for entry in self._index:
             score = sum(qvec[t] * entry["vec"].get(t, 0.0) for t in qvec if t in entry["vec"])
             if score >= min_score:
@@ -156,7 +156,7 @@ class EpisodeSimilaritySearch:
 
         return results
 
-    def _keyword_fallback(self, tokens: List[str], limit: int) -> List[Dict[str, Any]]:
+    def _keyword_fallback(self, tokens: list[str], limit: int) -> list[dict[str, Any]]:
         """Simple keyword matching when all query terms are out-of-vocabulary."""
         query_set = set(tokens)
         scored = []
@@ -170,7 +170,7 @@ class EpisodeSimilaritySearch:
         scored.sort(key=lambda x: x["score"], reverse=True)
         return scored[:limit]
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """Return index statistics."""
         if not self._built:
             self._build()

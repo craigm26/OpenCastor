@@ -36,7 +36,7 @@ import signal
 import subprocess
 import sys
 import time
-from typing import List, Optional
+from typing import Optional
 
 logger = logging.getLogger("OpenCastor.Sim")
 
@@ -65,7 +65,7 @@ def find_simulator(backend: str) -> Optional[str]:
     return None
 
 
-def list_available_simulators() -> List[str]:
+def list_available_simulators() -> list[str]:
     """Return the list of simulator names detectable on this system.
 
     Returns:
@@ -138,8 +138,8 @@ def _build_sim_args(
     backend: str,
     config_path: str,
     headless: bool = False,
-    extra_args: Optional[List[str]] = None,
-) -> List[str]:
+    extra_args: Optional[list[str]] = None,
+) -> list[str]:
     """Build the simulator command-line argument list.
 
     Args:
@@ -173,7 +173,7 @@ def launch_simulator(
     config_path: str,
     headless: bool = False,
     gateway_port: int = 8000,
-    extra_args: Optional[List[str]] = None,
+    extra_args: Optional[list[str]] = None,
     start_gateway: bool = True,
 ) -> int:
     """Launch the simulator with the castor gateway running in the background.

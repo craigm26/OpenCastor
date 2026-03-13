@@ -21,7 +21,7 @@ published outputs from SharedState and merges them into one action.
 import asyncio
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from .base import BaseAgent
 from .shared_state import Intent, SharedState
@@ -51,20 +51,20 @@ class OrchestratorAgent(BaseAgent):
 
     def __init__(
         self,
-        config: Optional[Dict[str, Any]] = None,
+        config: Optional[dict[str, Any]] = None,
         shared_state: Optional[SharedState] = None,
     ):
         super().__init__(config)
         self._state = shared_state or SharedState()
         self._tick = 0
-        self._last_action: Optional[Dict[str, Any]] = None
-        self._log: List[Dict[str, Any]] = []  # last 100 delegation entries
+        self._last_action: Optional[dict[str, Any]] = None
+        self._log: list[dict[str, Any]] = []  # last 100 delegation entries
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _collect(self) -> Dict[str, Any]:
+    def _collect(self) -> dict[str, Any]:
         """Read latest outputs from all swarm agents via SharedState."""
         return {
             "guardian_report": self._state.get("swarm.guardian_report"),
@@ -89,7 +89,7 @@ class OrchestratorAgent(BaseAgent):
         deadline_ts: Optional[float] = None,
         safety_class: str = "normal",
         owner: str = "system",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create and enqueue a new orchestration intent."""
         intent = Intent(
             goal=goal,
@@ -108,7 +108,7 @@ class OrchestratorAgent(BaseAgent):
         )
         return {"intent": intent.to_dict(), **result}
 
-    def list_intents(self) -> List[Dict[str, Any]]:
+    def list_intents(self) -> list[dict[str, Any]]:
         """List active and queued intents."""
         return self._state.list_intents()
 
@@ -120,15 +120,15 @@ class OrchestratorAgent(BaseAgent):
         """Change priority of an existing intent."""
         return self._state.reprioritize_intent(intent_id, priority=priority)
 
-    def checkpoint_specialist(self, specialist: str, checkpoint: Dict[str, Any]) -> None:
+    def checkpoint_specialist(self, specialist: str, checkpoint: dict[str, Any]) -> None:
         """Store resumable specialist state (Scout/Navigator/Manipulator)."""
         self._state.set_specialist_checkpoint(specialist, checkpoint)
 
-    def get_specialist_checkpoint(self, specialist: str) -> Optional[Dict[str, Any]]:
+    def get_specialist_checkpoint(self, specialist: str) -> Optional[dict[str, Any]]:
         """Get latest checkpoint for specialist."""
         return self._state.get_specialist_checkpoint(specialist)
 
-    def _resolve(self, outputs: Dict[str, Any]) -> Dict[str, Any]:
+    def _resolve(self, outputs: dict[str, Any]) -> dict[str, Any]:
         """Merge agent outputs into a single RCAN action."""
         intent_id = self._active_intent_id()
 
@@ -167,7 +167,7 @@ class OrchestratorAgent(BaseAgent):
     # BaseAgent interface
     # ------------------------------------------------------------------
 
-    async def observe(self, sensor_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def observe(self, sensor_data: dict[str, Any]) -> dict[str, Any]:
         """Collect all swarm agent outputs from SharedState."""
         outputs = self._collect()
         # Direct sensor_data can override/supplement SharedState values
@@ -176,7 +176,7 @@ class OrchestratorAgent(BaseAgent):
                 outputs[key] = val
         return outputs
 
-    async def act(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def act(self, context: dict[str, Any]) -> dict[str, Any]:
         """Resolve and return the coordinated RCAN action."""
         self._tick += 1
         action = self._resolve(context)
@@ -194,11 +194,11 @@ class OrchestratorAgent(BaseAgent):
     # Synchronous entry-point for TieredBrain
     # ------------------------------------------------------------------
 
-    async def _async_think(self, sensor_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _async_think(self, sensor_data: dict[str, Any]) -> dict[str, Any]:
         ctx = await self.observe(sensor_data)
         return await self.act(ctx)
 
-    def sync_think(self, sensor_data: Dict[str, Any]) -> Dict[str, Any]:
+    def sync_think(self, sensor_data: dict[str, Any]) -> dict[str, Any]:
         """Synchronous wrapper used by TieredBrain.think().
 
         Runs the async observe→act pipeline in a new event loop when called
@@ -221,7 +221,7 @@ class OrchestratorAgent(BaseAgent):
     # Status
     # ------------------------------------------------------------------
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Snapshot of current orchestrator state for health/telemetry."""
         return {
             "tick": self._tick,

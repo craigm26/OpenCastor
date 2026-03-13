@@ -28,7 +28,7 @@ required capability AND have the path permission to proceed.
 
 import logging
 from enum import Flag, auto
-from typing import Dict, Optional
+from typing import Optional
 
 logger = logging.getLogger("OpenCastor.FS.Perm")
 
@@ -126,8 +126,8 @@ class ACL:
     capabilities.
     """
 
-    def __init__(self, entries: Optional[Dict[str, str]] = None, required_caps: Cap = Cap.NONE):
-        self.entries: Dict[str, int] = {}
+    def __init__(self, entries: Optional[dict[str, str]] = None, required_caps: Cap = Cap.NONE):
+        self.entries: dict[str, int] = {}
         if entries:
             for principal, mode in entries.items():
                 self.entries[principal] = _parse_mode(mode)
@@ -146,7 +146,7 @@ class ACL:
             return bool(bits & _X)
         return False
 
-    def dump(self) -> Dict[str, str]:
+    def dump(self) -> dict[str, str]:
         return {p: _mode_str(m) for p, m in self.entries.items()}
 
 
@@ -161,8 +161,8 @@ class PermissionTable:
     """
 
     def __init__(self):
-        self._acls: Dict[str, ACL] = {}
-        self._caps: Dict[str, Cap] = {}
+        self._acls: dict[str, ACL] = {}
+        self._caps: dict[str, Cap] = {}
         self._install_defaults()
 
     def _install_defaults(self):
@@ -366,7 +366,7 @@ class PermissionTable:
         except Exception:
             return None
 
-    def dump(self) -> Dict:
+    def dump(self) -> dict:
         """Dump the full permission table for inspection."""
         return {
             "acls": {path: acl.dump() for path, acl in sorted(self._acls.items())},

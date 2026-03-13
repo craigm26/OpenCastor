@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import itertools
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.CommandInterpreter")
 
-_INTENT_ROUTING: List[tuple[str, str]] = [
+_INTENT_ROUTING: list[tuple[str, str]] = [
     ("grasp", "manipulator"),
     ("grab", "manipulator"),
     ("pick up", "manipulator"),
@@ -58,20 +58,20 @@ class CommandInterpreter:
 
     def __init__(self):
         self._explain_counter = itertools.count(1)
-        self._decision_records: Dict[str, Dict[str, Any]] = {}
+        self._decision_records: dict[str, dict[str, Any]] = {}
 
     @property
-    def decision_records(self) -> Dict[str, Dict[str, Any]]:
+    def decision_records(self) -> dict[str, dict[str, Any]]:
         return dict(self._decision_records)
 
-    def parse_intent(self, text: str) -> Dict[str, Any]:
+    def parse_intent(self, text: str) -> dict[str, Any]:
         lower = (text or "").lower().strip()
         for keyword, target in _INTENT_ROUTING:
             if keyword in lower:
                 return {"keyword": keyword, "target_agent": target}
         return {"keyword": "unknown", "target_agent": None}
 
-    def _policy_check(self, text: str) -> Dict[str, Any]:
+    def _policy_check(self, text: str) -> dict[str, Any]:
         lower = (text or "").lower()
         blocked = "restricted lab" in lower or (
             "restricted" in lower and any(k in lower for k in ("enter", "go", "move"))
@@ -112,7 +112,7 @@ class CommandInterpreter:
             "alternatives": [],
         }
 
-    def build_plan(self, text: str, intent: Dict[str, Any]) -> List[str]:
+    def build_plan(self, text: str, intent: dict[str, Any]) -> list[str]:
         kw = intent.get("keyword") or "command"
         target = intent.get("target_agent") or "system"
         return [
@@ -121,7 +121,7 @@ class CommandInterpreter:
             "Execute action safely and report outcome.",
         ]
 
-    def interpret(self, text: str, *, dry_run: bool = False) -> Dict[str, Any]:
+    def interpret(self, text: str, *, dry_run: bool = False) -> dict[str, Any]:
         intent = self.parse_intent(text)
         safety = self._policy_check(text)
         plan = self.build_plan(text, intent)

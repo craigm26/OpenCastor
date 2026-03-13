@@ -14,7 +14,7 @@ permission layer.
 import logging
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.FS")
 
@@ -35,13 +35,13 @@ class FSNode:
     __slots__ = ("name", "node_type", "data", "meta", "children", "ctime", "mtime")
 
     def __init__(
-        self, name: str, node_type: str = "file", data: Any = None, meta: Optional[Dict] = None
+        self, name: str, node_type: str = "file", data: Any = None, meta: Optional[dict] = None
     ):
         self.name = name
         self.node_type = node_type
         self.data = data
         self.meta = meta or {}
-        self.children: Dict[str, FSNode] = {} if node_type == "dir" else {}
+        self.children: dict[str, FSNode] = {} if node_type == "dir" else {}
         now = time.time()
         self.ctime = now
         self.mtime = now
@@ -50,7 +50,7 @@ class FSNode:
     def is_dir(self) -> bool:
         return self.node_type == "dir"
 
-    def stat(self) -> Dict[str, Any]:
+    def stat(self) -> dict[str, Any]:
         """Return a stat-like dict for this node."""
         return {
             "name": self.name,
@@ -86,7 +86,7 @@ class Namespace:
     # Path helpers
     # ------------------------------------------------------------------
     @staticmethod
-    def _split(path: str) -> List[str]:
+    def _split(path: str) -> list[str]:
         """Normalise and split an absolute path into components."""
         path = path.strip()
         if not path.startswith("/"):
@@ -94,7 +94,7 @@ class Namespace:
         parts = [p for p in path.split("/") if p]
         return parts
 
-    def _walk(self, parts: List[str], create_parents: bool = False) -> Optional[FSNode]:
+    def _walk(self, parts: list[str], create_parents: bool = False) -> Optional[FSNode]:
         """Walk the tree from root, optionally creating intermediate dirs."""
         node = self._root
         for part in parts:
@@ -117,7 +117,7 @@ class Namespace:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def mkdir(self, path: str, meta: Optional[Dict] = None) -> bool:
+    def mkdir(self, path: str, meta: Optional[dict] = None) -> bool:
         """Create a directory (and parents) at *path*.  Returns True on success."""
         with self._lock:
             parts = self._split(path)
@@ -133,7 +133,7 @@ class Namespace:
                 node.meta.update(meta)
             return True
 
-    def write(self, path: str, data: Any, meta: Optional[Dict] = None) -> bool:
+    def write(self, path: str, data: Any, meta: Optional[dict] = None) -> bool:
         """Write *data* to a file node at *path*, creating parents as needed."""
         with self._lock:
             parts = self._split(path)
@@ -181,7 +181,7 @@ class Namespace:
             node.mtime = time.time()
             return True
 
-    def ls(self, path: str = "/") -> Optional[List[str]]:
+    def ls(self, path: str = "/") -> Optional[list[str]]:
         """List children of a directory node."""
         with self._lock:
             node = self._walk(self._split(path)) if path != "/" else self._root
@@ -189,7 +189,7 @@ class Namespace:
                 return None
             return sorted(node.children.keys())
 
-    def stat(self, path: str) -> Optional[Dict]:
+    def stat(self, path: str) -> Optional[dict]:
         """Return stat info for a node, or ``None`` if not found."""
         with self._lock:
             node = self._walk(self._split(path)) if path != "/" else self._root
@@ -217,7 +217,7 @@ class Namespace:
             del parent.children[name]
             return True
 
-    def walk(self, path: str = "/") -> List[str]:
+    def walk(self, path: str = "/") -> list[str]:
         """Recursively list all paths under *path*."""
         results = []
         with self._lock:
@@ -227,7 +227,7 @@ class Namespace:
             self._walk_recursive(path.rstrip("/") or "/", node, results)
         return results
 
-    def _walk_recursive(self, prefix: str, node: FSNode, results: List[str]):
+    def _walk_recursive(self, prefix: str, node: FSNode, results: list[str]):
         for name, child in node.children.items():
             child_path = f"{prefix}/{name}" if prefix != "/" else f"/{name}"
             results.append(child_path)

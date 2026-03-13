@@ -27,7 +27,7 @@ import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import Deque, Dict, Optional
+from typing import Optional
 
 logger = logging.getLogger("OpenCastor.Channels.Session")
 
@@ -53,7 +53,7 @@ class UserSession:
 
     def __init__(self, user_id: str, max_messages: int = _DEFAULT_MAX_MESSAGES):
         self.user_id = user_id
-        self._messages: Deque[SessionMessage] = deque(maxlen=max_messages)
+        self._messages: deque[SessionMessage] = deque(maxlen=max_messages)
         self._last_activity: float = time.time()
 
     def push(self, role: str, text: str, channel: str, chat_id: str) -> None:
@@ -90,11 +90,11 @@ class ChannelSessionStore:
         self._max_messages = max_messages
         self._lock = Lock()
         # (channel, chat_id) → user_id
-        self._identity_map: Dict[tuple, str] = {}
+        self._identity_map: dict[tuple, str] = {}
         # user_id → UserSession
-        self._sessions: Dict[str, UserSession] = {}
+        self._sessions: dict[str, UserSession] = {}
         # channel → set of user_ids active on that channel
-        self._channel_users: Dict[str, set] = defaultdict(set)
+        self._channel_users: dict[str, set] = defaultdict(set)
 
     def resolve_user(self, channel: str, chat_id: str) -> str:
         """Return the canonical user_id for (channel, chat_id), creating one if needed."""

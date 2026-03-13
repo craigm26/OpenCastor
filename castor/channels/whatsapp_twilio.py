@@ -13,7 +13,8 @@ Setup:
 """
 
 import logging
-from typing import Callable, Optional
+from typing import Optional
+from collections.abc import Callable
 
 from castor.channels.base import BaseChannel
 

@@ -17,7 +17,7 @@ Config example (RCAN YAML):
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Literal, Optional
+from typing import Literal, Optional
 
 
 class GateOutcome(Enum):
@@ -37,8 +37,8 @@ class ConfidenceGate:
 class ConfidenceGateEnforcer:
     """Evaluates confidence gates for given scopes."""
 
-    def __init__(self, gates: List[ConfidenceGate]):
-        self._gates: Dict[str, ConfidenceGate] = {g.scope: g for g in gates}
+    def __init__(self, gates: list[ConfidenceGate]):
+        self._gates: dict[str, ConfidenceGate] = {g.scope: g for g in gates}
 
     def evaluate(self, scope: str, confidence: Optional[float]) -> GateOutcome:
         """Return the gate outcome for *scope* at *confidence*.

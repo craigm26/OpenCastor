@@ -40,7 +40,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.Camera")
 
@@ -213,13 +213,13 @@ class CameraManager:
 
     def __init__(
         self,
-        camera_configs: Optional[List[Dict[str, Any]]] = None,
+        camera_configs: Optional[list[dict[str, Any]]] = None,
         composite_mode: str = "primary_only",
         jpeg_quality: int = 85,
     ) -> None:
         self._mode = composite_mode if composite_mode in COMPOSITE_MODES else "primary_only"
         self._jpeg_quality = jpeg_quality
-        self._sources: Dict[str, Any] = {}
+        self._sources: dict[str, Any] = {}
         self._primary_id: Optional[str] = None
         self._is_open = False
 
@@ -292,7 +292,7 @@ class CameraManager:
         else:
             return self.get_frame(self._primary_id)
 
-    def available_cameras(self) -> List[str]:
+    def available_cameras(self) -> list[str]:
         """Return list of configured camera IDs."""
         return list(self._sources.keys())
 

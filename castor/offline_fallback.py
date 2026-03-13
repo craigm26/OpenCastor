@@ -18,7 +18,8 @@ RCAN config block::
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Optional
+from collections.abc import Callable
 
 from castor.connectivity import ConnectivityMonitor, is_online
 
@@ -48,7 +49,7 @@ class OfflineFallbackManager:
 
     def __init__(
         self,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         primary_provider,  # BaseProvider instance
         channel_send_fn: Optional[Callable[[str], None]] = None,
     ):

@@ -27,14 +27,15 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import IntEnum, IntFlag, auto
-from typing import Callable, Dict, List, Optional
+from typing import Optional
+from collections.abc import Callable
 
 from castor.fs.permissions import Cap
 
 logger = logging.getLogger(__name__)
 
 # Backward compatibility: map deprecated role names to new RCAN spec names
-_DEPRECATED_ROLE_NAMES: Dict[str, str] = {
+_DEPRECATED_ROLE_NAMES: dict[str, str] = {
     "ADMIN": "OWNER",
     "OPERATOR": "LEASEE",
 }
@@ -86,7 +87,7 @@ class Scope(IntFlag):
         return cls.NONE
 
     @classmethod
-    def from_strings(cls, names: List[str]) -> Scope:
+    def from_strings(cls, names: list[str]) -> Scope:
         """Parse a list of scope name strings into a Scope flag set."""
         result = cls.NONE
         mapping = {
@@ -102,7 +103,7 @@ class Scope(IntFlag):
                 result |= flag
         return result
 
-    def to_strings(self) -> List[str]:
+    def to_strings(self) -> list[str]:
         """Convert scope flags to a list of name strings."""
         names = []
         if self & Scope.STATUS:
@@ -119,7 +120,7 @@ class Scope(IntFlag):
 
 
 # Mapping from RCAN scopes to legacy Cap flags
-_SCOPE_TO_CAPS: Dict[Scope, Cap] = {
+_SCOPE_TO_CAPS: dict[Scope, Cap] = {
     Scope.STATUS: Cap.MEMORY_READ,
     Scope.CONTROL: Cap.MOTOR_WRITE | Cap.DEVICE_ACCESS | Cap.ESTOP,
     Scope.CONFIG: Cap.CONFIG_WRITE | Cap.PROVIDER_SWITCH,
@@ -128,7 +129,7 @@ _SCOPE_TO_CAPS: Dict[Scope, Cap] = {
 }
 
 # Mapping from legacy principal names to RCAN roles
-_LEGACY_ROLE_MAP: Dict[str, RCANRole] = {
+_LEGACY_ROLE_MAP: dict[str, RCANRole] = {
     "root": RCANRole.CREATOR,
     "brain": RCANRole.OWNER,
     "api": RCANRole.LEASEE,
@@ -137,7 +138,7 @@ _LEGACY_ROLE_MAP: Dict[str, RCANRole] = {
 }
 
 # Rate limits per role (requests per minute) per RCAN spec
-ROLE_RATE_LIMITS: Dict[RCANRole, int] = {
+ROLE_RATE_LIMITS: dict[RCANRole, int] = {
     RCANRole.GUEST: 10,
     RCANRole.USER: 100,
     RCANRole.LEASEE: 500,
@@ -146,7 +147,7 @@ ROLE_RATE_LIMITS: Dict[RCANRole, int] = {
 }
 
 # Session timeout per role (seconds, 0 = no timeout)
-ROLE_SESSION_TIMEOUT: Dict[RCANRole, int] = {
+ROLE_SESSION_TIMEOUT: dict[RCANRole, int] = {
     RCANRole.GUEST: 300,  # 5 minutes
     RCANRole.USER: 3600,  # 1 hour
     RCANRole.LEASEE: 7200,  # 2 hours
@@ -169,7 +170,7 @@ class RCANPrincipal:
     name: str
     role: RCANRole
     scopes: Scope = field(default=Scope.NONE)
-    fleet: List[str] = field(default_factory=list)
+    fleet: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         if self.scopes == Scope.NONE:

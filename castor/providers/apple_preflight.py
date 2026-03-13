@@ -7,7 +7,7 @@ import re
 import shutil
 import subprocess
 import sys
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 _REASON_ACTIONS = {
     "APPLE_INTELLIGENCE_NOT_ENABLED": [
@@ -58,7 +58,7 @@ def _check_xcode() -> tuple[bool, str]:
         return False, f"xcodebuild check failed: {exc}"
 
 
-def _fallback_stacks_for_device(device_info: Dict[str, Any]) -> list[str]:
+def _fallback_stacks_for_device(device_info: dict[str, Any]) -> list[str]:
     stacks = []
     platform_name = str(device_info.get("platform", "")).lower()
     arch = str(device_info.get("architecture", "")).lower()
@@ -68,7 +68,7 @@ def _fallback_stacks_for_device(device_info: Dict[str, Any]) -> list[str]:
     return stacks
 
 
-def detect_device_info() -> Dict[str, Any]:
+def detect_device_info() -> dict[str, Any]:
     """Detect host properties used by setup stack compatibility checks."""
     platform_name = "macos" if sys.platform == "darwin" else sys.platform
     mac_ver = platform.mac_ver()[0] if platform_name == "macos" else ""
@@ -80,7 +80,7 @@ def detect_device_info() -> Dict[str, Any]:
     }
 
 
-def run_apple_preflight(model_profile_id: Optional[str] = None) -> Dict[str, Any]:
+def run_apple_preflight(model_profile_id: Optional[str] = None) -> dict[str, Any]:
     """Run Apple provider readiness checks and return normalized diagnostics."""
     device = detect_device_info()
     issues: list[str] = []

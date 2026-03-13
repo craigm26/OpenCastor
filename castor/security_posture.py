@@ -12,7 +12,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.Security")
 
@@ -32,7 +32,7 @@ def _coerce_bool(value: Any, *, default: bool = False) -> bool:
     return default
 
 
-def _load_json(path: Path) -> Dict[str, Any]:
+def _load_json(path: Path) -> dict[str, Any]:
     with path.open() as handle:
         payload = json.load(handle)
     if not isinstance(payload, dict):
@@ -40,7 +40,7 @@ def _load_json(path: Path) -> Dict[str, Any]:
     return payload
 
 
-def detect_attestation_status() -> Dict[str, Any]:
+def detect_attestation_status() -> dict[str, Any]:
     """Return normalized runtime security posture data.
 
     Source precedence:
@@ -53,7 +53,7 @@ def detect_attestation_status() -> Dict[str, Any]:
     """
 
     source = "none"
-    payload: Dict[str, Any] = {}
+    payload: dict[str, Any] = {}
 
     configured_path = os.getenv("OPENCASTOR_ATTESTATION_PATH")
     candidate_paths = [configured_path] if configured_path else []
@@ -127,7 +127,7 @@ def detect_attestation_status() -> Dict[str, Any]:
     }
 
 
-def publish_attestation(fs: Any) -> Optional[Dict[str, Any]]:
+def publish_attestation(fs: Any) -> Optional[dict[str, Any]]:
     """Publish attestation state into ``/proc/safety`` nodes for a CastorFS instance."""
 
     if fs is None:

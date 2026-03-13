@@ -23,7 +23,8 @@ import json
 import logging
 import os
 import time
-from typing import Any, Callable, Dict, Iterator, List, Optional
+from typing import Any, Optional
+from collections.abc import Callable, Iterator
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -51,7 +52,7 @@ VISION_MODELS = {
 }
 
 # Built-in model aliases — users can override via config
-DEFAULT_MODEL_ALIASES: Dict[str, str] = {
+DEFAULT_MODEL_ALIASES: dict[str, str] = {
     "vision": "llava:latest",
     "fast": "llama3.2:1b",
     "code": "codellama:latest",
@@ -77,7 +78,7 @@ class OllamaConnectionError(ConnectionError):
 class OllamaModelNotFoundError(ValueError):
     """Raised when a requested model is not available locally."""
 
-    def __init__(self, model: str, available: Optional[List[str]] = None):
+    def __init__(self, model: str, available: Optional[list[str]] = None):
         self.model = model
         self.available = available or []
         avail_str = ", ".join(self.available[:5]) if self.available else "none"
@@ -128,7 +129,7 @@ def _connection_hint(host: str, original: Optional[Exception] = None) -> str:
     return f"Cannot connect to Ollama at {host}. Is Ollama running? Start it with: ollama serve"
 
 
-def _resolve_host(config: Dict[str, Any], profile: Optional[str] = None) -> str:
+def _resolve_host(config: dict[str, Any], profile: Optional[str] = None) -> str:
     """Resolve the Ollama host URL from env, config, or named profile."""
     # Named profile takes precedence if specified
     if profile:
@@ -150,7 +151,7 @@ def _resolve_host(config: Dict[str, Any], profile: Optional[str] = None) -> str:
     return host.rstrip("/")
 
 
-def _resolve_model_alias(model: str, aliases: Dict[str, str]) -> str:
+def _resolve_model_alias(model: str, aliases: dict[str, str]) -> str:
     """Resolve a model alias to its full name."""
     return aliases.get(model, model)
 
@@ -229,19 +230,19 @@ class _ModelCache:
 
     def __init__(self, ttl: float = DEFAULT_MODEL_CACHE_TTL):
         self.ttl = ttl
-        self._models: Optional[List[Dict[str, Any]]] = None
+        self._models: Optional[list[dict[str, Any]]] = None
         self._fetched_at: float = 0.0
 
     @property
     def expired(self) -> bool:
         return self._models is None or (time.time() - self._fetched_at) > self.ttl
 
-    def get(self) -> Optional[List[Dict[str, Any]]]:
+    def get(self) -> Optional[list[dict[str, Any]]]:
         if self.expired:
             return None
         return self._models
 
-    def set(self, models: List[Dict[str, Any]]) -> None:
+    def set(self, models: list[dict[str, Any]]) -> None:
         self._models = models
         self._fetched_at = time.time()
 
@@ -249,7 +250,7 @@ class _ModelCache:
         self._models = None
         self._fetched_at = 0.0
 
-    def model_names(self) -> List[str]:
+    def model_names(self) -> list[str]:
         if self._models is None:
             return []
         return [m["name"] for m in self._models]
@@ -277,7 +278,7 @@ class OllamaProvider(BaseProvider):
         - ``system_prompt``: Custom system prompt (overrides default)
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
 
         # Connection profile
@@ -532,11 +533,11 @@ class OllamaProvider(BaseProvider):
         Yields:
             String chunks of the model's response.
         """
-        messages: List[Dict[str, Any]] = [
+        messages: list[dict[str, Any]] = [
             {"role": "system", "content": self.system_prompt},
         ]
 
-        user_msg: Dict[str, Any] = {"role": "user", "content": instruction}
+        user_msg: dict[str, Any] = {"role": "user", "content": instruction}
         if self.is_vision and image_bytes:
             b64_image = base64.b64encode(image_bytes).decode("utf-8")
             user_msg["images"] = [b64_image]
@@ -566,7 +567,7 @@ class OllamaProvider(BaseProvider):
             except (json.JSONDecodeError, UnicodeDecodeError):
                 continue
 
-    def list_models(self) -> List[Dict[str, Any]]:
+    def list_models(self) -> list[dict[str, Any]]:
         """List models available in the local Ollama instance.
 
         Uses a TTL cache to avoid hitting /api/tags every call.

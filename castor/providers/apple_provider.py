@@ -7,7 +7,8 @@ import logging
 import queue
 import threading
 import time
-from typing import Any, Dict, Iterator
+from typing import Any
+from collections.abc import Iterator
 
 from .apple_preflight import run_apple_preflight
 from .base import BaseProvider, Thought
@@ -20,7 +21,7 @@ APPLE_SDK_INSTALL_CMD = (
 )
 
 
-_PROFILE_DEFAULTS: Dict[str, tuple[str, str]] = {
+_PROFILE_DEFAULTS: dict[str, tuple[str, str]] = {
     "apple-balanced": ("GENERAL", "DEFAULT"),
     "apple-creative": ("GENERAL", "PERMISSIVE_CONTENT_TRANSFORMATIONS"),
     "apple-tagging": ("CONTENT_TAGGING", "DEFAULT"),
@@ -30,7 +31,7 @@ _PROFILE_DEFAULTS: Dict[str, tuple[str, str]] = {
 class AppleProvider(BaseProvider):
     """On-device Apple Foundation Models adapter."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self._sdk = self._load_sdk()
         self._profile_id = self._resolve_profile_id(config)
@@ -47,7 +48,7 @@ class AppleProvider(BaseProvider):
                 f"Apple provider requires apple-fm-sdk. Install with: {APPLE_SDK_INSTALL_CMD}"
             ) from exc
 
-    def _resolve_profile_id(self, config: Dict[str, Any]) -> str:
+    def _resolve_profile_id(self, config: dict[str, Any]) -> str:
         profile = str(
             config.get("apple_profile") or config.get("model") or "apple-balanced"
         ).strip()

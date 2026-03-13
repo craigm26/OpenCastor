@@ -22,7 +22,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Optional
 
 logger = logging.getLogger("OpenCastor.Safety.AntiSubversion")
 
@@ -40,8 +40,8 @@ class ScanVerdict(Enum):
 @dataclass
 class ScanResult:
     verdict: ScanVerdict
-    reasons: List[str] = field(default_factory=list)
-    matched_patterns: List[str] = field(default_factory=list)
+    reasons: list[str] = field(default_factory=list)
+    matched_patterns: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -55,7 +55,7 @@ class ScanResult:
 # Patterns use word boundaries and case-insensitive matching to
 # minimise false positives on legitimate robot commands.
 
-_INJECTION_PATTERNS: List[tuple] = []
+_INJECTION_PATTERNS: list[tuple] = []
 
 
 def _p(name: str, pattern: str, verdict: ScanVerdict = ScanVerdict.BLOCK):
@@ -112,7 +112,7 @@ _p("separator_attack", r"[-=]{20,}\s*(?:system|instructions|new\s+prompt)", Scan
 # These patterns produce false positives on binary/image data and must
 # only be used when scanning freeform human-typed text.
 # =====================================================================
-_TEXT_ONLY_PATTERNS: List[tuple] = []
+_TEXT_ONLY_PATTERNS: list[tuple] = []
 
 
 def _tp(name: str, pattern: str, verdict: ScanVerdict = ScanVerdict.BLOCK):
@@ -128,7 +128,7 @@ _tp("base64_payload", r"[A-Za-z0-9+/]{80,}={0,2}")
 # =====================================================================
 # Forbidden filesystem scopes
 # =====================================================================
-FORBIDDEN_PATH_PATTERNS: List[re.Pattern] = [
+FORBIDDEN_PATH_PATTERNS: list[re.Pattern] = [
     re.compile(r"/etc/safety\b"),
     re.compile(r"/var/log/safety\b"),
     re.compile(r"/etc/shadow\b"),
@@ -138,9 +138,9 @@ FORBIDDEN_PATH_PATTERNS: List[re.Pattern] = [
 ]
 
 
-def _check_forbidden_paths(text: str) -> List[str]:
+def _check_forbidden_paths(text: str) -> list[str]:
     """Return list of forbidden path pattern names found in *text*."""
-    hits: List[str] = []
+    hits: list[str] = []
     for pat in FORBIDDEN_PATH_PATTERNS:
         if pat.search(text):
             hits.append(f"forbidden_path:{pat.pattern}")
@@ -155,8 +155,8 @@ _ANOMALY_MULTIPLIER = 3.0  # flag if current rate > 3× baseline
 _MIN_BASELINE_REQUESTS = 5  # need at least this many to compute baseline
 
 _rate_lock = threading.Lock()
-_request_history: Dict[str, List[float]] = {}  # principal → timestamps
-_baseline_rates: Dict[str, float] = {}  # principal → avg requests per window
+_request_history: dict[str, list[float]] = {}  # principal → timestamps
+_baseline_rates: dict[str, float] = {}  # principal → avg requests per window
 
 
 def _record_and_check_anomaly(principal: str) -> Optional[str]:
@@ -209,8 +209,8 @@ def scan_input(text: str, principal: str = "unknown") -> ScanResult:
     if not text:
         return ScanResult(verdict=ScanVerdict.PASS)
 
-    reasons: List[str] = []
-    matched: List[str] = []
+    reasons: list[str] = []
+    matched: list[str] = []
     worst = ScanVerdict.PASS
 
     # --- Prompt injection patterns ---

@@ -36,7 +36,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import requests
 
@@ -48,7 +48,7 @@ DEFAULT_HUB_URL = "https://raw.githubusercontent.com/craigm26/OpenCastor/main/co
 _REPO_ROOT = Path(__file__).parent.parent.parent
 
 
-def fetch_index(hub_url: Optional[str] = None) -> Dict[str, Any]:
+def fetch_index(hub_url: Optional[str] = None) -> dict[str, Any]:
     """Fetch and return the hub index JSON.
 
     Args:
@@ -78,7 +78,7 @@ def fetch_index(hub_url: Optional[str] = None) -> Dict[str, Any]:
         raise RuntimeError(f"Failed to fetch hub index from {url}: {exc}") from exc
 
 
-def _build_table(items: List[Dict[str, Any]], item_type: str) -> None:
+def _build_table(items: list[dict[str, Any]], item_type: str) -> None:
     """Print a Rich table of hub items."""
     try:
         from rich.console import Console
@@ -159,7 +159,7 @@ def cmd_hub_search(args) -> None:
 
     q = query.lower()
 
-    def _matches(entry: Dict[str, Any]) -> bool:
+    def _matches(entry: dict[str, Any]) -> bool:
         name_match = q in entry.get("name", "").lower()
         tag_match = any(q in t.lower() for t in entry.get("tags", []))
         desc_match = q in entry.get("description", "").lower()
@@ -310,13 +310,13 @@ _PLUGIN_ENTRY_POINT_GROUP = "opencastor.plugins"
 _PYPI_SEARCH_URL = "https://pypi.org/search/?q=opencastor-plugin&o=-created"
 
 
-def _discover_installed_plugins() -> List[Dict[str, Any]]:
+def _discover_installed_plugins() -> list[dict[str, Any]]:
     """Discover installed OpenCastor plugins via Python entry points.
 
     Returns:
         List of plugin metadata dicts from ``opencastor.plugins`` entry points.
     """
-    plugins: List[Dict[str, Any]] = []
+    plugins: list[dict[str, Any]] = []
     try:
         from importlib.metadata import entry_points
 
@@ -324,7 +324,7 @@ def _discover_installed_plugins() -> List[Dict[str, Any]]:
         for ep in eps:
             try:
                 dist = ep.dist
-                meta: Dict[str, Any] = {
+                meta: dict[str, Any] = {
                     "name": dist.name if dist else ep.name,
                     "version": dist.version if dist else "unknown",
                     "entry_point": ep.name,

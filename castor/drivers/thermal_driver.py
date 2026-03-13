@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import random
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.ThermalDriver")
 
@@ -41,7 +41,7 @@ class ThermalDriver:
       GET /api/thermal/hotspot — {row, col, index, temp_c}
     """
 
-    def __init__(self, config: Dict[str, Any] | None = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         cfg = config or {}
 
         # ── Resolve bus ───────────────────────────────────────────────────────
@@ -90,7 +90,7 @@ class ThermalDriver:
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
-    def _read_hardware(self) -> List[float]:
+    def _read_hardware(self) -> list[float]:
         """Read 64 pixel temperatures from AMG8833 via I2C."""
         # AMG8833 stores pixel data in registers 0x80–0xFF (128 bytes, 2 per pixel).
         # i2c_rdwr allows block reads beyond the 32-byte smbus limit.
@@ -99,7 +99,7 @@ class ThermalDriver:
         self._bus.i2c_rdwr(write_msg, read_msg)
         data = list(read_msg)
 
-        pixels: List[float] = []
+        pixels: list[float] = []
         for i in range(_AMG8833_N_PIXELS):
             raw = int.from_bytes(data[i * 2 : i * 2 + 2], "little", signed=False)
             temp_c = (raw & 0xFFF) * 0.25
@@ -108,13 +108,13 @@ class ThermalDriver:
             pixels.append(round(temp_c, 2))
         return pixels
 
-    def _mock_capture(self) -> List[float]:
+    def _mock_capture(self) -> list[float]:
         """Return 64 random floats uniformly distributed between 20–30 °C."""
         return [round(random.uniform(20.0, 30.0), 2) for _ in range(_AMG8833_N_PIXELS)]
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    def capture(self) -> List[float]:
+    def capture(self) -> list[float]:
         """Read the 8x8 thermal pixel array.
 
         Returns a flat list of 64 floats in °C, row-major order
@@ -138,7 +138,7 @@ class ThermalDriver:
                 # Degrade gracefully: return mock data rather than raising
                 return self._mock_capture()
 
-    def get_hotspot(self) -> Dict[str, Any]:
+    def get_hotspot(self) -> dict[str, Any]:
         """Find the hottest pixel in the current frame.
 
         Returns:
@@ -212,7 +212,7 @@ class ThermalDriver:
             pass
         return b""
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> dict[str, Any]:
         """Return driver health information.
 
         Returns:
@@ -242,7 +242,7 @@ class ThermalDriver:
 # ── Singleton factory ─────────────────────────────────────────────────────────
 
 
-def get_thermal(config: Dict[str, Any] | None = None) -> ThermalDriver:
+def get_thermal(config: dict[str, Any] | None = None) -> ThermalDriver:
     """Return the process-wide ThermalDriver singleton."""
     global _singleton
     with _singleton_lock:

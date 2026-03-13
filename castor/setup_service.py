@@ -14,7 +14,7 @@ from collections import Counter
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -49,7 +49,7 @@ SETUP_SESSION_DIR = Path.home() / ".castor" / "setup_sessions"
 SETUP_METRICS_DB = Path.home() / ".castor" / "setup.db"
 SETUP_METRICS_TABLE = "setup_metrics_v1"
 
-REASON_ACTIONS: Dict[str, list[str]] = {
+REASON_ACTIONS: dict[str, list[str]] = {
     "READY": [],
     "SDK_MISSING": [
         "Install the required SDK dependency for the selected stack.",
@@ -118,8 +118,8 @@ class SetupSession:
     status: str
     created_at: str
     updated_at: str
-    device: Dict[str, Any]
-    selections: Dict[str, Any] = field(default_factory=dict)
+    device: dict[str, Any]
+    selections: dict[str, Any] = field(default_factory=dict)
     timeline: list[dict[str, Any]] = field(default_factory=list)
     checks: list[dict[str, Any]] = field(default_factory=list)
 
@@ -137,14 +137,14 @@ class SetupMetrics:
     median_time_to_remediation_ms: float
     fallback_success_rate: float
     setup_abandonment_rate: float
-    top_reason_codes: Dict[str, int]
+    top_reason_codes: dict[str, int]
     generated_at: str
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
-_REMEDIATION_REGISTRY: Dict[str, RemediationAction] = {
+_REMEDIATION_REGISTRY: dict[str, RemediationAction] = {
     "install_apple_sdk": RemediationAction(
         id="install_apple_sdk",
         action_type="install_dependency",
@@ -237,7 +237,7 @@ def get_setup_catalog(
     *,
     config: Optional[dict[str, Any]] = None,
     wizard_context: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Return setup choices used by both CLI and web setup flows."""
     device = detect_device_info()
     providers = get_provider_specs(include_hidden=False)
@@ -302,7 +302,7 @@ def start_setup_session(
     *,
     robot_name: Optional[str] = None,
     wizard_context: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Create a new setup session persisted under ~/.castor/setup_sessions."""
     session = SetupSession(
         session_id=str(uuid.uuid4()),
@@ -322,19 +322,19 @@ def start_setup_session(
     return _save_session(session).to_dict()
 
 
-def get_setup_session(session_id: str) -> Dict[str, Any]:
+def get_setup_session(session_id: str) -> dict[str, Any]:
     """Return an existing setup session by id."""
     return _load_session(session_id).to_dict()
 
 
-def resume_setup_session(session_id: str) -> Dict[str, Any]:
+def resume_setup_session(session_id: str) -> dict[str, Any]:
     """Resume an existing setup session."""
     session = _load_session(session_id)
     _record_timeline(session, "session_resumed")
     return _save_session(session).to_dict()
 
 
-def find_resumable_setup_session(max_age_hours: int = 24) -> Optional[Dict[str, Any]]:
+def find_resumable_setup_session(max_age_hours: int = 24) -> Optional[dict[str, Any]]:
     """Return the latest in-progress setup session if one is available."""
     if not SETUP_SESSION_DIR.exists():
         return None
@@ -353,7 +353,7 @@ def find_resumable_setup_session(max_age_hours: int = 24) -> Optional[Dict[str, 
     return None
 
 
-def select_setup_session(session_id: str, stage: str, values: Dict[str, Any]) -> Dict[str, Any]:
+def select_setup_session(session_id: str, stage: str, values: dict[str, Any]) -> dict[str, Any]:
     """Update session selections and move the active stage."""
     if stage not in SETUP_STAGE_ORDER:
         raise ValueError(f"Unknown setup stage: {stage}")
@@ -370,7 +370,7 @@ def finalize_setup_session(
     success: bool,
     reason_code: str = "READY",
     config: Optional[dict[str, Any]] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Mark session completed/failed and emit setup metrics row."""
     session = _load_session(session_id)
     session.stage = "save"
@@ -416,7 +416,7 @@ def _install_apple_sdk() -> tuple[bool, str]:
         return False, str(exc)
 
 
-def _stack_fallbacks(stack_id: Optional[str], device: Dict[str, Any]) -> list[str]:
+def _stack_fallbacks(stack_id: Optional[str], device: dict[str, Any]) -> list[str]:
     if not stack_id:
         return []
     stacks = {stack.id: stack for stack in get_stack_profiles(device)}
@@ -451,7 +451,7 @@ def _preflight_check(
     )
 
 
-def _apple_stack_preflight(model_profile: Optional[str]) -> Dict[str, Any]:
+def _apple_stack_preflight(model_profile: Optional[str]) -> dict[str, Any]:
     raw = run_apple_preflight(model_profile_id=model_profile)
     reason_code = str(raw.get("reason") or "UNKNOWN")
     checks: list[PreflightCheck] = []
@@ -513,7 +513,7 @@ def _apple_stack_preflight(model_profile: Optional[str]) -> Dict[str, Any]:
     }
 
 
-def _mlx_stack_preflight(model_profile: Optional[str]) -> Dict[str, Any]:
+def _mlx_stack_preflight(model_profile: Optional[str]) -> dict[str, Any]:
     device = detect_device_info()
     checks: list[PreflightCheck] = []
 
@@ -608,7 +608,7 @@ def _mlx_stack_preflight(model_profile: Optional[str]) -> Dict[str, Any]:
     }
 
 
-def _ollama_stack_preflight(model_profile: Optional[str]) -> Dict[str, Any]:
+def _ollama_stack_preflight(model_profile: Optional[str]) -> dict[str, Any]:
     device = detect_device_info()
     checks: list[PreflightCheck] = []
 
@@ -684,7 +684,7 @@ def run_preflight(
     *,
     stack_id: Optional[str] = None,
     session_id: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run provider/stack setup preflight checks.
 
     Returns the old fields (`ok`, `reason`, `issues`, `actions`, `fallback_stacks`)
@@ -738,7 +738,7 @@ def run_preflight(
                 adapter = _apple_stack_preflight(model_profile)
 
     checks_payload = [check.to_dict() for check in sorted(adapter["checks"], key=lambda c: c.id)]
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "ok": bool(adapter["ok"]),
         "provider": provider_name,
         "stack_id": stack or None,
@@ -780,8 +780,8 @@ def run_remediation(
     *,
     consent: bool,
     session_id: Optional[str] = None,
-    context: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    context: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
     """Execute one remediation action from the registry."""
     action = _REMEDIATION_REGISTRY.get(remediation_id)
     if not action:
@@ -796,7 +796,7 @@ def run_remediation(
             "message": "Explicit consent is required before executing this remediation.",
         }
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "ok": True,
         "remediation_id": remediation_id,
         "action_type": action.action_type,
@@ -839,7 +839,7 @@ def run_remediation(
     return result
 
 
-def _build_agent_config(provider_key: str, model_id: str) -> Dict[str, Any]:
+def _build_agent_config(provider_key: str, model_id: str) -> dict[str, Any]:
     auth_map = get_provider_auth_map()
     info = auth_map.get(provider_key)
     if info is None:
@@ -862,9 +862,9 @@ def _build_agent_config(provider_key: str, model_id: str) -> Dict[str, Any]:
 def generate_preset_config(
     preset_name: str,
     robot_name: str,
-    agent_config: Dict[str, Any],
+    agent_config: dict[str, Any],
     secondary_models: Optional[list[dict[str, Any]]] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Generate RCAN config from a preset and setup selections."""
     preset_path = (
         Path(__file__).resolve().parent.parent / "config" / "presets" / f"{preset_name}.rcan.yaml"
@@ -919,7 +919,7 @@ def generate_setup_config(
     model: str,
     preset: str,
     secondary_models: Optional[list[dict[str, Any]]] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Build setup output payload from setup selections."""
     agent_config = _build_agent_config(provider, model)
     config = generate_preset_config(
@@ -946,7 +946,7 @@ def verify_setup_config(
     api_key: Optional[str] = None,
     allow_warnings: bool = False,
     session_id: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Dry-run setup verification before writing config to disk."""
     payload = generate_setup_config(
         robot_name=robot_name,
@@ -1090,7 +1090,7 @@ def verify_setup_config(
     return result
 
 
-def save_env_vars(env_vars: Dict[str, str]) -> None:
+def save_env_vars(env_vars: dict[str, str]) -> None:
     """Persist env vars to local .env file, upserting keys."""
     env_path = Path(".env")
     existing = env_path.read_text() if env_path.exists() else ""
@@ -1109,7 +1109,7 @@ def save_env_vars(env_vars: Dict[str, str]) -> None:
     env_path.write_text("\n".join(lines) + "\n")
 
 
-def save_config_file(config: Dict[str, Any], filename: str) -> str:
+def save_config_file(config: dict[str, Any], filename: str) -> str:
     """Write generated RCAN config to disk."""
     Path(filename).write_text(yaml.dump(config, sort_keys=False, default_flow_style=False))
     return filename
@@ -1158,7 +1158,7 @@ def record_setup_metric(
     time_to_remediation_ms: Optional[float],
     used_fallback: bool,
     config: Optional[dict[str, Any]] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Persist one anonymized local setup metric row."""
     if not _telemetry_enabled(config):
         return {"ok": False, "skipped": "telemetry_disabled"}
@@ -1187,7 +1187,7 @@ def record_setup_metric(
     return {"ok": True}
 
 
-def get_setup_metrics(config: Optional[dict[str, Any]] = None) -> Dict[str, Any]:
+def get_setup_metrics(config: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     """Return aggregated setup reliability metrics."""
     enabled = _telemetry_enabled(config)
     if not enabled:
@@ -1230,7 +1230,7 @@ def get_setup_metrics(config: Optional[dict[str, Any]] = None) -> Dict[str, Any]
     fallback_total = sum(1 for row in rows if int(row[4]) == 1)
     fallback_success = sum(1 for row in rows if int(row[4]) == 1 and row[0] == "success")
 
-    reason_counts: Dict[str, int] = dict(Counter(str(row[1]) for row in rows).most_common(10))
+    reason_counts: dict[str, int] = dict(Counter(str(row[1]) for row in rows).most_common(10))
     metrics = SetupMetrics(
         telemetry_enabled=True,
         total_runs=total,

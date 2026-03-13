@@ -19,7 +19,7 @@ import logging
 import os
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from castor.fs.namespace import Namespace
 from castor.fs.permissions import Cap, PermissionTable
@@ -85,7 +85,7 @@ class SafetyLayer:
         self,
         ns: Namespace,
         perms: PermissionTable,
-        limits: Optional[Dict] = None,
+        limits: Optional[dict] = None,
         capability_broker: Optional[CapabilityBroker] = None,
     ):
         self.ns = ns
@@ -95,15 +95,15 @@ class SafetyLayer:
         self.capability_broker = capability_broker
 
         # Rate limiting state
-        self._motor_timestamps: List[float] = []
+        self._motor_timestamps: list[float] = []
 
         # Per-role API rate limiting (RCAN Safety Invariant 5)
-        self._role_request_timestamps: Dict[str, List[float]] = {}
-        self._session_starts: Dict[str, float] = {}
+        self._role_request_timestamps: dict[str, list[float]] = {}
+        self._session_starts: dict[str, float] = {}
 
         # Violation tracking per principal
-        self._violations: Dict[str, int] = {}
-        self._lockouts: Dict[str, float] = {}
+        self._violations: dict[str, int] = {}
+        self._lockouts: dict[str, float] = {}
 
         # Emergency stop flag
         self._estop = False
@@ -365,7 +365,7 @@ class SafetyLayer:
         return self.ns.read(path)
 
     def write(
-        self, path: str, data: Any, principal: str = "root", meta: Optional[Dict] = None
+        self, path: str, data: Any, principal: str = "root", meta: Optional[dict] = None
     ) -> bool:
         """Write to a file node, checking permissions and safety."""
         if self._estop and path.startswith("/dev/motor"):
@@ -515,7 +515,7 @@ class SafetyLayer:
         self._audit_access(principal, path, "w", True)
         return self.ns.append(path, entry)
 
-    def ls(self, path: str = "/", principal: str = "root") -> Optional[List[str]]:
+    def ls(self, path: str = "/", principal: str = "root") -> Optional[list[str]]:
         """List directory contents, checking read permission."""
         if self._is_locked_out(principal):
             return None
@@ -529,7 +529,7 @@ class SafetyLayer:
             return None
         return self.ns.ls(path)
 
-    def stat(self, path: str, principal: str = "root") -> Optional[Dict]:
+    def stat(self, path: str, principal: str = "root") -> Optional[dict]:
         """Stat a node, checking read permission."""
         if self._is_locked_out(principal):
             return None
@@ -543,7 +543,7 @@ class SafetyLayer:
             return None
         return self.ns.stat(path)
 
-    def mkdir(self, path: str, principal: str = "root", meta: Optional[Dict] = None) -> bool:
+    def mkdir(self, path: str, principal: str = "root", meta: Optional[dict] = None) -> bool:
         """Create a directory, checking write permission on parent."""
         if self._is_locked_out(principal):
             return False

@@ -26,7 +26,7 @@ import os
 import secrets
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.Workspace")
 
@@ -54,13 +54,13 @@ class WorkspaceManager:
         self._dir = store_dir
         self._dir.mkdir(parents=True, exist_ok=True)
         self._index_path = self._dir / "index.json"
-        self._workspaces: Dict[str, Dict[str, Any]] = self._load()
+        self._workspaces: dict[str, dict[str, Any]] = self._load()
 
     # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------
 
-    def _load(self) -> Dict[str, Dict[str, Any]]:
+    def _load(self) -> dict[str, dict[str, Any]]:
         if self._index_path.exists():
             try:
                 with open(self._index_path) as f:
@@ -85,7 +85,7 @@ class WorkspaceManager:
         name: str,
         admin_email: str = "",
         rcan_path: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a new isolated workspace.
 
         Args:
@@ -109,7 +109,7 @@ class WorkspaceManager:
         token_raw = secrets.token_hex(32)
         token_hash = hashlib.sha256(token_raw.encode()).hexdigest()
 
-        entry: Dict[str, Any] = {
+        entry: dict[str, Any] = {
             "id": ws_id,
             "name": name,
             "admin_email": admin_email,
@@ -129,14 +129,14 @@ class WorkspaceManager:
         result["token"] = token_raw
         return result
 
-    def get(self, ws_id: str) -> Optional[Dict[str, Any]]:
+    def get(self, ws_id: str) -> Optional[dict[str, Any]]:
         """Return workspace metadata (token_hash excluded)."""
         entry = self._workspaces.get(ws_id)
         if entry is None:
             return None
         return {k: v for k, v in entry.items() if k != "token_hash"}
 
-    def list(self) -> List[Dict[str, Any]]:
+    def list(self) -> list[dict[str, Any]]:
         """Return all workspaces (token_hash excluded), sorted by creation."""
         result = [
             {k: v for k, v in ws.items() if k != "token_hash"} for ws in self._workspaces.values()
@@ -200,7 +200,7 @@ class WorkspaceManager:
         else:
             return secrets.token_hex(32)
 
-    def status(self, ws_id: str) -> Dict[str, Any]:
+    def status(self, ws_id: str) -> dict[str, Any]:
         """Return health/status for a workspace."""
         entry = self._workspaces.get(ws_id)
         if not entry:

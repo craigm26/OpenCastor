@@ -19,28 +19,28 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal, Optional
 
 logger = logging.getLogger("OpenCastor.HiTLGate")
 
 
 @dataclass
 class HiTLGate:
-    action_types: List[str]
+    action_types: list[str]
     require_auth: bool = True
     auth_timeout_ms: int = 30000
     on_timeout: Literal["block", "allow"] = "block"
-    notify: List[str] = field(default_factory=list)
+    notify: list[str] = field(default_factory=list)
 
 
 class HiTLGateManager:
     """Manages HiTL gate lifecycle: pending queue, auth futures, notifications."""
 
-    def __init__(self, gates: List[HiTLGate], audit: Any = None):
+    def __init__(self, gates: list[HiTLGate], audit: Any = None):
         self._gates = gates
         self._audit = audit
         # pending_id -> asyncio.Future[str] ("approve"|"deny")
-        self._pending: Dict[str, asyncio.Future] = {}
+        self._pending: dict[str, asyncio.Future] = {}
 
     def _match_gate(self, action_type: str) -> Optional[HiTLGate]:
         for gate in self._gates:
@@ -67,7 +67,7 @@ class HiTLGateManager:
         return await future
 
     async def _notify(
-        self, channels: List[str], pending_id: str, action: dict, thought: Any
+        self, channels: list[str], pending_id: str, action: dict, thought: Any
     ) -> None:
         """Emit notification to configured channels (best-effort)."""
         action_type = action.get("type", "unknown")

@@ -23,7 +23,7 @@ import logging
 import time
 import uuid
 from collections import deque
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any, Optional
 
 import yaml
 
@@ -32,7 +32,7 @@ logger = logging.getLogger("OpenCastor.ConfigHistory")
 _MAX_VERSIONS = 20
 
 
-def _config_summary(config: Dict[str, Any]) -> Dict[str, Any]:
+def _config_summary(config: dict[str, Any]) -> dict[str, Any]:
     """Extract a brief summary of a config for display."""
     agent = config.get("agent", {}) or {}
     meta = config.get("metadata", {}) or {}
@@ -53,7 +53,7 @@ class ConfigHistoryManager:
     """
 
     def __init__(self, max_versions: int = _MAX_VERSIONS):
-        self._versions: Deque[Dict[str, Any]] = deque(maxlen=max_versions)
+        self._versions: deque[dict[str, Any]] = deque(maxlen=max_versions)
 
     # ------------------------------------------------------------------
     # Recording
@@ -61,7 +61,7 @@ class ConfigHistoryManager:
 
     def record(
         self,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         config_path: str = "robot.rcan.yaml",
         label: str = "",
     ) -> str:
@@ -76,7 +76,7 @@ class ConfigHistoryManager:
             The version_id string.
         """
         version_id = f"v{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
-        entry: Dict[str, Any] = {
+        entry: dict[str, Any] = {
             "version_id": version_id,
             "timestamp": time.time(),
             "timestamp_iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -93,7 +93,7 @@ class ConfigHistoryManager:
     # Querying
     # ------------------------------------------------------------------
 
-    def list(self) -> List[Dict[str, Any]]:
+    def list(self) -> list[dict[str, Any]]:
         """Return version summaries (newest first, config excluded)."""
         result = []
         for entry in reversed(list(self._versions)):
@@ -101,7 +101,7 @@ class ConfigHistoryManager:
             result.append(d)
         return result
 
-    def get(self, version_id: str) -> Optional[Dict[str, Any]]:
+    def get(self, version_id: str) -> Optional[dict[str, Any]]:
         """Return the full version entry (including config) for *version_id*."""
         for entry in self._versions:
             if entry["version_id"] == version_id:
@@ -141,7 +141,7 @@ class ConfigHistoryManager:
         self,
         version_id: str,
         config_path: str = "robot.rcan.yaml",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Restore a config version by writing it back to disk.
 
         Args:

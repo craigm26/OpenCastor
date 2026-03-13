@@ -10,12 +10,12 @@ layered approach inspired by OpenClaw's auth-profiles pattern:
 
 import logging
 import os
-from typing import Dict, Optional
+from typing import Optional
 
 logger = logging.getLogger("OpenCastor.Auth")
 
 # Map of provider name -> (env var name, config key)
-PROVIDER_AUTH_MAP: Dict[str, tuple] = {
+PROVIDER_AUTH_MAP: dict[str, tuple] = {
     "google": ("GOOGLE_API_KEY", "api_key"),
     "openai": ("OPENAI_API_KEY", "api_key"),
     "anthropic": ("ANTHROPIC_API_KEY", "api_key"),
@@ -33,7 +33,7 @@ PROVIDER_AUTH_MAP: Dict[str, tuple] = {
 }
 
 # Map of channel name -> list of (env var, config key) tuples
-CHANNEL_AUTH_MAP: Dict[str, list] = {
+CHANNEL_AUTH_MAP: dict[str, list] = {
     "whatsapp": [],  # QR code auth -- no env vars needed
     "whatsapp_twilio": [
         ("TWILIO_ACCOUNT_SID", "account_sid"),
@@ -99,7 +99,7 @@ def load_dotenv_if_available():
         pass
 
 
-def resolve_provider_key(provider: str, config: Optional[Dict] = None) -> Optional[str]:
+def resolve_provider_key(provider: str, config: Optional[dict] = None) -> Optional[str]:
     """
     Resolve an API key for the given provider.
 
@@ -130,7 +130,7 @@ def resolve_provider_key(provider: str, config: Optional[Dict] = None) -> Option
     return None
 
 
-def resolve_channel_credentials(channel: str, config: Optional[Dict] = None) -> Dict[str, str]:
+def resolve_channel_credentials(channel: str, config: Optional[dict] = None) -> dict[str, str]:
     """
     Resolve all credentials for the given messaging channel.
 
@@ -150,7 +150,7 @@ def resolve_channel_credentials(channel: str, config: Optional[Dict] = None) -> 
     return credentials
 
 
-def check_provider_ready(provider: str, config: Optional[Dict] = None) -> bool:
+def check_provider_ready(provider: str, config: Optional[dict] = None) -> bool:
     """Check whether the given provider has credentials available."""
     provider_name = provider.lower()
 
@@ -187,7 +187,7 @@ def check_provider_ready(provider: str, config: Optional[Dict] = None) -> bool:
     return resolve_provider_key(provider, config) is not None
 
 
-def check_channel_ready(channel: str, config: Optional[Dict] = None) -> bool:
+def check_channel_ready(channel: str, config: Optional[dict] = None) -> bool:
     """Check whether the given channel has all required credentials.
 
     Channels with no required credentials (e.g. QR-code-based WhatsApp)
@@ -202,12 +202,12 @@ def check_channel_ready(channel: str, config: Optional[Dict] = None) -> bool:
     return len(creds) == len(required)
 
 
-def list_available_providers(config: Optional[Dict] = None) -> Dict[str, bool]:
+def list_available_providers(config: Optional[dict] = None) -> dict[str, bool]:
     """Return a map of provider -> ready status for all known providers."""
     return {name: check_provider_ready(name, config) for name in PROVIDER_AUTH_MAP}
 
 
-def list_available_channels(config: Optional[Dict] = None) -> Dict[str, bool]:
+def list_available_channels(config: Optional[dict] = None) -> dict[str, bool]:
     """Return a map of channel -> ready status for all known channels."""
     return {name: check_channel_ready(name, config) for name in CHANNEL_AUTH_MAP}
 

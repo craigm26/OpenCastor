@@ -21,11 +21,11 @@ import datetime as _dt
 import threading
 import time
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 __all__ = ["MetricsRegistry", "get_registry", "ChannelInterArrivalTracker", "RequestRateTracker"]
 
-_LabelKey = Tuple[str, ...]  # sorted label kv pairs as tuple
+_LabelKey = tuple[str, ...]  # sorted label kv pairs as tuple
 
 
 class Counter:
@@ -35,7 +35,7 @@ class Counter:
         self._name = name
         self._help = help_text
         self._label_names = label_names
-        self._values: Dict[_LabelKey, float] = defaultdict(float)
+        self._values: dict[_LabelKey, float] = defaultdict(float)
         self._lock = threading.Lock()
 
     def inc(self, amount: float = 1.0, **labels) -> None:
@@ -68,7 +68,7 @@ class Gauge:
     def __init__(self, name: str, help_text: str):
         self._name = name
         self._help = help_text
-        self._values: Dict[_LabelKey, float] = {}
+        self._values: dict[_LabelKey, float] = {}
         self._lock = threading.Lock()
 
     def set(self, value: float, **labels) -> None:
@@ -99,7 +99,7 @@ class Histogram:
         self._name = name
         self._help = help_text
         self._buckets = sorted(buckets)
-        self._counts: Dict[float, float] = defaultdict(float)
+        self._counts: dict[float, float] = defaultdict(float)
         self._sum = 0.0
         self._total = 0.0
         self._lock = threading.Lock()
@@ -137,14 +137,14 @@ class ProviderLatencyTracker:
     gauges per provider.
     """
 
-    _DEFAULT_BUCKETS: Tuple[float, ...] = (50, 100, 200, 500, 1000, 2000, 5000, 10000)  # ms
+    _DEFAULT_BUCKETS: tuple[float, ...] = (50, 100, 200, 500, 1000, 2000, 5000, 10000)  # ms
     # Maximum raw samples kept per provider (prevents unbounded growth)
     _MAX_SAMPLES: int = 10_000
 
-    def __init__(self, buckets: Tuple[float, ...] = _DEFAULT_BUCKETS) -> None:
-        self._buckets: Tuple[float, ...] = tuple(sorted(buckets))
+    def __init__(self, buckets: tuple[float, ...] = _DEFAULT_BUCKETS) -> None:
+        self._buckets: tuple[float, ...] = tuple(sorted(buckets))
         # provider_name → {counts, sum, total, samples}
-        self._data: Dict[str, Dict] = {}
+        self._data: dict[str, dict] = {}
         self._lock = threading.Lock()
 
     def observe(self, provider: str, value: float) -> None:
@@ -201,7 +201,7 @@ class ProviderLatencyTracker:
                 return float(samples[-1])
             return float(samples[lo] * (1.0 - frac) + samples[hi] * frac)
 
-    def providers(self) -> List[str]:
+    def providers(self) -> list[str]:
         """Return sorted list of provider names that have been observed."""
         with self._lock:
             return sorted(self._data.keys(), key=str)
@@ -213,7 +213,7 @@ class ProviderLatencyTracker:
         ``opencastor_provider_latency_p95_ms``, and
         ``opencastor_provider_latency_p99_ms`` — one time-series per provider.
         """
-        lines: List[str] = []
+        lines: list[str] = []
         for pct_label, pct_val in (("p50", 50.0), ("p95", 95.0), ("p99", 99.0)):
             metric_name = f"opencastor_provider_latency_{pct_label}_ms"
             lines.append(
@@ -258,15 +258,15 @@ class ChannelInterArrivalTracker:
     Stored separately so histograms carry the correct ``channel`` label.
     """
 
-    _DEFAULT_BUCKETS: Tuple[float, ...] = (10, 50, 100, 250, 500, 1000, 2000, 5000)  # ms
+    _DEFAULT_BUCKETS: tuple[float, ...] = (10, 50, 100, 250, 500, 1000, 2000, 5000)  # ms
 
     _MAX_SAMPLES: int = 1000
 
-    def __init__(self, buckets: Tuple[float, ...] = _DEFAULT_BUCKETS) -> None:
-        self._buckets: Tuple[float, ...] = tuple(sorted(buckets))
+    def __init__(self, buckets: tuple[float, ...] = _DEFAULT_BUCKETS) -> None:
+        self._buckets: tuple[float, ...] = tuple(sorted(buckets))
         # channel_name → {counts, sum, total, samples}
-        self._data: Dict[str, Dict] = {}
-        self._last_ts: Dict[str, float] = {}  # epoch seconds of last message per channel
+        self._data: dict[str, dict] = {}
+        self._last_ts: dict[str, float] = {}  # epoch seconds of last message per channel
         self._lock = threading.Lock()
 
     def record(self, channel: str) -> Optional[float]:
@@ -322,7 +322,7 @@ class ChannelInterArrivalTracker:
                 return float(samples[-1])
             return float(samples[lo] * (1.0 - frac) + samples[hi] * frac)
 
-    def channels(self) -> List[str]:
+    def channels(self) -> list[str]:
         """Return sorted list of channel names that have been observed."""
         with self._lock:
             return sorted(self._data.keys(), key=str)
@@ -356,7 +356,7 @@ class RequestRateTracker:
 
     def __init__(self, window_s: float = 60.0) -> None:
         self._window_s = window_s
-        self._timestamps: Dict[str, List[float]] = {}  # endpoint → list of epoch timestamps
+        self._timestamps: dict[str, list[float]] = {}  # endpoint → list of epoch timestamps
         self._lock = threading.Lock()
 
     def record(self, endpoint: str) -> None:
@@ -381,7 +381,7 @@ class RequestRateTracker:
                 return 0.0
             return len(recent) / self._window_s
 
-    def endpoints(self) -> List[str]:
+    def endpoints(self) -> list[str]:
         """Return sorted list of endpoint names that have been recorded."""
         with self._lock:
             return sorted(self._timestamps.keys(), key=str)
@@ -408,9 +408,9 @@ class MetricsRegistry:
     """Central metrics store — call :func:`get_registry` to get the singleton."""
 
     def __init__(self):
-        self._counters: Dict[str, Counter] = {}
-        self._gauges: Dict[str, Gauge] = {}
-        self._histograms: Dict[str, Histogram] = {}
+        self._counters: dict[str, Counter] = {}
+        self._gauges: dict[str, Gauge] = {}
+        self._histograms: dict[str, Histogram] = {}
         self._provider_latency = ProviderLatencyTracker()
         self._channel_interarrival = ChannelInterArrivalTracker()
         self._request_rate = RequestRateTracker()
@@ -418,14 +418,14 @@ class MetricsRegistry:
         self._start_time = time.time()
         self._enabled = True
         # Issue #395: per-channel cumulative message counts for message histogram
-        self._channel_msg_counts: Dict[str, int] = {}
+        self._channel_msg_counts: dict[str, int] = {}
         # Issue #397: per-provider error counts for error histogram
-        self._provider_error_counts: Dict[str, int] = {}
+        self._provider_error_counts: dict[str, int] = {}
         # Issue #417 — loop latency samples for percentile computation
-        self._loop_latency_samples: List[float] = []
+        self._loop_latency_samples: list[float] = []
         self._loop_latency_max_samples: int = 1000
         # Issue #421 — per-provider error timestamps for error_rate_histogram()
-        self._provider_error_times: Dict[str, List[float]] = {}
+        self._provider_error_times: dict[str, list[float]] = {}
         # Issue #431 — registry start time for uptime_histogram()
         self._started_at: float = time.time()
 
@@ -696,7 +696,7 @@ class MetricsRegistry:
 
     # ── Issue #372 — JSON snapshot ─────────────────────────────────────────────
 
-    def export_json(self) -> Dict[str, Any]:
+    def export_json(self) -> dict[str, Any]:
         """Return a structured dict snapshot of all metrics for the dashboard API.
 
         Returns a JSON-serialisable dict with keys:
@@ -709,7 +709,7 @@ class MetricsRegistry:
 
         Never raises.
         """
-        snapshot: Dict[str, Any] = {
+        snapshot: dict[str, Any] = {
             "counters": {},
             "gauges": {},
             "histograms": {},
@@ -738,7 +738,7 @@ class MetricsRegistry:
         for name, hist in self._histograms.items():
             with hist._lock:
                 cumulative = 0.0
-                buckets: Dict[str, float] = {}
+                buckets: dict[str, float] = {}
                 for b in hist._buckets:
                     cumulative += hist._counts[b]
                     buckets[str(b)] = cumulative
@@ -769,7 +769,7 @@ class MetricsRegistry:
 
         return snapshot
 
-    def channel_rate_histogram(self) -> Dict[str, Any]:
+    def channel_rate_histogram(self) -> dict[str, Any]:
         """Return per-channel message inter-arrival percentiles.
 
         Returns:
@@ -777,7 +777,7 @@ class MetricsRegistry:
             received at least two messages.  Returns ``{}`` when no channels
             have been recorded.  Never raises.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
         try:
             for channel in self._channel_interarrival.channels():
                 with self._channel_interarrival._lock:
@@ -797,7 +797,7 @@ class MetricsRegistry:
             )
         return result
 
-    def channel_message_histogram(self) -> Dict[str, Any]:
+    def channel_message_histogram(self) -> dict[str, Any]:
         """Return binned message-count distribution per channel (Issue #395).
 
         Buckets: 1, 5, 10, 50, 100, 500, 1000, +Inf.  Each bucket reports
@@ -817,7 +817,7 @@ class MetricsRegistry:
             with self._lock:
                 per_channel = dict(self._channel_msg_counts)
 
-            bucket_counts: Dict[str, int] = {str(b): 0 for b in _BUCKETS}
+            bucket_counts: dict[str, int] = {str(b): 0 for b in _BUCKETS}
             bucket_counts["+Inf"] = len(per_channel)
 
             for count in per_channel.values():
@@ -834,7 +834,7 @@ class MetricsRegistry:
             )
             return {"buckets": {}, "per_channel": {}}
 
-    def provider_error_histogram(self) -> Dict[str, Any]:
+    def provider_error_histogram(self) -> dict[str, Any]:
         """Return per-provider error counts binned into histogram buckets (Issue #397).
 
         Returns:
@@ -848,7 +848,7 @@ class MetricsRegistry:
             counts = dict(self._provider_error_counts)
 
         # Build histogram: for each threshold, count providers with errors <= threshold
-        buckets: Dict[str, int] = {}
+        buckets: dict[str, int] = {}
         for t in _BUCKET_THRESHOLDS:
             label = f"<={t}"
             buckets[label] = sum(1 for c in counts.values() if c <= t)
@@ -857,7 +857,7 @@ class MetricsRegistry:
 
         return {"buckets": buckets, "per_provider": counts}
 
-    def loop_latency_percentiles(self) -> Dict[str, Any]:
+    def loop_latency_percentiles(self) -> dict[str, Any]:
         """Return p50/p95/p99 of loop duration in ms (Issue #417).
 
         Uses the last up to 1000 loop latency samples recorded by record_loop().
@@ -884,7 +884,7 @@ class MetricsRegistry:
             "sample_count": n,
         }
 
-    def error_rate_histogram(self, window_s: float = 3600.0) -> Dict[str, Any]:
+    def error_rate_histogram(self, window_s: float = 3600.0) -> dict[str, Any]:
         """Return per-provider error rates binned into histogram buckets (Issue #421).
 
         Considers only errors recorded within the last *window_s* seconds.
@@ -914,7 +914,7 @@ class MetricsRegistry:
             with self._lock:
                 error_times_snapshot = {p: list(ts) for p, ts in self._provider_error_times.items()}
 
-            per_provider: Dict[str, Any] = {}
+            per_provider: dict[str, Any] = {}
             for provider, timestamps in error_times_snapshot.items():
                 recent = [t for t in timestamps if t >= cutoff]
                 if not recent:
@@ -926,7 +926,7 @@ class MetricsRegistry:
                     "window_s": window_s,
                 }
 
-            buckets: Dict[str, int] = {f"<={t}": 0 for t in _BUCKET_THRESHOLDS}
+            buckets: dict[str, int] = {f"<={t}": 0 for t in _BUCKET_THRESHOLDS}
             buckets["+Inf"] = len(per_provider)
             for info in per_provider.values():
                 r = info["rate"]
@@ -970,7 +970,7 @@ class MetricsRegistry:
             if g:
                 g.set(val, joint=joint)
 
-    def uptime_histogram(self) -> Dict[str, Any]:
+    def uptime_histogram(self) -> dict[str, Any]:
         """Return registry uptime statistics (Issue #431).
 
         Computes elapsed time since this :class:`MetricsRegistry` was

@@ -1,7 +1,7 @@
 import base64
 import logging
 import os
-from typing import Iterator
+from collections.abc import Iterator
 
 from castor.prompt_cache import CacheStats, build_cached_system_prompt
 

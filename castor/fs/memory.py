@@ -31,7 +31,7 @@ import logging
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from castor.fs.namespace import Namespace
 
@@ -86,10 +86,10 @@ class MemoryStore:
     def record_episode(
         self,
         observation: str,
-        action: Optional[Dict] = None,
+        action: Optional[dict] = None,
         outcome: Optional[str] = None,
-        tags: Optional[List[str]] = None,
-    ) -> Dict:
+        tags: Optional[list[str]] = None,
+    ) -> dict:
         """Record a timestamped episode.
 
         Returns the episode dict that was stored.
@@ -106,7 +106,7 @@ class MemoryStore:
             self._enforce_limit("episodic")
         return episode
 
-    def get_episodes(self, limit: int = 20, tag: Optional[str] = None) -> List[Dict]:
+    def get_episodes(self, limit: int = 20, tag: Optional[str] = None) -> list[dict]:
         """Retrieve recent episodes, optionally filtered by tag."""
         events = self.ns.read("/var/memory/episodic/events") or []
         if tag:
@@ -144,7 +144,7 @@ class MemoryStore:
         entry = facts.get(key)
         return entry["value"] if entry else None
 
-    def list_facts(self) -> Dict[str, Any]:
+    def list_facts(self) -> dict[str, Any]:
         """Return all stored facts as ``{key: value}``."""
         facts = self.ns.read("/var/memory/semantic/facts") or {}
         return {k: v["value"] for k, v in facts.items()}
@@ -162,7 +162,7 @@ class MemoryStore:
     # ------------------------------------------------------------------
     # Procedural memory
     # ------------------------------------------------------------------
-    def store_behavior(self, name: str, steps: List[Dict], description: str = ""):
+    def store_behavior(self, name: str, steps: list[dict], description: str = ""):
         """Store a named action sequence (compound behavior).
 
         Args:
@@ -181,12 +181,12 @@ class MemoryStore:
             self.ns.write("/var/memory/procedural/behaviors", behaviors)
             self._enforce_limit("procedural")
 
-    def get_behavior(self, name: str) -> Optional[Dict]:
+    def get_behavior(self, name: str) -> Optional[dict]:
         """Retrieve a stored behavior by name."""
         behaviors = self.ns.read("/var/memory/procedural/behaviors") or {}
         return behaviors.get(name)
 
-    def list_behaviors(self) -> List[str]:
+    def list_behaviors(self) -> list[str]:
         """List all stored behavior names."""
         behaviors = self.ns.read("/var/memory/procedural/behaviors") or {}
         return list(behaviors.keys())

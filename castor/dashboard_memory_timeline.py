@@ -28,7 +28,7 @@ import sqlite3
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.MemoryTimeline")
 
@@ -82,7 +82,7 @@ class MemoryTimeline:
         self,
         window_h: float = _DEFAULT_WINDOW_H,
         bucket_minutes: int = _DEFAULT_BUCKET_MINUTES,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Return bucketed episode counts, latency trends, and outcome distributions.
 
         Args:
@@ -106,9 +106,9 @@ class MemoryTimeline:
         since = now - (window_h * 3600.0)
 
         # Aggregate: bucket_ts → {count, latency_sum, outcomes, action_types}
-        buckets: Dict[float, Dict[str, Any]] = {}
-        outcome_totals: Dict[str, int] = defaultdict(int)
-        action_totals: Dict[str, int] = defaultdict(int)
+        buckets: dict[float, dict[str, Any]] = {}
+        outcome_totals: dict[str, int] = defaultdict(int)
+        action_totals: dict[str, int] = defaultdict(int)
         total = 0
 
         con = self._connect()
@@ -161,9 +161,9 @@ class MemoryTimeline:
         # Build ordered bucket list (fill gaps with zero-count buckets)
         first_bk = self._bucket_ts(since, bucket_seconds)
         last_bk = self._bucket_ts(now, bucket_seconds)
-        ordered_buckets: List[Dict[str, Any]] = []
+        ordered_buckets: list[dict[str, Any]] = []
         current_bk = first_bk
-        latency_trend: List[Dict[str, Any]] = []
+        latency_trend: list[dict[str, Any]] = []
 
         while current_bk <= last_bk:
             import datetime
@@ -200,7 +200,7 @@ class MemoryTimeline:
             "bucket_minutes": bucket_minutes,
         }
 
-    def get_outcome_summary(self, window_h: float = 24.0) -> Dict[str, Any]:
+    def get_outcome_summary(self, window_h: float = 24.0) -> dict[str, Any]:
         """Return a summary of episode outcomes over the look-back window.
 
         Args:
@@ -210,7 +210,7 @@ class MemoryTimeline:
             Dict with ``"total"``, ``"outcomes"`` (dict), and ``"ok_rate"`` (float 0–1).
         """
         since = time.time() - (window_h * 3600.0)
-        outcomes: Dict[str, int] = defaultdict(int)
+        outcomes: dict[str, int] = defaultdict(int)
         total = 0
 
         con = self._connect()
@@ -236,7 +236,7 @@ class MemoryTimeline:
     def get_latency_percentiles(
         self,
         window_h: float = 24.0,
-    ) -> Dict[str, Optional[float]]:
+    ) -> dict[str, Optional[float]]:
         """Compute p50, p95, p99 latency from episodes in the window.
 
         Args:
@@ -247,7 +247,7 @@ class MemoryTimeline:
             ``"count"`` (number of episodes used).
         """
         since = time.time() - (window_h * 3600.0)
-        samples: List[float] = []
+        samples: list[float] = []
 
         con = self._connect()
         if con is not None:

@@ -17,7 +17,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.Deploy")
 
@@ -186,7 +186,7 @@ def _build_ssh_cmd(
     user: str,
     host: str,
     remote_cmd: str,
-) -> List[str]:
+) -> list[str]:
     cmd = ["ssh", "-p", str(port), "-o", "StrictHostKeyChecking=accept-new", "-o", "BatchMode=yes"]
     if key_file:
         cmd += ["-i", key_file]
@@ -199,7 +199,7 @@ def _build_scp_cmd(
     port: int,
     local_src: str,
     remote_dest: str,
-) -> List[str]:
+) -> list[str]:
     cmd = ["scp", "-P", str(port), "-o", "StrictHostKeyChecking=accept-new"]
     if key_file:
         cmd += ["-i", key_file]
@@ -220,7 +220,7 @@ def _run_remote(
     _run_or_print(ssh_cmd, dry_run=dry_run, label=label)
 
 
-def _run_or_print(cmd: List[str], dry_run: bool, label: str = "") -> None:
+def _run_or_print(cmd: list[str], dry_run: bool, label: str = "") -> None:
     print(f"  $ {' '.join(cmd)}")
     if dry_run:
         return
@@ -251,7 +251,7 @@ def _save_host(host: str, user: str = "pi", port: int = 22) -> None:
     """Save host to ~/.castor/hosts.json for reuse."""
     try:
         _HOSTS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        hosts: Dict[str, Any] = {}
+        hosts: dict[str, Any] = {}
         if _HOSTS_FILE.exists():
             hosts = json.loads(_HOSTS_FILE.read_text())
         hosts[host] = {"user": user, "port": port}
@@ -260,7 +260,7 @@ def _save_host(host: str, user: str = "pi", port: int = 22) -> None:
         logger.debug("Could not save host: %s", exc)
 
 
-def load_known_hosts() -> Dict[str, Any]:
+def load_known_hosts() -> dict[str, Any]:
     """Load known hosts from ~/.castor/hosts.json."""
     if not _HOSTS_FILE.exists():
         return {}

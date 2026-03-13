@@ -26,7 +26,7 @@ import base64
 import logging
 import math
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.Gestures")
 
@@ -49,7 +49,7 @@ except ImportError:
     HAS_CV2 = False
 
 # Default gesture → robot action mapping
-DEFAULT_GESTURE_ACTIONS: Dict[str, Dict[str, Any]] = {
+DEFAULT_GESTURE_ACTIONS: dict[str, dict[str, Any]] = {
     "open_palm": {"action": "stop", "speed": 0},
     "closed_fist": {"action": "forward", "speed": 0.6},
     "thumbs_up": {"action": "forward", "speed": 1.0},
@@ -71,12 +71,12 @@ def _dist(a: Any, b: Any) -> float:
     return math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)
 
 
-def _finger_extended(landmarks: List[Any], tip_idx: int, pip_idx: int) -> bool:
+def _finger_extended(landmarks: list[Any], tip_idx: int, pip_idx: int) -> bool:
     """Return True if the finger tip is above (y < ) the pip joint."""
     return landmarks[tip_idx].y < landmarks[pip_idx].y
 
 
-def _classify_gesture(landmarks: List[Any]) -> Tuple[str, float]:
+def _classify_gesture(landmarks: list[Any]) -> tuple[str, float]:
     """Classify hand gesture from 21 MediaPipe landmarks.
 
     Returns (gesture_name, confidence_0_to_1).
@@ -142,7 +142,7 @@ class GestureController:
 
     def __init__(
         self,
-        gesture_actions: Optional[Dict[str, Dict[str, Any]]] = None,
+        gesture_actions: Optional[dict[str, dict[str, Any]]] = None,
         min_detection_confidence: float = 0.7,
         min_tracking_confidence: float = 0.5,
     ):
@@ -163,7 +163,7 @@ class GestureController:
         else:
             logger.warning("GestureController running in mock mode (mediapipe not installed)")
 
-    def recognize_from_jpeg(self, jpeg_bytes: bytes) -> Dict[str, Any]:
+    def recognize_from_jpeg(self, jpeg_bytes: bytes) -> dict[str, Any]:
         """Classify gesture from a JPEG image.
 
         Args:
@@ -225,7 +225,7 @@ class GestureController:
                 "mode": "error",
             }
 
-    def recognize_from_base64(self, b64_image: str) -> Dict[str, Any]:
+    def recognize_from_base64(self, b64_image: str) -> dict[str, Any]:
         """Convenience wrapper: base64-encoded JPEG → gesture dict."""
         try:
             jpeg_bytes = base64.b64decode(b64_image)
@@ -233,11 +233,11 @@ class GestureController:
             return {"gesture": "none", "action": {"action": "none"}, "error": str(exc)}
         return self.recognize_from_jpeg(jpeg_bytes)
 
-    def set_gesture_action(self, gesture: str, action: Dict[str, Any]) -> None:
+    def set_gesture_action(self, gesture: str, action: dict[str, Any]) -> None:
         """Override the action mapped to a gesture name."""
         self._gesture_actions[gesture] = action
 
-    def list_gestures(self) -> Dict[str, Dict[str, Any]]:
+    def list_gestures(self) -> dict[str, dict[str, Any]]:
         """Return all gesture → action mappings."""
         return dict(self._gesture_actions)
 

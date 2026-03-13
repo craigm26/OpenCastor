@@ -14,7 +14,6 @@ The mode is selected by the ``protocol`` field in your RCAN driver config:
 
 import logging
 import time
-from typing import Dict
 
 from castor.drivers.base import DriverBase
 
@@ -85,7 +84,7 @@ class PCA9685RCDriver(DriverBase):
       - esc_double_tap_reverse(default false)-- repeat neutral→reverse twice (some ESCs need it)
     """
 
-    def __init__(self, config: Dict):
+    def __init__(self, config: dict):
         self.config = config
 
         # Read channel mappings from RCAN config
@@ -266,7 +265,7 @@ class PCA9685Driver(DriverBase):
     Handles I2C communication to spin DC motors via PCA9685 PWM controller.
     """
 
-    def __init__(self, config: Dict):
+    def __init__(self, config: dict):
         self.config = config
 
         if not HAS_PCA9685 or not HAS_MOTOR:

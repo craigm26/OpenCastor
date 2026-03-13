@@ -27,7 +27,7 @@ import os
 import threading
 import time
 import urllib.request
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 from urllib.error import URLError
 
 from .base import DriverBase
@@ -45,7 +45,7 @@ except ImportError:
     HAS_RCLPY = False
 
 
-def _resolve_backend(config: Dict[str, Any]) -> str:
+def _resolve_backend(config: dict[str, Any]) -> str:
     env = os.getenv("SIMULATION_BACKEND", "").lower()
     if env in ("gazebo", "webots", "mock"):
         return env
@@ -135,12 +135,12 @@ class SimulationDriver(DriverBase):
             - ``default_speed``: Default linear speed (default ``0.5``)
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self._default_speed = float(config.get("default_speed", 0.5))
         self._backend_name = _resolve_backend(config)
         self._backend: Any = None
-        self._last_command: Dict[str, Any] = {}
+        self._last_command: dict[str, Any] = {}
 
         self._mode = "mock"
         self._error: Optional[str] = None
@@ -237,7 +237,7 @@ class SimulationDriver(DriverBase):
                 logger.warning("SimulationDriver close error: %s", exc)
             self._backend = None
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> dict[str, Any]:
         return {
             "ok": self._error is None,
             "mode": self._mode,

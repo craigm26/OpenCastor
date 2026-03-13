@@ -40,7 +40,7 @@ RCAN config example::
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 logger = logging.getLogger("OpenCastor.CompositeDriver")
 
@@ -54,17 +54,17 @@ class CompositeDriver:
     """
 
     def __init__(self, config: dict):
-        self._sub_drivers: Dict[str, Any] = {}
-        self._routing: Dict[str, str] = {}  # action_key → sub-driver id
+        self._sub_drivers: dict[str, Any] = {}
+        self._routing: dict[str, str] = {}  # action_key → sub-driver id
         isolation_cfg = (config.get("driver_isolation") or {}) if isinstance(config, dict) else {}
         self._isolation_enabled = bool(isolation_cfg.get("enabled", False))
 
         # Find the composite driver entry
-        driver_entries: List[dict] = config.get("drivers", [])
+        driver_entries: list[dict] = config.get("drivers", [])
         comp_entry = next((d for d in driver_entries if d.get("protocol") == "composite"), {})
 
-        subsystems: List[dict] = comp_entry.get("subsystems", [])
-        routing_cfg: Dict[str, str] = comp_entry.get("routing", {})
+        subsystems: list[dict] = comp_entry.get("subsystems", [])
+        routing_cfg: dict[str, str] = comp_entry.get("routing", {})
 
         # Default routing rules (can be overridden by config)
         default_routing = {

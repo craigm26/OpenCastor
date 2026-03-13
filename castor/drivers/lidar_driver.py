@@ -24,7 +24,7 @@ import os
 import sqlite3
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.Lidar")
 
@@ -104,7 +104,7 @@ class LidarDriver:
         port: Optional[str] = None,
         baud: Optional[int] = None,
         timeout: Optional[float] = None,
-        config: Optional[Dict[str, Any]] = None,
+        config: Optional[dict[str, Any]] = None,
     ):
         cfg = config or {}
         _raw_port = port or cfg.get("port") or os.getenv("LIDAR_PORT", "/dev/ttyUSB0")
@@ -124,7 +124,7 @@ class LidarDriver:
         # Issue #393: per-obstacle velocity tracking
         self._vel_prev_sectors: dict = {}  # sector → (dist_mm, ts)
         # Issue #376: accumulated SLAM occupancy map
-        self._slam_map: Optional[List[List[float]]] = None
+        self._slam_map: Optional[list[list[float]]] = None
         self._slam_map_size_m: float = 5.0
         self._slam_map_resolution_m: float = 0.05
 
@@ -265,7 +265,7 @@ class LidarDriver:
         except Exception as exc:
             logger.warning("LidarDriver: history log error: %s", exc)
 
-    def get_scan_history(self, window_s: float = 60.0, limit: int = 500) -> List[Dict[str, Any]]:
+    def get_scan_history(self, window_s: float = 60.0, limit: int = 500) -> list[dict[str, Any]]:
         """Return recent scan summaries from the history DB.
 
         Args:
@@ -462,7 +462,7 @@ class LidarDriver:
 
     # ── Issue #398 — nearest obstacle angle ──────────────────────────────────
 
-    def nearest_obstacle_angle(self) -> Dict[str, Any]:
+    def nearest_obstacle_angle(self) -> dict[str, Any]:
         """Return the angle and distance of the closest obstacle in the current scan.
 
         Calls :meth:`scan` to obtain the latest scan points, filters out zero/invalid
@@ -498,7 +498,7 @@ class LidarDriver:
 
     # ── Issue #403 — scan rate ────────────────────────────────────────────────
 
-    def scan_rate(self) -> Dict[str, Any]:
+    def scan_rate(self) -> dict[str, Any]:
         """Estimate the number of scans per second from the scan history.
 
         Queries the last 10 seconds of scan history.  Requires at least 2 entries
@@ -514,7 +514,7 @@ class LidarDriver:
         Never raises.
         """
         _window = 10.0
-        _base: Dict[str, Any] = {
+        _base: dict[str, Any] = {
             "scans_per_second": 0.0,
             "window_s": _window,
             "sample_count": 0,
@@ -545,7 +545,7 @@ class LidarDriver:
 
     # ── Issue #409 — per-sector distance history ──────────────────────────────
 
-    def sector_history(self, window_s: float = 30.0) -> Dict[str, Any]:
+    def sector_history(self, window_s: float = 30.0) -> dict[str, Any]:
         """Return per-sector distance history over a time window (Issue #409).
 
         Queries scan history and groups obstacle readings by sector name,
@@ -557,7 +557,7 @@ class LidarDriver:
         """
         try:
             history = self.get_scan_history(window_s=window_s)
-            sectors: Dict[str, List[Dict[str, Any]]] = {}
+            sectors: dict[str, list[dict[str, Any]]] = {}
             sector_columns = {
                 "front": "front_mm",
                 "left": "left_mm",
@@ -583,7 +583,7 @@ class LidarDriver:
 
     # ── Issue #418 — 2D Cartesian point cloud ─────────────────────────────────
 
-    def point_cloud_2d(self) -> Dict[str, Any]:
+    def point_cloud_2d(self) -> dict[str, Any]:
         """Return full 2D Cartesian point array from latest scan (Issue #418).
 
         Converts polar (angle_deg, distance_mm) to Cartesian (x_m, y_m).
@@ -594,7 +594,7 @@ class LidarDriver:
         """
         try:
             raw_points = self.scan()
-            points: List[Dict[str, Any]] = []
+            points: list[dict[str, Any]] = []
             for pt in raw_points:
                 dist_mm = pt.get("distance_mm")
                 angle_deg = pt.get("angle_deg")
@@ -629,7 +629,7 @@ class LidarDriver:
 
         Returns:
             {
-                "grid": List[List[int]],   # NxN, 0=free, 100=occupied, -1=unknown
+                "grid": list[list[int]],   # NxN, 0=free, 100=occupied, -1=unknown
                 "width": int,
                 "height": int,
                 "resolution_m": float,
@@ -825,7 +825,7 @@ class LidarDriver:
 
     # ── Moving objects (#358) ─────────────────────────────────────────────────
 
-    def moving_objects(self, min_delta_m: float = 0.05) -> List[Dict[str, Any]]:
+    def moving_objects(self, min_delta_m: float = 0.05) -> list[dict[str, Any]]:
         """Detect objects that moved between the last two scans.
 
         Compares per-angle distances between ``_prev_scan_points`` and
@@ -851,8 +851,8 @@ class LidarDriver:
             if not prev or not curr:
                 return []
 
-            def _bucket(points: list) -> Dict[int, float]:
-                buckets: Dict[int, float] = {}
+            def _bucket(points: list) -> dict[int, float]:
+                buckets: dict[int, float] = {}
                 for pt in points:
                     try:
                         angle = pt.get("angle_deg")
@@ -868,7 +868,7 @@ class LidarDriver:
 
             prev_b = _bucket(prev)
             curr_b = _bucket(curr)
-            results: List[Dict[str, Any]] = []
+            results: list[dict[str, Any]] = []
             for deg in range(360):
                 if deg not in prev_b or deg not in curr_b:
                     continue
@@ -890,7 +890,7 @@ class LidarDriver:
 
     # ── Issue #366 — per-zone velocity ────────────────────────────────────────
 
-    def zone_velocity(self, zone: str = "front", window_s: float = 2.0) -> Dict[str, Any]:
+    def zone_velocity(self, zone: str = "front", window_s: float = 2.0) -> dict[str, Any]:
         """Estimate the approaching velocity (m/s) in a named angular zone.
 
         Fetches recent scan history and computes the linear regression slope of
@@ -917,7 +917,7 @@ class LidarDriver:
             "rear": (135.0, 180.0),  # special: |angle| ≥ 135
             "right": (-135.0, -45.0),
         }
-        _result_base: Dict[str, Any] = {
+        _result_base: dict[str, Any] = {
             "zone": zone,
             "velocity_m_s": 0.0,
             "samples": 0,
@@ -1094,7 +1094,7 @@ class LidarDriver:
 
     # ── Issue #422 — arc scan ─────────────────────────────────────────────────
 
-    def arc_scan(self, start_deg: float = 0.0, end_deg: float = 180.0) -> Dict[str, Any]:
+    def arc_scan(self, start_deg: float = 0.0, end_deg: float = 180.0) -> dict[str, Any]:
         """Return LiDAR readings filtered to the angular arc [start_deg, end_deg].
 
         Calls :meth:`scan` internally and filters results to angles within the
@@ -1125,7 +1125,7 @@ class LidarDriver:
 
             if self._mode != "hardware" or self._lidar is None:
                 # Mock: generate synthetic readings every 5° within the arc
-                readings: List[Dict[str, Any]] = []
+                readings: list[dict[str, Any]] = []
                 if wrap:
                     # From start_deg up to 360, then 0 to end_deg
                     angle = start_deg
@@ -1184,7 +1184,7 @@ class LidarDriver:
 
     # ── Issue #428 — radial profile ───────────────────────────────────────────
 
-    def radial_profile(self, n_sectors: int = 36) -> Dict[str, Any]:
+    def radial_profile(self, n_sectors: int = 36) -> dict[str, Any]:
         """Divide 360° into equal sectors and return the minimum distance in each.
 
         Calls :meth:`scan` and bins each reading into its sector using:
@@ -1213,8 +1213,8 @@ class LidarDriver:
             sector_width = 360.0 / n
 
             # Build sector metadata
-            sectors: List[Dict[str, Any]] = []
-            sector_mins: List[Optional[float]] = [None] * n
+            sectors: list[dict[str, Any]] = []
+            sector_mins: list[Optional[float]] = [None] * n
             for i in range(n):
                 sectors.append(
                     {
@@ -1328,7 +1328,7 @@ class LidarDriver:
         self,
         size_m: float = 5.0,
         resolution_m: float = 0.05,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Build a 2-D occupancy grid from the current scan history.
 
         In mock mode returns an empty grid of the requested dimensions.
@@ -1346,7 +1346,7 @@ class LidarDriver:
         import math
 
         cells = max(1, int(size_m / resolution_m))
-        grid: List[List[float]] = [[0.0] * cells for _ in range(cells)]
+        grid: list[list[float]] = [[0.0] * cells for _ in range(cells)]
         origin = [-size_m / 2.0, -size_m / 2.0]
 
         if self._mode == "hardware":
@@ -1379,7 +1379,7 @@ class LidarDriver:
         reset: bool = False,
         size_m: float = 5.0,
         resolution_m: float = 0.05,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Incrementally accumulate the current scan into a persistent occupancy map.
 
         Merges new scan points into ``_slam_map`` using logical-OR: a cell is

@@ -15,7 +15,7 @@ import json
 import logging
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import requests
 
@@ -35,7 +35,7 @@ except ImportError:
 class ESP32WebsocketDriver(DriverBase):
     """Control an ESP32 robot over WebSocket with HTTP fallback."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         self.config = config
         self.host = str(config.get("host", "")).strip()
         self.port = int(config.get("port", 81))
@@ -92,14 +92,14 @@ class ESP32WebsocketDriver(DriverBase):
         self._ws = create_connection(self._ws_url, timeout=self.timeout_s)
         return self._ws
 
-    def _send_via_websocket(self, payload: Dict[str, Any]) -> bool:
+    def _send_via_websocket(self, payload: dict[str, Any]) -> bool:
         ws = self._ensure_websocket()
         if ws is None:
             return False
         ws.send(json.dumps(payload))
         return True
 
-    def _send_via_http(self, payload: Dict[str, Any]) -> bool:
+    def _send_via_http(self, payload: dict[str, Any]) -> bool:
         if not self.host:
             return False
         endpoint = (
@@ -114,7 +114,7 @@ class ESP32WebsocketDriver(DriverBase):
         ).raise_for_status()
         return True
 
-    def _send_command(self, payload: Dict[str, Any]) -> bool:
+    def _send_command(self, payload: dict[str, Any]) -> bool:
         if not self._can_retry():
             logger.debug("ESP32 retry window active; command skipped")
             return False
@@ -190,7 +190,7 @@ class ESP32WebsocketDriver(DriverBase):
             self._close_ws()
         self._session.close()
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> dict[str, Any]:
         if not self.host:
             return {"ok": False, "mode": "mock", "error": "missing host"}
 

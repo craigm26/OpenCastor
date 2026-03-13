@@ -20,7 +20,7 @@ expose runtime state:
 
 import logging
 import time
-from typing import Dict, Optional
+from typing import Optional
 
 from castor.fs.namespace import Namespace
 
@@ -43,7 +43,7 @@ class ProcFS:
         self._boot_time = time.time()
         self._iteration = 0
 
-    def bootstrap(self, config: Optional[Dict] = None):
+    def bootstrap(self, config: Optional[dict] = None):
         """Create the /proc tree and populate initial values."""
         self.ns.mkdir("/proc")
         self.ns.mkdir("/proc/loop")
@@ -120,7 +120,7 @@ class ProcFS:
         self.ns.write("/proc/loop/latency_ms", round(latency_ms, 2))
         self.update_uptime()
 
-    def record_thought(self, raw_text: str, action: Optional[Dict] = None):
+    def record_thought(self, raw_text: str, action: Optional[dict] = None):
         """Record that the brain produced a thought."""
         count = (self.ns.read("/proc/brain/thoughts") or 0) + 1
         self.ns.write("/proc/brain/thoughts", count)
@@ -160,7 +160,7 @@ class ProcFS:
     # ------------------------------------------------------------------
     # Read helpers (convenience)
     # ------------------------------------------------------------------
-    def snapshot(self) -> Dict:
+    def snapshot(self) -> dict:
         """Return a complete snapshot of /proc as a nested dict."""
         return {
             "uptime": self.ns.read("/proc/uptime"),

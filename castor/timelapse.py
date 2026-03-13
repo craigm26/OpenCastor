@@ -26,7 +26,7 @@ import os
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.Timelapse")
 
@@ -55,13 +55,13 @@ class TimelapseGenerator:
         self._dir = output_dir
         self._dir.mkdir(parents=True, exist_ok=True)
         self._index_path = self._dir / "index.json"
-        self._index: Dict[str, Dict[str, Any]] = self._load_index()
+        self._index: dict[str, dict[str, Any]] = self._load_index()
 
     # ------------------------------------------------------------------
     # Index persistence
     # ------------------------------------------------------------------
 
-    def _load_index(self) -> Dict[str, Dict[str, Any]]:
+    def _load_index(self) -> dict[str, dict[str, Any]]:
         if self._index_path.exists():
             try:
                 with open(self._index_path) as f:
@@ -83,10 +83,10 @@ class TimelapseGenerator:
 
     def generate(
         self,
-        recording_ids: Optional[List[str]] = None,
+        recording_ids: Optional[list[str]] = None,
         speed_factor: float = _DEFAULT_SPEED,
         output_fps: int = _DEFAULT_FPS,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Generate a time-lapse from the specified recordings.
 
         Args:
@@ -128,10 +128,10 @@ class TimelapseGenerator:
         self,
         timelapse_id: str,
         output_path: str,
-        recordings: List[Dict[str, Any]],
+        recordings: list[dict[str, Any]],
         speed_factor: float,
         output_fps: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Generate time-lapse using OpenCV."""
         writer = None
         frame_count = 0
@@ -199,10 +199,10 @@ class TimelapseGenerator:
         self,
         timelapse_id: str,
         output_path: str,
-        recordings: List[Dict[str, Any]],
+        recordings: list[dict[str, Any]],
         speed_factor: float,
         output_fps: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Mock generate (OpenCV not available)."""
         meta = {
             "timelapse_id": timelapse_id,
@@ -225,13 +225,13 @@ class TimelapseGenerator:
     # Listing
     # ------------------------------------------------------------------
 
-    def list(self) -> List[Dict[str, Any]]:
+    def list(self) -> list[dict[str, Any]]:
         """Return all generated timelapses, newest first."""
         items = list(self._index.values())
         items.sort(key=lambda x: x.get("created_at", 0), reverse=True)
         return items
 
-    def get(self, timelapse_id: str) -> Optional[Dict[str, Any]]:
+    def get(self, timelapse_id: str) -> Optional[dict[str, Any]]:
         """Return metadata for a specific timelapse."""
         return self._index.get(timelapse_id)
 

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Optional
 
 logger = logging.getLogger("OpenCastor.RCAN.Capabilities")
 
@@ -44,12 +44,12 @@ class CapabilityRegistry:
         config: RCAN configuration dict.
     """
 
-    def __init__(self, config: Optional[Dict] = None):
-        self._capabilities: Dict[str, Dict] = {}
+    def __init__(self, config: Optional[dict] = None):
+        self._capabilities: dict[str, dict] = {}
         if config is not None:
             self._auto_detect(config)
 
-    def _auto_detect(self, config: Dict):
+    def _auto_detect(self, config: dict):
         """Detect capabilities from config sections."""
         # Status is always available
         self.register(Capability.STATUS, description="Runtime telemetry and health")
@@ -105,11 +105,11 @@ class CapabilityRegistry:
         return capability in self._capabilities
 
     @property
-    def names(self) -> List[str]:
+    def names(self) -> list[str]:
         """Return sorted list of capability names."""
         return sorted(self._capabilities.keys())
 
-    def to_dict(self) -> Dict[str, Dict]:
+    def to_dict(self) -> dict[str, dict]:
         """Return capability registry as a dict."""
         return dict(self._capabilities)
 

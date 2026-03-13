@@ -16,7 +16,7 @@ import logging
 import os
 import shutil
 import subprocess
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from castor.drivers.base import DriverBase
 
@@ -49,7 +49,7 @@ _OUTPUT_MAP = {
 class EV3DevDriver(DriverBase):
     """Differential drive adapter for LEGO Mindstorms EV3."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         self.config = config
         self._mode = "mock"
         self._error: Optional[str] = "driver not connected"
@@ -65,8 +65,8 @@ class EV3DevDriver(DriverBase):
         connection = config.get("connection", {})
         self._ssh_host = str(connection.get("host", "ev3dev.local")).strip()
         self._ssh_user = str(connection.get("user", "robot")).strip()
-        self._ssh_paths: Dict[str, str] = {}
-        self._local_motors: Dict[str, Any] = {}
+        self._ssh_paths: dict[str, str] = {}
+        self._local_motors: dict[str, Any] = {}
 
         if HAS_EV3DEV2 and os.path.isdir("/sys/class/tacho-motor"):
             if self._init_local_motors(motor_cfgs):
@@ -148,7 +148,7 @@ class EV3DevDriver(DriverBase):
             self._error = proc.stderr.strip() or "ssh discovery failed"
             return False
 
-        discovered: Dict[str, str] = {}
+        discovered: dict[str, str] = {}
         for line in proc.stdout.splitlines():
             if ":" not in line:
                 continue
@@ -174,7 +174,7 @@ class EV3DevDriver(DriverBase):
             "C": OUTPUT_C,
             "D": OUTPUT_D,
         }
-        motors: Dict[str, Any] = {}
+        motors: dict[str, Any] = {}
 
         for cfg in motor_cfgs:
             port_raw = str(cfg.get("port", "")).strip().lower()
@@ -273,7 +273,7 @@ class EV3DevDriver(DriverBase):
     def close(self) -> None:
         self.stop()
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> dict[str, Any]:
         if self._mode == "hardware-local":
             return {"ok": True, "mode": "hardware", "transport": "local", "error": None}
         if self._mode == "hardware-ssh":

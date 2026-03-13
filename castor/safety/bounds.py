@@ -11,7 +11,7 @@ import logging
 import math
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.Safety.Bounds")
 
@@ -45,7 +45,7 @@ class BoundsResult:
         return self.status == BoundsStatus.VIOLATION
 
     @staticmethod
-    def combine(results: List[BoundsResult]) -> BoundsResult:
+    def combine(results: list[BoundsResult]) -> BoundsResult:
         """Return the worst result from a list."""
         if not results:
             return BoundsResult()
@@ -132,8 +132,8 @@ class WorkspaceBounds:
         self,
         sphere: Optional[Sphere] = None,
         box: Optional[Box] = None,
-        forbidden_spheres: Optional[List[Sphere]] = None,
-        forbidden_boxes: Optional[List[Box]] = None,
+        forbidden_spheres: Optional[list[Sphere]] = None,
+        forbidden_boxes: Optional[list[Box]] = None,
         warning_margin: float = WARNING_MARGIN,
     ):
         self.sphere = sphere
@@ -143,7 +143,7 @@ class WorkspaceBounds:
         self.warning_margin = warning_margin
 
     def check_position(self, x: float, y: float, z: float) -> BoundsResult:
-        results: List[BoundsResult] = []
+        results: list[BoundsResult] = []
 
         # Check allowed envelope (sphere)
         if self.sphere is not None:
@@ -225,8 +225,8 @@ class JointLimits:
 class JointBounds:
     """Per-joint position, velocity, and torque limits."""
 
-    def __init__(self, joints: Optional[Dict[str, JointLimits]] = None):
-        self.joints: Dict[str, JointLimits] = joints or {}
+    def __init__(self, joints: Optional[dict[str, JointLimits]] = None):
+        self.joints: dict[str, JointLimits] = joints or {}
 
     def set_joint(self, joint_id: str, limits: JointLimits) -> None:
         self.joints[joint_id] = limits
@@ -244,7 +244,7 @@ class JointBounds:
             )
 
         lim = self.joints[joint_id]
-        results: List[BoundsResult] = []
+        results: list[BoundsResult] = []
 
         if position is not None:
             pos_range = lim.position_max - lim.position_min
@@ -409,7 +409,7 @@ class ForceBounds:
 # Default robot configs
 # ---------------------------------------------------------------------------
 
-DEFAULT_CONFIGS: Dict[str, Dict[str, Any]] = {
+DEFAULT_CONFIGS: dict[str, dict[str, Any]] = {
     "differential_drive": {
         "workspace": {
             "box": {
@@ -523,7 +523,7 @@ class BoundsChecker:
         self.force = force or ForceBounds()
 
     @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> BoundsChecker:
+    def from_config(cls, config: dict[str, Any]) -> BoundsChecker:
         """Build a BoundsChecker from a config dict."""
         ws_cfg = config.get("workspace", {})
         workspace = WorkspaceBounds(
@@ -560,7 +560,7 @@ class BoundsChecker:
         # Fallback to arm defaults
         return cls.from_robot_type("arm")
 
-    def check_action(self, action: Dict[str, Any]) -> BoundsResult:
+    def check_action(self, action: dict[str, Any]) -> BoundsResult:
         """One-call validation of an action dict.
 
         Supported keys:
@@ -570,7 +570,7 @@ class BoundsChecker:
             contact_force: float
             gripper_force: float
         """
-        results: List[BoundsResult] = []
+        results: list[BoundsResult] = []
 
         pos = action.get("position")
         if pos and len(pos) >= 3:
@@ -615,7 +615,7 @@ def check_write_bounds(
     if not isinstance(data, dict):
         return BoundsResult()
 
-    action: Dict[str, Any] = {}
+    action: dict[str, Any] = {}
 
     if path.startswith("/dev/arm"):
         # Arm writes may contain position, joints, force

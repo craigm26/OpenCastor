@@ -31,7 +31,7 @@ import json
 import logging
 import os
 import threading
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.ESP32BLE")
 
@@ -74,7 +74,7 @@ class ESP32BLEDriver:
             * ``ble_timeout`` (float) — connection timeout in seconds.
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, config: Optional[dict[str, Any]] = None) -> None:
         config = config or {}
         self._address: str = config.get("ble_address", "") or os.getenv("ESP32_BLE_ADDRESS", "")
         self._char_uuid: str = config.get("ble_char_uuid", "") or os.getenv(
@@ -151,7 +151,7 @@ class ESP32BLEDriver:
 
     # ── Public driver API ─────────────────────────────────────────────────────
 
-    def _send_command(self, command: Dict[str, Any]) -> None:
+    def _send_command(self, command: dict[str, Any]) -> None:
         """Serialise *command* as JSON and write it over BLE.
 
         In mock mode, logs the command at DEBUG level and returns without error.
@@ -170,7 +170,7 @@ class ESP32BLEDriver:
             self._connected = False
             logger.error("ESP32BLEDriver: write failed: %s", exc)
 
-    def move(self, params: Optional[Dict[str, Any]] = None) -> None:
+    def move(self, params: Optional[dict[str, Any]] = None) -> None:
         """Send a ``move`` command to the ESP32.
 
         Args:
@@ -178,7 +178,7 @@ class ESP32BLEDriver:
                     values.  Defaults to ``{"linear": 0.5, "angular": 0.0}``.
         """
         params = params or {}
-        cmd: Dict[str, Any] = {
+        cmd: dict[str, Any] = {
             "type": "move",
             "linear": float(params.get("linear", 0.5)),
             "angular": float(params.get("angular", 0.0)),
@@ -212,7 +212,7 @@ class ESP32BLEDriver:
         self._mode = "mock"
         self._connected = False
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> dict[str, Any]:
         """Return BLE driver health status.
 
         Returns:

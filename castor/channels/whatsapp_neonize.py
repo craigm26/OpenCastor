@@ -28,7 +28,8 @@ import logging
 import os
 import re
 import threading
-from typing import Callable, List, Optional
+from typing import Optional
+from collections.abc import Callable
 
 from castor.channels.base import BaseChannel
 
@@ -111,14 +112,14 @@ class WhatsAppChannel(BaseChannel):
 
         # Access control config
         self._dm_policy: str = config.get("dm_policy", "allowlist")
-        self._allow_from: List[str] = [_normalize_number(n) for n in config.get("allow_from", [])]
+        self._allow_from: list[str] = [_normalize_number(n) for n in config.get("allow_from", [])]
         self._self_chat_mode: bool = bool(config.get("self_chat_mode", True))
         self._group_policy: str = config.get("group_policy", "disabled")
         self._ack_reaction: Optional[str] = config.get("ack_reaction")
 
         # Group filtering: name-based (substring) or explicit JID allowlist
         self._group_name_filter: Optional[str] = config.get("group_name_filter") or None
-        self._group_jids: List[str] = [str(j).strip() for j in config.get("group_jids", []) if j]
+        self._group_jids: list[str] = [str(j).strip() for j in config.get("group_jids", []) if j]
 
         # Cache for group JID → subject lookups (avoids repeated API calls)
         self._group_name_cache: dict = {}  # {chat_user: str | None}
@@ -496,7 +497,7 @@ class WhatsAppChannel(BaseChannel):
                 return number
         return None
 
-    def list_pairing_requests(self) -> List[dict]:
+    def list_pairing_requests(self) -> list[dict]:
         """Return pending pairing requests as [{number, code}]."""
         return [{"number": f"+{n}", "code": c} for n, c in self._pairing_requests.items()]
 

@@ -18,7 +18,7 @@ Install: pip install opencastor[reachy]
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional
+from typing import Optional
 
 from castor.drivers.base import DriverBase
 
@@ -51,7 +51,7 @@ class ReachyDriver(DriverBase):
     def __init__(self, config: dict) -> None:
         self._config = config
         self._host: Optional[str] = config.get("host", "reachy.local")
-        self._arms: List[str] = config.get("arms", ["right"])
+        self._arms: list[str] = config.get("arms", ["right"])
         self._head_enabled: bool = bool(config.get("head", True))
         self._mode = "mock"
         self._reachy = None
@@ -178,7 +178,7 @@ class ReachyDriver(DriverBase):
     # Extended API
     # ------------------------------------------------------------------
 
-    def move_arm(self, side: str, joint_positions: Dict[str, float]) -> None:
+    def move_arm(self, side: str, joint_positions: dict[str, float]) -> None:
         """Move an arm to the specified joint positions.
 
         Args:
@@ -198,7 +198,7 @@ class ReachyDriver(DriverBase):
         except Exception as exc:
             logger.warning("ReachyDriver.move_arm(%s) failed: %s", side, exc)
 
-    def get_joint_positions(self) -> Dict[str, float]:
+    def get_joint_positions(self) -> dict[str, float]:
         """Read present joint positions for all enabled arms.
 
         Returns:
@@ -207,7 +207,7 @@ class ReachyDriver(DriverBase):
         if self._mode == "mock":
             return {}
 
-        positions: Dict[str, float] = {}
+        positions: dict[str, float] = {}
         for side in self._arms:
             try:
                 arm = getattr(self._reachy, f"{side}_arm", None)

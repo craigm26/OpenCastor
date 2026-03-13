@@ -34,7 +34,7 @@ import logging
 import os
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from urllib import request as _urllib_request
 from urllib.parse import urljoin
 
@@ -103,7 +103,7 @@ class PeerStatus:
         base_url: str,
         ok: bool,
         latency_ms: float = 0.0,
-        data: Optional[Dict] = None,
+        data: Optional[dict] = None,
         error: str = "",
     ):
         self.name = name
@@ -113,7 +113,7 @@ class PeerStatus:
         self.data = data or {}
         self.error = error
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialise to a JSON-safe dict."""
         return {
             "name": self.name,
@@ -141,7 +141,7 @@ class RelayResult:
         self,
         peer_name: str,
         ok: bool,
-        response: Optional[Dict] = None,
+        response: Optional[dict] = None,
         error: str = "",
         latency_ms: float = 0.0,
     ):
@@ -151,7 +151,7 @@ class RelayResult:
         self.error = error
         self.latency_ms = latency_ms
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialise to a JSON-safe dict."""
         return {
             "peer_name": self.peer_name,
@@ -162,7 +162,7 @@ class RelayResult:
         }
 
 
-def _http_get(url: str, token: str = "", timeout: float = 5.0) -> Dict:
+def _http_get(url: str, token: str = "", timeout: float = 5.0) -> dict:
     """Perform a JSON GET request.
 
     Args:
@@ -185,7 +185,7 @@ def _http_get(url: str, token: str = "", timeout: float = 5.0) -> Dict:
     return json.loads(body)
 
 
-def _http_post(url: str, payload: Dict, token: str = "", timeout: float = 10.0) -> Dict:
+def _http_post(url: str, payload: dict, token: str = "", timeout: float = 10.0) -> dict:
     """Perform a JSON POST request.
 
     Args:
@@ -223,10 +223,10 @@ class MeshNode:
         config: Full RCAN config dict.
     """
 
-    def __init__(self, config: Dict) -> None:
+    def __init__(self, config: dict) -> None:
         mesh_cfg = config.get("mesh", {})
         self.enabled: bool = mesh_cfg.get("enabled", False)
-        self._peers: Dict[str, PeerConfig] = {}
+        self._peers: dict[str, PeerConfig] = {}
 
         for peer_raw in mesh_cfg.get("peers", []):
             name = peer_raw.get("name", "")
@@ -249,13 +249,13 @@ class MeshNode:
     # Public API
     # ------------------------------------------------------------------
 
-    def list_peers(self) -> List[PeerStatus]:
+    def list_peers(self) -> list[PeerStatus]:
         """Ping every configured peer and return health status list.
 
         Returns:
             List of :class:`PeerStatus` objects (one per configured peer).
         """
-        statuses: List[PeerStatus] = []
+        statuses: list[PeerStatus] = []
         for _name, peer in self._peers.items():
             statuses.append(self._ping_peer(peer))
         return statuses
@@ -304,7 +304,7 @@ class MeshNode:
                 latency_ms=latency_ms,
             )
 
-    def relay(self, peer_name: str, instruction: str) -> Dict:
+    def relay(self, peer_name: str, instruction: str) -> dict:
         """Alias for :meth:`route_to_peer` returning a plain dict.
 
         Suitable for use as an HTTP handler response body.
@@ -354,7 +354,7 @@ class MeshNode:
     # ------------------------------------------------------------------
 
     @property
-    def peer_names(self) -> List[str]:
+    def peer_names(self) -> list[str]:
         """Sorted list of configured peer names."""
         return sorted(self._peers.keys())
 
@@ -404,7 +404,7 @@ class MeshNode:
 # ---------------------------------------------------------------------------
 
 
-def get_mesh(config: Optional[Dict] = None) -> MeshNode:
+def get_mesh(config: Optional[dict] = None) -> MeshNode:
     """Return the global :class:`MeshNode` singleton.
 
     Creates a new instance if one does not yet exist or if *config* is given.

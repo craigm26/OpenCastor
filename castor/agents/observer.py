@@ -8,7 +8,7 @@ can consume from SharedState.
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from castor.world import EntityRecord, WorldModel
 
@@ -70,11 +70,11 @@ class SceneGraph:
     """
 
     timestamp: float
-    detections: List[Detection] = field(default_factory=list)
+    detections: list[Detection] = field(default_factory=list)
     free_space_pct: float = 1.0
     closest_obstacle_m: Optional[float] = None
-    dominant_objects: List[str] = field(default_factory=list)
-    raw_sensor_keys: List[str] = field(default_factory=list)
+    dominant_objects: list[str] = field(default_factory=list)
+    raw_sensor_keys: list[str] = field(default_factory=list)
 
 
 class ObserverAgent(BaseAgent):
@@ -108,7 +108,7 @@ class ObserverAgent(BaseAgent):
 
     def __init__(
         self,
-        config: Optional[Dict[str, Any]] = None,
+        config: Optional[dict[str, Any]] = None,
         shared_state: Optional[SharedState] = None,
     ) -> None:
         super().__init__(config)
@@ -118,7 +118,7 @@ class ObserverAgent(BaseAgent):
             self.config.get("obstacle_labels", [])
         )
 
-    async def observe(self, sensor_data: Dict[str, Any]) -> "SceneGraph":
+    async def observe(self, sensor_data: dict[str, Any]) -> "SceneGraph":
         """Build and return a :class:`SceneGraph` from *sensor_data*.
 
         Handles missing or ``None`` sensor keys gracefully — unknown keys are
@@ -133,8 +133,8 @@ class ObserverAgent(BaseAgent):
         if sensor_data is None:
             sensor_data = {}
 
-        raw_keys: List[str] = []
-        detections: List[Detection] = []
+        raw_keys: list[str] = []
+        detections: list[Detection] = []
 
         # ---- Parse Hailo detections ----
         hailo_raw = sensor_data.get("hailo_detections")
@@ -170,7 +170,7 @@ class ObserverAgent(BaseAgent):
         self.status = AgentStatus.RUNNING
         return scene
 
-    async def act(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def act(self, context: dict[str, Any]) -> dict[str, Any]:
         """Return a simple action based on the most recent SceneGraph.
 
         The observer does not drive motors directly; it signals whether
@@ -239,7 +239,7 @@ class ObserverAgent(BaseAgent):
             logger.debug(f"Skipping malformed detection {det!r}: {exc}")
             return None
 
-    def _enrich_with_depth(self, detections: List[Detection], depth_map: Any) -> List[Detection]:
+    def _enrich_with_depth(self, detections: list[Detection], depth_map: Any) -> list[Detection]:
         """Assign depth-derived distances using bbox centre pixel lookup.
 
         Args:
@@ -251,7 +251,7 @@ class ObserverAgent(BaseAgent):
         """
         try:
             h, w = depth_map.shape[:2]
-            enriched: List[Detection] = []
+            enriched: list[Detection] = []
             for det in detections:
                 x1, y1, x2, y2 = det.bbox
                 cx = int(((x1 + x2) / 2) * w)
@@ -274,12 +274,12 @@ class ObserverAgent(BaseAgent):
             logger.debug(f"Depth enrichment failed: {exc}")
             return detections
 
-    def _closest_obstacle(self, detections: List[Detection]) -> Optional[float]:
+    def _closest_obstacle(self, detections: list[Detection]) -> Optional[float]:
         """Return the minimum known distance among obstacle detections."""
         distances = [d.distance_m for d in detections if d.is_obstacle and d.distance_m is not None]
         return min(distances) if distances else None
 
-    def _estimate_free_space(self, detections: List[Detection], depth_map: Any) -> float:
+    def _estimate_free_space(self, detections: list[Detection], depth_map: Any) -> float:
         """Heuristic estimate of free navigable space fraction [0, 1].
 
         Uses depth map if available (fraction of pixels with depth > 1 m),
@@ -299,10 +299,10 @@ class ObserverAgent(BaseAgent):
                 occupied += max(0.0, x2 - x1) * max(0.0, y2 - y1)
         return float(max(0.0, 1.0 - min(occupied, 1.0)))
 
-    def _dominant_objects(self, detections: List[Detection]) -> List[str]:
+    def _dominant_objects(self, detections: list[Detection]) -> list[str]:
         """Return the top-3 unique object labels ranked by confidence."""
         sorted_dets = sorted(detections, key=lambda d: d.confidence, reverse=True)
-        seen: List[str] = []
+        seen: list[str] = []
         for det in sorted_dets:
             if det.label not in seen:
                 seen.append(det.label)

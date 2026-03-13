@@ -15,7 +15,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.Update")
 
@@ -169,7 +169,7 @@ def cmd_swarm_update(args) -> None:
             "  manual password entry (or set up SSH key auth)."
         )
 
-    results: List[Dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
     for node in nodes:
         result = _update_node(node, dry_run=dry_run, has_sshpass=has_sshpass)
         results.append(result)
@@ -189,10 +189,10 @@ def cmd_swarm_update(args) -> None:
 
 
 def _update_node(
-    node: Dict[str, Any],
+    node: dict[str, Any],
     dry_run: bool,
     has_sshpass: bool,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run the update sequence on a single swarm node."""
     name = node.get("name", node.get("ip", node.get("host", "?")))
     host = node.get("ip") or node.get("host", "localhost")
@@ -210,7 +210,7 @@ def _update_node(
     )
 
     # Build SSH command
-    ssh_cmd: List[str] = []
+    ssh_cmd: list[str] = []
 
     if password and has_sshpass:
         ssh_cmd += ["sshpass", "-p", password]
@@ -265,7 +265,7 @@ def _update_node(
 # ---------------------------------------------------------------------------
 
 
-def _run_or_print(cmd: List[str], dry_run: bool, label: str) -> None:
+def _run_or_print(cmd: list[str], dry_run: bool, label: str) -> None:
     """Print the command (always), then execute it unless dry_run is True."""
     print(f"  Running: {' '.join(cmd)}")
     if dry_run:
@@ -275,7 +275,7 @@ def _run_or_print(cmd: List[str], dry_run: bool, label: str) -> None:
         logger.warning("Command failed with exit code %d: %s", result.returncode, label)
 
 
-def _load_swarm_nodes(config_path: Optional[str] = None) -> List[Dict[str, Any]]:
+def _load_swarm_nodes(config_path: Optional[str] = None) -> list[dict[str, Any]]:
     """Load the list of nodes from swarm.yaml (delegates to swarm module)."""
     try:
         from castor.commands.swarm import load_swarm_config

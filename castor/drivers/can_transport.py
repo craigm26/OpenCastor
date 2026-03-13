@@ -11,7 +11,7 @@ Frame ID layout: ``(node_id << 5) | cmd_id``  (11-bit standard CAN ID)
 from __future__ import annotations
 
 import logging
-from typing import Optional, Tuple
+from typing import Optional
 
 logger = logging.getLogger("OpenCastor.CanTransport")
 
@@ -81,7 +81,7 @@ class CanTransport:
         except Exception as exc:
             logger.error("CAN send error (node=%d cmd=0x%02x): %s", node_id, cmd_id, exc)
 
-    def recv(self, timeout: float = 0.1) -> Optional[Tuple[int, int, bytes]]:
+    def recv(self, timeout: float = 0.1) -> Optional[tuple[int, int, bytes]]:
         """Receive a CAN frame.
 
         Args:

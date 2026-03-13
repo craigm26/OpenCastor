@@ -54,7 +54,7 @@ Filesystem layout::
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from castor.fs.context import ContextWindow, Pipeline, PipelineStage
 from castor.fs.memory import MemoryStore
@@ -117,7 +117,7 @@ class CastorFS:
         limits:       Optional dict overriding safety limits.
     """
 
-    def __init__(self, persist_dir: Optional[str] = None, limits: Optional[Dict] = None):
+    def __init__(self, persist_dir: Optional[str] = None, limits: Optional[dict] = None):
         from castor.fs.safety import SafetyLayer
 
         # Core layers
@@ -142,7 +142,7 @@ class CastorFS:
         self.ns.write("/dev/camera", None)
         self.ns.write("/dev/speaker", None)
 
-    def boot(self, config: Optional[Dict] = None):
+    def boot(self, config: Optional[dict] = None):
         """Initialise the filesystem with a loaded RCAN config.
 
         Call this once after constructing CastorFS and loading the
@@ -205,11 +205,11 @@ class CastorFS:
         """Append with permission enforcement."""
         return self.safety.append(path, entry, principal=principal)
 
-    def ls(self, path: str = "/", principal: str = "root") -> Optional[List[str]]:
+    def ls(self, path: str = "/", principal: str = "root") -> Optional[list[str]]:
         """List directory contents with permission enforcement."""
         return self.safety.ls(path, principal=principal)
 
-    def stat(self, path: str, principal: str = "root") -> Optional[Dict]:
+    def stat(self, path: str, principal: str = "root") -> Optional[dict]:
         """Stat a node with permission enforcement."""
         return self.safety.stat(path, principal=principal)
 
@@ -268,7 +268,7 @@ class CastorFS:
         self._tree_recursive(path, "", depth, lines)
         return "\n".join(lines)
 
-    def _tree_recursive(self, path: str, prefix: str, depth: int, lines: List[str]):
+    def _tree_recursive(self, path: str, prefix: str, depth: int, lines: list[str]):
         if depth < 0:
             return
 

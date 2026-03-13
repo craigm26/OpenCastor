@@ -6,7 +6,7 @@ message to the correct swarm agent via SharedState.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from castor.command_interpreter import get_command_interpreter
 
@@ -16,7 +16,7 @@ from .shared_state import SharedState
 logger = logging.getLogger("OpenCastor.Agents.Communicator")
 
 # Keyword → target agent routing table (first match wins, ordered by specificity)
-_INTENT_ROUTING: List[tuple] = [
+_INTENT_ROUTING: list[tuple] = [
     # Manipulation
     ("grasp", "manipulator"),
     ("grab", "manipulator"),
@@ -80,12 +80,12 @@ class CommunicatorAgent(BaseAgent):
 
     def __init__(
         self,
-        config: Optional[Dict[str, Any]] = None,
+        config: Optional[dict[str, Any]] = None,
         shared_state: Optional[SharedState] = None,
     ):
         super().__init__(config)
         self._state = shared_state or SharedState()
-        self._conversation_history: List[str] = []
+        self._conversation_history: list[str] = []
         self._last_intent: Optional[str] = None
         self._last_routed_to: Optional[str] = None
         self._interpreter = get_command_interpreter()
@@ -137,12 +137,12 @@ class CommunicatorAgent(BaseAgent):
     # BaseAgent interface
     # ------------------------------------------------------------------
 
-    async def observe(self, sensor_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def observe(self, sensor_data: dict[str, Any]) -> dict[str, Any]:
         """Pull latest incoming message from SharedState or sensor_data."""
         msg = sensor_data.get("incoming_message") or self._state.get("swarm.incoming_message")
         return {"message": msg}
 
-    async def act(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def act(self, context: dict[str, Any]) -> dict[str, Any]:
         """Parse intent, route to target agent, and return routing result."""
         msg = context.get("message")
         if not msg:

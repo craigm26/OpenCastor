@@ -13,7 +13,7 @@ import json
 import logging
 import time
 from collections import deque
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger("OpenCastor.ThoughtLog")
 
@@ -23,7 +23,7 @@ class ThoughtLog:
 
     def __init__(self, max_memory: int = 1000, storage_path: Optional[str] = None):
         self._store: deque = deque(maxlen=max_memory)
-        self._index: Dict[str, int] = {}  # thought_id -> deque position (approximate)
+        self._index: dict[str, int] = {}  # thought_id -> deque position (approximate)
         self._storage_path = storage_path
 
         if storage_path:
@@ -37,7 +37,7 @@ class ThoughtLog:
             except Exception as exc:
                 logger.debug("ThoughtLog storage dir error (non-fatal): %s", exc)
 
-    def record(self, thought: Any, context_snapshot: Optional[Dict] = None) -> None:
+    def record(self, thought: Any, context_snapshot: Optional[dict] = None) -> None:
         """Persist a Thought to the in-memory store (and optionally JSONL file).
 
         Args:
@@ -69,7 +69,7 @@ class ThoughtLog:
             except Exception as exc:
                 logger.debug("ThoughtLog JSONL write failed (non-fatal): %s", exc)
 
-    def get(self, thought_id: str, include_reasoning: bool = False) -> Optional[Dict]:
+    def get(self, thought_id: str, include_reasoning: bool = False) -> Optional[dict]:
         """Retrieve a thought by ID.
 
         Args:

@@ -18,7 +18,8 @@ SAFETY priority messages skip the queue (Safety Invariant 6).
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Optional
+from collections.abc import Callable
 
 from castor.rcan.capabilities import CapabilityRegistry
 from castor.rcan.message import RCANMessage
@@ -28,7 +29,7 @@ from castor.rcan.ruri import RURI
 logger = logging.getLogger("OpenCastor.RCAN.Router")
 
 # Map capabilities to required scopes
-_CAP_SCOPE_MAP: Dict[str, Scope] = {
+_CAP_SCOPE_MAP: dict[str, Scope] = {
     "status": Scope.STATUS,
     "nav": Scope.CONTROL,
     "teleop": Scope.CONTROL,
@@ -38,7 +39,7 @@ _CAP_SCOPE_MAP: Dict[str, Scope] = {
 }
 
 # Handler signature: (message, principal) -> payload dict
-HandlerFn = Callable[[RCANMessage, Optional[RCANPrincipal]], Dict[str, Any]]
+HandlerFn = Callable[[RCANMessage, Optional[RCANPrincipal]], dict[str, Any]]
 
 
 class MessageRouter:
@@ -52,7 +53,7 @@ class MessageRouter:
     def __init__(self, ruri: RURI, capabilities: CapabilityRegistry):
         self.ruri = ruri
         self.capabilities = capabilities
-        self._handlers: Dict[str, HandlerFn] = {}
+        self._handlers: dict[str, HandlerFn] = {}
         self._messages_routed = 0
 
     @property
