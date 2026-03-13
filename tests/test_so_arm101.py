@@ -185,3 +185,60 @@ def test_arm_cli_config_dry(tmp_path):
     content = Path(out).read_text()
     assert "test_arm" in content
     assert "feetech" in content
+
+
+# ── lerobot bridge ────────────────────────────────────────────────────────────
+
+def test_lerobot_bridge_status():
+    from castor.hardware.so_arm101.lerobot_bridge import status
+
+    st = status()
+    assert "available" in st
+    assert "venv" in st
+    assert "tools" in st
+    # Tools dict has expected keys
+    for key in ["lerobot-find-port", "lerobot-setup-motors", "lerobot-calibrate"]:
+        assert key in st["tools"]
+
+
+def test_lerobot_bridge_find_bin_no_crash():
+    from castor.hardware.so_arm101.lerobot_bridge import find_lerobot_bin
+
+    result = find_lerobot_bin("lerobot-find-port")
+    # May be None (no LeRobot installed in CI) — just must not raise
+    assert result is None or result.exists()
+
+
+def test_motor_setup_dry_run_uses_native_when_no_lerobot():
+    """Dry-run should not require LeRobot."""
+    from castor.hardware.so_arm101.motor_setup import setup_motors
+
+    results = setup_motors(
+        port="/dev/null",
+        arm="follower",
+        dry_run=True,
+        prefer_lerobot=False,
+        print_fn=lambda *a: None,
+        input_fn=lambda *a: "",
+    )
+    assert len(results) == 6
+
+
+def test_arm_cli_calibrate_no_lerobot(capsys):
+    """calibrate should print install instructions when LeRobot not available."""
+    import argparse
+    from unittest.mock import patch
+    from castor.hardware.so_arm101.cli import cmd_calibrate
+
+    with patch("castor.hardware.so_arm101.lerobot_bridge.lerobot_available", return_value=False):
+        cmd_calibrate(argparse.Namespace(arm="follower", port=None))
+
+    captured = capsys.readouterr()
+    assert "lerobot-calibrate not found" in captured.out or "LeRobot" in captured.out
+
+
+def test_arm_cli_status_no_crash(capsys):
+    import argparse
+    from castor.hardware.so_arm101.cli import cmd_status
+
+    cmd_status(argparse.Namespace())

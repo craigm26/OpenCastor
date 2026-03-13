@@ -107,6 +107,33 @@ def interactive_port_identify(
     return port
 
 
+def lerobot_find_port(label: str = "arm", print_fn=print, input_fn=input) -> Optional[str]:
+    """
+    Run lerobot-find-port interactively, then prompt user to confirm the port.
+
+    Returns the confirmed port string, or None.
+    """
+    from castor.hardware.so_arm101.lerobot_bridge import find_lerobot_bin
+
+    tool = find_lerobot_bin("lerobot-find-port")
+    if not tool:
+        return None
+
+    import subprocess
+
+    print_fn(f"\n[LeRobot] Identifying port for {label} arm...")
+    print_fn(f"  Running: {tool}")
+    print_fn("  When prompted, disconnect the USB cable from the controller board.\n")
+    try:
+        subprocess.run([str(tool)])
+    except Exception as e:
+        print_fn(f"  Error: {e}")
+        return None
+
+    port = input_fn("\n  Enter the port shown above (e.g. /dev/ttyACM0): ").strip()
+    return port or None
+
+
 def auto_assign_ports(print_fn=print, input_fn=input) -> dict[str, str]:
     """
     Detect and return {'follower': '/dev/...', 'leader': '/dev/...'}.
@@ -114,6 +141,23 @@ def auto_assign_ports(print_fn=print, input_fn=input) -> dict[str, str]:
     If only one port found → assigns to follower only.
     If two found → prompts user to confirm which is which.
     """
+    # ── Use lerobot-find-port if available ──
+    from castor.hardware.so_arm101.lerobot_bridge import lerobot_available
+
+    if lerobot_available():
+        print_fn("\n[SO-ARM101] LeRobot detected — using lerobot-find-port for port identification")
+        result = {}
+        for arm in (["follower", "leader"] if True else ["follower"]):
+            ans = input_fn(f"\n  Identify {arm} arm port? [Y/n]: ").strip().lower()
+            if ans != "n":
+                port = lerobot_find_port(label=arm, print_fn=print_fn, input_fn=input_fn)
+                if port:
+                    result[arm] = port
+            else:
+                break
+        if result:
+            return result
+
     ports = detect_feetech_ports()
 
     if len(ports) >= 2:

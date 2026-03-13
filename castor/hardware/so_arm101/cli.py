@@ -119,6 +119,63 @@ def cmd_verify(args) -> None:
         print("   Check daisy-chain cable order and power supply.\n")
 
 
+def cmd_calibrate(args) -> None:
+    """castor arm calibrate — run lerobot-calibrate for joint zero-offsets."""
+    from castor.hardware.so_arm101.lerobot_bridge import (
+        lerobot_available,
+        run_calibrate,
+        status as lr_status,
+    )
+
+    if not lerobot_available():
+        print(
+            "\n⚠  lerobot-calibrate not found.\n"
+            "   Install LeRobot first:\n"
+            "     git clone https://github.com/huggingface/lerobot.git\n"
+            "     cd lerobot && python3 -m venv .venv && source .venv/bin/activate\n"
+            "     pip install -e '.[feetech]'\n"
+        )
+        return
+
+    st = lr_status()
+    print(f"\n[SO-ARM101] LeRobot venv: {st['venv']}")
+
+    port = args.port
+    if not port:
+        from castor.hardware.so_arm101.port_finder import detect_feetech_ports
+        ports = detect_feetech_ports()
+        port = ports[0]["port"] if ports else "/dev/ttyACM0"
+
+    ok = run_calibrate(port=port, arm=args.arm)
+    if ok:
+        print(f"\n✅ Calibration complete for {args.arm} arm.\n")
+    else:
+        print(f"\n⚠  Calibration exited with an error. Check cables and retry.\n")
+
+
+def cmd_status(args) -> None:
+    """castor arm status — show LeRobot install status and detected ports."""
+    from castor.hardware.so_arm101.lerobot_bridge import status as lr_status
+    from castor.hardware.so_arm101.port_finder import detect_feetech_ports
+
+    st = lr_status()
+    print("\n[SO-ARM101] LeRobot status:")
+    print(f"  Available : {'✅ yes' if st['available'] else '❌ no'}")
+    print(f"  Venv      : {st['venv'] or 'not found'}")
+    for tool, path in st["tools"].items():
+        icon = "✓" if path else "✗"
+        print(f"  {icon}  {tool}: {path or 'not found'}")
+
+    ports = detect_feetech_ports()
+    print(f"\n[SO-ARM101] Detected controller boards:")
+    if ports:
+        for p in ports:
+            print(f"  ✓  {p['port']}  — {p['description']}")
+    else:
+        print("  None detected (boards may not be plugged in)")
+    print()
+
+
 def cmd_config(args) -> None:
     from castor.hardware.so_arm101.config_generator import write_config
     from castor.hardware.so_arm101.port_finder import auto_assign_ports
@@ -170,6 +227,16 @@ def build_parser(subparsers=None) -> argparse.ArgumentParser:
     p_ver.add_argument("--arm", choices=["follower", "leader"], default="follower")
     p_ver.add_argument("--port", help="Serial port")
     p_ver.set_defaults(func=cmd_verify)
+
+    # calibrate
+    p_cal = subparsers.add_parser("calibrate", help="Run lerobot-calibrate for joint zero-offsets")
+    p_cal.add_argument("--arm", choices=["follower", "leader"], default="follower")
+    p_cal.add_argument("--port", help="Serial port")
+    p_cal.set_defaults(func=cmd_calibrate)
+
+    # status
+    p_st = subparsers.add_parser("status", help="Show LeRobot install status and detected ports")
+    p_st.set_defaults(func=cmd_status)
 
     # config
     p_cfg = subparsers.add_parser("config", help="Generate RCAN config file")

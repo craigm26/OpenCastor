@@ -71,6 +71,7 @@ def setup_motors(
     print_fn=print,
     input_fn=input,
     dry_run: bool = False,
+    prefer_lerobot: bool = True,
 ) -> dict[str, bool]:
     """
     Interactively configure motor IDs and baudrates for one arm.
@@ -86,6 +87,17 @@ def setup_motors(
     """
     motor_list = FOLLOWER_MOTORS if arm == "follower" else LEADER_MOTORS
     results: dict[str, bool] = {}
+
+    # ── Prefer LeRobot tools when available (e.g. ~/lerobot/.venv on alex.local) ──
+    if prefer_lerobot and not dry_run:
+        from castor.hardware.so_arm101.lerobot_bridge import (
+            lerobot_available,
+            run_setup_motors as _lr_setup,
+        )
+        if lerobot_available():
+            print_fn("\n[SO-ARM101] LeRobot detected — delegating to lerobot-setup-motors")
+            ok = _lr_setup(port=port, arm=arm, print_fn=print_fn)
+            return {m["joint"]: ok for m in motor_list}
 
     try:
         from feetech_servo_sdk import PacketHandler, PortHandler  # type: ignore[import]
