@@ -158,8 +158,76 @@
     <div class="container">
       <div class="changelog-timeline">
 
+        <!-- v2026.3.13.11 -->
+        <div class="changelog-release current reveal" id="v2026.3.13.11">
+          <div class="release-header">
+            <span class="release-version">v2026.3.13.11</span>
+            <span class="release-date">2026-03-13</span>
+            <span class="release-badge badge-new">Latest</span>
+          </div>
+          <div class="release-body">
+            <div class="release-group">
+              <span class="release-group-label">Fixed</span>
+              <ul>
+                <li><code>castor/rcan/registry.py</code>: <code>_validate_rrn()</code> now accepts numeric <code>RRN-XXXXXX</code> format alongside URI format; type-check for non-string input raises <code>ValueError</code> not <code>AttributeError</code></li>
+                <li><code>castor/rcan/registry.py</code>: <code>RegistryRegisterResult.from_message()</code> enforces <code>rrn</code> required on success, <code>error</code> required on failure</li>
+                <li><code>castor/rcan/registry.py</code>: <code>RegistryResolveResult.from_message()</code> enforces <code>ruri</code> required when <code>status="found"</code></li>
+                <li><code>castor/rcan/registry.py</code>: <code>RegistryResolveResponse.to_message()</code> emits correct wire type <code>REGISTRY_RESOLVE_RESULT</code> (17), not <code>REGISTRY_RESOLVE</code> (14)</li>
+                <li><code>castor/tiered_brain.py</code>: <code>sensor_poll</code> fast-only guarantee enforced — interpreter <code>should_escalate</code> can no longer override planner suppression</li>
+                <li><code>castor/rcan/sdk_compat.py</code>: handle rcan ≥ 0.3.0 <code>ValidationResult</code> object return from <code>validate_config()</code></li>
+                <li><code>bob.rcan.yaml</code>: added <code>rrn</code>, <code>rrn_uri</code>, <code>task_routing</code> block; updated to v2026.3.13.11</li>
+              </ul>
+            </div>
+            <div class="release-group">
+              <span class="release-group-label">Added</span>
+              <ul>
+                <li>15 new validation tests in <code>tests/test_rcan_registry.py</code> covering Copilot-flagged validation paths; 105 total passing</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- v2026.3.13.10 -->
+        <div class="changelog-release reveal" id="v2026.3.13.10">
+          <div class="release-header">
+            <span class="release-version">v2026.3.13.10</span>
+            <span class="release-date">2026-03-13</span>
+          </div>
+          <div class="release-body">
+            <div class="release-group">
+              <span class="release-group-label">Fixed</span>
+              <ul>
+                <li><code>castor/fleet/group_policy.py</code>: <code>FleetManager.from_config</code> now emits <code>logger.warning</code> on malformed group entries instead of silently dropping them (#641)</li>
+              </ul>
+            </div>
+            <div class="release-group">
+              <span class="release-group-label">Added</span>
+              <ul>
+                <li><code>tests/test_fleet_group_policy.py</code>: 28 tests covering <code>GroupPolicy.matches</code>, <code>FleetManager</code>, <code>resolve_config</code>, and <code>_deep_merge</code> (#640)</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- v2026.3.13.9 -->
+        <div class="changelog-release reveal" id="v2026.3.13.9">
+          <div class="release-header">
+            <span class="release-version">v2026.3.13.9</span>
+            <span class="release-date">2026-03-13</span>
+          </div>
+          <div class="release-body">
+            <div class="release-group">
+              <span class="release-group-label">Added</span>
+              <ul>
+                <li><code>castor/providers/task_router.py</code>: add <code>openrouter</code> to all task categories in <code>_DEFAULT_ROUTING</code> — was unreachable (#639)</li>
+                <li><code>tests/test_task_router.py</code>: 3 new tests validating openrouter reachability, local-provider priority for SENSOR_POLL, cloud-fallback for REASONING</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
         <!-- v2026.3.13.8 -->
-        <div class="changelog-release current reveal" id="v2026.3.13.8">
+        <div class="changelog-release reveal" id="v2026.3.13.8">
           <div class="release-header">
             <span class="release-version">v2026.3.13.8</span>
             <span class="release-date">March 13, 2026</span>
