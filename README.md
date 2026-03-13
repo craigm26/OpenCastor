@@ -76,6 +76,9 @@ castor init --output ./config/robot.rcan.yaml
 
 # Interactive: full setup wizard (requires TTY)
 docker run -it --rm -v ./config:/app/config opencastor castor wizard
+
+# With USB hardware (SO-ARM101, Dynamixel, etc.) — pass through USB bus for auto-detect:
+docker run -it --rm --device=/dev/bus/usb --privileged -v ./config:/app/config opencastor castor wizard
 ```
 
 ## Minimal Config
