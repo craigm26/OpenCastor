@@ -6,7 +6,7 @@ a single endpoint at https://openrouter.ai/api/v1. Uses the `openai` SDK with a
 custom base_url and required OpenRouter-specific headers.
 
 Env:     OPENROUTER_API_KEY  (required)
-         OPENROUTER_MODEL    (optional override; default anthropic/claude-3.5-haiku)
+         OPENROUTER_MODEL    (optional override; default anthropic/claude-3.5-sonnet)
 Install: pip install openai
 
 Supported model families (examples):
@@ -30,7 +30,7 @@ from .base import BaseProvider, Thought
 
 logger = logging.getLogger("OpenCastor.OpenRouter")
 
-_DEFAULT_MODEL = "anthropic/claude-3.5-haiku"
+_DEFAULT_MODEL = "anthropic/claude-3.5-sonnet"
 _BASE_URL = "https://openrouter.ai/api/v1"
 _EXTRA_HEADERS = {
     "HTTP-Referer": "https://opencastor.com",
