@@ -72,14 +72,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
-    # Serial port tools
-    udev \
+    # Serial port device access
+    cu \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root user — member of dialout for USB serial access
-RUN groupadd --system castor && \
-    useradd --system --gid castor --groups dialout \
-        --create-home --home-dir /home/castor --shell /bin/bash castor
+RUN groupadd --system castor 2>/dev/null || true && \
+    useradd --system --gid castor \
+        --create-home --home-dir /home/castor --shell /bin/bash castor 2>/dev/null || true && \
+    usermod -aG dialout castor 2>/dev/null || true
 
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1
