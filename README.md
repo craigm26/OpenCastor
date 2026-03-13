@@ -84,7 +84,7 @@ docker run -it --rm --device=/dev/bus/usb --privileged -v ./config:/app/config o
 ## Minimal Config
 
 ```yaml
-rcan_version: "1.1.0"
+rcan_version: "1.2"
 metadata:
   robot_name: my-robot
 agent:

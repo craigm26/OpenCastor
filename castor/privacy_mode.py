@@ -54,12 +54,12 @@ class PrivacyModeManager:
 
     # ── Control ───────────────────────────────────────────────────────
 
-    def enable(self):
+    def enable(self) -> None:
         self._enabled = True
         self._violations.clear()
         logger.warning("PRIVACY MODE ENABLED — all cloud egress blocked")
 
-    def disable(self):
+    def disable(self) -> None:
         self._enabled = False
         logger.info("Privacy mode disabled — cloud providers re-enabled")
 
