@@ -6,6 +6,14 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 
 ---
 
+## [2026.3.13.9] — 2026-03-13
+
+### Added
+- `castor/providers/task_router.py`: add `openrouter` to all task categories in `_DEFAULT_ROUTING` — OpenRouterProvider was fully implemented but unreachable via TaskRouter (#639)
+- `tests/test_task_router.py`: three new tests validating openrouter reachability, local-provider priority for SENSOR_POLL, and cloud-fallback ordering for REASONING
+
+---
+
 ## [2026.3.13.8] — 2026-03-13
 
 ### Added
