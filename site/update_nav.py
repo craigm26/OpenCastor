@@ -1,7 +1,7 @@
 import os
 import re
 
-site_dir = r"c:\Users\CraigM\source\repos\OpenCastor\site"
+site_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)))
 html_files = [f for f in os.listdir(site_dir) if f.endswith('.html')]
 
 links_html = """      <a href="/docs">Docs</a>
