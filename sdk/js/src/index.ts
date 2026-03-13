@@ -60,6 +60,81 @@ export interface PointCloudResponse {
   mode: string;
 }
 
+export interface InvokeRequest {
+  /** Skill name to invoke on the robot runtime (§19). */
+  skill: string;
+  /** Arbitrary parameters forwarded to the skill handler. */
+  params?: Record<string, unknown>;
+  /** Override the auto-generated UUIDv4 message id. */
+  msgId?: string;
+  /**
+   * Maximum time in milliseconds to wait for INVOKE_RESULT before the client
+   * rejects the promise.  The INVOKE_CANCEL is sent automatically on timeout.
+   * Defaults to no client-side timeout (server TTL applies).
+   */
+  timeoutMs?: number;
+  /**
+   * RURI to send the INVOKE_RESULT reply to.  Defaults to the robot's own RURI.
+   * Use when building multi-hop dispatch patterns (§19.2).
+   */
+  replyTo?: string;
+}
+
+export interface InvokeResponse {
+  /** Echoes the originating INVOKE msg_id (§19.3 reply_to). */
+  reply_to: string;
+  /** Outcome: "success" | "not_found" | "error" | "cancelled" | "timeout" */
+  status: "success" | "not_found" | "error" | "cancelled" | "timeout" | string;
+  /** Skill-specific result payload. */
+  result?: Record<string, unknown>;
+  /** Human-readable error detail when status !== "success". */
+  error?: string;
+  /** Round-trip latency in milliseconds (when reported by the runtime). */
+  latency_ms?: number;
+  [key: string]: unknown;
+}
+
+export interface RegistryRegisterRequest {
+  /** Robot Registration Number — numeric (<code>RRN-XXXXXXXXXXXX</code>) or URI form. */
+  rrn: string;
+  /** Canonical RCAN URI for this robot. */
+  ruri: string;
+  /** Display name for the robot. */
+  name?: string;
+  /** Manufacturer identifier. */
+  manufacturer?: string;
+  /** Robot model name. */
+  model?: string;
+  /** Ed25519 public key (Base64) used to verify ownership proofs. */
+  public_key?: string;
+  /** Arbitrary extra metadata. */
+  metadata?: Record<string, unknown>;
+}
+
+export interface RegistryRegisterResponse {
+  /** Outcome: "success" | "already_registered" | "error" */
+  status: "success" | "already_registered" | "error" | string;
+  /** The RRN that was registered. */
+  rrn?: string;
+  /** Human-readable error detail when status !== "success". */
+  error?: string;
+  [key: string]: unknown;
+}
+
+export interface RegistryResolveResponse {
+  /** Outcome: "found" | "not_found" | "error" */
+  status: "found" | "not_found" | "error" | string;
+  /** Resolved RCAN URI when status === "found". */
+  ruri?: string;
+  /** The RRN that was resolved. */
+  rrn?: string;
+  /** Registration metadata returned by the registry. */
+  metadata?: Record<string, unknown>;
+  /** Human-readable error detail when status !== "found". */
+  error?: string;
+  [key: string]: unknown;
+}
+
 export interface EpisodeMemory {
   id?: number | string;
   timestamp?: string;
@@ -181,6 +256,134 @@ export class CastorClient {
   /** Emergency stop. */
   async stop(): Promise<{ ok: boolean }> {
     return this.fetch("POST", "/api/stop", {});
+  }
+
+  // ── INVOKE (§19) ──────────────────────────────────────────────────────
+
+  /**
+   * Invoke a named skill on the robot runtime (RCAN §19).
+   *
+   * Sends an INVOKE message (type 11) to the `/rcan` endpoint and returns the
+   * `INVOKE_RESULT` payload.  The `reply_to` field in the response echoes the
+   * `msg_id` of the outbound INVOKE for correlation.
+   */
+  async invoke(request: InvokeRequest): Promise<InvokeResponse> {
+    const msgId = request.msgId ?? crypto.randomUUID();
+    const payload: Record<string, unknown> = {
+      msg_type: 11, // MessageType.INVOKE
+      msg_id: msgId,
+      skill: request.skill,
+      params: request.params ?? {},
+    };
+    if (request.replyTo) payload.reply_to = request.replyTo;
+
+    if (request.timeoutMs != null) {
+      const timeoutSignal = AbortSignal.timeout
+        ? AbortSignal.timeout(request.timeoutMs)
+        : undefined;
+      const fetchPromise = this.fetch<InvokeResponse>("POST", "/rcan", payload);
+      if (!timeoutSignal) return fetchPromise;
+      return Promise.race([
+        fetchPromise,
+        new Promise<never>((_, reject) =>
+          timeoutSignal.addEventListener("abort", async () => {
+            // Best-effort cancel on timeout
+            try { await this.invokeCancel(msgId); } catch { /* ignore */ }
+            reject(
+              Object.assign(new Error(`invoke(${request.skill}) timed out after ${request.timeoutMs}ms`), {
+                status: "timeout" as const,
+                reply_to: msgId,
+              })
+            );
+          })
+        ),
+      ]);
+    }
+
+    return this.fetch<InvokeResponse>("POST", "/rcan", payload);
+  }
+
+  /**
+   * Cancel an in-flight INVOKE by its message id (RCAN §19 INVOKE_CANCEL, type 15).
+   *
+   * Best-effort: if the skill has already completed the cancellation is silently
+   * ignored by the router.
+   */
+  async invokeCancel(msgId: string): Promise<{ ok: boolean }> {
+    return this.fetch<{ ok: boolean }>("POST", "/rcan", {
+      msg_type: 15, // MessageType.INVOKE_CANCEL
+      invoke_id: msgId,
+    });
+  }
+
+  /**
+   * Invoke multiple skills in parallel and wait for all to complete (§19).
+   *
+   * Mirrors Python's `parallel_invoke.invoke_all()`.  Each request is sent
+   * concurrently; the returned array preserves input order.  A single skill
+   * failure does NOT cancel the others (use `Promise.allSettled` semantics).
+   *
+   * @example
+   * const [nav, wave] = await client.invokeAll([
+   *   { skill: "navigate_to", params: { x: 1, y: 2 } },
+   *   { skill: "wave" },
+   * ]);
+   */
+  async invokeAll(requests: InvokeRequest[]): Promise<InvokeResponse[]> {
+    return Promise.all(requests.map((r) => this.invoke(r)));
+  }
+
+  /**
+   * Invoke multiple skills in parallel and return the first to complete (§19).
+   *
+   * Mirrors Python's `parallel_invoke.invoke_race()`.  Remaining in-flight
+   * invocations are cancelled best-effort after the winner resolves.
+   *
+   * @example
+   * const result = await client.invokeRace([
+   *   { skill: "plan_route_a", params: { dest: "dock" } },
+   *   { skill: "plan_route_b", params: { dest: "dock" } },
+   * ]);
+   */
+  async invokeRace(requests: InvokeRequest[]): Promise<InvokeResponse> {
+    const msgIds = requests.map((r) => r.msgId ?? crypto.randomUUID());
+    const withIds = requests.map((r, i) => ({ ...r, msgId: msgIds[i] }));
+    const winner = await Promise.race(withIds.map((r) => this.invoke(r)));
+    // Best-effort cancel the losers
+    for (const id of msgIds) {
+      if (id !== winner.reply_to) {
+        this.invokeCancel(id).catch(() => { /* ignore */ });
+      }
+    }
+    return winner;
+  }
+
+  // ── Registry (§21) ────────────────────────────────────────────────────
+
+  /**
+   * Register a robot with the Robot Registry Foundation (RCAN §21 REGISTRY_REGISTER, type 13).
+   *
+   * On success the registry assigns a canonical RRN and returns
+   * `status: "success"`.  Use {@link registryResolve} to look up a robot by RRN.
+   */
+  async registryRegister(request: RegistryRegisterRequest): Promise<RegistryRegisterResponse> {
+    return this.fetch<RegistryRegisterResponse>("POST", "/rcan", {
+      msg_type: 13, // MessageType.REGISTRY_REGISTER
+      ...request,
+    });
+  }
+
+  /**
+   * Resolve an RRN to a RURI and metadata (RCAN §21 REGISTRY_RESOLVE, type 14).
+   *
+   * Returns `status: "found"` with the `ruri` when the RRN is known, or
+   * `status: "not_found"` when it is not.
+   */
+  async registryResolve(rrn: string): Promise<RegistryResolveResponse> {
+    return this.fetch<RegistryResolveResponse>("POST", "/rcan", {
+      msg_type: 14, // MessageType.REGISTRY_RESOLVE
+      rrn,
+    });
   }
 
   // ── Memory ────────────────────────────────────────────────────────────
