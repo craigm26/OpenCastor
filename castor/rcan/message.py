@@ -19,8 +19,10 @@ Message types follow the RCAN spec::
     INVOKE             -- Trigger a named skill/behavior on the robot runtime (v1.3 §19)
     INVOKE_RESULT      -- Result of an INVOKE invocation (v1.3 §19)
     INVOKE_CANCEL      -- Cancel an in-flight INVOKE by invoke_id (v1.3 §19)
-    REGISTRY_REGISTER  -- Register robot with RRF (v1.3 §21)
-    REGISTRY_RESOLVE   -- Resolve RRN to RURI/metadata (v1.3 §21)
+    REGISTRY_REGISTER        -- Register robot with RRF (v1.3 §21)
+    REGISTRY_RESOLVE         -- Resolve RRN to RURI/metadata (v1.3 §21)
+    REGISTRY_REGISTER_RESULT -- Result of REGISTRY_REGISTER (v1.3 §21)
+    REGISTRY_RESOLVE_RESULT  -- Result of REGISTRY_RESOLVE (v1.3 §21)
 
 Each message carries a priority (LOW, NORMAL, HIGH, SAFETY) that determines
 queue ordering.  SAFETY priority messages skip the queue entirely
@@ -54,6 +56,10 @@ class MessageType(IntEnum):
     REGISTRY_REGISTER = 13  # §21 — register robot with RRF
     REGISTRY_RESOLVE = 14  # §21 — resolve RRN to RURI/metadata
     INVOKE_CANCEL = 15  # Cancel an in-flight INVOKE by invoke_id (RCAN v1.3 §19)
+    REGISTRY_REGISTER_RESULT = (
+        16  # §21 — result of REGISTRY_REGISTER (success/failure + assigned RRN)
+    )
+    REGISTRY_RESOLVE_RESULT = 17  # §21 — result of REGISTRY_RESOLVE (RURI + metadata or error)
 
 
 class Priority(IntEnum):

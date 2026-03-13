@@ -29,8 +29,8 @@ def check_sdk_compat(rcan_version: str = SPEC_VERSION) -> dict:
         rcan_py_version = getattr(rcan, "__version__", "unknown")
         info["rcan_py"] = rcan_py_version
         # Check compatibility (simple semver major match)
-        if not _versions_compatible(rcan_py_version, "0.2.0"):
-            warnings.append(f"rcan Python SDK {rcan_py_version} may be outdated (expected >=0.2.0)")
+        if not _versions_compatible(rcan_py_version, "0.3.0"):
+            warnings.append(f"rcan Python SDK {rcan_py_version} may be outdated (expected >=0.3.0)")
     except ImportError:
         warnings.append("rcan Python SDK not installed — install with: pip install rcan")
         info["rcan_py"] = None

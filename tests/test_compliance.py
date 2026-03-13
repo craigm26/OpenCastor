@@ -67,7 +67,7 @@ def _make_report(checks=None, compliant=True):
         checks = PASSING_CHECKS
     return ComplianceReport(
         spec_version=SPEC_VERSION,
-        rcan_py_version="0.1.0",
+        rcan_py_version="0.3.0",
         opencastor_version="2026.3.3.0",
         checks=checks,
         compliant=compliant,
@@ -147,7 +147,7 @@ def test_generate_report_uses_config(tmp_path):
             "castor.compliance._run_conformance_checks",
             return_value=[{"check_id": "c1", "status": "pass", "message": "ok", "detail": None}],
         ),
-        patch("castor.compliance._get_rcan_py_version", return_value="0.1.0"),
+        patch("castor.compliance._get_rcan_py_version", return_value="0.3.0"),
         patch("castor.compliance._get_opencastor_version", return_value="2026.3.3.0"),
     ):
         report = generate_report(config_path=str(config_file))
