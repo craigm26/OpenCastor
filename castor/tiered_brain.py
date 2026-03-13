@@ -23,8 +23,23 @@ import logging
 import time
 
 from .providers.base import Thought
+from .providers.task_router import TaskCategory, TaskRouter
 
 logger = logging.getLogger("OpenCastor.TieredBrain")
+
+# Task categories that should ALWAYS skip the planner (cheap/fast tier only)
+_FAST_ONLY_CATEGORIES: frozenset[TaskCategory] = frozenset({TaskCategory.SENSOR_POLL})
+
+# Task categories that should PREFER the planner when available
+_PREFER_PLANNER_CATEGORIES: frozenset[TaskCategory] = frozenset(
+    {
+        TaskCategory.REASONING,
+        TaskCategory.CODE,
+        TaskCategory.SAFETY,
+        TaskCategory.VISION,
+        TaskCategory.SEARCH,
+    }
+)
 
 
 class ReactiveLayer:
@@ -160,11 +175,24 @@ class TieredBrain:
     uncertainty (action confidence < threshold).
     """
 
-    def __init__(self, fast_provider, planner_provider=None, config: dict | None = None):
+    def __init__(
+        self,
+        fast_provider,
+        planner_provider=None,
+        config: dict | None = None,
+        task_router: TaskRouter | None = None,
+    ):
         config = config or {}
         self.fast = fast_provider
         self.planner = planner_provider
         self.reactive = ReactiveLayer(config)
+
+        # Task-aware routing (issue #612): optional TaskRouter for category-based dispatch.
+        # If a task_routing block exists in RCAN config, honour it; else use defaults.
+        routing_table = config.get("task_routing", {})
+        self.task_router: TaskRouter = task_router or TaskRouter(
+            routing_table=routing_table or None
+        )
 
         # Planner runs every N ticks (0 = never auto-run)
         self.planner_interval = config.get("tiered_brain", {}).get("planner_interval", 10)
@@ -217,11 +245,40 @@ class TieredBrain:
         }
 
     def think(
-        self, image_bytes: bytes, instruction: str, sensor_data: dict | None = None
+        self,
+        image_bytes: bytes,
+        instruction: str,
+        sensor_data: dict | None = None,
+        task_category: str | None = None,
     ) -> Thought:
-        """Run the tiered brain pipeline."""
+        """Run the tiered brain pipeline.
+
+        Args:
+            image_bytes:    Raw camera frame bytes.
+            instruction:    Natural-language task description.
+            sensor_data:    Optional sensor snapshot dict.
+            task_category:  Optional :class:`~castor.providers.task_router.TaskCategory`
+                            value (string) for task-aware routing (issue #612).
+
+                            - ``"sensor_poll"`` — never escalate to planner; cheap/fast only.
+                            - ``"reasoning"``, ``"code"``, ``"safety"``, ``"vision"``,
+                              ``"search"`` — prefer planner when available.
+                            - ``"navigation"`` or ``None`` — default interval-based behaviour.
+
+        Returns:
+            A :class:`~castor.providers.base.Thought` with an action and metadata.
+        """
         self.tick_count += 1
         self.stats["total_ticks"] += 1
+
+        # ── Task-category routing (issue #612) ──────────────────────────────
+        _resolved_category: TaskCategory | None = None
+        if task_category is not None:
+            try:
+                _resolved_category = TaskCategory(task_category)
+                logger.debug("TieredBrain: task_category=%s", _resolved_category.value)
+            except ValueError:
+                logger.warning("Unknown task_category %r — ignoring for routing", task_category)
 
         # Layer 0: Reactive (instant)
         reactive_action = self.reactive.evaluate(image_bytes, sensor_data)
@@ -262,15 +319,28 @@ class TieredBrain:
             logger.info(f"Fast brain ({fast_ms:.0f}ms): {thought.action.get('type', '?')}")
 
         # Layer 2: Planner (periodic or on escalation)
-        if self.planner and self.planner_interval > 0:
-            if self.tick_count % self.planner_interval == 0:
-                should_plan = True
-                logger.info("Planner: periodic check (tick %d)", self.tick_count)
-
-        # Also escalate if fast brain produced no action
-        if self.planner and not thought.action:
+        # Task-category overrides: SENSOR_POLL skips planner; high-complexity categories force it.
+        if _resolved_category in _FAST_ONLY_CATEGORIES:
+            # Cheap tasks: never escalate to planner regardless of interval or uncertainty
+            logger.debug(
+                "TieredBrain: task_category=%s → fast-only, skipping planner",
+                _resolved_category.value if _resolved_category else None,
+            )
+        elif _resolved_category in _PREFER_PLANNER_CATEGORIES and self.planner:
+            # High-complexity tasks: force planner when available
             should_plan = True
-            logger.info("Planner: escalation (fast brain produced no action)")
+            logger.info("TieredBrain: task_category=%s → forcing planner", _resolved_category.value)
+        else:
+            # Default interval-based logic (covers NAVIGATION, None, unknown)
+            if self.planner and self.planner_interval > 0:
+                if self.tick_count % self.planner_interval == 0:
+                    should_plan = True
+                    logger.info("Planner: periodic check (tick %d)", self.tick_count)
+
+            # Also escalate if fast brain produced no action
+            if self.planner and not thought.action:
+                should_plan = True
+                logger.info("Planner: escalation (fast brain produced no action)")
 
         if should_plan and self.planner:
             try:

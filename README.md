@@ -225,6 +225,51 @@ Layer 1: Reactive    Rule engine                 <1ms     e-stop, bounds
 
 80% of decisions are handled free at the reactive layer. Only genuinely complex tasks escalate to the planner.
 
+### Task-Aware Model Routing
+
+By default, the planner runs every N ticks (`planner_interval`). You can override this with **task-category routing** so cheap tasks never touch the planner and high-stakes tasks always do.
+
+Add a `task_routing:` block to your `.rcan.yaml`:
+
+```yaml
+task_routing:
+  sensor_poll:  [ollama, gemini, anthropic]   # fast & free — never escalates
+  navigation:   [anthropic, gemini, ollama]   # default interval logic
+  reasoning:    [anthropic, openai, gemini]   # always uses planner when available
+  code:         [deepseek, openai, anthropic] # always uses planner
+  safety:       [anthropic, openai, gemini]   # NEVER downgraded — always planner
+  vision:       [gemini, anthropic, openai]   # multimodal — always planner
+  search:       [gemini, anthropic, openai]   # agentic — always planner
+```
+
+Pass the category when invoking a skill:
+
+```python
+thought = brain.think(image, "poll battery level", task_category="sensor_poll")
+thought = brain.think(image, "plan escape route", task_category="reasoning")
+```
+
+Or via RCAN `INVOKE` message:
+
+```yaml
+skill: nav.plan_escape
+params: { obstacle: front }
+task_category: reasoning   # forces planner
+```
+
+**Category behaviour summary:**
+
+| Category | Planner behaviour |
+|---|---|
+| `sensor_poll` | **Never** — fast provider only, saves tokens |
+| `navigation` | Default interval logic |
+| `reasoning` | **Always** when planner is available |
+| `code` | Always |
+| `safety` | Always — never downgraded |
+| `vision` | Always (multimodal) |
+| `search` | Always (agentic) |
+| `None` / unset | Default interval logic |
+
 ## Supported AI Providers
 
 | Provider | Models | Best For |
