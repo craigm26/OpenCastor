@@ -6,6 +6,19 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 
 ---
 
+## [2026.3.13.0] — 2026-03-13
+
+### Changed
+- `castor/rcan/sdk_compat.py`: `SPEC_VERSION` updated from `"1.2"` to `"1.3"` — aligns with current spec. (#603)
+- `castor/cli.py`: `rcan_version` references in registry and conformance output updated to `"1.3"`. (#603)
+- `castor/rcan_generator.py`: generated config template `rcan_version` bumped to `"1.3.0"`. (#603)
+- `castor/conformance.py`: conformance check fix messages and pass detail updated to reference v1.3. (#603)
+
+### Fixed
+- `castor/providers/pool_provider.py`: health probe exceptions in `_health_probe_loop` now logged at `WARNING` (was `DEBUG`), consistent with `fleet_telemetry.py`. (#606)
+
+---
+
 ## [2026.3.12.8] — 2026-03-12
 
 ### Fixed
