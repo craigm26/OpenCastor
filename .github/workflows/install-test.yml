@@ -14,7 +14,7 @@ jobs:
   install-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98  # v4.3.1
       - name: Run installer
         run: bash scripts/install.sh --no-rpi --skip-wizard
         env:
@@ -27,7 +27,7 @@ jobs:
   install-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98  # v4.3.1
       - name: Run installer
         run: bash scripts/install.sh --no-rpi --skip-wizard
         env:
@@ -40,7 +40,7 @@ jobs:
   install-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98  # v4.3.1
       - name: Run installer
         shell: pwsh
         run: .\scripts\install.ps1 -SkipWizard
