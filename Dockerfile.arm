@@ -99,8 +99,9 @@ COPY --from=builder /build/castor ./castor
 COPY --from=builder /build/pyproject.toml ./
 
 # Config + data mount points
-RUN mkdir -p /app/config /app/episodes && \
-    chown -R castor:castor /app /home/castor
+RUN mkdir -p /app/config /app/episodes /home/castor && \
+    chown -R castor:castor /app /home/castor 2>/dev/null || \
+    chmod -R 777 /app /home/castor
 
 # Entrypoint (reuse base one — handles missing config gracefully)
 COPY docker/entrypoint.sh /entrypoint.sh
