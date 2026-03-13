@@ -32,8 +32,9 @@ import pytest
 
 def _make_acb_driver(config: dict | None = None, *, force_mock: bool = True):
     """Construct an AcbDriver in mock mode with telemetry disabled."""
-    with patch("castor.drivers.acb_driver.HAS_PYSERIAL", False), patch(
-        "castor.drivers.acb_driver.HAS_CAN_TRANSPORT", False
+    with (
+        patch("castor.drivers.acb_driver.HAS_PYSERIAL", False),
+        patch("castor.drivers.acb_driver.HAS_CAN_TRANSPORT", False),
     ):
         from castor.drivers.acb_driver import AcbDriver
 
@@ -103,8 +104,16 @@ class TestAcbDriverMock:
     def test_telemetry_contains_expected_keys(self):
         drv = _make_acb_driver()
         tel = drv.get_telemetry()
-        for key in ("pos_rad", "vel_rad_s", "current_a", "voltage_v", "error_flags",
-                    "is_calibrated", "control_mode", "ts"):
+        for key in (
+            "pos_rad",
+            "vel_rad_s",
+            "current_a",
+            "voltage_v",
+            "error_flags",
+            "is_calibrated",
+            "control_mode",
+            "ts",
+        ):
             assert key in tel, f"Missing key: {key}"
         drv.close()
 
@@ -222,7 +231,9 @@ class TestAcbDriverUsb:
         with patch("castor.drivers.acb_driver.HAS_PYSERIAL", False):
             from castor.drivers.acb_driver import AcbDriver
 
-            drv = AcbDriver({"id": "usb_test", "mock": True, "telemetry_hz": 0, "port": "/dev/ttyACM0"})
+            drv = AcbDriver(
+                {"id": "usb_test", "mock": True, "telemetry_hz": 0, "port": "/dev/ttyACM0"}
+            )
 
         # Force hardware mode with the mock serial — telemetry loop runs in mock,
         # so it calls get_encoder() which returns zeros (mode check is first).
@@ -343,9 +354,10 @@ class TestCanTransport:
         mock_bus = MagicMock()
         mock_message = MagicMock()
 
-        with patch("castor.drivers.can_transport.HAS_PYTHON_CAN", True), patch(
-            "castor.drivers.can_transport._can"
-        ) as mock_can_mod:
+        with (
+            patch("castor.drivers.can_transport.HAS_PYTHON_CAN", True),
+            patch("castor.drivers.can_transport._can") as mock_can_mod,
+        ):
             mock_can_mod.interface.Bus.return_value = mock_bus
             mock_can_mod.Message.return_value = mock_message
             from castor.drivers.can_transport import CanTransport
@@ -427,9 +439,10 @@ class TestHardwareDetect:
 
     def test_acb_auto_detect_via_driver(self):
         """AcbDriver with port=auto should call detect_acb_usb."""
-        with patch("castor.drivers.acb_driver.HAS_PYSERIAL", False), patch(
-            "castor.hardware_detect.detect_acb_usb", return_value=[]
-        ) as mock_detect:
+        with (
+            patch("castor.drivers.acb_driver.HAS_PYSERIAL", False),
+            patch("castor.hardware_detect.detect_acb_usb", return_value=[]) as mock_detect,
+        ):
             from castor.drivers.acb_driver import AcbDriver
 
             drv = AcbDriver({"id": "auto_test", "port": "auto"})
@@ -510,8 +523,9 @@ class TestProfiles:
 
 class TestAcbDriverRegistration:
     def test_get_driver_acb_protocol(self):
-        with patch("castor.drivers.acb_driver.HAS_PYSERIAL", False), patch(
-            "castor.drivers.acb_driver.HAS_CAN_TRANSPORT", False
+        with (
+            patch("castor.drivers.acb_driver.HAS_PYSERIAL", False),
+            patch("castor.drivers.acb_driver.HAS_CAN_TRANSPORT", False),
         ):
             from castor.drivers import get_driver, is_supported_protocol
 

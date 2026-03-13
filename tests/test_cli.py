@@ -1509,7 +1509,9 @@ class TestCmdInstallService:
 
     def test_missing_config(self, capsys, tmp_path):
         """cmd_install_service reports error when config not found."""
-        args = _make_args(config=str(tmp_path / "missing.rcan.yaml"), dashboard_port=8501, dry_run=False)
+        args = _make_args(
+            config=str(tmp_path / "missing.rcan.yaml"), dashboard_port=8501, dry_run=False
+        )
         cmd_install_service(args)
         out = capsys.readouterr().out
         assert "Config not found" in out

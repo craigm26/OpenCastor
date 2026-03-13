@@ -1271,7 +1271,15 @@ def test_scan_cameras_includes_name_field(monkeypatch, tmp_path):
     sys_dir.mkdir(parents=True)
     (sys_dir / "name").write_text("FakeCam HD\n")
 
-    monkeypatch.setattr(os.path, "isdir", lambda p: p == "/dev" or os.path.isdir.__wrapped__(p) if hasattr(os.path.isdir, "__wrapped__") else True)
+    monkeypatch.setattr(
+        os.path,
+        "isdir",
+        lambda p: (
+            p == "/dev" or os.path.isdir.__wrapped__(p)
+            if hasattr(os.path.isdir, "__wrapped__")
+            else True
+        ),
+    )
     monkeypatch.setattr(os, "listdir", lambda p: ["video0"] if p == "/dev" else [])
     monkeypatch.setattr(os, "access", lambda p, m: True)
 

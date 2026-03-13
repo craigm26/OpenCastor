@@ -966,6 +966,7 @@ class TestCORS:
     def test_cors_wildcard_not_default(self, client):
         """Default CORS must NOT be wildcard (*) — only specific origins allowed."""
         import castor.api as api_mod
+
         assert api_mod._cors_origins_stripped != ["*"]
 
 

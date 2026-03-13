@@ -1,4 +1,5 @@
 """Tests for wake word auto-start on gateway startup."""
+
 import os
 
 import pytest

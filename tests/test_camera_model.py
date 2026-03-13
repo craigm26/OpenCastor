@@ -1,4 +1,5 @@
 """Tests for CameraManager.model, .composite_mode, and OAK camera type routing."""
+
 from unittest.mock import MagicMock
 import pytest
 from castor.camera import CameraManager, _OakCameraSource

@@ -204,10 +204,23 @@ def client():
     original_shutdown = app.router.on_shutdown[:]
     app.router.on_startup.clear()
     app.router.on_shutdown.clear()
+
+    # Also replace the lifespan context manager with a no-op so that real
+    # hardware/config initialisation is skipped during tests.
+    import contextlib as _contextlib
+
+    _original_lifespan = app.router.lifespan_context
+
+    @_contextlib.asynccontextmanager
+    async def _noop_lifespan(app):
+        yield
+
+    app.router.lifespan_context = _noop_lifespan
     try:
         with TestClient(app, raise_server_exceptions=False) as c:
             yield c
     finally:
+        app.router.lifespan_context = _original_lifespan
         app.router.on_startup[:] = original_startup
         app.router.on_shutdown[:] = original_shutdown
 

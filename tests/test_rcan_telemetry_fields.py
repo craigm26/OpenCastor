@@ -1,4 +1,5 @@
 """Tests for RCAN §20 telemetry field registry constants."""
+
 from castor.rcan import telemetry_fields
 
 

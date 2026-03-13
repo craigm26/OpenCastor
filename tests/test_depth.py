@@ -194,6 +194,18 @@ def _make_client_and_reset(monkeypatch):
 
     app.router.on_startup.clear()
     app.router.on_shutdown.clear()
+
+    # Also replace the lifespan context manager with a no-op so that real
+    # hardware/config initialisation is skipped during tests.
+    import contextlib as _contextlib
+
+    _original_lifespan = app.router.lifespan_context
+
+    @_contextlib.asynccontextmanager
+    async def _noop_lifespan(app):
+        yield
+
+    app.router.lifespan_context = _noop_lifespan
     return TestClient(app, raise_server_exceptions=False)
 
 

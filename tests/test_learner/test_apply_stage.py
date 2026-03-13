@@ -96,8 +96,16 @@ class TestApplyStageHistoryCap:
         stage = ApplyStage(config_dir=tmp_path)
         # Pre-populate history with MAX + 5 entries
         n = MAX_HISTORY_ENTRIES + 5
-        history = [{"patch_id": f"p{i}", "patch": {}, "success": True, "error": None,
-                    "timestamp": float(i)} for i in range(n)]
+        history = [
+            {
+                "patch_id": f"p{i}",
+                "patch": {},
+                "success": True,
+                "error": None,
+                "timestamp": float(i),
+            }
+            for i in range(n)
+        ]
         stage._save_history(history)
 
         # Applying one more patch should trigger the cap
@@ -112,8 +120,16 @@ class TestApplyStageHistoryCap:
 
         stage = ApplyStage(config_dir=tmp_path)
         # Fill to just over the cap
-        history = [{"patch_id": f"p{i}", "patch": {}, "success": True, "error": None,
-                    "timestamp": float(i)} for i in range(MAX_HISTORY_ENTRIES)]
+        history = [
+            {
+                "patch_id": f"p{i}",
+                "patch": {},
+                "success": True,
+                "error": None,
+                "timestamp": float(i),
+            }
+            for i in range(MAX_HISTORY_ENTRIES)
+        ]
         stage._save_history(history)
 
         patch = ConfigPatch(key="new_key", new_value=99)
@@ -134,6 +150,7 @@ class TestApplyBehaviorDeduplication:
         stage.apply(patch2, _approved())
 
         import yaml
+
         behaviors = yaml.safe_load(stage.behaviors_file.read_text())
         rules = behaviors.get("rules", [])
         names = [r["rule_name"] for r in rules]
@@ -149,6 +166,7 @@ class TestApplyBehaviorDeduplication:
         stage.apply(BehaviorPatch(rule_name="rule_b", conditions={}, action={}), _approved())
 
         import yaml
+
         behaviors = yaml.safe_load(stage.behaviors_file.read_text())
         names = [r["rule_name"] for r in behaviors.get("rules", [])]
         assert "rule_a" in names

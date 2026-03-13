@@ -50,6 +50,18 @@ def clean_client(monkeypatch):
     app.router.on_startup.clear()
     app.router.on_shutdown.clear()
 
+    # Also replace the lifespan context manager with a no-op so that real
+    # hardware/config initialisation is skipped during tests.
+    import contextlib as _contextlib
+
+    _original_lifespan = app.router.lifespan_context
+
+    @_contextlib.asynccontextmanager
+    async def _noop_lifespan(app):
+        yield
+
+    app.router.lifespan_context = _noop_lifespan
+
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c, api_mod
 
@@ -125,6 +137,16 @@ class TestWebSocketTelemetry:
         app.router.on_startup.clear()
         app.router.on_shutdown.clear()
 
+        import contextlib as _contextlib
+
+        _orig_ls = app.router.lifespan_context
+
+        @_contextlib.asynccontextmanager
+        async def _noop_ls(app):
+            yield
+
+        app.router.lifespan_context = _noop_ls
+
         with TestClient(app, raise_server_exceptions=False) as client:
             with pytest.raises(Exception):  # noqa: B017
                 # Wrong token — server must reject
@@ -145,6 +167,16 @@ class TestWebSocketTelemetry:
 
         app.router.on_startup.clear()
         app.router.on_shutdown.clear()
+
+        import contextlib as _contextlib
+
+        _orig_ls = app.router.lifespan_context
+
+        @_contextlib.asynccontextmanager
+        async def _noop_ls(app):
+            yield
+
+        app.router.lifespan_context = _noop_ls
 
         with TestClient(app, raise_server_exceptions=False) as client:
             with client.websocket_connect("/ws/telemetry?token=my-secret") as ws:

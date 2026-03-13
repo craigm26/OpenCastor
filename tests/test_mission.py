@@ -237,10 +237,22 @@ def mission_client():
     from castor.api import app
 
     # Suppress lifecycle events (same pattern as test_api_endpoints.py client fixture)
+    import contextlib
+
     original_startup = app.router.on_startup[:]
     original_shutdown = app.router.on_shutdown[:]
     app.router.on_startup.clear()
     app.router.on_shutdown.clear()
+
+    # Also replace the lifespan context manager with a no-op so that real
+    # hardware/config initialisation is skipped during tests.
+    original_lifespan = app.router.lifespan_context
+
+    @contextlib.asynccontextmanager
+    async def _noop_lifespan(app):
+        yield
+
+    app.router.lifespan_context = _noop_lifespan
 
     api_mod.state.config = {
         "physics": {"wheel_circumference_m": 0.21, "turn_time_per_deg_s": 0.011}
@@ -258,6 +270,7 @@ def mission_client():
     finally:
         app.router.on_startup[:] = original_startup
         app.router.on_shutdown[:] = original_shutdown
+        app.router.lifespan_context = original_lifespan
         api_mod.state.driver = None
         api_mod.state.config = None
         api_mod.state.mission_runner = None

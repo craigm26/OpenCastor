@@ -1,4 +1,5 @@
 """Tests for USB mic auto-detection and GET /api/voice/devices."""
+
 from unittest.mock import patch, MagicMock
 
 import pytest

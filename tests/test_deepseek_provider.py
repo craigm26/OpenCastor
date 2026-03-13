@@ -11,14 +11,15 @@ from castor.providers.deepseek_provider import DeepSeekProvider  # noqa: E402
 def _openai_available() -> bool:
     try:
         import importlib
-        spec = importlib.util.find_spec('openai')
+
+        spec = importlib.util.find_spec("openai")
         return spec is not None and spec.origin is not None
     except (ValueError, ModuleNotFoundError):
         return False
 
+
 pytestmark = pytest.mark.skipif(
-    not _openai_available(),
-    reason='openai not installed or not importable'
+    not _openai_available(), reason="openai not installed or not importable"
 )
 
 _CFG = {
