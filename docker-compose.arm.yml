@@ -1,0 +1,84 @@
+# OpenCastor — SO-ARM101 arm setup compose file
+# Target: alex.local (or any Linux machine with USB serial ports)
+#
+# Usage:
+#   docker compose -f docker-compose.arm.yml up -d
+#   docker exec -it opencastor-arm castor arm status
+#   docker exec -it opencastor-arm castor arm assemble
+#
+# USB serial passthrough:
+#   Add devices as needed. Run `ls /dev/ttyACM*` on the host first.
+#   Or use privileged: true to pass through ALL USB devices (easier during setup).
+
+services:
+  opencastor-arm:
+    build:
+      context: .
+      dockerfile: Dockerfile.arm
+    image: opencastor-arm:latest
+    container_name: opencastor-arm
+    restart: unless-stopped
+
+    # ── Port mapping ──────────────────────────────────────────────
+    ports:
+      - "8000:8000"    # REST API
+      - "8765:8765"    # Web wizard (castor wizard --web)
+
+    # ── Environment ───────────────────────────────────────────────
+    env_file:
+      - .env
+    environment:
+      - CASTOR_CONFIG=/app/config/arm.rcan.yaml
+      - OPENCASTOR_API_HOST=0.0.0.0
+      - OPENCASTOR_API_PORT=8000
+
+    # ── Volumes ───────────────────────────────────────────────────
+    volumes:
+      # Robot config (arm.rcan.yaml generated here by castor arm config)
+      - ./config:/app/config
+      # Episode recordings for imitation learning
+      - arm_episodes:/app/episodes
+      # Calibration data persisted across restarts
+      - arm_calibration:/home/castor/.cache/lerobot
+
+    # ── USB serial passthrough ────────────────────────────────────
+    # Option A: Specific devices (safer, requires knowing port names)
+    #   Uncomment and adjust to your /dev/ttyACM* paths:
+    # devices:
+    #   - /dev/ttyACM0:/dev/ttyACM0   # follower arm
+    #   - /dev/ttyACM1:/dev/ttyACM1   # leader arm (bimanual)
+    #
+    # Option B: Privileged mode (easiest during initial setup)
+    #   Passes through ALL host devices including all /dev/ttyACM*
+    privileged: true
+
+    # ── Serial port group access ──────────────────────────────────
+    group_add:
+      - dialout
+
+    # ── Network ───────────────────────────────────────────────────
+    network_mode: host   # Simplifies mDNS / arm network discovery
+
+    # ── Logging ───────────────────────────────────────────────────
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # ── Health check ──────────────────────────────────────────────
+    healthcheck:
+      test: ["CMD", "python", "-c", "import castor; print('ok')"]
+      interval: 30s
+      timeout: 10s
+      start-period: 15s
+      retries: 3
+
+    # ── Labels ────────────────────────────────────────────────────
+    labels:
+      - "com.opencastor.role=arm"
+      - "com.opencastor.hardware=so_arm101"
+
+volumes:
+  arm_episodes:
+  arm_calibration:

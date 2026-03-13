@@ -1,0 +1,122 @@
+# OpenCastor — SO-ARM101 / LeRobot arm image
+# Targets: Raspberry Pi 5 (arm64), alex.local (x86_64 or arm64)
+#
+# Includes:
+#   - OpenCastor runtime + castor arm commands
+#   - LeRobot + feetech-servo-sdk (lerobot[feetech])
+#   - FFmpeg / media build deps (required by LeRobot)
+#   - USB serial access (dialout group)
+#
+# Build:
+#   docker build -f Dockerfile.arm -t opencastor-arm:latest .
+#
+# Run (quick test):
+#   docker run --rm --device /dev/ttyACM0 opencastor-arm castor arm status
+
+# ── Stage 1: Builder ──────────────────────────────────────────────────────────
+FROM python:3.11-slim-bookworm AS builder
+
+# System deps: build tools + FFmpeg libs (LeRobot requirement)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    git \
+    pkg-config \
+    python3-dev \
+    # FFmpeg (LeRobot video/episode recording)
+    libavformat-dev \
+    libavcodec-dev \
+    libavdevice-dev \
+    libavutil-dev \
+    libswscale-dev \
+    libswresample-dev \
+    libavfilter-dev \
+    ffmpeg \
+    # OpenCV + display
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Install OpenCastor deps
+COPY pyproject.toml requirements.txt ./
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# Install OpenCastor + arm extras (feetech + lerobot sdk)
+COPY . .
+RUN pip install --no-cache-dir --prefix=/install ".[lerobot]"
+
+# Install LeRobot from HuggingFace (full package for lerobot-* CLI tools)
+RUN pip install --no-cache-dir --prefix=/install \
+    "lerobot[feetech] @ git+https://github.com/huggingface/lerobot.git"
+
+# ── Stage 2: Runtime ─────────────────────────────────────────────────────────
+FROM python:3.11-slim-bookworm
+
+LABEL org.opencontainers.image.title="OpenCastor ARM"
+LABEL org.opencontainers.image.description="OpenCastor + SO-ARM101 + LeRobot"
+LABEL org.opencontainers.image.source="https://github.com/craigm26/OpenCastor"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
+# Runtime system deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # FFmpeg runtime
+    ffmpeg \
+    # USB serial (lsusb, /dev/ttyACM*)
+    usbutils \
+    # OpenCV headless runtime
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    # Serial port tools
+    udev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Non-root user — member of dialout for USB serial access
+RUN groupadd --system castor && \
+    useradd --system --gid castor --groups dialout \
+        --create-home --home-dir /home/castor --shell /bin/bash castor
+
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV HOME=/home/castor
+ENV OPENCASTOR_DIR=/home/castor/.opencastor
+ENV CASTOR_CONFIG=/app/config/arm.rcan.yaml
+# Make lerobot-* CLI tools findable
+ENV PATH="/usr/local/bin:${PATH}"
+
+# Copy installed packages from builder
+COPY --from=builder /install /usr/local
+
+# Copy source
+COPY --from=builder /build/castor ./castor
+COPY --from=builder /build/pyproject.toml ./
+
+# Config + data mount points
+RUN mkdir -p /app/config /app/episodes && \
+    chown -R castor:castor /app /home/castor
+
+# Entrypoint (reuse base one — handles missing config gracefully)
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Arm-specific entrypoint wrapper
+COPY docker/arm-entrypoint.sh /arm-entrypoint.sh
+RUN chmod +x /arm-entrypoint.sh
+
+USER castor
+
+# Expose web wizard + API
+EXPOSE 8000 8765
+
+# Health: just check castor is importable (no gateway needed for arm setup mode)
+HEALTHCHECK --interval=60s --timeout=10s --start-period=15s --retries=3 \
+    CMD python -c "import castor; print('ok')" || exit 1
+
+ENTRYPOINT ["/arm-entrypoint.sh"]
+CMD ["castor", "run", "--config", "/app/config/arm.rcan.yaml"]
