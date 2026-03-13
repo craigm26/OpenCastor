@@ -6,6 +6,15 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 
 ---
 
+## [2026.3.13.5] — 2026-03-13
+
+### Fixed
+- `castor/rcan/message.py`: add `REGISTRY_REGISTER_RESULT` (wire value 16) and `REGISTRY_RESOLVE_RESULT` (wire value 17) to `MessageType` enum per RCAN spec §21. (#631)
+- `castor/rcan/sdk_compat.py`: bump minimum rcan-py version check from `>=0.2.0` to `>=0.3.0`. (#630)
+- `tests/test_compliance.py`: update stale `rcan_py_version` fixture from `"0.1.0"` to `"0.3.0"` to cover the v0.3.0 compatibility path. (#632)
+
+---
+
 ## [2026.3.13.4] — 2026-03-13
 
 ### Fixed
