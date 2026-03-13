@@ -6,6 +6,16 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 
 ---
 
+## [2026.3.12.5] — 2026-03-12
+
+### Fixed
+- **#590** `InvokeRequest` docstring corrected from §19.3 to §19.2; `InvokeResult` from §19.4 to §19.3 per RCAN v1.3 spec
+
+### Changed
+- **#591** `pyproject.toml` Documentation URL updated from GitHub README to `https://opencastor.com/docs`
+
+---
+
 ## [2026.3.12.4] — 2026-03-12
 
 ### Added
