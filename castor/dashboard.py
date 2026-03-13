@@ -259,6 +259,22 @@ avg_lat = _proc_loop.get("latency_ms", 0)
 
 # ── SIDEBAR (settings + quick actions) ────────────────────────────────────────
 with st.sidebar:
+    theme_choice = st.radio(
+        "🎨 Theme",
+        ["Dark", "Light"],
+        horizontal=True,
+        key="theme_choice",
+        help="Toggle between dark and light mode"
+    )
+    if theme_choice == "Light":
+        st.markdown("""
+        <style>
+        :root { color-scheme: light; }
+        .stApp { background-color: #f8f8fc !important; color: #0f0f1a !important; }
+        .stSidebar { background-color: #f0f0f8 !important; }
+        .stMarkdown, .stText, label { color: #0f0f1a !important; }
+        </style>
+        """, unsafe_allow_html=True)
     st.markdown("### ⚙️ Settings")
     st.session_state.gateway_url = st.text_input("Gateway URL", value=st.session_state.gateway_url)
     st.session_state.api_token = st.text_input(
