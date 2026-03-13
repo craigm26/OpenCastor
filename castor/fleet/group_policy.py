@@ -99,6 +99,12 @@ class FleetManager:
                         enabled=group_data.get("enabled", True),
                     )
                 )
+            else:
+                logger.warning(
+                    "FleetManager: skipping malformed group entry '%s' (expected dict, got %s)",
+                    name,
+                    type(group_data).__name__,
+                )
         return cls(groups=groups)
 
     def get_robot_groups(self, rrn: str) -> list[GroupPolicy]:
