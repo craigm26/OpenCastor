@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OpenCastor - The Universal Runtime for Embodied AI</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#0ea5e9",
+                        "background-light": "#f8faff",
+                        "background-dark": "#0a0b1e",
+                    },
+                    fontFamily: {
+                        display: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.75rem",
+                    },
+                },
+            },
+        };
+        function toggleTheme() {
+            document.documentElement.classList.toggle('dark');
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .glass-nav {
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #0ea5e9 0%, #2dd4bf 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .glow-button {
+            box-shadow: 0 0 20px rgba(14, 165, 233, 0.3);
+        }
+        .dark .glow-button {
+            box-shadow: 0 0 20px rgba(14, 165, 233, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-200 transition-colors duration-300 min-h-screen">
+<nav class="fixed top-6 left-1/2 -translate-x-1/2 w-[90%] max-w-5xl z-50">
+<div class="glass-nav bg-white/40 dark:bg-white/5 border border-white/40 dark:border-white/10 rounded-2xl px-6 py-3 flex items-center justify-between shadow-lg shadow-indigo-100/20 dark:shadow-none">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 bg-gradient-to-tr from-primary to-cyan-400 rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-xl">cyclone</span>
+</div>
+<span class="font-bold text-xl tracking-tight text-slate-900 dark:text-white">OpenCastor</span>
+</div>
+<div class="hidden md:flex items-center gap-8 text-sm font-medium text-slate-600 dark:text-slate-400">
+<a class="hover:text-primary transition-colors" href="#">Docs</a>
+<a class="hover:text-primary transition-colors" href="#">Hardware</a>
+<a class="hover:text-primary transition-colors" href="#">Blog</a>
+<a class="hover:text-primary transition-colors" href="#">Community</a>
+<a class="hover:text-primary transition-colors" href="#">Tutorials</a>
+<a class="hover:text-primary transition-colors" href="#">About</a>
+</div>
+<div class="flex items-center gap-4">
+<button class="relative w-14 h-7 bg-slate-200 dark:bg-slate-800 rounded-full flex items-center transition-colors p-1" onclick="toggleTheme()">
+<div class="absolute left-1 dark:left-8 w-5 h-5 bg-white dark:bg-primary rounded-full shadow-sm transition-all flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px] dark:hidden text-orange-500">light_mode</span>
+<span class="material-symbols-outlined text-[14px] hidden dark:block text-white">dark_mode</span>
+</div>
+</button>
+<a class="flex items-center gap-2 bg-slate-900 dark:bg-white/10 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-slate-800 transition-colors" href="#">
+<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.041-1.412-4.041-1.412-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"></path></svg>
+                    GitHub
+                </a>
+</div>
+</div>
+</nav>
+<main class="pt-40 pb-20 px-6 flex flex-col items-center text-center">
+<div class="max-w-4xl mx-auto space-y-8">
+<h1 class="text-5xl md:text-7xl font-extrabold text-slate-900 dark:text-white leading-tight tracking-tight">
+                The Universal Runtime <br/>
+                for <span class="gradient-text">Embodied AI.</span>
+</h1>
+<p class="text-lg md:text-xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto leading-relaxed">
+                Give any robot a brain. Semantic perception with local embeddings, 13+ AI providers, HLabs ACB, LiDAR, IMU, depth cameras, reactive obstacle avoidance. One config file. Zero lock-in.
+            </p>
+<div class="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+<button class="glow-button bg-primary hover:bg-sky-500 text-white px-8 py-4 rounded-xl font-semibold flex items-center gap-2 transition-all transform hover:-translate-y-1">
+                    Get Started 
+                    <span class="material-symbols-outlined text-xl">arrow_right_alt</span>
+</button>
+<button class="bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 px-8 py-4 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-200 dark:hover:bg-white/10 transition-all">
+<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.041-1.412-4.041-1.412-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"></path></svg>
+                    Star on GitHub
+                </button>
+</div>
+</div>
+<div class="mt-20 w-full max-w-2xl px-4">
+<div class="bg-slate-950 rounded-2xl p-1 shadow-2xl overflow-hidden ring-1 ring-white/10">
+<div class="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-slate-900/50">
+<div class="flex items-center gap-3 font-mono text-sm">
+<span class="text-primary">curl</span>
+<span class="text-slate-400">-sL opencastor.com/install | bash</span>
+</div>
+<button class="group flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg border border-white/5">
+<span class="material-symbols-outlined text-[16px]">content_copy</span>
+                        COPY
+                    </button>
+</div>
+</div>
+<div class="flex items-center justify-center gap-8 mt-10 text-slate-400 dark:text-slate-500 font-medium text-sm">
+<a class="flex items-center gap-2 hover:text-primary transition-colors" href="#">
+<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L1 21h22L12 2zm0 3.84L19.03 19H4.97L12 5.84z"></path></svg>
+                    PyPi
+                </a>
+<a class="flex items-center gap-2 hover:text-primary transition-colors" href="#">
+<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"></path></svg>
+                    GitHub
+                </a>
+<a class="flex items-center gap-2 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">description</span>
+                    Docs
+                </a>
+</div>
+</div>
+</main>
+<div class="fixed top-0 left-0 w-full h-full -z-10 pointer-events-none overflow-hidden">
+<div class="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-indigo-200/20 dark:bg-indigo-900/10 blur-[120px] rounded-full"></div>
+<div class="absolute top-[20%] -right-[10%] w-[35%] h-[35%] bg-cyan-200/20 dark:bg-cyan-900/10 blur-[120px] rounded-full"></div>
+<div class="absolute -bottom-[10%] left-[20%] w-[30%] h-[30%] bg-sky-200/20 dark:bg-sky-900/10 blur-[120px] rounded-full"></div>
+</div>
+
+</body></html>

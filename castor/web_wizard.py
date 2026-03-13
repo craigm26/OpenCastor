@@ -15,28 +15,28 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
 <title>OpenCastor Setup Wizard</title>
 <style>
-  :root { --bg:#0f1115; --card:#181c24; --border:#2d3442; --text:#e8edf7;
-          --muted:#98a3ba; --accent:#66d9a3; --warn:#e9c46a; --err:#ef476f; }
+  :root { --bg:#0a0b1e; --card:#12142b; --border:#1e2245; --text:#e8edf7;
+          --muted:#98a3ba; --accent:#0ea5e9; --warn:#e9c46a; --err:#ef476f; }
   * { box-sizing: border-box; }
   body { margin:0; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-         background: radial-gradient(circle at top right, #1b2230, #0b0d12 55%);
+         background: radial-gradient(circle at top right, #12142b, #0a0b1e 55%);
          color: var(--text); padding: 22px; }
   .wrap { max-width: 860px; margin: 0 auto; }
   h1 { margin:0 0 8px 0; font-size: 1.9rem; letter-spacing: 0.01em; }
   p { color: var(--muted); }
   .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(260px,1fr)); gap:16px; }
-  .card { background: linear-gradient(160deg, #1b2333, #141922); border:1px solid var(--border);
+  .card { background: linear-gradient(160deg, #1e2245, #12142b); border:1px solid var(--border);
           border-radius: 12px; padding:14px; }
   label { display:block; margin-top:10px; margin-bottom:5px; color:var(--muted); font-size:0.88rem; }
   input, select, button, textarea { width:100%; border-radius:8px; border:1px solid var(--border);
           background:#0f131b; color:var(--text); padding:10px; font-size:0.95rem; }
-  button { cursor:pointer; background: linear-gradient(135deg, #66d9a3, #53b78a); color:#04120a;
+  button { cursor:pointer; background: linear-gradient(135deg, #0ea5e9, #0284c7); color:#ffffff;
           border:none; font-weight:700; }
   button.secondary { background:#1d2432; color:var(--text); border:1px solid var(--border); }
   .row { display:flex; gap:10px; margin-top:12px; }
   .result { margin-top:12px; white-space:pre-wrap; font-family:Consolas, monospace; font-size:0.85rem;
             border:1px dashed var(--border); border-radius:10px; padding:10px; background:#0c1017; }
-  .ok { color: #66d9a3; }
+  .ok { color: #0ea5e9; }
   .warn { color: var(--warn); }
   .err { color: var(--err); }
   code { background:#101622; padding:2px 6px; border-radius:6px; }

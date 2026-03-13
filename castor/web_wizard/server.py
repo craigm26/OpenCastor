@@ -43,7 +43,7 @@ HTML = """<!DOCTYPE html>
 <title>OpenCastor Setup Wizard</title>
 <style>
   :root {
-    --bg: #0a0a0f; --bg-alt: #12121a; --accent: #22d3ee;
+    --bg: #0a0b1e; --bg-alt: #12142b; --accent: #0ea5e9;
     --text: #e8e6e3; --muted: #9ca3af; --border: #27272a;
     --green: #22c55e; --yellow: #eab308; --red: #ef4444;
   }

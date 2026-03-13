@@ -21,12 +21,12 @@
 
 <style>
   :root {
-    --bg: #0f1115;
-    --card: #181c24;
-    --border: #2d3442;
+    --bg: #0a0b1e;
+    --card: #12142b;
+    --border: #1e2245;
     --text: #e8edf7;
     --muted: #98a3ba;
-    --accent: #66d9a3;
+    --accent: #0ea5e9;
     --warn: #e9c46a;
     --err: #ef476f;
   }
@@ -96,7 +96,7 @@
     font-weight: 600;
     width: 100%;
   }
-  .btn-primary { background: linear-gradient(135deg, #66d9a3, #53b78a); color: #04120a; }
+  .btn-primary { background: linear-gradient(135deg, #0ea5e9, #0284c7); color: #ffffff; }
   .btn-danger  { background: var(--err); color: #fff; }
   .btn-secondary { background: #1d2432; color: var(--text); border: 1px solid var(--border); }
 
@@ -220,7 +220,7 @@ function startDraw() {
   if (drawControl) { map.removeControl(drawControl); drawControl = null; }
   drawControl = new L.Control.Draw({
     draw: {
-      polygon: { showArea: true, shapeOptions: { color: '#66d9a3', weight: 2 } },
+      polygon: { showArea: true, shapeOptions: { color: '#0ea5e9', weight: 2 } },
       polyline: false, rectangle: false, circle: false, marker: false, circlemarker: false,
     },
     edit: { featureGroup: drawnItems },
