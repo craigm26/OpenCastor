@@ -37,6 +37,7 @@ OPTIONAL_TOP_LEVEL: list[str] = [
     "hailo_vision",
     "hailo_confidence",
     "interpreter",
+    "memory",  # v1.3+: memory.compaction for rolling context compression
 ]
 
 # Required keys inside the 'agent' block

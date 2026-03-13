@@ -22,7 +22,8 @@ from collections.abc import Callable
 from typing import Any, Optional
 
 from castor.rcan.capabilities import CapabilityRegistry
-from castor.rcan.message import RCANMessage
+from castor.rcan.invoke import InvokeCancelRequest, SkillRegistry
+from castor.rcan.message import MessageType, RCANMessage
 from castor.rcan.rbac import RCANPrincipal, Scope
 from castor.rcan.ruri import RURI
 
@@ -50,9 +51,15 @@ class MessageRouter:
         capabilities:  Capability registry.
     """
 
-    def __init__(self, ruri: RURI, capabilities: CapabilityRegistry):
+    def __init__(
+        self,
+        ruri: RURI,
+        capabilities: CapabilityRegistry,
+        skill_registry: Optional[SkillRegistry] = None,
+    ):
         self.ruri = ruri
         self.capabilities = capabilities
+        self._skill_registry = skill_registry
         self._handlers: dict[str, HandlerFn] = {}
         self._messages_routed = 0
 
@@ -63,6 +70,64 @@ class MessageRouter:
     def register_handler(self, capability: str, handler: HandlerFn):
         """Register a handler for a capability."""
         self._handlers[capability] = handler
+
+    def route_invoke_cancel(self, message: RCANMessage) -> RCANMessage:
+        """Handle an INVOKE_CANCEL message (§19 v1.3).
+
+        Dispatches to :meth:`SkillRegistry.cancel` if a skill registry was
+        provided at construction time.  Returns an ACK on success or ERROR if
+        no registry is configured or the message type is wrong.
+
+        Args:
+            message: Incoming RCANMessage with type INVOKE_CANCEL.
+
+        Returns:
+            ACK or ERROR RCANMessage.
+        """
+        source_ruri = str(self.ruri)
+
+        if message.type != MessageType.INVOKE_CANCEL:
+            return RCANMessage.error(
+                source=source_ruri,
+                target=message.source,
+                code="WRONG_MESSAGE_TYPE",
+                detail=f"Expected INVOKE_CANCEL, got {message.type}",
+                reply_to=message.id,
+            )
+
+        if self._skill_registry is None:
+            return RCANMessage.error(
+                source=source_ruri,
+                target=message.source,
+                code="NO_SKILL_REGISTRY",
+                detail="No SkillRegistry configured on this router",
+                reply_to=message.id,
+            )
+
+        payload = message.payload or {}
+        msg_id = payload.get("msg_id", "")
+        if not msg_id:
+            return RCANMessage.error(
+                source=source_ruri,
+                target=message.source,
+                code="MISSING_MSG_ID",
+                detail="INVOKE_CANCEL payload must include 'msg_id'",
+                reply_to=message.id,
+            )
+
+        cancel_req = InvokeCancelRequest(
+            msg_id=msg_id,
+            reason=payload.get("reason"),
+        )
+        found = self._skill_registry.cancel(cancel_req.msg_id)
+        logger.debug("INVOKE_CANCEL msg_id=%s found=%s", msg_id, found)
+        self._messages_routed += 1
+        return RCANMessage.ack(
+            source=source_ruri,
+            target=message.source,
+            reply_to=message.id,
+            payload={"cancelled": found, "msg_id": msg_id},
+        )
 
     def route(
         self,
@@ -111,6 +176,42 @@ class MessageRouter:
                 code="EXPIRED",
                 detail="Message TTL exceeded",
                 reply_to=message.id,
+            )
+
+        # 2b. Dispatch INVOKE / INVOKE_CANCEL by message type before capability routing
+        if message.type == MessageType.INVOKE_CANCEL:
+            return self.route_invoke_cancel(message)
+
+        if message.type == MessageType.INVOKE:
+            if self._skill_registry is None:
+                return RCANMessage.error(
+                    source=source_ruri,
+                    target=message.source,
+                    code="NO_SKILL_REGISTRY",
+                    detail="No SkillRegistry configured on this router",
+                    reply_to=message.id,
+                )
+            from castor.rcan.invoke import InvokeRequest  # local import avoids cycles
+
+            payload = message.payload or {}
+            req = InvokeRequest(
+                skill=payload.get("skill", ""),
+                params=payload.get("params", {}),
+                invoke_id=payload.get("msg_id", message.id),
+                timeout_ms=payload.get("timeout_ms"),
+            )
+            result = self._skill_registry.invoke(req)
+            self._messages_routed += 1
+            return RCANMessage.ack(
+                source=source_ruri,
+                target=message.source,
+                reply_to=message.id,
+                payload={
+                    "status": result.status,
+                    "result": result.result,
+                    "error": result.error,
+                    "duration_ms": result.duration_ms,
+                },
             )
 
         # 3. Check authorization

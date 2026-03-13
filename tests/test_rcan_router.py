@@ -195,6 +195,105 @@ class TestRouterAuthorization:
         assert resp.type == MessageType.ACK
 
 
+class TestInvokeFamily:
+    """INVOKE / INVOKE_CANCEL / INVOKE_RESULT routing."""
+
+    @pytest.fixture
+    def registry(self):
+        from castor.rcan.invoke import SkillRegistry
+
+        reg = SkillRegistry()
+        reg.register_fn("echo", lambda params: {"echo": params.get("msg", "")})
+        return reg
+
+    @pytest.fixture
+    def invoke_router(self, ruri, caps, registry):
+        r = MessageRouter(ruri, caps, skill_registry=registry)
+        r.register_handler("status", lambda msg, p: {"uptime": 0.0})
+        return r
+
+    def _invoke_msg(self, ruri_str: str, skill: str, params: dict | None = None):
+        return RCANMessage(
+            type=MessageType.INVOKE,
+            source="rcan://client.app.xyz",
+            target=ruri_str,
+            payload={"skill": skill, "params": params or {}},
+        )
+
+    def test_invoke_routes_to_skill(self, invoke_router):
+        msg = self._invoke_msg("rcan://opencastor.rover.abc12345/status", "echo", {"msg": "hi"})
+        resp = invoke_router.route(msg)
+        assert resp.type == MessageType.ACK
+        assert resp.payload["status"] == "success"
+        assert resp.payload["result"]["echo"] == "hi"
+
+    def test_invoke_unknown_skill_returns_not_found(self, invoke_router):
+        msg = self._invoke_msg("rcan://opencastor.rover.abc12345/status", "no_such_skill")
+        resp = invoke_router.route(msg)
+        assert resp.type == MessageType.ACK
+        assert resp.payload["status"] == "not_found"
+
+    def test_invoke_no_registry_returns_error(self, router):
+        """Router without skill registry returns NO_SKILL_REGISTRY error."""
+        msg = RCANMessage(
+            type=MessageType.INVOKE,
+            source="rcan://a.b.c",
+            target="rcan://opencastor.rover.abc12345/status",
+            payload={"skill": "echo"},
+        )
+        resp = router.route(msg)
+        assert resp.type == MessageType.ERROR
+        assert resp.payload["code"] == "NO_SKILL_REGISTRY"
+
+    def test_invoke_cancel_found(self, invoke_router, registry):
+        """INVOKE_CANCEL with a known msg_id signals the cancel event."""
+        import threading
+
+        registry._cancel_events["fake-id-123"] = threading.Event()
+        msg = RCANMessage(
+            type=MessageType.INVOKE_CANCEL,
+            source="rcan://a.b.c",
+            target="rcan://opencastor.rover.abc12345/status",
+            payload={"msg_id": "fake-id-123", "reason": "user abort"},
+        )
+        resp = invoke_router.route(msg)
+        assert resp.type == MessageType.ACK
+        assert resp.payload["cancelled"] is True
+
+    def test_invoke_cancel_not_found(self, invoke_router):
+        """INVOKE_CANCEL for unknown msg_id returns ACK with cancelled=False."""
+        msg = RCANMessage(
+            type=MessageType.INVOKE_CANCEL,
+            source="rcan://a.b.c",
+            target="rcan://opencastor.rover.abc12345/status",
+            payload={"msg_id": "no-such-id"},
+        )
+        resp = invoke_router.route(msg)
+        assert resp.type == MessageType.ACK
+        assert resp.payload["cancelled"] is False
+
+    def test_invoke_cancel_missing_msg_id(self, invoke_router):
+        msg = RCANMessage(
+            type=MessageType.INVOKE_CANCEL,
+            source="rcan://a.b.c",
+            target="rcan://opencastor.rover.abc12345/status",
+            payload={},
+        )
+        resp = invoke_router.route(msg)
+        assert resp.type == MessageType.ERROR
+        assert resp.payload["code"] == "MISSING_MSG_ID"
+
+    def test_invoke_result_type_exists(self):
+        """MessageType.INVOKE_RESULT is defined."""
+        assert MessageType.INVOKE_RESULT == 12
+
+    def test_messages_routed_increments_for_invoke(self, invoke_router):
+        before = invoke_router.messages_routed
+        msg = self._invoke_msg("rcan://opencastor.rover.abc12345/status", "echo")
+        invoke_router.route(msg)
+        assert invoke_router.messages_routed == before + 1
+
+
 class TestRouterHandlerErrors:
     """Handler exception handling."""
 

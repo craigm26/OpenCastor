@@ -13,7 +13,7 @@ within that section.
 
 from castor.rcan import telemetry_fields
 from castor.rcan.capabilities import Capability, CapabilityRegistry
-from castor.rcan.invoke import InvokeRequest, InvokeResult, SkillRegistry
+from castor.rcan.invoke import InvokeCancelRequest, InvokeRequest, InvokeResult, SkillRegistry
 from castor.rcan.message import MessageType, Priority, RCANMessage
 from castor.rcan.rbac import CapabilityBroker, CapabilityLease, RCANPrincipal, RCANRole, Scope
 from castor.rcan.router import MessageRouter
@@ -50,6 +50,7 @@ __all__ = [
     # §19 INVOKE
     "InvokeRequest",
     "InvokeResult",
+    "InvokeCancelRequest",
     "SkillRegistry",
     # §20 Telemetry fields
     "telemetry_fields",
