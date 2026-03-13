@@ -27,7 +27,12 @@ import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+from castor.memory.compaction import CompactionConfig, ContextCompactor
+
+if TYPE_CHECKING:
+    from castor.providers.base import BaseProvider
 
 logger = logging.getLogger("OpenCastor.Channels.Session")
 
@@ -51,16 +56,51 @@ class SessionMessage:
 class UserSession:
     """Rolling conversation context for a single canonical user identity."""
 
-    def __init__(self, user_id: str, max_messages: int = _DEFAULT_MAX_MESSAGES):
+    def __init__(
+        self,
+        user_id: str,
+        max_messages: int = _DEFAULT_MAX_MESSAGES,
+        compaction_config: CompactionConfig | None = None,
+    ):
         self.user_id = user_id
-        self._messages: deque[SessionMessage] = deque(maxlen=max_messages)
+        self._max_messages = max_messages
+        self._compactor = ContextCompactor(compaction_config or CompactionConfig())
+        self._provider: BaseProvider | None = None
+        if self._compactor.config.enabled:
+            # No hard maxlen — compactor manages size
+            self._messages: deque[SessionMessage] = deque()
+        else:
+            # Backward-compat: silent FIFO truncation when compaction is off
+            self._messages = deque(maxlen=max_messages)
         self._last_activity: float = time.time()
+
+    def set_provider(self, provider: BaseProvider) -> None:
+        """Attach a provider for LLM-based summarization during compaction."""
+        self._provider = provider
 
     def push(self, role: str, text: str, channel: str, chat_id: str) -> None:
         self._messages.append(
             SessionMessage(role=role, text=text, channel=channel, chat_id=chat_id)
         )
         self._last_activity = time.time()
+        if self._compactor.config.enabled:
+            self.maybe_compact()
+
+    def maybe_compact(self) -> bool:
+        """Run compaction if needed. Returns True if compaction occurred."""
+        msgs = [{"role": m.role, "content": m.text} for m in self._messages]
+        compacted, did_compact = self._compactor.maybe_compact(msgs, self._provider)
+        if did_compact:
+            self._messages = deque(
+                SessionMessage(
+                    role=m["role"],
+                    text=m["content"],
+                    channel="compacted",
+                    chat_id="",
+                )
+                for m in compacted
+            )
+        return did_compact
 
     def build_context(self, max_messages: int = 10) -> str:
         """Return a human-readable context summary for the last N messages."""
@@ -86,8 +126,13 @@ class ChannelSessionStore:
     same human operator).
     """
 
-    def __init__(self, max_messages: int = _DEFAULT_MAX_MESSAGES):
+    def __init__(
+        self,
+        max_messages: int = _DEFAULT_MAX_MESSAGES,
+        compaction_config: CompactionConfig | None = None,
+    ):
         self._max_messages = max_messages
+        self._compaction_config = compaction_config
         self._lock = Lock()
         # (channel, chat_id) → user_id
         self._identity_map: dict[tuple, str] = {}
@@ -107,7 +152,9 @@ class ChannelSessionStore:
             user_id = self._identity_map[key]
 
             if user_id not in self._sessions:
-                self._sessions[user_id] = UserSession(user_id, self._max_messages)
+                self._sessions[user_id] = UserSession(
+                    user_id, self._max_messages, self._compaction_config
+                )
 
             self._channel_users[channel].add(user_id)
             self._reap_expired()
@@ -134,7 +181,9 @@ class ChannelSessionStore:
             self._identity_map[key_b] = canonical
 
             if canonical not in self._sessions:
-                self._sessions[canonical] = UserSession(canonical, self._max_messages)
+                self._sessions[canonical] = UserSession(
+                    canonical, self._max_messages, self._compaction_config
+                )
 
             if uid_b in self._sessions and uid_b != canonical:
                 # Merge old messages from uid_b into canonical session
@@ -149,7 +198,9 @@ class ChannelSessionStore:
         """Append a message to the user's shared session."""
         with self._lock:
             if user_id not in self._sessions:
-                self._sessions[user_id] = UserSession(user_id, self._max_messages)
+                self._sessions[user_id] = UserSession(
+                    user_id, self._max_messages, self._compaction_config
+                )
             self._sessions[user_id].push(role=role, text=text, channel=channel, chat_id=chat_id)
 
     def build_context(self, user_id: str, max_messages: int = 10) -> str:

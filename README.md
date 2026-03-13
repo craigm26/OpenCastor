@@ -161,6 +161,21 @@ class Episode:
 
 Episodes are stored as JSON files in `~/.opencastor/episodes/` (via `EpisodeStore`) and also in a SQLite database (via `EpisodeMemory`). Both are capped at **10,000 episodes with FIFO eviction** to prevent unbounded disk growth.
 
+### Long-Running Sessions (Context Compaction)
+
+For 24/7 deployments (Bob, Alex), enable rolling context compression so sessions never hit provider context window limits:
+
+```yaml
+memory:
+  compaction:
+    enabled: true          # disabled by default
+    max_tokens: 80000      # trigger threshold
+    target_tokens: 20000   # post-compaction target
+    preserve_last_n: 10    # always keep last N messages verbatim
+```
+
+When the rolling context exceeds `max_tokens`, the `ContextCompactor` summarizes older messages via LLM (using `provider.think()`) and replaces them with a `[Compacted session summary]` block. If the provider is unavailable, a rule-based fallback summary is used. Requires at least one provider configured.
+
 ### The Sisyphus Loop
 
 After each task, the self-improving PM→Dev→QA→Apply pipeline runs:
