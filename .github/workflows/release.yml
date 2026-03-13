@@ -38,6 +38,19 @@ jobs:
       actions: read
       contents: read
     steps:
+      - name: Wait for CI to complete
+        run: |
+          echo 'Waiting for CI to pass on ${{ github.sha }}...'
+          for i in $(seq 1 30); do
+            STATUS=$(gh run list --repo ${{ github.repository }} --workflow ci.yml --commit ${{ github.sha }} --json conclusion --jq '.[0].conclusion' 2>/dev/null || echo 'pending')
+            echo "Attempt $i: CI status = $STATUS"
+            if [ "$STATUS" = 'success' ]; then echo 'CI passed!'; exit 0; fi
+            if [ "$STATUS" = 'failure' ] || [ "$STATUS" = 'cancelled' ]; then echo 'CI failed!'; exit 1; fi
+            sleep 20
+          done
+          echo 'Timeout waiting for CI'; exit 1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Verify tag commit is on main and CI passed
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7
         with:
