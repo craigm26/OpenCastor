@@ -18,6 +18,9 @@ const {
 } = Astro.props;
 
 const currentPath = Astro.url.pathname.replace(/\/$/, '') || '/';
+
+const sunSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+const moonSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
 ---
 
 <!DOCTYPE html>
@@ -54,32 +57,56 @@ const currentPath = Astro.url.pathname.replace(/\/$/, '') || '/';
 <!-- ======== NAV ======== -->
 <nav class="site-nav" id="siteNav">
   <div class="nav-inner">
+
+    <!-- Logo -->
     <a href="/" class="nav-logo">
       <img src="/assets/icon-64.png" alt="" class="nav-logo-img" width="26" height="26" aria-hidden="true" />
       <span class="nav-logo-text">OpenCastor</span>
     </a>
 
+    <!-- Center links + mobile drawer -->
     <div class="nav-links" id="navLinks">
-      <a href="/docs" class={currentPath === '/docs' ? 'nav-active' : ''}>Docs</a>
-      <a href="/hardware" class={currentPath === '/hardware' ? 'nav-active' : ''}>Hardware</a>
+      <a href="/docs"      class={currentPath === '/docs'      ? 'nav-active' : ''}>Docs</a>
+      <a href="/hardware"  class={currentPath === '/hardware'  ? 'nav-active' : ''}>Hardware</a>
       <a href="/tutorials" class={currentPath === '/tutorials' ? 'nav-active' : ''}>Tutorials</a>
-      <a href="/hub" class={currentPath === '/hub' ? 'nav-active' : ''}>Hub</a>
-      <a href="/about" class={currentPath === '/about' ? 'nav-active' : ''}>About</a>
+      <a href="/hub"       class={currentPath === '/hub'       ? 'nav-active' : ''}>Hub</a>
+      <a href="/about"     class={currentPath === '/about'     ? 'nav-active' : ''}>About</a>
+
+      <!-- Theme pill — visible inside mobile drawer only -->
+      <div class="nav-drawer-theme">
+        <button class="theme-pill" id="themeToggleMobile" aria-label="Toggle theme">
+          <span class="theme-pill-opt" data-opt="light" aria-label="Light mode">
+            <Fragment set:html={sunSvg} /> Light
+          </span>
+          <span class="theme-pill-opt" data-opt="dark" aria-label="Dark mode">
+            <Fragment set:html={moonSvg} /> Dark
+          </span>
+        </button>
+      </div>
     </div>
 
+    <!-- Right side -->
     <div class="nav-end">
-      <button class="nav-theme-btn" id="themeToggle" aria-label="Toggle theme" title="Toggle light/dark mode">
-        <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <!-- Theme pill — desktop -->
+      <button class="theme-pill" id="themeToggle" aria-label="Toggle theme" title="Toggle light/dark mode">
+        <span class="theme-pill-opt" data-opt="light" aria-label="Light mode">
+          <Fragment set:html={sunSvg} />
+        </span>
+        <span class="theme-pill-opt" data-opt="dark" aria-label="Dark mode">
+          <Fragment set:html={moonSvg} />
+        </span>
       </button>
+
       <a href="https://github.com/craigm26/OpenCastor" class="btn-nav" target="_blank" rel="noopener" aria-label="GitHub">
         <span class="btn-label">GitHub</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11" aria-hidden="true"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg>
       </a>
+
       <button class="mobile-toggle" id="mobileToggle" aria-label="Toggle menu" aria-expanded="false">
         <span></span><span></span><span></span>
       </button>
     </div>
+
   </div>
 </nav>
 
@@ -95,27 +122,27 @@ const currentPath = Astro.url.pathname.replace(/\/$/, '') || '/';
     }, { passive: true });
   }
 
-  // ── Theme toggle ──
-  var btn = document.getElementById('themeToggle');
-  function syncTheme() {
-    var light = document.documentElement.getAttribute('data-theme') === 'light';
-    // In dark mode show moon; in light mode show sun
-    document.querySelectorAll('.icon-moon').forEach(function(el){ el.style.display = light ? 'none' : 'block'; });
-    document.querySelectorAll('.icon-sun').forEach(function(el){ el.style.display = light ? 'block' : 'none'; });
+  // ── Theme pill: apply theme and sync all pills ──
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('oc-theme', theme);
   }
-  syncTheme();
-  if (btn) {
-    btn.addEventListener('click', function () {
-      var next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', next);
-      localStorage.setItem('oc-theme', next);
-      syncTheme();
+
+  document.querySelectorAll('.theme-pill').forEach(function (pill) {
+    pill.addEventListener('click', function (e) {
+      var opt = e.target.closest('[data-opt]');
+      if (opt) {
+        applyTheme(opt.dataset.opt);
+      } else {
+        var cur = document.documentElement.getAttribute('data-theme') || 'dark';
+        applyTheme(cur === 'dark' ? 'light' : 'dark');
+      }
     });
-  }
+  });
 
   // ── Mobile menu ──
   var toggle = document.getElementById('mobileToggle');
-  var links = document.getElementById('navLinks');
+  var links  = document.getElementById('navLinks');
   if (toggle && links) {
     toggle.addEventListener('click', function () {
       var open = links.classList.toggle('open');
@@ -123,6 +150,7 @@ const currentPath = Astro.url.pathname.replace(/\/$/, '') || '/';
       toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
       document.body.style.overflow = open ? 'hidden' : '';
     });
+    // Close on nav link click
     links.querySelectorAll('a').forEach(function (a) {
       a.addEventListener('click', function () {
         links.classList.remove('open');
@@ -136,7 +164,7 @@ const currentPath = Astro.url.pathname.replace(/\/$/, '') || '/';
   // ── Scroll spy: active nav link ──
   var path = window.location.pathname.replace(/\/$/, '') || '/';
   document.querySelectorAll('.nav-links a').forEach(function (a) {
-    var href = a.getAttribute('href').replace(/\/$/, '') || '/';
+    var href = (a.getAttribute('href') || '').replace(/\/$/, '') || '/';
     if (href === path) a.classList.add('nav-active');
   });
 
