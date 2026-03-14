@@ -176,6 +176,86 @@ def cmd_status(args) -> None:
     print()
 
 
+def cmd_record(args) -> int:
+    """Record demonstration episodes via LeRobot teleoperation.
+
+    Delegates to ``lerobot-record`` with SO-ARM101 follower/leader config.
+    Run ``castor arm record --help`` for options.
+    """
+    from castor.hardware.so_arm101.lerobot_bridge import LeRobotBridge
+
+    bridge = LeRobotBridge()
+    if not bridge.available:
+        print("LeRobot not available. Install with: pip install 'lerobot[feetech]'")
+        return 1
+
+    cmd = [
+        "lerobot-record",
+        "--robot.type=so101_follower",
+        f"--robot.port={args.port or '/dev/ttyACM0'}",
+        "--teleop.type=so101_leader",
+        f"--teleop.port={args.leader_port or '/dev/ttyACM1'}",
+        f"--dataset.repo_id={args.dataset or 'local/so101_demo'}",
+        f"--dataset.num_episodes={args.episodes or 10}",
+    ]
+    if args.push:
+        cmd.append("--dataset.push_to_hub=true")
+
+    import subprocess
+    result = subprocess.run(bridge._prefix_cmd(cmd))
+    return result.returncode
+
+
+def cmd_grasp(args) -> int:
+    """Hailo grasp-planning hook for SO-ARM101.
+
+    This is an integration stub.  When ``castor/hailo_vision.py`` is present
+    (installed via ``opencastor[hailo]``), it calls
+    ``hailo_vision.detect_grasp_target()`` to get a grasp pose from the
+    Hailo NPU and passes it to the arm.
+
+    To add your own grasp logic, implement or replace
+    ``castor/hailo_vision.py::detect_grasp_target()``.
+    """
+    # Locate hailo_vision relative to the castor package root
+    import importlib
+    import importlib.util
+
+    hailo_spec = importlib.util.find_spec("castor.hailo_vision")
+
+    # Also accept a local file next to this package (development installs)
+    _local_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "hailo_vision.py"
+    )
+    _local_path = os.path.normpath(_local_path)
+
+    if hailo_spec is None and not os.path.exists(_local_path):
+        print(
+            "Hailo not available. "
+            "Ensure opencastor[hailo] is installed and Hailo NPU is connected."
+        )
+        return 1
+
+    # Import whichever path resolved
+    if hailo_spec is not None:
+        hailo_vision = importlib.import_module("castor.hailo_vision")
+    else:
+        spec = importlib.util.spec_from_file_location("castor.hailo_vision", _local_path)
+        hailo_vision = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+        spec.loader.exec_module(hailo_vision)  # type: ignore[union-attr]
+
+    # ── Grasp detection ────────────────────────────────────────────────────
+    # TODO: pass camera frame / ROI when available
+    target = hailo_vision.detect_grasp_target()
+    if target is None:
+        print("No grasp target detected.")
+        return 1
+
+    print(f"Grasp target detected: {target}")
+    # TODO: send target pose to arm controller via RCAN
+    return 0
+
+
 def cmd_config(args) -> None:
     from castor.hardware.so_arm101.config_generator import write_config
     from castor.hardware.so_arm101.port_finder import auto_assign_ports
@@ -237,6 +317,19 @@ def build_parser(subparsers=None) -> argparse.ArgumentParser:
     # status
     p_st = subparsers.add_parser("status", help="Show LeRobot install status and detected ports")
     p_st.set_defaults(func=cmd_status)
+
+    # record
+    p_rec = subparsers.add_parser("record", help="Record teleoperation episodes via LeRobot")
+    p_rec.add_argument("--port", help="Follower port (default: /dev/ttyACM0)")
+    p_rec.add_argument("--leader-port", help="Leader port (default: /dev/ttyACM1)")
+    p_rec.add_argument("--dataset", help="Dataset repo ID (default: local/so101_demo)")
+    p_rec.add_argument("--episodes", type=int, default=10, help="Number of episodes")
+    p_rec.add_argument("--push", action="store_true", help="Push to HuggingFace Hub")
+    p_rec.set_defaults(func=cmd_record)
+
+    # grasp
+    p_grasp = subparsers.add_parser("grasp", help="Hailo grasp-planning hook (stub)")
+    p_grasp.set_defaults(func=cmd_grasp)
 
     # config
     p_cfg = subparsers.add_parser("config", help="Generate RCAN config file")

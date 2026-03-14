@@ -176,6 +176,47 @@ def run_calibrate(
         return False
 
 
+# ── LeRobotBridge class ───────────────────────────────────────────────────────
+
+class LeRobotBridge:
+    """
+    Thin wrapper around the LeRobot CLI tools for SO-ARM101.
+
+    Usage::
+
+        bridge = LeRobotBridge()
+        if bridge.available:
+            result = subprocess.run(bridge._prefix_cmd(["lerobot-record", ...]))
+    """
+
+    def __init__(self) -> None:
+        self._venv = lerobot_venv_path()
+
+    @property
+    def available(self) -> bool:
+        """True when lerobot-record (or at minimum lerobot-find-port) is discoverable."""
+        return find_lerobot_bin("lerobot-find-port") is not None
+
+    def _prefix_cmd(self, cmd: list[str]) -> list[str]:
+        """
+        Resolve the first element of *cmd* to its full binary path.
+
+        If the tool lives inside a specific venv, that path is used so the
+        command runs with the correct Python environment even when called from
+        a different venv or the system Python.
+
+        If the tool is not found on disk (e.g. not yet installed), the command
+        is returned unchanged so the caller gets a descriptive OSError.
+        """
+        if not cmd:
+            return cmd
+        tool_name = cmd[0]
+        resolved = find_lerobot_bin(tool_name)
+        if resolved:
+            return [str(resolved)] + list(cmd[1:])
+        return list(cmd)
+
+
 # ── Status summary ────────────────────────────────────────────────────────────
 
 def status() -> dict:

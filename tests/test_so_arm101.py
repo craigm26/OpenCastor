@@ -242,3 +242,85 @@ def test_arm_cli_status_no_crash(capsys):
     from castor.hardware.so_arm101.cli import cmd_status
 
     cmd_status(argparse.Namespace())
+
+
+# ── record / grasp (new in #658) ──────────────────────────────────────────────
+
+def test_record_no_lerobot(capsys):
+    """cmd_record should return 1 and print a helpful message when LeRobot is absent."""
+    import argparse
+    from unittest.mock import patch, MagicMock
+    from castor.hardware.so_arm101.cli import cmd_record
+
+    mock_bridge = MagicMock()
+    mock_bridge.available = False
+
+    with patch(
+        "castor.hardware.so_arm101.lerobot_bridge.LeRobotBridge",
+        return_value=mock_bridge,
+    ):
+        rc = cmd_record(
+            argparse.Namespace(
+                port=None,
+                leader_port=None,
+                dataset=None,
+                episodes=10,
+                push=False,
+            )
+        )
+
+    assert rc == 1
+    captured = capsys.readouterr()
+    assert "LeRobot not available" in captured.out
+
+
+def test_record_with_lerobot(capsys):
+    """cmd_record should invoke lerobot-record via subprocess when LeRobot is present."""
+    import argparse
+    import subprocess
+    from unittest.mock import patch, MagicMock
+    from castor.hardware.so_arm101.cli import cmd_record
+
+    mock_bridge = MagicMock()
+    mock_bridge.available = True
+    mock_bridge._prefix_cmd.side_effect = lambda cmd: cmd  # pass-through
+
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+
+    with patch(
+        "castor.hardware.so_arm101.lerobot_bridge.LeRobotBridge",
+        return_value=mock_bridge,
+    ), patch("subprocess.run", return_value=mock_result) as mock_run:
+        rc = cmd_record(
+            argparse.Namespace(
+                port="/dev/ttyACM0",
+                leader_port="/dev/ttyACM1",
+                dataset="local/my_demo",
+                episodes=5,
+                push=False,
+            )
+        )
+
+    assert rc == 0
+    call_args = mock_run.call_args[0][0]  # first positional arg (the cmd list)
+    assert call_args[0] == "lerobot-record"
+    assert "--robot.type=so101_follower" in call_args
+    assert "--robot.port=/dev/ttyACM0" in call_args
+    assert "--dataset.num_episodes=5" in call_args
+
+
+def test_grasp_hook_no_hailo(capsys):
+    """cmd_grasp should print a helpful message when hailo_vision is not available."""
+    import argparse
+    from unittest.mock import patch
+    from castor.hardware.so_arm101.cli import cmd_grasp
+
+    # Patch both the importlib spec lookup and the local file existence check
+    with patch("importlib.util.find_spec", return_value=None), \
+         patch("os.path.exists", return_value=False):
+        rc = cmd_grasp(argparse.Namespace())
+
+    assert rc == 1
+    captured = capsys.readouterr()
+    assert "Hailo not available" in captured.out
