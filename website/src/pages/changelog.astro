@@ -19,8 +19,51 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     <div class="container">
       <div class="changelog-timeline">
 
+        <!-- v2026.3.14.5 -->
+        <div class="changelog-release current reveal" id="v2026.3.14.5">
+          <div class="release-header">
+            <span class="release-version">v2026.3.14.5</span>
+            <span class="release-date">2026-03-14</span>
+            <span class="release-badge badge-new">Latest</span>
+          </div>
+          <div class="release-body">
+            <div class="release-group">
+              <span class="release-group-label">Safety (Protocol 66 full implementation)</span>
+              <ul>
+                <li>SensorMonitor now wires to <code>SafetyLayer.estop()</code> — thermal/electrical critical events halt motors</li>
+                <li>SO-ARM101 <code>safety_bridge.py</code> — all arm commands route through SafetyLayer (bounds, estop, rate limits, anti-subversion, full audit)</li>
+                <li>Per-scope RCAN §16.2 confidence gates: CONTROL=0.75, CONFIG=0.65, TRAINING=0.60, STATUS=0.0</li>
+                <li>Session expiry → controlled stop for CONTROL-scoped principals (RCAN §6)</li>
+                <li>Remote RCAN commands tagged <code>source=rcan</code> in every audit log entry</li>
+                <li>11 adversarial P66 invariant tests proving all 5 invariants hold</li>
+                <li><code>GET /api/safety/manifest</code> endpoint — live conformance report</li>
+                <li>DriverBase SafetyLayer integration — hardware drivers opt in via <code>_move()</code></li>
+                <li><code>hardware_safety</code> field in rcan-config.json schema (physical_estop, SIL level, etc.)</li>
+                <li>6 new conformance checker safety checks (P66 conformance %, local_safety_wins, watchdog, etc.)</li>
+              </ul>
+            </div>
+            <div class="release-group">
+              <span class="release-group-label">Code quality</span>
+              <ul>
+                <li>Fixed 13 BoundsStatus type errors, p66_manifest typing, pca9685 None guards</li>
+                <li><code>ws_telemetry</code> complexity reduced from 26 to 3 (extracted <code>_build_telemetry_payload</code>)</li>
+                <li>rcan-py 0.4.1: safety message helpers (<code>make_estop</code>/<code>stop</code>/<code>resume</code>, <code>validate_safety_message</code>)</li>
+              </ul>
+            </div>
+            <div class="release-group">
+              <span class="release-group-label">Ecosystem</span>
+              <ul>
+                <li>RCAN schema: <code>local_safety_wins</code> is now a required field (RCAN §6 invariant)</li>
+                <li>All 5 RRF robot entries have <code>hardware_safety</code> capability declarations</li>
+                <li><code>castor init</code> generates complete safety block by default</li>
+                <li><a href="https://rcan.dev/docs/safety" style="color:var(--accent)">rcan.dev/docs/safety</a> — new safety conformance documentation page</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
         <!-- v2026.3.13.12 -->
-        <div class="changelog-release current reveal" id="v2026.3.13.12">
+        <div class="changelog-release reveal" id="v2026.3.13.12">
           <div class="release-header">
             <span class="release-version">v2026.3.13.12</span>
             <span class="release-date">2026-03-13</span>

@@ -769,6 +769,128 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             </div>
           </div>
         </div>
+
+        <!-- Protocol 66 -->
+        <div class="doc-section reveal" style="margin-top:56px">
+          <div class="section-header" style="text-align:center;margin-bottom:32px">
+            <p class="section-label">Protocol 66</p>
+            <h2 class="section-title" style="font-size:1.75rem">Protocol 66 — Safety Conformance</h2>
+            <p class="section-desc" style="margin-left:auto;margin-right:auto">OpenCastor implements Protocol 66 (P66),
+              the RCAN safety conformance framework. P66 defines five invariants that must hold at all times — enforced
+              at the runtime layer, not the AI layer. See <a href="https://rcan.dev/docs/safety"
+              style="color:var(--accent)">rcan.dev/docs/safety</a> for the full specification.</p>
+          </div>
+
+          <h3>What is Protocol 66?</h3>
+          <p>Protocol 66 is a set of verifiable safety invariants baked into the OpenCastor runtime. Named after RCAN
+            §16.6, P66 makes safety properties machine-checkable — any conforming robot runtime can prove it upholds
+            all five invariants via the <code>/api/safety/manifest</code> endpoint. This enables auditors, operators,
+            and orchestrators to verify safety conformance programmatically without reading source code.</p>
+
+          <h3 style="margin-top:32px">The 5 Invariants</h3>
+          <div class="guide-grid" style="margin-top:16px">
+            <div class="guide-card reveal">
+              <h3>① local_safety_always_wins</h3>
+              <p>Local safety checks are evaluated before any remote RCAN command is dispatched. A remote command
+                cannot bypass e-stop, bounds, or confidence gates — even if the orchestrator instructs it to.</p>
+            </div>
+            <div class="guide-card reveal reveal-d1">
+              <h3>② safety_messages_bypass_queues</h3>
+              <p>RCAN MessageType 6 (safety messages — ESTOP, STOP, RESUME) bypass all queues and confidence gates.
+                They are processed with the highest priority, before any pending command in the queue.</p>
+            </div>
+            <div class="guide-card reveal reveal-d2">
+              <h3>③ estop_requires_explicit_clear</h3>
+              <p>Once an ESTOP is triggered, it cannot be cleared automatically. It requires an explicit hardware-level
+                acknowledgment — preventing AI retry loops from spontaneously resuming a halted robot.</p>
+            </div>
+            <div class="guide-card reveal reveal-d3">
+              <h3>④ ai_cannot_override_safety</h3>
+              <p>No AI model output — regardless of provider, confidence, or role — can override a safety constraint.
+                The safety layer sits below the AI layer in the call stack and is structurally unreachable by model
+                output.</p>
+            </div>
+            <div class="guide-card reveal reveal-d4">
+              <h3>⑤ audit_trail_complete</h3>
+              <p>Every safety event, command dispatch, and ESTOP trigger is written to the tamper-evident audit log
+                before the action completes. No safety-relevant event can be lost or suppressed.</p>
+            </div>
+          </div>
+
+          <h3 style="margin-top:40px">GET /api/safety/manifest — Live Conformance Report</h3>
+          <p>OpenCastor exposes a real-time conformance report at <code>/api/safety/manifest</code>. Call it from
+            any orchestrator, CI pipeline, or monitoring system to verify that all five P66 invariants are
+            currently satisfied.</p>
+
+          <div class="code-block reveal" style="margin:16px 0;max-width:720px">
+            <div class="code-header">
+              <div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">GET /api/safety/manifest</span>
+            </div>
+            <div class="code-body"><span class="k">curl</span> http://localhost:8000/api/safety/manifest
+
+              <span class="cm"># Response:</span>
+              {
+              <span class="k">"p66_conformant"</span>: <span class="v">true</span>,
+              <span class="k">"conformance_pct"</span>: <span class="n">100.0</span>,
+              <span class="k">"invariants"</span>: {
+                <span class="k">"local_safety_always_wins"</span>: <span class="v">true</span>,
+                <span class="k">"safety_messages_bypass_queues"</span>: <span class="v">true</span>,
+                <span class="k">"estop_requires_explicit_clear"</span>: <span class="v">true</span>,
+                <span class="k">"ai_cannot_override_safety"</span>: <span class="v">true</span>,
+                <span class="k">"audit_trail_complete"</span>: <span class="v">true</span>
+              },
+              <span class="k">"watchdog_ok"</span>: <span class="v">true</span>,
+              <span class="k">"estop_active"</span>: <span class="v">false</span>,
+              <span class="k">"timestamp_ms"</span>: <span class="n">1741996800000</span>
+              }
+            </div>
+          </div>
+
+          <h3 style="margin-top:40px">Safety Configuration in rcan.yaml</h3>
+          <p>The <code>safety</code> block in your RCAN config controls P66 behaviour. The
+            <code>local_safety_wins</code> field is required (RCAN §6 invariant) — the wizard generates it by
+            default.</p>
+
+          <div class="code-block reveal" style="margin:16px 0;max-width:720px">
+            <div class="code-header">
+              <div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">my_robot.rcan.yaml — safety block</span>
+            </div>
+            <div class="code-body"><span class="k">safety</span>:
+              <span class="k">local_safety_wins</span>: <span class="v">true</span>          <span class="cm"># required — RCAN §6</span>
+              <span class="k">emergency_stop_distance</span>: <span class="n">15</span>      <span class="cm"># cm — triggers ESTOP</span>
+              <span class="k">watchdog</span>:
+                <span class="k">enabled</span>: <span class="v">true</span>
+                <span class="k">timeout_ms</span>: <span class="n">500</span>               <span class="cm"># heartbeat interval</span>
+              <span class="k">confidence_gates</span>:
+                <span class="k">CONTROL</span>: <span class="n">0.75</span>                <span class="cm"># min confidence to dispatch control commands</span>
+                <span class="k">CONFIG</span>: <span class="n">0.65</span>                 <span class="cm"># min confidence for config changes</span>
+                <span class="k">TRAINING</span>: <span class="n">0.60</span>               <span class="cm"># min confidence for training actions</span>
+                <span class="k">STATUS</span>: <span class="n">0.0</span>                  <span class="cm"># status queries always allowed</span>
+            </div>
+          </div>
+
+          <h3 style="margin-top:40px">Hardware Safety Declaration</h3>
+          <p>Declare physical safety hardware in the <code>hardware_safety</code> block. This is reflected in
+            the conformance manifest and surfaced in the Robot Registry (RRF).</p>
+
+          <div class="code-block reveal" style="margin:16px 0;max-width:720px">
+            <div class="code-header">
+              <div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">my_robot.rcan.yaml — hardware_safety block</span>
+            </div>
+            <div class="code-body"><span class="k">hardware_safety</span>:
+              <span class="k">physical_estop</span>: <span class="v">true</span>           <span class="cm"># physical e-stop button present</span>
+              <span class="k">sil_level</span>: <span class="n">2</span>                   <span class="cm"># IEC 62061 SIL (1–3)</span>
+              <span class="k">ple_level</span>: <span class="s">"d"</span>                <span class="cm"># ISO 13849 PLe (a–e)</span>
+              <span class="k">watchdog_hardware</span>: <span class="v">true</span>       <span class="cm"># independent hardware watchdog</span>
+              <span class="k">force_torque_sensor</span>: <span class="v">false</span>    <span class="cm"># collision detection via F/T sensor</span>
+            </div>
+          </div>
+
+          <p style="margin-top:16px">
+            Full P66 specification, conformance checker source, and test vectors:
+            <a href="https://rcan.dev/docs/safety" style="color:var(--accent)">rcan.dev/docs/safety →</a>
+          </p>
+        </div>
       </div>
     </section>
 
