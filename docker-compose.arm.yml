@@ -16,6 +16,7 @@ services:
       context: .
       dockerfile: Dockerfile.arm
     image: opencastor-arm:latest
+    pull_policy: never
     container_name: opencastor-arm
     restart: unless-stopped
 

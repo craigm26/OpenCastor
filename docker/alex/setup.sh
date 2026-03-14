@@ -30,6 +30,9 @@ echo ""
 # ── 1. Nuke old installs ──────────────────────────────────────────────────────
 log "Cleaning up old installs..."
 
+# Remove old OpenCastor venv dirs if present
+rm -rf ~/opencastor-env ~/opencastor-venv ~/oak-env
+
 # Remove LeRobot venv if present
 if [ -d "${HOME}/lerobot" ]; then
     warn "Removing ~/lerobot (was: $(du -sh "${HOME}/lerobot" 2>/dev/null | cut -f1) on disk)"
@@ -93,7 +96,14 @@ fi
 # Create config dir
 mkdir -p config
 
-# ── 5. Build Docker image ─────────────────────────────────────────────────────
+# ── 5. Check disk space ───────────────────────────────────────────────────────
+FREE_GB=$(df -BG / | awk 'NR==2 {gsub("G",""); print $4}')
+if [ "${FREE_GB}" -lt 10 ]; then
+    die "Not enough disk space: ${FREE_GB}GB free (need ≥10GB). Free up space and retry."
+fi
+log "Disk space OK: ${FREE_GB}GB free."
+
+# ── 5b. Build Docker image ────────────────────────────────────────────────────
 log "Building opencastor-arm Docker image (this takes a few minutes on first run)..."
 docker build -f Dockerfile.arm -t "${IMAGE}" . 2>&1 | \
     grep -E '(Step|RUN|COPY|FROM|Successfully|error|ERROR|warning)' || true
@@ -101,6 +111,10 @@ docker build -f Dockerfile.arm -t "${IMAGE}" . 2>&1 | \
 log "Image built: ${IMAGE}"
 
 # ── 6. Start the container ────────────────────────────────────────────────────
+log "Cleaning up ghost containers before start..."
+docker compose -f "${COMPOSE_FILE}" down --remove-orphans 2>/dev/null || true
+docker rm -f opencastor-arm 2>/dev/null || true
+
 log "Starting opencastor-arm container..."
 docker compose -f "${COMPOSE_FILE}" up -d
 
