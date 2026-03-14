@@ -45,6 +45,9 @@ if [ ! -f "$CONFIG_PATH" ]; then
     echo "  Or use the web wizard:"
     echo "    http://alex.local:8765  (castor wizard --web)"
     echo ""
+    # No config = stay alive for docker exec commands; don't crash-loop
+    echo "  Container ready. Waiting for setup commands..."
+    exec sleep infinity
 fi
 
 exec "$@"
