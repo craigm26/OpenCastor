@@ -58,11 +58,27 @@ drivers: []
 # - id: camera
 #   protocol: oak_d         # OAK-D depth camera
 
-# Safety limits
+# Safety limits (local_safety_wins is required — RCAN §6 invariant)
 safety:
+  local_safety_wins: true
+  max_linear_speed_mps: 1.0
+  max_angular_speed_radps: 2.0
+  emergency_stop_distance: 0.3
   max_linear_velocity_ms: 0.5
   max_angular_velocity_rads: 1.0
   estop_enabled: true
+
+watchdog:
+  timeout_s: 10
+
+brain:
+  confidence_gates:
+    - scope: control
+      min_confidence: 0.75
+      on_fail: block
+    - scope: config
+      min_confidence: 0.65
+      on_fail: block
 
 # RCAN protocol settings
 rcan_protocol:
