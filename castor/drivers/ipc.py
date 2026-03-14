@@ -107,7 +107,17 @@ class DriverIPCAdapter:
             raise RuntimeError(resp.get("error", f"RPC call failed: {method}"))
         return resp.get("result")
 
+    def _move(self, linear: float = 0.0, angular: float = 0.0) -> None:
+        """Execute a velocity command after SafetyLayer validation."""
+        self._rpc("move", linear, angular)
+
     def move(self, linear_or_action, angular: float = 0.0):
+        """Route a move command over IPC.
+
+        Accepts either ``move(linear, angular)`` (two-float form) or
+        ``move(action_dict, angular)`` (legacy dict form).  For SafetyLayer
+        routing use the two-float form; the dict form bypasses it.
+        """
         return self._rpc("move", linear_or_action, angular)
 
     def stop(self):

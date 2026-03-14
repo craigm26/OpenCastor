@@ -155,26 +155,19 @@ class PCA9685RCDriver(DriverBase):
         time.sleep(0.5)  # give the ESC time to recognise the neutral signal
         logger.info("ESC armed (neutral throttle sent)")
 
-    def move(
+    def _move(
         self,
         linear: float = 0.0,
         angular: float = 0.0,
-        linear_x: float | None = None,
-        angular_z: float | None = None,
     ):
-        """
-        Drive the RC car.
+        """Drive the RC car after SafetyLayer validation.
+
+        Alias resolution (linear_x / angular_z) is handled by DriverBase.move().
 
         Args:
-            linear:    Throttle, -1.0 (full reverse) to 1.0 (full forward).
-            angular:   Steering, -1.0 (full left) to 1.0 (full right).
-            linear_x:  Alias for linear (legacy).
-            angular_z: Alias for angular (legacy).
+            linear:  Throttle, -1.0 (full reverse) to 1.0 (full forward).
+            angular: Steering, -1.0 (full left) to 1.0 (full right).
         """
-        if linear_x is not None:
-            linear = linear_x
-        if angular_z is not None:
-            angular = angular_z
         linear_x = max(-1.0, min(1.0, linear))
         angular_z = max(-1.0, min(1.0, angular))
 
@@ -298,18 +291,15 @@ class PCA9685Driver(DriverBase):
         self.motor_left.decay_mode = motor.SLOW_DECAY
         self.motor_right.decay_mode = motor.SLOW_DECAY
 
-    def move(
+    def _move(
         self,
         linear: float = 0.0,
         angular: float = 0.0,
-        linear_x: float | None = None,
-        angular_z: float | None = None,
     ):
-        """Arcade-drive mixing."""
-        if linear_x is not None:
-            linear = linear_x
-        if angular_z is not None:
-            angular = angular_z
+        """Arcade-drive mixing after SafetyLayer validation.
+
+        Alias resolution (linear_x / angular_z) is handled by DriverBase.move().
+        """
         left_speed = max(-1.0, min(1.0, linear - angular))
         right_speed = max(-1.0, min(1.0, linear + angular))
 

@@ -128,12 +128,24 @@ class CompositeDriver:
 
     # ── DriverBase interface ──────────────────────────────────────────────────
 
+    def _move(self, linear: float = 0.0, angular: float = 0.0) -> None:
+        """Execute a velocity command after SafetyLayer validation.
+
+        Routes to the "base" sub-driver (or first available sub-driver).
+        """
+        base = (
+            self._sub_drivers.get("base")
+            or next(iter(self._sub_drivers.values()), None)
+            or _NullDriver("base")
+        )
+        base.move(linear, angular)
+
     def move(self, linear_or_action, angular: float = 0.0):
         """Route a move command to the appropriate sub-driver(s).
 
         Accepts either:
-          - ``move(linear, angular)`` — classic two-float form
-          - ``move(action_dict)`` — dict with typed keys (composite form)
+          - ``move(linear, angular)`` — classic two-float form (SafetyLayer-routed)
+          - ``move(action_dict)`` — dict with typed keys (composite form, bypasses SafetyLayer)
         """
         if isinstance(linear_or_action, dict):
             self._dispatch_action(linear_or_action)
@@ -243,6 +255,9 @@ class _NullDriver:
 
     def __init__(self, name: str = "null"):
         self._name = name
+
+    def _move(self, linear: float = 0.0, angular: float = 0.0) -> None:
+        logger.debug("_NullDriver(%s)._move() — no-op", self._name)
 
     def move(self, *args, **kwargs):
         logger.debug("_NullDriver(%s).move() — no-op", self._name)

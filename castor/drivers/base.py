@@ -1,11 +1,22 @@
-# TODO: The following drivers still define move() directly and have not yet been
-# migrated to _move() for automatic SafetyLayer routing. Each one still works;
-# they just bypass SafetyLayer until migrated:
-#   acb_driver.py, arduino_driver.py, composite.py, dynamixel.py,
-#   esp32_ble_driver.py, esp32_websocket.py, ev3dev_driver.py,
-#   imu_driver.py, ipc.py, lidar_driver.py, pca9685.py,
-#   picamera2_driver.py, reachy_driver.py, ros2_driver.py,
-#   simulation_driver.py, spike_driver.py, thermal_driver.py, worker.py
+# SafetyLayer migration status — drivers that implement _move() are automatically
+# routed through bounds-checking, estop, rate-limiting and audit when a SafetyLayer
+# is attached.  Drivers still using move() directly bypass this routing.
+#
+# MIGRATED (implement _move()):
+#   acb_driver.py, composite.py (_NullDriver too), esp32_ble_driver.py,
+#   esp32_websocket.py, ev3dev_driver.py, ipc.py, pca9685.py (both classes),
+#   reachy_driver.py, ros2_driver.py, simulation_driver.py, spike_driver.py
+#
+# NOT MIGRATED (move() overrides DriverBase — intentional or pending):
+#   arduino_driver.py — pending
+#   dynamixel.py      — arm driver; move(motor_id, angle_deg) is arm-specific,
+#                        not a velocity interface; DO NOT migrate
+#   imu_driver.py     — sensor-only; no move() needed
+#   lidar_driver.py   — sensor-only; no move() needed
+#   picamera2_driver.py — sensor-only; no move() needed
+#   thermal_driver.py — sensor-only; no move() needed
+#   worker.py         — proxy; delegates to real driver
+#   battery_driver.py — sensor-only; no move() needed
 
 from abc import ABC, abstractmethod
 from typing import Any, Optional

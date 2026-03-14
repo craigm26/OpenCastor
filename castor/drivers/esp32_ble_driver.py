@@ -170,21 +170,44 @@ class ESP32BLEDriver:
             self._connected = False
             logger.error("ESP32BLEDriver: write failed: %s", exc)
 
+    def _move(self, linear: float = 0.5, angular: float = 0.0) -> None:
+        """Execute a velocity command after SafetyLayer validation.
+
+        This is the preferred override point — ``move()`` routes here after
+        safety checks when a SafetyLayer is attached.
+        """
+        cmd: dict[str, Any] = {
+            "type": "move",
+            "linear": float(linear),
+            "angular": float(angular),
+        }
+        self._send_command(cmd)
+        logger.debug("ESP32BLEDriver._move: %r", cmd)
+
     def move(self, params: Optional[dict[str, Any]] = None) -> None:
         """Send a ``move`` command to the ESP32.
+
+        .. deprecated::
+            Pass ``linear`` and ``angular`` via the DriverBase ``move(linear, angular)``
+            interface instead.  This params-dict form remains for legacy callers.
 
         Args:
             params: Optional dict with ``linear`` (m/s) and ``angular`` (rad/s)
                     values.  Defaults to ``{"linear": 0.5, "angular": 0.0}``.
         """
+        import warnings
+
+        warnings.warn(
+            "ESP32BLEDriver.move(params=...) is deprecated; "
+            "use move(linear, angular) from DriverBase instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         params = params or {}
-        cmd: dict[str, Any] = {
-            "type": "move",
-            "linear": float(params.get("linear", 0.5)),
-            "angular": float(params.get("angular", 0.0)),
-        }
-        self._send_command(cmd)
-        logger.debug("ESP32BLEDriver.move: %r", cmd)
+        self._move(
+            linear=float(params.get("linear", 0.5)),
+            angular=float(params.get("angular", 0.0)),
+        )
 
     def stop(self) -> None:
         """Send a ``stop`` command to the ESP32."""

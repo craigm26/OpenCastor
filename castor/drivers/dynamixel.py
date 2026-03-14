@@ -100,6 +100,7 @@ class DynamixelDriver(DriverBase):
         for mid in motor_ids:
             self.packetHandler.write1ByteTxRx(self.portHandler, mid, self.ADDR_TORQUE_ENABLE, 0)
 
+    # Arm driver — move() has arm-specific signature, not routed through DriverBase.move()
     def move(self, motor_id: int, angle_deg: float):
         """
         Moves a specific motor to an angle.

@@ -176,19 +176,21 @@ class SimulationDriver(DriverBase):
     # DriverBase interface
     # ------------------------------------------------------------------
 
-    def move(self, **kwargs: Any) -> None:
-        """Execute a movement command.
+    def _move(self, linear: float = 0.0, angular: float = 0.0) -> None:
+        """Execute a velocity command after SafetyLayer validation.
 
-        Accepted kwargs (following PCA9685 / RCAN action schema):
-            - direction: "forward" | "backward" | "left" | "right" | "stop"
-            - speed: 0.0–1.0
-            - linear: direct linear velocity (m/s)
-            - angular: direct angular velocity (rad/s)
+        Called by ``DriverBase.move()`` when a SafetyLayer is attached.
+        Delegates to the internal ``_apply_motion`` helper so that both
+        the legacy ``move(**kwargs)`` path and the new SafetyLayer path
+        share the same core logic.
         """
-        direction = str(kwargs.get("direction", "stop")).lower()
-        speed = float(kwargs.get("speed", self._default_speed))
-        linear = float(kwargs.get("linear", 0.0))
-        angular = float(kwargs.get("angular", 0.0))
+        self._apply_motion(linear=linear, angular=angular)
+
+    def _apply_motion(self, *, direction: str = "stop", speed: float | None = None,
+                      linear: float = 0.0, angular: float = 0.0) -> None:
+        """Core motion logic shared by move() and _move()."""
+        if speed is None:
+            speed = self._default_speed
 
         # Map direction strings to linear/angular
         if direction == "forward":
@@ -219,6 +221,25 @@ class SimulationDriver(DriverBase):
                 linear,
                 angular,
             )
+
+    def move(self, **kwargs: Any) -> None:
+        """Execute a movement command (legacy kwargs form).
+
+        Accepted kwargs (following PCA9685 / RCAN action schema):
+            - direction: "forward" | "backward" | "left" | "right" | "stop"
+            - speed: 0.0–1.0
+            - linear: direct linear velocity (m/s)
+            - angular: direct angular velocity (rad/s)
+
+        Note: Prefer ``DriverBase.move(linear, angular)`` for SafetyLayer routing.
+              This kwargs form is retained for backward compatibility.
+        """
+        self._apply_motion(
+            direction=str(kwargs.get("direction", "stop")).lower(),
+            speed=float(kwargs.get("speed", self._default_speed)),
+            linear=float(kwargs.get("linear", 0.0)),
+            angular=float(kwargs.get("angular", 0.0)),
+        )
 
     def stop(self) -> None:
         """Send a stop command to the simulator."""

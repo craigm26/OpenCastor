@@ -154,17 +154,12 @@ class ESP32WebsocketDriver(DriverBase):
             ang = float(angular)
         return linear, ang
 
-    def move(
+    def _move(
         self,
         linear: float = 0.0,
         angular: float = 0.0,
-        linear_x: Optional[float] = None,
-        angular_z: Optional[float] = None,
     ) -> None:
-        if linear_x is not None:
-            linear = linear_x
-        if angular_z is not None:
-            angular = angular_z
+        # Alias resolution (linear_x / angular_z) is handled by DriverBase.move().
         linear, angular = self._coerce_motion(linear, angular)
 
         payload = {
