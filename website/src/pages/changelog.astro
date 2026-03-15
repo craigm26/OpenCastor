@@ -19,8 +19,29 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     <div class="container">
       <div class="changelog-timeline">
 
+        <!-- v2026.3.14.6 -->
+        <div class="changelog-release current reveal" id="v2026.3.14.6">
+          <div class="release-header">
+            <span class="release-version">v2026.3.14.6</span>
+            <span class="release-date">2026-03-14</span>
+            <span class="release-badge badge-new">Latest</span>
+          </div>
+          <div class="release-body">
+            <div class="release-group">
+              <span class="release-group-label">CI Fixes + Driver Migrations</span>
+              <ul>
+                <li>Fixed castor doctor crash (#672)</li>
+                <li>Migrated 18 hardware drivers to _move() for automatic SafetyLayer routing (#673)</li>
+                <li>Fixed waveshare_alpha.rcan.yaml schema validation</li>
+                <li>DriverBase.move() accepts dict and linear_x/angular_z kwargs (backward compat)</li>
+                <li>736 tests passing, 7 skipped</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
         <!-- v2026.3.14.5 -->
-        <div class="changelog-release current reveal" id="v2026.3.14.5">
+        <div class="changelog-release reveal" id="v2026.3.14.5">
           <div class="release-header">
             <span class="release-version">v2026.3.14.5</span>
             <span class="release-date">2026-03-14</span>
