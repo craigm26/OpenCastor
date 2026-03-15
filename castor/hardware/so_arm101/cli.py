@@ -247,6 +247,7 @@ def cmd_grasp(args) -> int:
 
     # ── Camera ROI (optional) ──────────────────────────────────────────────
     import logging as _logging
+
     _arm_logger = _logging.getLogger("OpenCastor.Hardware.SOArm101.CLI")
     try:
         from castor.hardware.so_arm101.vision import get_camera_frame_roi

@@ -186,8 +186,14 @@ class SimulationDriver(DriverBase):
         """
         self._apply_motion(linear=linear, angular=angular)
 
-    def _apply_motion(self, *, direction: str = "stop", speed: float | None = None,
-                      linear: float = 0.0, angular: float = 0.0) -> None:
+    def _apply_motion(
+        self,
+        *,
+        direction: str = "stop",
+        speed: float | None = None,
+        linear: float = 0.0,
+        angular: float = 0.0,
+    ) -> None:
         """Core motion logic shared by move() and _move()."""
         if speed is None:
             speed = self._default_speed

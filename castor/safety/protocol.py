@@ -251,6 +251,7 @@ def _check_sensor_consent(
 # Protocol 66 — Extended rules (Phase 2)
 # ---------------------------------------------------------------------------
 
+
 def _check_human_proximity_estop(
     action: dict[str, Any], params: dict[str, Any]
 ) -> Optional[RuleViolation]:
@@ -320,9 +321,7 @@ def _check_arm_joint_velocity(
     return None
 
 
-def _check_arm_payload(
-    action: dict[str, Any], params: dict[str, Any]
-) -> Optional[RuleViolation]:
+def _check_arm_payload(action: dict[str, Any], params: dict[str, Any]) -> Optional[RuleViolation]:
     """ARM_002 — Payload mass limit for manipulators."""
     payload_kg = action.get("payload_kg")
     if payload_kg is None:
@@ -363,16 +362,13 @@ def _check_arm_singularity(
             category="arm",
             severity="warning",
             message=(
-                f"Arm near kinematic singularity (metric={singularity_metric:.4f}) — "
-                "reduce speed"
+                f"Arm near kinematic singularity (metric={singularity_metric:.4f}) — reduce speed"
             ),
         )
     return None
 
 
-def _check_motor_voltage(
-    action: dict[str, Any], params: dict[str, Any]
-) -> Optional[RuleViolation]:
+def _check_motor_voltage(action: dict[str, Any], params: dict[str, Any]) -> Optional[RuleViolation]:
     """ELECTRICAL_001 — Motor supply voltage out of safe range."""
     voltage_v = action.get("motor_voltage_v")
     if voltage_v is None:
@@ -396,9 +392,7 @@ def _check_motor_voltage(
     return None
 
 
-def _check_motor_current(
-    action: dict[str, Any], params: dict[str, Any]
-) -> Optional[RuleViolation]:
+def _check_motor_current(action: dict[str, Any], params: dict[str, Any]) -> Optional[RuleViolation]:
     """ELECTRICAL_002 — Motor current draw over safe limit."""
     current_a = action.get("motor_current_a")
     if current_a is None:
@@ -448,9 +442,7 @@ def _check_direction_reversal(
     return None
 
 
-def _check_ai_confidence(
-    action: dict[str, Any], params: dict[str, Any]
-) -> Optional[RuleViolation]:
+def _check_ai_confidence(action: dict[str, Any], params: dict[str, Any]) -> Optional[RuleViolation]:
     """SOFTWARE_002 — AI confidence must meet per-scope threshold before actuation."""
     confidence = action.get("ai_confidence")
     if confidence is None:

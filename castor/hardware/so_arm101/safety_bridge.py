@@ -138,9 +138,7 @@ def write_arm_command(
     # Check e-stop explicitly for /dev/arm paths (SafetyLayer only auto-blocks
     # /dev/motor during estop; arm paths need an explicit guard here).
     if safety_layer.is_estopped:
-        logger.warning(
-            "write_arm_command blocked on %s: emergency stop is active", path
-        )
+        logger.warning("write_arm_command blocked on %s: emergency stop is active", path)
         return False
 
     result = safety_layer.write(path, data, principal=principal)

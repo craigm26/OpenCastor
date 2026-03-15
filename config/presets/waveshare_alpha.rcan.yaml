@@ -1,8 +1,6 @@
-```yaml
 adept_generic:
   metadata:
     robot_name: waveshare_alpha
     agent_provider: wave_driver
     agent_model: wave_model
     drivers: [amazon_kit_generic, arduino_l298n, dynamixel_arm]
-```

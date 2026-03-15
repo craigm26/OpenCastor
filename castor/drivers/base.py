@@ -86,7 +86,12 @@ class DriverBase(ABC):
             linear_x: Alias for ``linear`` (ROS2 / legacy callers).
             angular_z: Alias for ``angular`` (ROS2 / legacy callers).
         """
-        # Accept ROS-convention aliases for backward compatibility
+        # Accept dict as first argument (legacy calling convention: move({"linear": 0.8}))
+        if isinstance(linear, dict):
+            cmd = linear
+            linear = float(cmd.get("linear", cmd.get("linear_x", 0.0)))
+            angular = float(cmd.get("angular", cmd.get("angular_z", 0.0)))
+        # Accept ROS-convention keyword aliases
         if linear_x is not None:
             linear = linear_x
         if angular_z is not None:

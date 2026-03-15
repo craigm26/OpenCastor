@@ -34,7 +34,6 @@ from __future__ import annotations
 import time
 from typing import Any, Optional
 
-
 # ---------------------------------------------------------------------------
 # Rule catalogue
 # ---------------------------------------------------------------------------
@@ -348,6 +347,7 @@ _P66_RULES: list[dict[str, Any]] = [
 # Manifest builder
 # ---------------------------------------------------------------------------
 
+
 def build_manifest(safety_layer: Any = None, hardware_caps: Optional[dict] = None) -> dict:
     """Build the Protocol 66 conformance manifest.
 
@@ -370,13 +370,23 @@ def build_manifest(safety_layer: Any = None, hardware_caps: Optional[dict] = Non
         r = dict(rule)
         if _hw_caps:
             if r["rule_id"] == "HARDWARE_001" and _hw_caps.get("hardware_watchdog_mcu"):
-                r = {**r, "status": "implemented", "notes": (
-                    r.get("notes", "") + " [Declared implemented via hardware_safety.hardware_watchdog_mcu]"
-                ).strip()}
+                r = {
+                    **r,
+                    "status": "implemented",
+                    "notes": (
+                        r.get("notes", "")
+                        + " [Declared implemented via hardware_safety.hardware_watchdog_mcu]"
+                    ).strip(),
+                }
             elif r["rule_id"] == "HARDWARE_002" and _hw_caps.get("physical_estop"):
-                r = {**r, "status": "implemented", "notes": (
-                    r.get("notes", "") + " [Declared implemented via hardware_safety.physical_estop]"
-                ).strip()}
+                r = {
+                    **r,
+                    "status": "implemented",
+                    "notes": (
+                        r.get("notes", "")
+                        + " [Declared implemented via hardware_safety.physical_estop]"
+                    ).strip(),
+                }
         _rules_with_hw.append(r)
 
     total = len(_rules_with_hw)
@@ -400,8 +410,7 @@ def build_manifest(safety_layer: Any = None, hardware_caps: Optional[dict] = Non
             live_state = {
                 "estopped": safety_layer.is_estopped,
                 "active_policies": {
-                    k: v["enabled"]
-                    for k, v in safety_layer.ns.read("/etc/safety/policies").items()
+                    k: v["enabled"] for k, v in safety_layer.ns.read("/etc/safety/policies").items()
                 }
                 if safety_layer.ns.exists("/etc/safety/policies")
                 else {},

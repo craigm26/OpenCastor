@@ -32,6 +32,7 @@ def wire_drivers_to_safety(drivers: list, safety_layer: Any) -> int:
                 logger.warning("wire_drivers_to_safety: failed for %r: %s", driver, exc)
     return count
 
+
 _EXACT_PROTOCOLS = {
     "acb",
     "composite",

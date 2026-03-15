@@ -159,7 +159,7 @@ class WorkspaceBounds:
                     BoundsResult(
                         BoundsStatus.WARNING,
                         f"near workspace sphere boundary ({-d:.4f}m margin)",
-                        -d
+                        -d,
                     )
                 )
             else:

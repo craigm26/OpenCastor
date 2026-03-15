@@ -277,9 +277,7 @@ def print_report(report) -> None:
                     _status = "skip"
                 else:
                     _status = "warn"
-            _dr.checks.append(
-                CheckResult(name=str(_name), status=_status, detail=str(_detail))
-            )
+            _dr.checks.append(CheckResult(name=str(_name), status=_status, detail=str(_detail)))
         report = _dr
     # ── Render ──────────────────────────────────────────────────────────────
     STATUS_ICON = {"ok": "✅", "warn": "⚠️ ", "fail": "❌", "skip": "⏭️ "}
