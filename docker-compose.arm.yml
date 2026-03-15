@@ -28,8 +28,12 @@ services:
     # ── Environment ───────────────────────────────────────────────
     env_file:
       - .env
+    command: >
+      sh -c "castor gateway --config /app/config/arm.rcan.yaml --host 0.0.0.0 --port 8000"
+
     environment:
       - CASTOR_CONFIG=/app/config/arm.rcan.yaml
+      - OPENCASTOR_CONFIG=/app/config/arm.rcan.yaml
       - OPENCASTOR_API_HOST=0.0.0.0
       - OPENCASTOR_API_PORT=8000
 

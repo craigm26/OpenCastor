@@ -1,0 +1,43 @@
+rcan_version: "1.4"
+
+metadata:
+  robot_name: "Alex"
+  robot_uuid: "00000000-0000-0000-0000-000000000005"
+  description: "Pi5 + OAK-D depth camera, Ackermann steering"
+  author: "craigm26"
+  ruri: "rcan://craigm26.opencastor-rpi5-ackermann.alex-001"
+
+agent:
+  provider: "huggingface"
+  model: "meta-llama/Meta-Llama-3-8B-Instruct"
+  vision_enabled: true
+  safety_stop: true
+
+physics:
+  type: "ackermann"
+  dof: 2
+
+drivers:
+  - id: main_drive
+    protocol: gpio
+
+network:
+  allow_remote_override: false
+
+rcan_protocol:
+  port: 8000
+  capabilities:
+    - status
+    - nav
+    - teleop
+    - vision
+    - chat
+  enable_mdns: true
+  enable_jwt: true
+  ruri: "rcan://craigm26.opencastor-rpi5-ackermann.alex-001"
+
+safety:
+  local_safety_wins: true
+  emergency_stop_distance: 0.4
+  watchdog:
+    timeout_s: 10
