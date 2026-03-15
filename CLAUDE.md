@@ -6,9 +6,9 @@
 
 OpenCastor is the open-source **reference implementation of the RCAN protocol** (v1.4). It connects LLM "brains" to robot "bodies" through a plug-and-play architecture and exposes them to messaging platforms for remote control.
 
-- **Version**: 2026.3.13.11 (date-based: `YYYY.MM.DD.patch`)
+- **Version**: 2026.3.14.6 (date-based: `YYYY.MM.DD.patch`)
 - **RCAN**: v1.4 — see [rcan.dev/spec](https://rcan.dev/spec/)
-- **License**: Apache 2.0 | **Python**: 3.10+ | **Tests**: 105+ passing
+- **License**: Apache 2.0 | **Python**: 3.10+ | **Tests**: 161+ passing
 
 ## Quick Start
 
@@ -31,7 +31,7 @@ OpenCastor/
 │   ├── providers/          # LLM adapters (Gemini, Claude, GPT, Ollama, ...)
 │   │   ├── task_router.py  # TaskRouter — routes tasks by category to providers
 │   │   └── base.py         # BaseProvider ABC + Thought dataclass
-│   ├── drivers/            # Hardware drivers (PCA9685, Dynamixel, ROS2, ...)
+│   ├── drivers/            # Hardware drivers (see full list below)
 │   ├── channels/           # Messaging channels (WhatsApp, Telegram, Discord, ...)
 │   ├── rcan/               # RCAN protocol implementation
 │   │   ├── registry.py     # RRN validation, REGISTRY_REGISTER/RESOLVE (§21)
@@ -39,14 +39,26 @@ OpenCastor/
 │   │   ├── parallel_invoke.py  # invoke_all(), invoke_race()
 │   │   ├── message.py      # MessageType enum, RCANMessage
 │   │   └── sdk_compat.py   # Compatibility layer for rcan-py SDK
+│   ├── safety/             # Safety subsystem
+│   │   ├── p66_manifest.py # P66 safety manifest — capability declarations
+│   │   ├── bounds.py       # BoundsChecker — motor command validation
+│   │   ├── monitor.py      # SensorMonitor — sensor health wiring
+│   │   ├── authorization.py # HiTL authorization (§8)
+│   │   ├── protocol.py     # SafetyLayer — wraps driver calls
+│   │   └── state.py        # Safety state machine
+│   ├── hardware/
+│   │   └── so_arm101/      # SO-ARM101 6-DOF arm
+│   │       ├── safety_bridge.py  # Routes arm commands through SafetyLayer
+│   │       ├── vision.py         # Arm camera/vision pipeline
+│   │       ├── rcan_bridge.py    # RCAN→arm command translation
+│   │       └── cli.py            # Arm CLI utilities
 │   ├── fleet/              # Fleet management, group policies
 │   ├── privacy_mode.py     # Privacy mode — blocks cloud egress
 │   └── sdk/                # Python SDK wrapper
 ├── sdk/js/                 # TypeScript/JS SDK (@opencastor/sdk)
 │   └── src/index.ts        # CastorClient — typed wrappers for all API endpoints
-├── site/                   # OpenCastor website (static HTML/CSS)
-│   ├── *.html              # 8 pages (index, docs, hardware, about, hub, ...)
-│   └── styles.css          # Global stylesheet (dark/light theme, pill toggles)
+├── website/                # Astro-based website (replaces old site/)
+│   └── src/pages/          # Astro pages (index.astro, docs.astro, ...)
 ├── tests/                  # Test suite (pytest)
 ├── config/presets/         # RCAN config presets for common hardware
 ├── bob.rcan.yaml           # Bob robot config (gitignored — device-specific)
@@ -60,16 +72,73 @@ OpenCastor/
 | `TieredBrain` | `castor/tiered_brain.py` | Routes prompts: fast model or planner based on `task_category` |
 | `TaskRouter` | `castor/providers/task_router.py` | Selects provider by `TaskCategory` (SENSOR_POLL → local-only, SAFETY → planner) |
 | `BaseProvider` | `castor/providers/base.py` | LLM adapter ABC: `think()`, `think_stream()`, `health_check()` |
-| `DriverBase` | `castor/drivers/base.py` | Hardware ABC: `move()`, `stop()`, `close()`, `health_check()` |
+| `DriverBase` | `castor/drivers/base.py` | Hardware ABC: `move()`, `stop()`, `close()`, `health_check()`. Subclasses implement `_move()` — raw hardware call — while `move()` routes through `SafetyLayer` first |
+| `SafetyLayer` | `castor/safety/protocol.py` | Wraps all driver commands; enforces bounds, HiTL gates, safety state |
+| `BoundsChecker` | `castor/safety/bounds.py` | Validates motor commands against configured limits |
+| `SensorMonitor` | `castor/safety/monitor.py` | Polls sensors; wires health signals into safety state |
+| `P66Manifest` | `castor/safety/p66_manifest.py` | Declares robot capabilities and safety constraints (P66 standard) |
 | `RegistryMessage` | `castor/rcan/registry.py` | RCAN §21 wire message. `RRNCategory` enum, `_validate_rrn()`, `metadata` block |
 | `InvokeRequest` | `castor/rcan/invoke.py` | §19 INVOKE — skill name + params + timeout |
 | `SkillRegistry` | `castor/rcan/invoke.py` | Maps skill names to handler callables |
 | `FleetManager` | `castor/fleet/group_policy.py` | Group policies, config deep-merge |
 | `CastorClient` | `sdk/js/src/index.ts` | TypeScript SDK — `invoke()`, `invokeAll()`, `invokeRace()`, `registryRegister()`, `registryResolve()` |
 
-## RCAN Protocol (v1.4)
+## Safety Architecture
 
-OpenCastor implements **RCAN v1.4** full stack:
+```
+move(cmd)  ──►  SafetyLayer.check(cmd)  ──►  _move(cmd)  ──►  hardware
+                    │
+                    ├── BoundsChecker     (hard limits)
+                    ├── SensorMonitor     (sensor health gates)
+                    ├── P66Manifest       (capability declarations)
+                    └── HiTL AuthGate     (human-in-the-loop §8)
+```
+
+- **`DriverBase._move()`** — subclasses override this; raw hardware call, no safety logic
+- **`DriverBase.move()`** — public method; always routes through `SafetyLayer` before calling `_move()`
+- **`safety_bridge.py`** (SO-ARM101) — translates RCAN arm commands, enforces joint limits via `SafetyLayer`
+- **`SensorMonitor`** — wired to driver `health_check()`; halts motion if sensor health degrades
+- **`P66Manifest`** — machine-readable capability/constraint declarations; exposed at `GET /api/safety/manifest`
+- `SAFETY` task category **always** uses planner (never downgraded by TieredBrain)
+- `SENSOR_POLL` task category **never** escalates to planner (token budget guard)
+
+## Drivers (full list)
+
+| Driver | File | Protocol |
+|---|---|---|
+| PCA9685 | `pca9685.py` | I²C PWM (servos/ESC) |
+| Dynamixel | `dynamixel.py` | TTL/RS485 serial |
+| Feetech | `feetech_driver.py` | SCS/SMS serial |
+| GPIO | `gpio_driver.py` | RPi GPIO |
+| Arduino | `arduino_driver.py` | Serial |
+| ESP32 BLE | `esp32_ble_driver.py` | BLE GATT |
+| ESP32 WebSocket | `esp32_websocket.py` | WebSocket |
+| ODrive | `odrive_driver.py` | USB/CAN |
+| CAN | `can_transport.py` | SocketCAN |
+| ROS2 | `ros2_driver.py` | ROS2 topics/actions |
+| Stepper | `stepper_driver.py` | Step/dir GPIO |
+| IMU | `imu_driver.py` | I²C/SPI |
+| LiDAR | `lidar_driver.py` | Serial/UDP |
+| Thermal | `thermal_driver.py` | I²C (MLX90640) |
+| Battery | `battery_driver.py` | I²C/ADC |
+| PiCamera2 | `picamera2_driver.py` | libcamera |
+| ACB | `acb_driver.py` | HLabs ACB |
+| EV3dev | `ev3dev_driver.py` | ev3dev2 |
+| SPIKE | `spike_driver.py` | LEGO SPIKE |
+| Reachy | `reachy_driver.py` | Pollen Robotics |
+| Simulation | `simulation_driver.py` | In-process mock |
+| Composite | `composite.py` | Multi-driver aggregator |
+
+## API Endpoints (key)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/safety/manifest` | P66 safety manifest (capabilities + constraints) |
+| `POST` | `/rcan` | RCAN message dispatch (INVOKE, COMMAND, REGISTRY_*) |
+| `GET` | `/health` | Gateway health + driver status |
+| `POST` | `/invoke` | Direct skill invocation shortcut |
+
+## RCAN Protocol (v1.4)
 
 ### MessageTypes
 ```python
@@ -93,7 +162,6 @@ REGISTRY_RESOLVE_RESULT = 17   # Resolution result (§21)
 ```
 
 ### Robot Registration Numbers (RRN)
-Two formats, both accepted by `_validate_rrn()`:
 ```
 RRN-000000000001                           # numeric (12 digits, RRF-assigned)
 rrn://org/category/model/id               # URI 4-segment (recommended)
@@ -116,17 +184,17 @@ SEARCH       → planner preferred
 ## RCAN Config Format (v1.4)
 
 ```yaml
-rcan_version: "1.4"  # Must match current spec
+rcan_version: "1.4"
 metadata:
   robot_name: my-robot
-  rrn: RRN-000000000001               # RRF-assigned numeric RRN
-  rrn_uri: rrn://org/robot/model/id   # URI-format RRN (structured)
+  rrn: RRN-000000000001
+  rrn_uri: rrn://org/robot/model/id
   rcan_uri: rcan://robot.local:8000/my-robot
-  version: 2026.3.13.11
+  version: 2026.3.14.6
 agent:
   provider: google
   model: gemini-1.5-flash
-task_routing:                          # Optional (PR #647)
+task_routing:
   enabled: true
   categories:
     sensor_poll: {planner: false}
@@ -141,9 +209,11 @@ drivers:
 ```bash
 pip install -e ".[dev]"
 pytest tests/                          # All tests
-pytest tests/test_rcan_registry.py     # Registry + RRN tests (105 tests)
-pytest tests/test_tiered_brain_task_routing.py  # Task routing (31 tests)
-pytest tests/test_task_router.py       # TaskRouter (30 tests)
+pytest tests/test_rcan_registry.py     # Registry + RRN tests
+pytest tests/test_tiered_brain_task_routing.py  # Task routing
+pytest tests/test_rcan_integration.py  # RCAN integration
+pytest tests/test_config_validation.py # Config validation
+pytest tests/test_conformance.py       # Conformance suite
 ruff check castor/                     # Lint
 ruff format castor/                    # Format
 ```
@@ -154,34 +224,20 @@ ruff format castor/                    # Format
 - Error responses use `{"error": "...", "code": "HTTP_NNN"}` not `{"detail": "..."}`
 - `tick_count = 998` not `999` in routing tests (999 is divisible by default interval 10)
 
-## JS SDK (`sdk/js/`)
+## Key Files
 
-```typescript
-import { CastorClient } from '@opencastor/sdk';
-const client = new CastorClient({ baseUrl: 'http://robot.local:8000' });
-
-// §19 INVOKE
-await client.invoke({ skill: 'navigate_to', params: { x: 1, y: 2 }, timeoutMs: 5000 });
-await client.invokeAll([{ skill: 'wave' }, { skill: 'speak', params: { text: 'hi' } }]);
-const winner = await client.invokeRace([{ skill: 'plan_a' }, { skill: 'plan_b' }]);
-
-// §21 Registry
-await client.registryRegister({ rrn: 'RRN-000000000001', ruri: 'rcan://robot.local:8000/bob' });
-const resolved = await client.registryResolve('RRN-000000000001');
 ```
-
-Tests: `cd sdk/js && npm test` (13 tests, Jest + ts-jest)
-
-## Website (`site/`)
-
-8 static HTML pages. Theme: dark/light pill toggle (`☀·🌙`), stored in `localStorage('oc-theme')`.
-
-**Key CSS patterns:**
-- `.theme-pill` / `.theme-pill-opt[data-opt="light"|"dark"]` — pill toggle
-- `.nav-end` — flex container for pill + hamburger (z-index: 1001 to stay above mobile nav)
-- `.nav-theme-row` — shown only in mobile drawer (`display:none` on desktop)
-
-**If adding a new page:** copy the nav structure from `index.html`, keep `.nav-end` group intact.
+castor/safety/p66_manifest.py              # P66 capability/constraint manifest
+castor/safety/protocol.py                  # SafetyLayer implementation
+castor/safety/monitor.py                   # SensorMonitor
+castor/hardware/so_arm101/safety_bridge.py # Arm safety routing
+castor/hardware/so_arm101/vision.py        # Arm vision pipeline
+castor/hardware/so_arm101/rcan_bridge.py   # RCAN→arm translation
+castor/drivers/base.py                     # DriverBase (_move() pattern)
+castor/rcan/registry.py                    # RRN validation + §21 registry
+castor/rcan/invoke.py                      # §19 INVOKE + SkillRegistry
+castor/api.py                              # FastAPI gateway
+```
 
 ## CI/CD
 
@@ -190,7 +246,7 @@ Tests: `cd sdk/js && npm test` (13 tests, Jest + ts-jest)
 | `ci.yml` | Push / PR | pytest + ruff + mypy |
 | `validate_rcan.yml` | `*.rcan.yaml` changes | JSON schema validation |
 | `release.yml` | Tag push | PyPI publish |
-| `deploy-pages.yml` | Main push | Cloudflare Pages (site/) |
+| `deploy-pages.yml` | Main push | Cloudflare Pages (website/) |
 
 Versioning: `YYYY.MM.DD.patch` — bump patch for each commit, date when date changes.
 
@@ -213,21 +269,14 @@ Versioning: `YYYY.MM.DD.patch` — bump patch for each commit, date when date ch
 
 ### New Driver
 1. `castor/drivers/<name>.py` → subclass `DriverBase`
-2. Implement `move()`, `stop()`, `close()` with `HAS_<NAME>` mock fallback
-3. Register in `castor/main.py` `get_driver()`
+2. Implement `_move()`, `stop()`, `close()` — **not** `move()`; safety routing is automatic
+3. Add `HAS_<NAME>` mock fallback for optional hardware SDKs
+4. Register in `castor/main.py` `get_driver()`
 
 ### New RCAN Skill (§19)
 1. Define handler: `async def my_skill(params: dict) -> dict`
 2. Register: `skill_registry.register("my_skill", my_skill)`
 3. Test via `POST /rcan` with `{"msg_type": 11, "skill": "my_skill", "params": {...}}`
-
-## Safety
-
-- `_check_instruction_safety()` called at top of every `think()`/`think_stream()`
-- `BoundsChecker` validates motor commands; `GuardianAgent` has veto
-- `SENSOR_POLL` task category NEVER escalates to planner (TieredBrain hard override)
-- `SAFETY` task category ALWAYS uses planner (never downgraded)
-- `.env` in `.gitignore`; `bob.rcan.yaml`, `alex.rcan.yaml` gitignored (device-specific)
 
 ## Bob (the reference robot)
 
