@@ -61,6 +61,7 @@ class MessageType(IntEnum):
         16  # §21 — result of REGISTRY_REGISTER (success/failure + assigned RRN)
     )
     REGISTRY_RESOLVE_RESULT = 17  # §21 — result of REGISTRY_RESOLVE (RURI + metadata or error)
+    TRANSPARENCY = 18  # EU AI Act Art. 13 transparency disclosure
     HANDOFF = 19  # Transfer control between principals
 
 
