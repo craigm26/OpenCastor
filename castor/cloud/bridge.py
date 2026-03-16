@@ -78,13 +78,44 @@ class CastorBridge:
         self.poll_interval_s = poll_interval_s
         self.telemetry_interval_s = telemetry_interval_s
 
-        # Extract robot identity from RCAN config
-        self.rrn: str = config.get("rrn", "RRN-unknown")
-        self.robot_name: str = config.get("name", "unnamed-robot")
-        self.owner: str = config.get("owner", "rrn://unknown")
-        self.ruri: str = config.get("metadata", {}).get("ruri", f"rcan://{self.rrn}")
-        self.capabilities: list[str] = config.get("capabilities", [])
-        self.version: str = config.get("opencastor_version", "unknown")
+        # Extract robot identity from RCAN config.
+        # Fields may live at top-level OR under the 'metadata' sub-key.
+        meta: dict[str, Any] = config.get("metadata", {})
+        rcan: dict[str, Any] = config.get("rcan_protocol", {})
+
+        self.rrn: str = (
+            config.get("rrn")
+            or meta.get("rrn")
+            or "RRN-unknown"
+        )
+        self.robot_name: str = (
+            config.get("robot_name")
+            or config.get("name")
+            or meta.get("robot_name")
+            or meta.get("name")
+            or "unnamed-robot"
+        )
+        self.owner: str = (
+            config.get("owner")
+            or meta.get("rrn_uri")
+            or "rrn://unknown"
+        )
+        self.ruri: str = (
+            meta.get("ruri")
+            or meta.get("rcan_uri")
+            or config.get("ruri")
+            or f"rcan://{self.rrn}"
+        )
+        self.capabilities: list[str] = (
+            config.get("capabilities")
+            or rcan.get("capabilities")
+            or []
+        )
+        self.version: str = (
+            meta.get("version")
+            or config.get("opencastor_version")
+            or "unknown"
+        )
         self.firebase_uid: str = config.get("firebase_uid", "")
 
         self._db: Any = None        # Firestore client
