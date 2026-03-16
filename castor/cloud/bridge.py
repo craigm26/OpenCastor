@@ -91,8 +91,8 @@ class CastorBridge:
         self.robot_name: str = (
             config.get("robot_name")
             or config.get("name")
-            or meta.get("robot_name")
-            or meta.get("name")
+            or meta.get("name")          # metadata.name has display name (e.g. "Bob")
+            or meta.get("robot_name")    # fallback to robot_name (e.g. "bob")
             or "unnamed-robot"
         )
         self.owner: str = (
@@ -287,6 +287,17 @@ class CastorBridge:
             # R2RAM scope check
             requester_owner: str = doc.get("issued_by_owner", "")
             scope: str = doc.get("scope", "chat")
+
+            # Normalize: Cloud Functions sets issued_by_owner = "uid:<firebase_uid>"
+            # when the sender is the robot owner (human via Flutter app).
+            # Map this back to self.owner so _is_same_owner() recognises it.
+            issued_by_uid: str = doc.get("issued_by_uid", "")
+            if (
+                issued_by_uid
+                and self.firebase_uid
+                and issued_by_uid == self.firebase_uid
+            ):
+                requester_owner = self.owner
             instruction: str = doc.get("instruction", "")
             is_estop = scope == "safety" and "estop" in instruction.lower()
 
