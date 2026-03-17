@@ -615,30 +615,73 @@ async def send_command(cmd: CommandRequest, request: Request):
     # Resolve surface from channel/context fields (bridge sends "opencastor_app")
     _surface = cmd.channel or cmd.context or "whatsapp"
     _think_t0 = time.perf_counter()
-    try:
-        thought = active.think(image_bytes, cmd.instruction, surface=_surface)
-    except Exception as _think_exc:
-        from castor.providers.base import ProviderQuotaError
 
-        if isinstance(_think_exc, ProviderQuotaError):
-            raise HTTPException(
-                status_code=402,
-                detail=(
-                    "AI provider credits exhausted. "
-                    "Add 'provider_fallback' to your RCAN config to automatically "
-                    "switch to a backup provider (e.g. Ollama or Google Gemini). "
-                    f"Provider: {_think_exc.provider_name or 'unknown'}"
-                ),
-            ) from _think_exc
-        raise
-    finally:
-        _think_ms = round((time.perf_counter() - _think_t0) * 1000, 1)
-        _provider_name = getattr(active, "model_name", None) or "unknown"
-        from castor.metrics import get_registry as _get_reg
+    # ── Agent Harness (when enabled in RCAN config) ──────────────────────────
+    _agent_cfg = state.fs.config.get("agent", {}) if state.fs else {}
+    _harness_cfg = _agent_cfg.get("harness", {})
+    _harness_enabled = _harness_cfg.get("enabled", False)  # opt-in
 
-        _get_reg().record_provider_latency(_provider_name, _think_ms)
+    if _harness_enabled:
+        try:
+            from castor.harness import AgentHarness, HarnessContext
+            from castor.tools import ToolRegistry
 
-    logger.info("Brain replied via %s in %.0f ms", _provider_name, _think_ms)
+            _harness = getattr(state, "_harness", None)
+            if _harness is None:
+                _tool_reg = getattr(state, "tool_registry", None) or ToolRegistry(_agent_cfg)
+                _harness = AgentHarness(
+                    provider=active,
+                    config=_agent_cfg,
+                    tool_registry=_tool_reg,
+                )
+                state._harness = _harness  # type: ignore[attr-defined]
+
+            _hctx = HarnessContext(
+                instruction=cmd.instruction,
+                image_bytes=image_bytes,
+                surface=_surface,
+                scope=getattr(cmd, "scope", "chat") or "chat",
+                consent_granted=getattr(cmd, "consent_granted", False) or False,
+            )
+            _hresult = await _harness.run(_hctx)
+            thought = _hresult.thought
+            _provider_name = getattr(active, "model_name", None) or "unknown"
+            _think_ms = _hresult.total_latency_ms
+        except Exception as _harness_exc:
+            logger.warning("Harness error, falling back to direct think(): %s", _harness_exc)
+            _harness_enabled = False  # fall through to legacy path
+
+    if not _harness_enabled:
+        # ── Legacy single-shot path ──────────────────────────────────────────
+        try:
+            thought = active.think(image_bytes, cmd.instruction, surface=_surface)
+        except Exception as _think_exc:
+            from castor.providers.base import ProviderQuotaError
+
+            if isinstance(_think_exc, ProviderQuotaError):
+                raise HTTPException(
+                    status_code=402,
+                    detail=(
+                        "AI provider credits exhausted. "
+                        "Add 'provider_fallback' to your RCAN config to automatically "
+                        "switch to a backup provider (e.g. Ollama or Google Gemini). "
+                        f"Provider: {_think_exc.provider_name or 'unknown'}"
+                    ),
+                ) from _think_exc
+            raise
+        finally:
+            _think_ms = round((time.perf_counter() - _think_t0) * 1000, 1)
+            _provider_name = getattr(active, "model_name", None) or "unknown"
+            from castor.metrics import get_registry as _get_reg
+
+            _get_reg().record_provider_latency(_provider_name, _think_ms)
+
+    _think_ms = round(getattr(_think_ms, "real", _think_ms) if isinstance(_think_ms, complex) else _think_ms, 1)
+    _provider_name = getattr(active, "model_name", None) or "unknown"
+    from castor.metrics import get_registry as _get_reg
+    _get_reg().record_provider_latency(_provider_name, _think_ms)
+
+    logger.info("Brain replied via %s in %.0f ms (harness=%s)", _provider_name, _think_ms, _harness_enabled)
     _record_thought(cmd.instruction, thought.raw_text, thought.action)
 
     # Execute action on hardware if available
@@ -649,6 +692,7 @@ async def send_command(cmd: CommandRequest, request: Request):
         "raw_text": thought.raw_text,
         "action": thought.action,
         "model_used": _provider_name,
+        "harness": _harness_enabled,
     }
 
 

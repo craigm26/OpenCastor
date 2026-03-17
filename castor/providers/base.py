@@ -42,6 +42,8 @@ class Thought:
     latency_ms: Optional[int] = None
     escalated: bool = False
     gate_bypassed: bool = False
+    # Tool calls requested by the model (set by think_with_tools)
+    tool_calls: list = field(default_factory=list)
 
 
 class BaseProvider(ABC):
