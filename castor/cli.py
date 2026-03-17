@@ -3456,6 +3456,227 @@ def _cmd_trajectory(args) -> None:
         print("Usage: castor trajectory [list|show <id>|export|stats]")
 
 
+
+# ── castor share / castor install / castor explore ────────────────────────────
+
+def _cmd_share(args) -> None:
+    """castor share — package and share a preset, skill, or harness."""
+    import json
+    import re as _re
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    content_type = getattr(args, "share_type", "preset") or "preset"
+    source = getattr(args, "source", None) or "."
+    title = getattr(args, "title", None) or Path(source).name
+    tags = getattr(args, "tags", None) or ""
+    dry_run = getattr(args, "dry_run", False)
+
+    source_path = Path(source)
+    if not source_path.exists():
+        print(f"  ✗ Source not found: {source}")
+        return
+
+    # Collect files
+    if source_path.is_file():
+        files = {source_path.name: source_path.read_text()}
+    else:
+        files = {}
+        for p in source_path.rglob("*"):
+            if p.is_file() and p.suffix in (".yaml", ".yml", ".md", ".json", ".txt"):
+                rel = str(p.relative_to(source_path))
+                files[rel] = p.read_text()
+
+    if not files:
+        print("  ✗ No shareable files found (looking for .yaml, .md, .json)")
+        return
+
+    # Scrub secrets
+    SECRET_PATTERNS = [
+        (r"(api[_-]?key|apikey|token|secret|password|passwd)\s*[:=]\s*[\'\"]?([A-Za-z0-9_\-\.]{16,})", r"\1: <REDACTED>"),
+        (r"(sk|AIza|AKIA|ghp|ghs|glpat|xoxb|xoxp)[A-Za-z0-9_\-]{8,}", "<REDACTED_KEY>"),
+        (r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "<PUBLIC_IP>"),
+    ]
+    scrubbed = {}
+    redaction_count = 0
+    for fname, text in files.items():
+        for pattern, replacement in SECRET_PATTERNS:
+            new_text = _re.sub(pattern, replacement, text, flags=_re.IGNORECASE)
+            if new_text != text:
+                redaction_count += len(_re.findall(pattern, text, flags=_re.IGNORECASE))
+            text = new_text
+        scrubbed[fname] = text
+
+    # Build manifest
+    manifest = {
+        "type": content_type,
+        "title": title,
+        "tags": [t.strip() for t in tags.split(",") if t.strip()],
+        "files": list(scrubbed.keys()),
+        "share_format": "1.0",
+        "opencastor_version": "2026.3",
+    }
+
+    if dry_run:
+        print("\n  [dry-run] Would share:")
+        print(f"  Type: {content_type}")
+        print(f"  Title: {title}")
+        print(f"  Files: {', '.join(scrubbed.keys())}")
+        print(f"  Tags: {manifest['tags']}")
+        if redaction_count:
+            print(f"  ⚠  {redaction_count} secret(s) would be redacted")
+        return
+
+    # Write bundle to temp dir
+    bundle_dir = Path(tempfile.mkdtemp(prefix="castor-share-"))
+    (bundle_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    for fname, text in scrubbed.items():
+        dest = bundle_dir / fname
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(text)
+
+    bundle_zip = Path(f"/tmp/castor-share-{Path(source).stem}.zip")
+    shutil.make_archive(str(bundle_zip.with_suffix("")), "zip", bundle_dir)
+
+    print(f"\n  ✓ Bundle ready: {bundle_zip}")
+    if redaction_count:
+        print(f"  ⚠  Redacted {redaction_count} secret(s)")
+    print()
+    print("  To share this config publicly, open a PR:")
+    print("  https://github.com/craigm26/OpenCastor/issues/new")
+    print(f"  → Attach {bundle_zip.name} or paste the contents")
+    print()
+    print("  Or contribute directly:")
+    print(f"  cp {bundle_zip} ~/OpenCastor/config/community/")
+    print("  git add . && git commit -m \"community: add " + title + "\"")
+    print("  git push && gh pr create")
+    print()
+    print("  ℹ  Firebase-based instant sharing coming in Phase 2 (issue #700)")
+
+
+def _cmd_install(args) -> None:
+    """castor install — install a preset, skill, or harness from the hub."""
+    from pathlib import Path
+
+    target = getattr(args, "target", None) or ""
+    dry_run = getattr(args, "dry_run", False)
+    dest_dir = Path(getattr(args, "output", None) or ".")
+
+    if not target:
+        print("  Usage: castor install <id>|skill:<name>|harness:<name>")
+        print("  Example: castor install skill:camera-describe")
+        return
+
+    # Built-in skills
+    if target.startswith("skill:"):
+        skill_name = target[6:]
+        builtin_dir = Path(__file__).parent / "skills" / "builtin" / skill_name
+        if builtin_dir.exists():
+            dest = dest_dir / "castor" / "skills" / "custom" / skill_name
+            if dest.exists() and not dry_run:
+                print(f"  ✓ Skill {skill_name!r} already installed at {dest}")
+                return
+            if dry_run:
+                print(f"  [dry-run] Would install skill {skill_name!r} → {dest}")
+                return
+            import shutil
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(str(builtin_dir), str(dest))
+            print(f"  ✓ Installed skill {skill_name!r} → {dest}")
+            print("  Add to your RCAN config under agent.skills.extra_dirs")
+        else:
+            available = [d.name for d in (Path(__file__).parent / "skills" / "builtin").iterdir() if d.is_dir()]
+            print(f"  ✗ Unknown skill {skill_name!r}")
+            print(f"  Available: {', '.join(available)}")
+        return
+
+    # Built-in presets
+    if target.startswith("preset:"):
+        preset_name = target[7:].replace("-", "_")
+        preset_file = Path(__file__).parent.parent / "config" / "presets" / f"{preset_name}.rcan.yaml"
+        if not preset_file.exists():
+            # Try fuzzy match
+            presets_dir = preset_file.parent
+            candidates = [p.stem for p in presets_dir.glob("*.rcan.yaml")]
+            matches = [c for c in candidates if preset_name in c or c in preset_name]
+            if matches:
+                print(f"  Did you mean: {', '.join(matches)}")
+            else:
+                print(f"  ✗ Preset {preset_name!r} not found")
+            return
+        dest = dest_dir / preset_file.name
+        if dry_run:
+            print(f"  [dry-run] Would copy {preset_file.name} → {dest}")
+            return
+        import shutil
+        shutil.copy(str(preset_file), str(dest))
+        print(f"  ✓ Installed preset → {dest}")
+        return
+
+    # Harness bundles (Phase 1: point to GitHub)
+    if target.startswith("harness:"):
+        harness_name = target[8:]
+        print("  Harness bundles are available at opencastor.com/hub")
+        print(f"  castor install harness:{harness_name} — Firebase integration coming in Phase 2 (issue #700)")
+        print("  For now: https://github.com/craigm26/OpenCastor/tree/main/config/community")
+        return
+
+    # Generic ID (Phase 2: fetch from Firebase)
+    print(f"  Looking up {target!r} on opencastor.com...")
+    print("  ℹ  Firebase-based hub install coming in Phase 2 (issue #700)")
+    print("  For now, browse presets with:")
+    print("    ls config/presets/          # built-in presets")
+    print("    castor install skill:<name> # built-in skills")
+    print("    castor explore              # see what's available")
+
+
+def _cmd_explore(args) -> None:
+    """castor explore — browse available presets, skills, and harnesses."""
+    from pathlib import Path
+
+    content_type = getattr(args, "explore_type", None)
+
+    print()
+    print("  ╔══════════════════════════════════════════════════════╗")
+    print("  ║         OpenCastor Hub — opencastor.com/hub          ║")
+    print("  ╚══════════════════════════════════════════════════════╝")
+
+    if not content_type or content_type == "preset":
+        presets_dir = Path(__file__).parent.parent / "config" / "presets"
+        if presets_dir.exists():
+            preset_files = sorted(presets_dir.glob("*.rcan.yaml"))
+            print(f"\n  PRESETS ({len(preset_files)} available):")
+            for p in preset_files[:12]:
+                print(f"    castor install preset:{p.stem}")
+            if len(preset_files) > 12:
+                print(f"    ... and {len(preset_files) - 12} more in config/presets/")
+
+    if not content_type or content_type == "skill":
+        skills_dir = Path(__file__).parent / "skills" / "builtin"
+        if skills_dir.exists():
+            skill_dirs = sorted(d for d in skills_dir.iterdir() if d.is_dir())
+            print(f"\n  SKILLS ({len(skill_dirs)} built-in):")
+            for s in skill_dirs:
+                skill_md = s / "SKILL.md"
+                consent = "consent: required" if skill_md.exists() and "consent: required" in skill_md.read_text() else ""
+                flag = " ⚠ consent" if consent else ""
+                print(f"    castor install skill:{s.name}{flag}")
+
+    if not content_type or content_type == "harness":
+        print("\n  HARNESSES (community bundles):")
+        print("    castor install harness:bob-pi4-oakd    # Pi4 + OAK-D + Gemini 2.0")
+        print("    castor install harness:alex-so-arm101  # SO-ARM101 + Gemini 2.0 + Docker")
+        print("    More at: https://opencastor.com/hub")
+
+    print()
+    print("  SHARE YOUR CONFIG:")
+    print("    castor share preset config/robot.rcan.yaml --title \"My Robot\"")
+    print("    castor share skill castor/skills/my-skill/")
+    print("    castor share harness . --include-skills")
+    print()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="castor",
@@ -4935,6 +5156,27 @@ def main() -> None:
     except ImportError:
         pass
 
+
+    # castor share
+    p_share = sub.add_parser("share", help="Share a preset, skill, or harness to the hub")
+    p_share.add_argument("share_type", nargs="?", choices=["preset","skill","harness"], default="preset", help="What to share (default: preset)")
+    p_share.add_argument("source", nargs="?", default=".", help="File or directory to share")
+    p_share.add_argument("--title", "-t", help="Human-readable title")
+    p_share.add_argument("--tags", default="", help="Comma-separated tags (hardware, provider, etc.)")
+    p_share.add_argument("--dry-run", action="store_true", help="Preview without writing files")
+
+    # castor install
+    p_install2 = sub.add_parser("install", help="Install a preset, skill, or harness from the hub")
+    p_install2.add_argument("target", help="ID to install — e.g. skill:camera-describe, preset:so_arm101, harness:bob-pi4-oakd")
+    p_install2.add_argument("--output", "-o", default=".", help="Destination directory (default: .)")
+    p_install2.add_argument("--dry-run", action="store_true", help="Preview without applying")
+
+    # castor explore
+    p_explore = sub.add_parser("explore", help="Browse available presets, skills, and harnesses")
+    p_explore.add_argument("--type", dest="explore_type", choices=["preset","skill","harness"], help="Filter by type")
+    p_explore.add_argument("--hardware", help="Filter by hardware tag")
+    p_explore.add_argument("--categories", action="store_true", help="List categories only")
+
     args = parser.parse_args()
 
     commands = {
@@ -5028,6 +5270,10 @@ def main() -> None:
         "eval": _cmd_eval,
         # Trajectory log management
         "trajectory": _cmd_trajectory,
+        # Config sharing hub (issue #700)
+        "share": _cmd_share,
+        "install": _cmd_install,
+        "explore": _cmd_explore,
     }
 
     # castor eval — skill evaluation harness

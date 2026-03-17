@@ -34,8 +34,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       <div class="container">
         <div class="community-stats-grid">
           <div class="community-stat reveal">
-            <div class="community-stat-number">7</div>
-            <div class="community-stat-label">Recipes</div>
+            <div class="community-stat-number">25+</div>
+            <div class="community-stat-label">Configs &amp; Skills</div>
           </div>
           <div class="community-stat reveal reveal-d1">
             <div class="community-stat-number">8</div>
@@ -46,7 +46,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <div class="community-stat-label">GitHub Stars</div>
           </div>
           <div class="community-stat reveal reveal-d3">
-            <div class="community-stat-number">2,009</div>
+            <div class="community-stat-number">106</div>
             <div class="community-stat-label">Tests Passing</div>
           </div>
         </div>
@@ -68,14 +68,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <h3>Install</h3>
             <p>One command to copy a recipe to your project. Configs are PII-scrubbed and ready to customize.</p>
             <code
-              style="font-size:0.8125rem;margin-top:8px;display:inline-block">castor hub install &lt;recipe-id&gt;</code>
+              style="font-size:0.8125rem;margin-top:8px;display:inline-block">castor install &lt;recipe-id&gt;</code>
           </div>
           <div class="step reveal reveal-d2">
             <div class="step-num">03</div>
             <h3>Share Back</h3>
             <p>Got something working? Package your config with notes and lessons learned. Auto-scrubs secrets and PII.
             </p>
-            <code style="font-size:0.8125rem;margin-top:8px;display:inline-block">castor hub share --submit</code>
+            <code style="font-size:0.8125rem;margin-top:8px;display:inline-block">castor share</code>
           </div>
         </div>
       </div>
@@ -93,7 +93,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
         <div class="hw-grid">
 
-          <div class="hw-card reveal">
+          <div class="hw-card reveal" data-type="preset">
             <div class="hw-card-top">
               <div class="hw-card-icon">🏠</div>
               <span class="status status-green">Tested</span>
@@ -111,7 +111,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               <span>&middot; ~$120 &middot; Beginner</span>
             </div>
             <div style="margin-top:12px">
-              <code style="font-size:0.75rem;color:var(--accent)">castor hub install picar-home-patrol-e7f3a1</code>
+              <code style="font-size:0.75rem;color:var(--accent)">castor install picar-home-patrol-e7f3a1</code>
             </div>
           </div>
 
@@ -133,7 +133,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               <span>&middot; ~$200 &middot; Intermediate</span>
             </div>
             <div style="margin-top:12px">
-              <code style="font-size:0.75rem;color:var(--accent)">castor hub install llama-farm-scout-b4d2e8</code>
+              <code style="font-size:0.75rem;color:var(--accent)">castor install llama-farm-scout-b4d2e8</code>
             </div>
           </div>
 
@@ -155,7 +155,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               <span>&middot; ~$140 &middot; Beginner</span>
             </div>
             <div style="margin-top:12px">
-              <code style="font-size:0.75rem;color:var(--accent)">castor hub install classroom-assistant-a1c3f7</code>
+              <code style="font-size:0.75rem;color:var(--accent)">castor install classroom-assistant-a1c3f7</code>
             </div>
           </div>
 
@@ -177,7 +177,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               <span>&middot; ~$280 &middot; Intermediate</span>
             </div>
             <div style="margin-top:12px">
-              <code style="font-size:0.75rem;color:var(--accent)">castor hub install warehouse-inventory-d5e9b2</code>
+              <code style="font-size:0.75rem;color:var(--accent)">castor install warehouse-inventory-d5e9b2</code>
             </div>
           </div>
 
@@ -199,7 +199,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               <span>&middot; ~$95 &middot; Beginner</span>
             </div>
             <div style="margin-top:12px">
-              <code style="font-size:0.75rem;color:var(--accent)">castor hub install garden-monitor-f2a8c4</code>
+              <code style="font-size:0.75rem;color:var(--accent)">castor install garden-monitor-f2a8c4</code>
             </div>
           </div>
 
@@ -221,7 +221,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               <span>&middot; ~$85 &middot; Beginner</span>
             </div>
             <div style="margin-top:12px">
-              <code style="font-size:0.75rem;color:var(--accent)">castor hub install pet-companion-b7d1e6</code>
+              <code style="font-size:0.75rem;color:var(--accent)">castor install pet-companion-b7d1e6</code>
             </div>
           </div>
 
@@ -244,7 +244,160 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             </div>
             <div style="margin-top:12px">
               <code
-                style="font-size:0.75rem;color:var(--accent)">castor hub install research-data-collector-c9f4a3</code>
+                style="font-size:0.75rem;color:var(--accent)">castor install research-data-collector-c9f4a3</code>
+            </div>
+          </div>
+
+
+          <!-- SKILLS -->
+          <div class="hw-card reveal" data-type="skill">
+            <div class="hw-card-top">
+              <div class="hw-card-icon">👁️</div>
+              <span class="status status-green">Built-in Skill</span>
+            </div>
+            <h3>camera-describe</h3>
+            <p>Capture and describe what the robot's camera sees. Works with any camera-equipped robot. No consent needed — read-only vision.</p>
+            <div class="recipe-tags">
+              <span class="recipe-tag">vision</span>
+              <span class="recipe-tag">camera</span>
+              <span class="recipe-tag">any robot</span>
+            </div>
+            <div class="hw-card-meta">
+              <span>by <strong>OpenCastor</strong></span>
+              <span>&middot; Free &middot; Beginner</span>
+            </div>
+            <div style="margin-top:12px">
+              <code style="font-size:0.75rem;color:var(--accent)">castor install skill:camera-describe</code>
+            </div>
+          </div>
+
+          <div class="hw-card reveal reveal-d1" data-type="skill">
+            <div class="hw-card-top">
+              <div class="hw-card-icon">🌐</div>
+              <span class="status status-green">Built-in Skill</span>
+            </div>
+            <h3>web-lookup</h3>
+            <p>Answer questions requiring current or external information. Uses Brave Search API or DuckDuckGo fallback. No robot hardware required.</p>
+            <div class="recipe-tags">
+              <span class="recipe-tag">web</span>
+              <span class="recipe-tag">search</span>
+              <span class="recipe-tag">any robot</span>
+            </div>
+            <div class="hw-card-meta">
+              <span>by <strong>OpenCastor</strong></span>
+              <span>&middot; Free &middot; Beginner</span>
+            </div>
+            <div style="margin-top:12px">
+              <code style="font-size:0.75rem;color:var(--accent)">castor install skill:web-lookup</code>
+            </div>
+          </div>
+
+          <div class="hw-card reveal reveal-d2" data-type="skill">
+            <div class="hw-card-top">
+              <div class="hw-card-icon">🦾</div>
+              <span class="status" style="background:var(--orange-light);color:var(--orange)">Consent Required</span>
+            </div>
+            <h3>arm-manipulate</h3>
+            <p>Pick up, grab, place, and manipulate objects using a robotic arm. Requires explicit user consent before executing. Supports SO-ARM101 and Dynamixel arms.</p>
+            <div class="recipe-tags">
+              <span class="recipe-tag">arm</span>
+              <span class="recipe-tag">manipulation</span>
+              <span class="recipe-tag">gripper</span>
+              <span class="recipe-tag">so-arm101</span>
+            </div>
+            <div class="hw-card-meta">
+              <span>by <strong>OpenCastor</strong></span>
+              <span>&middot; Free &middot; Intermediate</span>
+            </div>
+            <div style="margin-top:12px">
+              <code style="font-size:0.75rem;color:var(--accent)">castor install skill:arm-manipulate</code>
+            </div>
+          </div>
+
+          <div class="hw-card reveal reveal-d3" data-type="skill">
+            <div class="hw-card-top">
+              <div class="hw-card-icon">🗺️</div>
+              <span class="status" style="background:var(--orange-light);color:var(--orange)">Consent Required</span>
+            </div>
+            <h3>navigate-to</h3>
+            <p>Move to named locations, follow users, or navigate to coordinates. Uses camera + distance sensors for safe navigation. Requires explicit consent for physical motion.</p>
+            <div class="recipe-tags">
+              <span class="recipe-tag">navigation</span>
+              <span class="recipe-tag">drive</span>
+              <span class="recipe-tag">differential drive</span>
+            </div>
+            <div class="hw-card-meta">
+              <span>by <strong>OpenCastor</strong></span>
+              <span>&middot; Free &middot; Intermediate</span>
+            </div>
+            <div style="margin-top:12px">
+              <code style="font-size:0.75rem;color:var(--accent)">castor install skill:navigate-to</code>
+            </div>
+          </div>
+
+          <div class="hw-card reveal reveal-d4" data-type="skill">
+            <div class="hw-card-top">
+              <div class="hw-card-icon">🤝</div>
+              <span class="status status-green">Built-in Skill</span>
+            </div>
+            <h3>peer-coordinate</h3>
+            <p>Consult, delegate to, or collaborate with other robots in the fleet via RCAN. "Ask Alex to check the other room." Bob and Alex use this to split tasks.</p>
+            <div class="recipe-tags">
+              <span class="recipe-tag">rcan</span>
+              <span class="recipe-tag">fleet</span>
+              <span class="recipe-tag">multi-robot</span>
+            </div>
+            <div class="hw-card-meta">
+              <span>by <strong>OpenCastor</strong></span>
+              <span>&middot; Free &middot; Advanced</span>
+            </div>
+            <div style="margin-top:12px">
+              <code style="font-size:0.75rem;color:var(--accent)">castor install skill:peer-coordinate</code>
+            </div>
+          </div>
+
+          <!-- HARNESSES -->
+          <div class="hw-card reveal reveal-d5" data-type="harness">
+            <div class="hw-card-top">
+              <div class="hw-card-icon">🐾</div>
+              <span class="status" style="background:var(--purple-light);color:var(--purple)">Harness Bundle</span>
+            </div>
+            <h3>Bob — Pi 4 + OAK-D</h3>
+            <p>Complete harness for a Raspberry Pi 4 + OAK-D robot with Gemini 2.0 Flash brain. Includes web-lookup, camera-describe, peer-coordinate skills + RCAN 1.6 config. Craig's primary research robot.</p>
+            <div class="recipe-tags">
+              <span class="recipe-tag">raspberry-pi-4</span>
+              <span class="recipe-tag">oak-d</span>
+              <span class="recipe-tag">gemini-2.0</span>
+              <span class="recipe-tag">rcan-1.6</span>
+            </div>
+            <div class="hw-card-meta">
+              <span>by <strong>craigm26</strong></span>
+              <span>&middot; Free (Gemini) &middot; Intermediate</span>
+            </div>
+            <div style="margin-top:12px">
+              <code style="font-size:0.75rem;color:var(--accent)">castor install harness:bob-pi4-oakd</code>
+            </div>
+          </div>
+
+          <div class="hw-card reveal reveal-d6" data-type="harness">
+            <div class="hw-card-top">
+              <div class="hw-card-icon">🦿</div>
+              <span class="status" style="background:var(--purple-light);color:var(--purple)">Harness Bundle</span>
+            </div>
+            <h3>Alex — SO-ARM101 + Gemini</h3>
+            <p>Complete harness for a SO-ARM101 6-DOF arm with Gemini 2.0 Flash brain in Docker. Includes arm-manipulate, peer-coordinate skills, full P66 safety config.</p>
+            <div class="recipe-tags">
+              <span class="recipe-tag">so-arm101</span>
+              <span class="recipe-tag">6dof-arm</span>
+              <span class="recipe-tag">gemini-2.0</span>
+              <span class="recipe-tag">docker</span>
+            </div>
+            <div class="hw-card-meta">
+              <span>by <strong>craigm26</strong></span>
+              <span>&middot; Free (Gemini) &middot; Advanced</span>
+            </div>
+            <div style="margin-top:12px">
+              <code style="font-size:0.75rem;color:var(--accent)">castor install harness:alex-so-arm101</code>
             </div>
           </div>
 
@@ -254,7 +407,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               <span class="status" style="background:var(--accent-light);color:var(--accent)">Your recipe?</span>
             </div>
             <h3>Share Your Build</h3>
-            <p>Got a working robot config? Package it with <code>castor hub share --submit</code> and help the next
+            <p>Got a working robot config? Package it with <code>castor share</code> and help the next
               builder skip the hard parts.</p>
             <div class="recipe-tags">
               <span class="recipe-tag">Any AI</span>
@@ -270,6 +423,21 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       </div>
     </section>
 
+
+    <!-- ======== TYPE FILTER TABS ======== -->
+    <section class="section" style="padding-top:0;padding-bottom:0">
+      <div class="container">
+        <div class="hub-filter-bar reveal" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:32px;margin-top:-16px">
+          <button class="hub-filter-btn active" data-filter="all" onclick="hubFilter('all',this)">All</button>
+          <button class="hub-filter-btn" data-filter="preset" onclick="hubFilter('preset',this)">🤖 Presets</button>
+          <button class="hub-filter-btn" data-filter="skill" onclick="hubFilter('skill',this)">🧩 Skills</button>
+          <button class="hub-filter-btn" data-filter="harness" onclick="hubFilter('harness',this)">📦 Harnesses</button>
+        </div>
+        <p class="hub-filter-desc" id="hub-type-desc" style="font-size:0.875rem;color:var(--text-muted);margin-bottom:24px;margin-top:-24px">
+          <strong>Presets</strong> = full robot config (hardware + brain). <strong>Skills</strong> = single capabilities you can add to any robot. <strong>Harnesses</strong> = complete bundles (preset + skills + persona).
+        </p>
+      </div>
+    </section>
     <!-- ======== SUBMIT CTA ======== -->
     <section class="section" id="submit-cta">
       <div class="container">
@@ -284,9 +452,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
                   <path d="M5 12h14M12 5l7 7-7 7" />
                 </svg>
-                castor hub share --submit
+                castor share
               </a>
-              <a href="https://github.com/craigm26/OpenCastor/tree/main/community-recipes" class="btn btn-secondary">
+              <a href="https://github.com/craigm26/OpenCastor/tree/main/config/community" class="btn btn-secondary">
                 Browse on GitHub
               </a>
             </div>
@@ -309,7 +477,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <div class="card reveal">
             <div class="card-icon" style="background:var(--accent-glow)">🤖</div>
             <h3>Submit a Recipe</h3>
-            <p>The fastest way to contribute. Package your working config with <code>castor hub share --submit</code>
+            <p>The fastest way to contribute. Package your working config with <code>castor share</code>
               and open a PR to <code>community-recipes/</code>. See existing recipes for format.</p>
             <div style="margin-top:20px">
               <a href="#submit" style="color:var(--accent);font-size:0.875rem;font-weight:600">Submit yours &rarr;</a>
@@ -432,8 +600,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <div class="reveal">
             <p class="section-label">CLI</p>
             <h2 class="section-title">Browse and share<br>from the terminal.</h2>
-            <p class="section-desc">The hub is built into the <code>castor</code> CLI. No account needed to browse.
-              Share via GitHub PR.</p>
+            <p class="section-desc">The hub is built into the <code>castor</code> CLI. No account needed to browse or install.
+              Share your config — presets, skills, or complete harnesses.</p>
           </div>
 
           <div class="code-block reveal reveal-d2">
@@ -441,26 +609,27 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               <div class="code-dots"><span></span><span></span><span></span></div>
               <span class="code-filename">Terminal</span>
             </div>
-            <div class="code-body"><span class="cm"># Browse all recipes</span>
-              <span class="s">$</span> castor hub browse
+            <div class="code-body"><span class="cm"># Browse presets, skills, and harnesses</span>
+              <span class="s">$</span> castor explore
 
-              <span class="cm"># Filter by category and AI provider</span>
-              <span class="s">$</span> castor hub browse --category agriculture --provider huggingface
+              <span class="cm"># Filter by type and hardware</span>
+              <span class="s">$</span> castor explore --type skill --hardware raspberry-pi-4
 
               <span class="cm"># Search for something specific</span>
-              <span class="s">$</span> castor hub search "outdoor patrol camera"
+              <span class="s">$</span> castor search "oak-d navigation"
 
-              <span class="cm"># View full details</span>
-              <span class="s">$</span> castor hub show picar-home-patrol-e7f3a1
+              <span class="cm"># Install a preset, skill, or harness</span>
+              <span class="s">$</span> castor install picar-home-patrol-e7f3a1
+              <span class="s">$</span> castor install skill:camera-describe
+              <span class="s">$</span> castor install harness:bob-pi4-oakd
 
-              <span class="cm"># Install a recipe to your project</span>
-              <span class="s">$</span> castor hub install picar-home-patrol-e7f3a1
+              <span class="cm"># Share your config (PII auto-scrubbed)</span>
+              <span class="s">$</span> castor share preset config/robot.rcan.yaml
+              <span class="s">$</span> castor share skill castor/skills/my-skill/
+              <span class="s">$</span> castor share harness . --include-skills
 
-              <span class="cm"># Share your working config (PII auto-scrubbed)</span>
-              <span class="s">$</span> castor hub share --submit
-
-              <span class="cm"># See all categories</span>
-              <span class="s">$</span> castor hub categories
+              <span class="cm"># Fork someone else's config</span>
+              <span class="s">$</span> castor fork picar-home-patrol-e7f3a1 my-picar
             </div>
           </div>
         </div>
@@ -482,8 +651,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <div class="wizard-step-num">1</div>
             <div>
               <h3>Package your config</h3>
-              <p>Run <code style="padding:2px 6px;font-size:0.8125rem">castor hub share --submit</code> to auto-scrub
-                secrets and generate a submission bundle.</p>
+              <p>Run <code style="padding:2px 6px;font-size:0.8125rem">castor share</code> to auto-scrub secrets, validate your RCAN config, and generate a shareable bundle.</p>
             </div>
           </div>
           <div class="code-block">
@@ -491,7 +659,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               <div class="code-dots"><span></span><span></span><span></span></div><span
                 class="code-filename">Terminal</span>
             </div>
-            <div class="code-body"><span class="k">castor hub share</span> --submit --config robot.rcan.yaml --docs
+            <div class="code-body"><span class="k">castor share</span> --submit --config robot.rcan.yaml --docs
               BUILD_NOTES.md</div>
           </div>
         </div>
@@ -525,7 +693,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <div>
               <h3>Review &amp; merge</h3>
               <p>Maintainers review for PII leaks and validate the RCAN schema. Once approved, your recipe appears in
-                <code style="padding:2px 6px;font-size:0.8125rem">castor hub browse</code>.</p>
+                <code style="padding:2px 6px;font-size:0.8125rem">castor explore</code>.</p>
             </div>
           </div>
         </div>
@@ -543,13 +711,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         </div>
 
         <div class="hw-grid">
-          <div class="hw-card reveal">
+          <div class="hw-card reveal" data-type="preset">
             <div class="hw-card-top">
               <div class="hw-card-icon">🏠</div><span class="status status-green">Seed</span>
             </div>
             <h3>minimal-picar</h3>
             <p>Bare-minimum PiCar-X config with Ollama local brain. No API keys needed. 5-minute setup.</p>
-            <div class="hw-card-meta">castor hub install minimal-picar</div>
+            <div class="hw-card-meta">castor install minimal-picar</div>
           </div>
           <div class="hw-card reveal reveal-d1">
             <div class="hw-card-top">
@@ -557,7 +725,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             </div>
             <h3>hailo-vision-demo</h3>
             <p>Hailo-8 YOLOv8 object detection with Pi Camera. Detects and narrates objects in real time.</p>
-            <div class="hw-card-meta">castor hub install hailo-vision-demo</div>
+            <div class="hw-card-meta">castor install hailo-vision-demo</div>
           </div>
           <div class="hw-card reveal reveal-d2">
             <div class="hw-card-top">
@@ -565,7 +733,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             </div>
             <h3>oakd-depth-nav</h3>
             <p>OAK-D depth camera navigation. Obstacle avoidance using depth maps. Differential drive.</p>
-            <div class="hw-card-meta">castor hub install oakd-depth-nav</div>
+            <div class="hw-card-meta">castor install oakd-depth-nav</div>
           </div>
           <div class="hw-card reveal reveal-d3">
             <div class="hw-card-top">
@@ -573,7 +741,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             </div>
             <h3>tiered-brain-starter</h3>
             <p>Full tiered brain config: HuggingFace fast brain + Claude planner with auto-escalation.</p>
-            <div class="hw-card-meta">castor hub install tiered-brain-starter</div>
+            <div class="hw-card-meta">castor install tiered-brain-starter</div>
           </div>
         </div>
       </div>
@@ -585,7 +753,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         <div class="section-header reveal" style="text-align:center;margin-left:auto;margin-right:auto">
           <p class="section-label">Safety</p>
           <h2 class="section-title">Share safely.<br>Secrets stay secret.</h2>
-          <p class="section-desc" style="margin-left:auto;margin-right:auto">The <code>castor hub share</code> command
+          <p class="section-desc" style="margin-left:auto;margin-right:auto">The <code>castor share</code> command
             automatically scrubs your config and docs before packaging. Always review the output before submitting.</p>
         </div>
 
@@ -616,7 +784,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       <h2 class="reveal">Every working config helps someone.</h2>
       <p class="reveal reveal-d1">Share yours. Find your next build. Build together.</p>
       <div class="hero-actions reveal reveal-d2">
-        <a href="https://github.com/craigm26/OpenCastor/tree/main/community-recipes" class="btn btn-primary btn-lg">
+        <a href="https://github.com/craigm26/OpenCastor/tree/main/config/community" class="btn btn-primary btn-lg">
           Browse Recipes on GitHub
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <path d="M5 12h14M12 5l7 7-7 7" />
@@ -720,6 +888,61 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       });
     });
   });
+</script>
+
+
+<style>
+  .hub-filter-btn {
+    padding: 6px 16px;
+    border-radius: 20px;
+    border: 1.5px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .hub-filter-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .hub-filter-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  :root[data-theme="dark"] .hub-filter-btn.active { color: #fff; }
+  .hub-filter-desc { transition: opacity 0.2s; }
+</style>
+
+<script>
+  function hubFilter(type, btn) {
+    // Update button states
+    document.querySelectorAll('.hub-filter-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+
+    // Show/hide cards
+    document.querySelectorAll('[data-type]').forEach(function(card) {
+      if (type === 'all' || card.dataset.type === type) {
+        card.style.display = '';
+      } else {
+        card.style.display = 'none';
+      }
+    });
+
+    // Update description
+    var desc = document.getElementById('hub-type-desc');
+    if (desc) {
+      var descriptions = {
+        all: '<strong>Presets</strong> = full robot config (hardware + brain). <strong>Skills</strong> = single capabilities you can add to any robot. <strong>Harnesses</strong> = complete bundles (preset + skills + persona).',
+        preset: '<strong>Presets</strong> &#8212; complete <code>*.rcan.yaml</code> files describing a robot&#8217;s hardware + brain setup. One command to get a robot running.',
+        skill: '<strong>Skills</strong> &#8212; individual capabilities you can add to any robot. Each skill teaches the robot one thing: navigate, describe, search, coordinate.',
+        harness: '<strong>Harnesses</strong> &#8212; complete bundles: preset + skills + persona + eval cases. Everything to replicate a specific robot&#8217;s intelligence. Like a Docker image for robot brains.'
+      };
+      desc.innerHTML = descriptions[type] || descriptions.all;
+    }
+  }
 </script>
 
 </BaseLayout>
