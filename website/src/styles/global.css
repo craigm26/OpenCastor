@@ -498,6 +498,27 @@ code, pre { font-family: var(--font-mono); }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   text-align: center; padding: 140px var(--gutter) 80px; overflow: hidden;
 }
+
+/* Phase 8: Hero Brand Identifier */
+.hero-brand-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.hero-brand-logo img {
+  filter: drop-shadow(0 4px 20px rgba(14, 165, 233, 0.4));
+  border-radius: 12px;
+}
+.hero-brand-logo .brand-text {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
 .hero::before {
   content: ''; position: absolute; top: -15%; left: 50%; transform: translateX(-50%);
   width: min(1000px, 130vw); height: min(1000px, 130vw);
