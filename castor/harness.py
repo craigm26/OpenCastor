@@ -257,6 +257,13 @@ class AgentHarness:
         self._auto_rag: bool = bool(harness_cfg.get("auto_rag", True))
         self._auto_telemetry: bool = bool(harness_cfg.get("auto_telemetry", True))
 
+        # Register extended agent tools
+        try:
+            from castor.agent_tools import register_agent_tools
+            register_agent_tools(self._tool_registry)
+        except Exception as _reg_exc:
+            logger.debug("Agent tools registration skipped: %s", _reg_exc)
+
         # P66 audit hook always present
         _hook_cfg = harness_cfg.get("hooks", {})
         if _hook_cfg.get("p66_audit", True):

@@ -1,0 +1,12 @@
+[
+  {"id": "ask_alex", "prompt": "Ask Alex what she sees", "should_trigger": true, "expected_checks": ["calls_rcan", "has_response"]},
+  {"id": "ask_bob", "prompt": "What does Bob think about this task?", "should_trigger": true, "expected_checks": ["calls_rcan", "has_response"]},
+  {"id": "coordinate", "prompt": "Coordinate with Alex to sort the bricks", "should_trigger": true, "expected_checks": ["calls_rcan", "has_response"]},
+  {"id": "delegate", "prompt": "Tell Bob to patrol the room", "should_trigger": true, "expected_checks": ["calls_rcan"]},
+  {"id": "split_task", "prompt": "Split the sorting task with Alex", "should_trigger": true, "expected_checks": ["calls_rcan", "has_response"]},
+  {"id": "check_peer_status", "prompt": "Check if Alex is online", "should_trigger": true, "expected_checks": ["calls_rcan", "has_response"]},
+  {"id": "negative_camera", "prompt": "What do you see?", "should_trigger": false, "expected_checks": []},
+  {"id": "negative_web", "prompt": "Search for Lego assembly instructions", "should_trigger": false, "expected_checks": []},
+  {"id": "negative_movement", "prompt": "Go forward", "should_trigger": false, "expected_checks": []},
+  {"id": "negative_no_robot", "prompt": "What is the weather?", "should_trigger": false, "expected_checks": []}
+]

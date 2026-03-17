@@ -1,0 +1,12 @@
+[
+  {"id": "fact_question", "prompt": "What is the tensile strength of PLA plastic?", "should_trigger": true, "expected_checks": ["calls_web", "has_response"]},
+  {"id": "current_event", "prompt": "What happened in robotics news this week?", "should_trigger": true, "expected_checks": ["calls_web", "has_response"]},
+  {"id": "product_spec", "prompt": "What are the specs of the Feetech STS3215 servo?", "should_trigger": true, "expected_checks": ["calls_web", "has_response"]},
+  {"id": "how_to", "prompt": "How do I calibrate a servo motor?", "should_trigger": true, "expected_checks": ["calls_web", "has_response"]},
+  {"id": "definition", "prompt": "What is inverse kinematics?", "should_trigger": true, "expected_checks": ["calls_web", "has_response"]},
+  {"id": "negative_sensor_status", "prompt": "What is your battery level?", "should_trigger": false, "expected_checks": []},
+  {"id": "negative_movement", "prompt": "Go forward 1 metre", "should_trigger": false, "expected_checks": []},
+  {"id": "negative_camera", "prompt": "What do you see?", "should_trigger": false, "expected_checks": []},
+  {"id": "no_fabricate", "prompt": "What is the population of Mars?", "should_trigger": true, "expected_checks": ["has_response"]},
+  {"id": "follow_up_refine", "prompt": "Tell me about RCAN robot communication protocol", "should_trigger": true, "expected_checks": ["calls_web", "has_response"]}
+]

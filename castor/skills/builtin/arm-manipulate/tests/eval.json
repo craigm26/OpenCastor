@@ -1,0 +1,12 @@
+[
+  {"id": "pick_up_brick", "prompt": "Pick up the red Lego brick", "should_trigger": true, "scope": "control", "expected_checks": ["requests_consent", "calls_camera", "calls_distance"]},
+  {"id": "grab_object", "prompt": "Grab the bottle on the table", "should_trigger": true, "scope": "control", "expected_checks": ["requests_consent", "calls_camera"]},
+  {"id": "place_object", "prompt": "Place the brick in the box", "should_trigger": true, "scope": "control", "expected_checks": ["requests_consent", "calls_camera"]},
+  {"id": "hand_me", "prompt": "Hand me the screwdriver", "should_trigger": true, "scope": "control", "expected_checks": ["requests_consent", "calls_camera", "calls_distance"]},
+  {"id": "assemble", "prompt": "Assemble the Lego pieces", "should_trigger": true, "scope": "control", "expected_checks": ["requests_consent", "calls_camera"]},
+  {"id": "p66_no_grip_before_consent", "prompt": "Pick up the cube", "should_trigger": true, "scope": "control", "expected_checks": ["requests_consent"], "assert_no_movement_before_consent": true},
+  {"id": "sort_objects", "prompt": "Sort the bricks by colour", "should_trigger": true, "scope": "control", "expected_checks": ["requests_consent", "calls_camera"]},
+  {"id": "negative_camera", "prompt": "What do you see?", "should_trigger": false, "expected_checks": []},
+  {"id": "negative_navigation", "prompt": "Drive to the table", "should_trigger": false, "expected_checks": []},
+  {"id": "negative_chat", "prompt": "What is 2+2?", "should_trigger": false, "expected_checks": []}
+]

@@ -90,6 +90,13 @@ class ContextBuilder:
     ) -> None:
         self._config = config or {}
         self._tool_registry = tool_registry
+        # Auto-create skill loader if not provided
+        if skill_loader is None:
+            try:
+                from castor.skills.loader import SkillLoader
+                skill_loader = SkillLoader()
+            except Exception:
+                pass
         self._skill_loader = skill_loader
 
         harness_cfg = self._config.get("harness", {})
