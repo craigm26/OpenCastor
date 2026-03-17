@@ -429,10 +429,10 @@ def build_manifest(safety_layer: Any = None, hardware_caps: Optional[dict] = Non
         "manifest_version": "1.0",
         "protocol": "ContinuonOS Protocol 66 (OpenCastor independent implementation)",
         "rcan_spec_version": "1.5",
-        "rcan_version": "1.5",                    # v1.5: explicit rcan_version field
-        "replay_cache_enabled": True,             # v1.5: GAP-03 replay prevention active
-        "sender_type_logged": True,               # v1.5: GAP-08 cloud relay audit trail
-        "offline_mode_capable": True,             # v1.5: GAP-06 offline operation support
+        "rcan_version": "1.5",  # v1.5: explicit rcan_version field
+        "replay_cache_enabled": True,  # v1.5: GAP-03 replay prevention active
+        "sender_type_logged": True,  # v1.5: GAP-08 cloud relay audit trail
+        "offline_mode_capable": True,  # v1.5: GAP-06 offline operation support
         "opencastor_version": __import__("castor").__version__,
         "generated_at": int(time.time() * 1000),
         "summary": {
@@ -443,7 +443,10 @@ def build_manifest(safety_layer: Any = None, hardware_caps: Optional[dict] = Non
             "hardware_dependent": hardware,
             "v15_invariants_implemented": v15_implemented,
             "conformance_pct": round(
-                100 * (implemented + partial * 0.5) / max(total - hardware + V15_INVARIANT_COUNT, 1), 1
+                100
+                * (implemented + partial * 0.5)
+                / max(total - hardware + V15_INVARIANT_COUNT, 1),
+                1,
             ),
         },
         "by_category": by_category,

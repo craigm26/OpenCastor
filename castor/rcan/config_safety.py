@@ -39,7 +39,7 @@ log = logging.getLogger(__name__)
 # These are prefixes — any key starting with one of these requires safety scope.
 _SAFETY_REQUIRED_PREFIXES: tuple[str, ...] = (
     "safety.",
-    "safety",       # exact match
+    "safety",  # exact match
     "hardware.",
     "hardware",
     "brain.provider",
@@ -164,7 +164,9 @@ def validate_config_update(
         log.info(
             "config_safety: safety-scope CONFIG_UPDATE approved for dangerous fields %s "
             "(requester=%s, cmd_id=%s)",
-            dangerous, req.requester, req.cmd_id,
+            dangerous,
+            req.requester,
+            req.cmd_id,
         )
         return True, "approved (safety scope)", True
 
@@ -177,9 +179,11 @@ def validate_config_update(
         )
 
     log.info(
-        "config_safety: CONFIG_UPDATE approved for fields %s "
-        "(scope=%s, requester=%s, cmd_id=%s)",
-        list(req.fields.keys()), req.scope, req.requester, req.cmd_id,
+        "config_safety: CONFIG_UPDATE approved for fields %s (scope=%s, requester=%s, cmd_id=%s)",
+        list(req.fields.keys()),
+        req.scope,
+        req.requester,
+        req.cmd_id,
     )
     return True, "approved", False
 
@@ -201,6 +205,7 @@ class ConfigRollbackManager:
     def __init__(self) -> None:
         self._snapshot: Optional[ConfigSnapshot] = None
         import threading
+
         self._lock = threading.Lock()
 
     def take_snapshot(self, config: dict[str, Any], cmd_id: str = "") -> ConfigSnapshot:
@@ -221,7 +226,8 @@ class ConfigRollbackManager:
             self._snapshot = snapshot
         log.debug(
             "config_safety: snapshot taken (cmd_id=%s, fields=%d)",
-            cmd_id, len(config),
+            cmd_id,
+            len(config),
         )
         return snapshot
 
@@ -240,15 +246,16 @@ class ConfigRollbackManager:
 
         if snap.is_expired:
             log.warning(
-                "config_safety: rollback snapshot expired (age=%.0fs > %ds) — "
-                "cannot restore",
-                snap.age_s, ROLLBACK_WINDOW_S,
+                "config_safety: rollback snapshot expired (age=%.0fs > %ds) — cannot restore",
+                snap.age_s,
+                ROLLBACK_WINDOW_S,
             )
             return None
 
         log.info(
             "config_safety: rolling back to snapshot (age=%.0fs, cmd_id=%s)",
-            snap.age_s, snap.cmd_id,
+            snap.age_s,
+            snap.cmd_id,
         )
         return copy.deepcopy(snap.config)
 

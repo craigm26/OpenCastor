@@ -66,12 +66,14 @@ SAFETY_REPLAY_WINDOW_S: int = 10
 def _try_import_replay() -> Any:
     """Attempt to import ReplayCache from rcan.replay; return stub if unavailable."""
     try:
-        import sys as _sys
         import os as _os
+        import sys as _sys
+
         _rcan_path = _os.path.expanduser("~/rcan-py")
         if _rcan_path not in _sys.path:
             _sys.path.insert(0, _rcan_path)
         from rcan.replay import ReplayCache
+
         return ReplayCache
     except ImportError:
         return None
@@ -152,11 +154,7 @@ class CastorBridge:
         meta: dict[str, Any] = config.get("metadata", {})
         rcan: dict[str, Any] = config.get("rcan_protocol", {})
 
-        self.rrn: str = (
-            config.get("rrn")
-            or meta.get("rrn")
-            or "RRN-unknown"
-        )
+        self.rrn: str = config.get("rrn") or meta.get("rrn") or "RRN-unknown"
         self.robot_name: str = (
             config.get("robot_name")
             or config.get("name")
@@ -164,36 +162,19 @@ class CastorBridge:
             or meta.get("robot_name")
             or "unnamed-robot"
         )
-        self.owner: str = (
-            config.get("owner")
-            or meta.get("rrn_uri")
-            or "rrn://unknown"
-        )
+        self.owner: str = config.get("owner") or meta.get("rrn_uri") or "rrn://unknown"
         self.ruri: str = (
-            meta.get("ruri")
-            or meta.get("rcan_uri")
-            or config.get("ruri")
-            or f"rcan://{self.rrn}"
+            meta.get("ruri") or meta.get("rcan_uri") or config.get("ruri") or f"rcan://{self.rrn}"
         )
-        self.capabilities: list[str] = (
-            config.get("capabilities")
-            or rcan.get("capabilities")
-            or []
-        )
-        self.version: str = (
-            meta.get("version")
-            or config.get("opencastor_version")
-            or "unknown"
-        )
+        self.capabilities: list[str] = config.get("capabilities") or rcan.get("capabilities") or []
+        self.version: str = meta.get("version") or config.get("opencastor_version") or "unknown"
         self.firebase_uid: str = config.get("firebase_uid", "")
 
         # v1.5: Training data consent config (GAP-10)
-        self.training_consent_required: bool = bool(
-            config.get("training_consent_required", False)
-        )
+        self.training_consent_required: bool = bool(config.get("training_consent_required", False))
 
-        self._db: Any = None        # Firestore client
-        self._consent: Any = None   # ConsentManager
+        self._db: Any = None  # Firestore client
+        self._consent: Any = None  # ConsentManager
         self._running = False
         self._telemetry_thread: threading.Thread | None = None
         self._last_processed: set[str] = set()  # command IDs already handled
@@ -264,18 +245,14 @@ class CastorBridge:
         if is_estop:
             return True
 
-        log.warning(
-            "OFFLINE MODE: command rejected (scope=%s) — not an ESTOP", scope
-        )
+        log.warning("OFFLINE MODE: command rejected (scope=%s) — not an ESTOP", scope)
         return False
 
     # ------------------------------------------------------------------
     # v1.5 Replay prevention helpers (GAP-03)
     # ------------------------------------------------------------------
 
-    def _check_replay(
-        self, cmd_id: str, doc: dict[str, Any], is_safety: bool = False
-    ) -> bool:
+    def _check_replay(self, cmd_id: str, doc: dict[str, Any], is_safety: bool = False) -> bool:
         """Check for command replay before executing.
 
         Uses separate caches for safety vs. normal commands (10s vs 30s window).
@@ -297,6 +274,7 @@ class CastorBridge:
                     issued_at = raw_issued.timestamp()
                 elif isinstance(raw_issued, str):
                     from datetime import datetime as _dt
+
                     issued_at = _dt.fromisoformat(raw_issued.replace("Z", "+00:00")).timestamp()
             except Exception:
                 pass
@@ -318,14 +296,10 @@ class CastorBridge:
                 allowed = bool(result)
                 reason = "" if allowed else "replay detected"
             if not allowed:
-                log.warning(
-                    "replay_check: REJECTED cmd_id=%s reason=%s", cmd_id, reason
-                )
+                log.warning("replay_check: REJECTED cmd_id=%s reason=%s", cmd_id, reason)
             return allowed
         except Exception as exc:
-            log.warning(
-                "replay_check: REJECTED cmd_id=%s reason=%s", cmd_id, exc
-            )
+            log.warning("replay_check: REJECTED cmd_id=%s reason=%s", cmd_id, exc)
             return False
 
     # ------------------------------------------------------------------
@@ -338,9 +312,7 @@ class CastorBridge:
             import firebase_admin
             from firebase_admin import credentials, firestore
         except ImportError:
-            log.error(
-                "firebase-admin not installed. Run: pip install opencastor[cloud]"
-            )
+            log.error("firebase-admin not installed. Run: pip install opencastor[cloud]")
             raise
 
         if not firebase_admin._apps:
@@ -351,13 +323,12 @@ class CastorBridge:
                 cred = credentials.ApplicationDefault()
                 log.info("Firebase: using Application Default Credentials")
 
-            firebase_admin.initialize_app(
-                cred, {"projectId": self.firebase_project}
-            )
+            firebase_admin.initialize_app(cred, {"projectId": self.firebase_project})
 
         self._db = firestore.client()
 
         from castor.cloud.consent_manager import ConsentManager
+
         self._consent = ConsentManager(
             robot_rrn=self.rrn,
             owner=self.owner,
@@ -505,7 +476,9 @@ class CastorBridge:
             if not self._check_replay(cmd_id, doc, is_safety=(scope == "safety")):
                 log.warning(
                     "Command %s rejected as replay (sender_type=%s, scope=%s)",
-                    cmd_id, sender_type, scope,
+                    cmd_id,
+                    sender_type,
+                    scope,
                 )
                 audit_entry: dict[str, Any] = {
                     "status": "replay_rejected",
@@ -533,19 +506,19 @@ class CastorBridge:
                     ack_elapsed = time.monotonic() - estop_dispatch_start
                     if ack_elapsed > ESTOP_ACK_DEADLINE_S:
                         log.warning(
-                            "ESTOP QoS ACK took %.2fs — exceeded %.1fs deadline! "
-                            "cmd_id=%s",
-                            ack_elapsed, ESTOP_ACK_DEADLINE_S, cmd_id,
+                            "ESTOP QoS ACK took %.2fs — exceeded %.1fs deadline! cmd_id=%s",
+                            ack_elapsed,
+                            ESTOP_ACK_DEADLINE_S,
+                            cmd_id,
                         )
                     else:
                         log.debug(
                             "ESTOP QoS ACK written in %.3fs cmd_id=%s",
-                            ack_elapsed, cmd_id,
+                            ack_elapsed,
+                            cmd_id,
                         )
                 except Exception as ack_exc:
-                    log.warning(
-                        "ESTOP QoS ACK write failed: %s (cmd_id=%s)", ack_exc, cmd_id
-                    )
+                    log.warning("ESTOP QoS ACK write failed: %s (cmd_id=%s)", ack_exc, cmd_id)
 
             # --- GAP-06: Offline mode check (after ESTOP is dispatched) -----
             if not self._is_command_allowed_offline(scope, instruction):
@@ -561,11 +534,7 @@ class CastorBridge:
             # --- R2RAM scope check ------------------------------------------
             requester_owner: str = doc.get("issued_by_owner", "")
             issued_by_uid: str = doc.get("issued_by_uid", "")
-            if (
-                issued_by_uid
-                and self.firebase_uid
-                and issued_by_uid == self.firebase_uid
-            ):
+            if issued_by_uid and self.firebase_uid and issued_by_uid == self.firebase_uid:
                 requester_owner = self.owner
 
             authorized, reason = self._consent.is_authorized(
@@ -578,7 +547,11 @@ class CastorBridge:
             if not authorized:
                 log.warning(
                     "Command %s denied: %s (owner=%s, scope=%s, sender_type=%s)",
-                    cmd_id, reason, requester_owner, scope, sender_type,
+                    cmd_id,
+                    reason,
+                    requester_owner,
+                    scope,
+                    sender_type,
                 )
                 denied_entry: dict[str, Any] = {
                     "status": "denied",
@@ -625,7 +598,10 @@ class CastorBridge:
             cmd_ref.update(complete_entry)
             log.info(
                 "Command %s complete (scope=%s, sender_type=%s, cloud_relay=%s)",
-                cmd_id, scope, sender_type, is_cloud_relay,
+                cmd_id,
+                scope,
+                sender_type,
+                is_cloud_relay,
             )
             self._record_firestore_success()
 
@@ -647,9 +623,7 @@ class CastorBridge:
     # GAP-10: Training data consent helpers
     # ------------------------------------------------------------------
 
-    def _is_training_data_command(
-        self, scope: str, instruction: str, doc: dict[str, Any]
-    ) -> bool:
+    def _is_training_data_command(self, scope: str, instruction: str, doc: dict[str, Any]) -> bool:
         """Return True if this command would trigger training data collection."""
         if not self.training_consent_required:
             return False
@@ -679,7 +653,8 @@ class CastorBridge:
         except Exception as exc:
             log.warning(
                 "training consent check failed for owner=%s: %s — blocking collection",
-                requester_owner, exc,
+                requester_owner,
+                exc,
             )
             return False
 
@@ -772,7 +747,8 @@ class CastorBridge:
         self._commands_ref().document(req_id).update({"status": "pending_consent"})
         log.info(
             "Consent request %s from %s written — awaiting owner approval",
-            req_id, doc.get("from_owner"),
+            req_id,
+            doc.get("from_owner"),
         )
 
     def _handle_consent_grant(self, req_id: str, doc: dict[str, Any]) -> None:
@@ -890,9 +866,7 @@ class CastorBridge:
                         if msg_type == "consent_request"
                         else self._handle_consent_grant
                     )
-                    threading.Thread(
-                        target=fn, args=(cmd_id, data), daemon=True
-                    ).start()
+                    threading.Thread(target=fn, args=(cmd_id, data), daemon=True).start()
                 else:
                     threading.Thread(
                         target=self._execute_command,
@@ -926,12 +900,14 @@ class CastorBridge:
         # Attempt real-time listener
         listener = None
         try:
-            from google.cloud.firestore import Watch  # type: ignore[import]
+            pass  # Watch import moved; using on_snapshot directly
 
             listener = self._commands_ref().on_snapshot(self._on_command_snapshot)
             log.info(
                 "Bridge LIVE — %s (%s) → Firebase %s [real-time listener, rcan=1.5]",
-                self.robot_name, self.rrn, self.firebase_project,
+                self.robot_name,
+                self.rrn,
+                self.firebase_project,
             )
             while self._running:
                 time.sleep(1.0)
@@ -946,7 +922,10 @@ class CastorBridge:
 
             log.info(
                 "Bridge LIVE — %s (%s) → Firebase %s [poll mode, interval=%.0fs, rcan=1.5]",
-                self.robot_name, self.rrn, self.firebase_project, self.poll_interval_s,
+                self.robot_name,
+                self.rrn,
+                self.firebase_project,
+                self.poll_interval_s,
             )
             while self._running:
                 self._poll_commands_once()
@@ -974,6 +953,7 @@ class CastorBridge:
 # ---------------------------------------------------------------------------
 # CLI entry point  (called from castor/cli.py)
 # ---------------------------------------------------------------------------
+
 
 def run_bridge(args: Any) -> None:
     """Entry point for ``castor bridge`` CLI command."""
