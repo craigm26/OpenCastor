@@ -47,6 +47,9 @@ __all__ = [
     "HarnessContext",
     "HarnessResult",
     "HarnessHook",
+    "DriftDetectionHook",
+    "P66AuditHook",
+    "RetryOnErrorHook",
 ]
 
 # ── P66 tool classification ──────────────────────────────────────────────────
@@ -119,6 +122,7 @@ class HarnessResult:
     # Harness metadata
     iterations: int = 0
     was_compacted: bool = False
+    drift_score: Optional[float] = None
     error: Optional[str] = None
     run_id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
@@ -221,6 +225,53 @@ class RetryOnErrorHook(HarnessHook):
         return None
 
 
+class DriftDetectionHook(HarnessHook):
+    """Detects when the model's response has drifted off-task.
+
+    After 3+ tool iterations, compares the final response against the
+    original instruction using cosine similarity of simple word vectors.
+    Below ``threshold`` → logs drift warning and records ``drift_score``
+    on the result.
+
+    Args:
+        threshold: Cosine similarity below this value is considered drift.
+                   Default 0.15 (loose — avoids false positives on short
+                   instructions that legitimately produce long responses).
+    """
+
+    def __init__(self, threshold: float = 0.15) -> None:
+        self.threshold = threshold
+
+    async def on_post_turn(
+        self, ctx: HarnessContext, result: HarnessResult
+    ) -> None:
+        if result.iterations < 3:
+            return  # don't check on short runs
+
+        score = _word_overlap_similarity(ctx.instruction, result.thought.raw_text)
+        result.drift_score = score  # type: ignore[attr-defined]
+
+        if score < self.threshold:
+            logger.warning(
+                "Harness: drift detected (score=%.3f < %.3f) session=%s instruction=%r",
+                score, self.threshold, ctx.session_id, ctx.instruction[:60],
+            )
+
+
+def _word_overlap_similarity(a: str, b: str) -> float:
+    """Simple word-overlap similarity (Jaccard) as a lightweight drift proxy."""
+    if not a or not b:
+        return 0.0
+    import re
+    words_a = set(re.findall(r'\b[a-z]{3,}\b', a.lower()))
+    words_b = set(re.findall(r'\b[a-z]{3,}\b', b.lower()))
+    if not words_a or not words_b:
+        return 0.0
+    intersection = words_a & words_b
+    union = words_a | words_b
+    return len(intersection) / len(union)
+
+
 # ── Main harness ──────────────────────────────────────────────────────────────
 
 class AgentHarness:
@@ -264,12 +315,15 @@ class AgentHarness:
         except Exception as _reg_exc:
             logger.debug("Agent tools registration skipped: %s", _reg_exc)
 
-        # P66 audit hook always present
+        # Built-in hooks (always registered unless explicitly disabled)
         _hook_cfg = harness_cfg.get("hooks", {})
         if _hook_cfg.get("p66_audit", True):
             self.hooks.append(P66AuditHook())
         if _hook_cfg.get("retry_on_error", True):
             self.hooks.append(RetryOnErrorHook())
+        if _hook_cfg.get("drift_detection", True):
+            _drift_thresh = float(_hook_cfg.get("drift_threshold", 0.15))
+            self.hooks.append(DriftDetectionHook(threshold=_drift_thresh))
 
         # Lazy import context builder to avoid circular deps
         self._context_builder: Any = None

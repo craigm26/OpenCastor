@@ -3387,6 +3387,75 @@ def _improve_toggle(args) -> bool:
     return True
 
 
+def _cmd_eval(args) -> None:
+    """castor eval — run skill evaluation harness."""
+    from castor.eval_harness import run_eval_cli
+    skill_names = []
+    if getattr(args, "skill", None):
+        skill_names = [args.skill]
+    elif not getattr(args, "eval_all", False):
+        print("Specify --skill NAME or --all")
+        return
+    dry_run = not getattr(args, "no_dry_run", False)
+    code = run_eval_cli(
+        skill_names=skill_names,
+        output_json=getattr(args, "output_json", False),
+        verbose=getattr(args, "verbose", False),
+    )
+    raise SystemExit(code)
+
+
+def _cmd_trajectory(args) -> None:
+    """castor trajectory — trajectory log management."""
+    from castor.trajectory import TrajectoryLogger
+    import json as _json
+
+    action = getattr(args, "traj_action", None) or "list"
+
+    if action == "list":
+        records = TrajectoryLogger.list_recent(20)
+        if not records:
+            print("No trajectory records found.")
+            return
+        print(f"{'ID':36}  {'Scope':8}  {'Skill':20}  {'Latency':10}  {'P66'}")
+        print("-" * 85)
+        for r in records:
+            p66 = "🔴" if r.get("p66_estop") else ("🟡" if r.get("p66_consent_req") else "🟢")
+            print(
+                f"{r['id'][:36]:36}  {r.get('scope','?'):8}  "
+                f"{(r.get('skill_triggered') or '-')[:20]:20}  "
+                f"{r.get('total_latency_ms', 0):8.0f}ms  {p66}"
+            )
+
+    elif action == "show":
+        run_id = getattr(args, "id", "")
+        record = TrajectoryLogger.get_record(run_id)
+        if record is None:
+            print(f"No record found: {run_id}")
+            return
+        # Parse JSON fields
+        for key in ("tool_calls_json", "secondary_verdict_json"):
+            val = record.pop(key, None)
+            if val:
+                try:
+                    record[key.replace("_json", "")] = _json.loads(val)
+                except Exception:
+                    pass
+        print(_json.dumps(record, indent=2, default=str))
+
+    elif action == "export":
+        print(TrajectoryLogger.export_jsonl())
+
+    elif action == "stats":
+        stats = TrajectoryLogger.stats()
+        print(f"Total runs:     {stats.get('total_runs', 0)}")
+        print(f"Avg latency:    {stats.get('avg_latency_ms', 0):.1f}ms")
+        print(f"P66 events:     {stats.get('p66_events', 0)}")
+        print(f"Errors:         {stats.get('errors', 0)}")
+    else:
+        print("Usage: castor trajectory [list|show <id>|export|stats]")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="castor",
@@ -4955,7 +5024,28 @@ def main() -> None:
         "setup": cmd_setup,
         # Fleet UI deep links + QR codes
         "fleet-link": cmd_fleet_link,
+        # Agent harness: skill evaluation
+        "eval": _cmd_eval,
+        # Trajectory log management
+        "trajectory": _cmd_trajectory,
     }
+
+    # castor eval — skill evaluation harness
+    p_eval = sub.add_parser("eval", help="Evaluate a skill against its test suite")
+    p_eval.add_argument("--skill", "-s", metavar="NAME", help="Skill name to evaluate")
+    p_eval.add_argument("--all", action="store_true", dest="eval_all", help="Evaluate all loaded skills")
+    p_eval.add_argument("--verbose", "-v", action="store_true", help="Show per-check details")
+    p_eval.add_argument("--json", action="store_true", dest="output_json", help="Output JSON")
+    p_eval.add_argument("--no-dry-run", action="store_true", help="Allow physical tool execution (CAUTION)")
+
+    # castor trajectory — trajectory log management
+    p_traj = sub.add_parser("trajectory", help="Manage trajectory logs")
+    p_traj_sub = p_traj.add_subparsers(dest="traj_action")
+    p_traj_sub.add_parser("list", help="Show recent 20 runs")
+    p_traj_show = p_traj_sub.add_parser("show", help="Show a single run by ID")
+    p_traj_show.add_argument("id", metavar="RUN_ID")
+    p_traj_sub.add_parser("export", help="Export all runs as JSONL")
+    p_traj_sub.add_parser("stats", help="Show summary statistics")
 
     # Load plugins and merge any plugin-provided commands
     try:
