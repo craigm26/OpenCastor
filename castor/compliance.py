@@ -29,13 +29,20 @@ SPEC_VERSION = "1.6"
 # Robots running older spec versions are still interoperable; newer versions are warned.
 # Both MAJOR.MINOR ("1.4") and MAJOR.MINOR.PATCH ("1.4.0") formats are accepted.
 ACCEPTED_RCAN_VERSIONS: tuple[str, ...] = (
-    "1.0", "1.0.0",
-    "1.1", "1.1.0",
-    "1.2", "1.2.0",
-    "1.3", "1.3.0",
-    "1.4", "1.4.0",
-    "1.5", "1.5.0",
-    "1.6", "1.6.0",
+    "1.0",
+    "1.0.0",
+    "1.1",
+    "1.1.0",
+    "1.2",
+    "1.2.0",
+    "1.3",
+    "1.3.0",
+    "1.4",
+    "1.4.0",
+    "1.5",
+    "1.5.0",
+    "1.6",
+    "1.6.0",
 )
 
 
