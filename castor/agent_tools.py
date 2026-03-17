@@ -124,8 +124,35 @@ def register_agent_tools(registry: ToolRegistry) -> None:
         },
         returns="array",
     )
+    registry.register(
+        name="share_config_with_peer",
+        fn=share_config_with_peer,
+        description=(
+            "Share a RCAN config file with a peer robot via RCAN CONFIG_SHARE message. "
+            "The peer must confirm before installing. Requires R2RAM chat-level consent."
+        ),
+        parameters={
+            "peer_rrn": {
+                "type": "string",
+                "description": "Target robot RRN (e.g. RRN-000000000001)",
+                "required": True,
+            },
+            "config_path": {
+                "type": "string",
+                "description": "Path to the .rcan.yaml file to share",
+                "required": True,
+            },
+            "title": {
+                "type": "string",
+                "description": "Optional display title",
+                "required": False,
+            },
+        },
+        returns="object",
+    )
     logger.info(
-        "AgentTools: registered web_search, get_telemetry, recall_episode, send_rcan_message, query_local_knowledge"
+        "AgentTools: registered web_search, get_telemetry, recall_episode, "
+        "send_rcan_message, query_local_knowledge, share_config_with_peer"
     )
 
 
@@ -468,3 +495,84 @@ def _cosine_sim(a: list, b: list) -> float:
     if mag_a == 0 or mag_b == 0:
         return 0.0
     return dot / (mag_a * mag_b)
+
+
+# ── CONFIG_SHARE agent tool ───────────────────────────────────────────────────
+
+_CONFIG_SHARE_SECRET_PATTERNS = [
+    r"api[_-]?key\s*:\s*\S+",
+    r"token\s*:\s*\S+",
+    r"password\s*:\s*\S+",
+    r"secret\s*:\s*\S+",
+    r"private[_-]?key\s*:\s*\S+",
+    r"credentials\s*:\s*\S+",
+]
+
+
+def _scrub_config_content(content: str) -> str:
+    """Remove secret values from RCAN config content before sharing."""
+    import re
+
+    scrubbed = content
+    for pattern in _CONFIG_SHARE_SECRET_PATTERNS:
+        scrubbed = re.sub(pattern, "[REDACTED]", scrubbed, flags=re.IGNORECASE)
+    return scrubbed
+
+
+def share_config_with_peer(
+    peer_rrn: str = "",
+    config_path: str = "",
+    title: str = "",
+) -> dict:
+    """Share a RCAN config file with a peer robot via RCAN CONFIG_SHARE message.
+
+    This sends the config content to the peer's bridge for operator review.
+    The peer will NOT auto-install — they must confirm via their operator interface.
+    Requires R2RAM chat-level consent from the peer.
+
+    Args:
+        peer_rrn: Target robot's RRN (e.g., 'RRN-000000000001').
+        config_path: Path to the .rcan.yaml file to share.
+        title: Optional display title for the config.
+
+    Returns:
+        Dict with 'success', 'message', and 'peer_rrn' keys.
+    """
+    import json
+    from pathlib import Path
+
+    if not peer_rrn:
+        return {"success": False, "message": "peer_rrn is required"}
+    if not config_path:
+        return {"success": False, "message": "config_path is required"}
+
+    config_file = Path(config_path).expanduser()
+    if not config_file.exists():
+        return {"success": False, "message": f"Config file not found: {config_path}"}
+
+    content = config_file.read_text()
+    scrubbed = _scrub_config_content(content)
+    filename = config_file.name
+
+    payload = {
+        "type": "CONFIG_SHARE",
+        "params": {
+            "config_bundle": scrubbed,
+            "filename": filename,
+            "title": title or filename,
+            "from_rrn": _get_own_rrn(),
+        },
+    }
+
+    result = send_rcan_message(rrn=peer_rrn, message=json.dumps(payload), timeout_s=15.0)
+    if result.get("status") == "sent":
+        return {
+            "success": True,
+            "message": f"Config '{filename}' shared with {peer_rrn}. Awaiting peer confirmation.",
+            "peer_rrn": peer_rrn,
+        }
+    return {
+        "success": False,
+        "message": f"Failed to reach peer {peer_rrn}: {result.get('error', 'unknown error')}",
+        "peer_rrn": peer_rrn,
+    }

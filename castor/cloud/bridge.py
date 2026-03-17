@@ -1113,6 +1113,59 @@ class CastorBridge:
     # Consent request handling
     # ------------------------------------------------------------------
 
+    def _handle_config_share(self, cmd_id: str, doc: dict[str, Any]) -> None:
+        """Handle an incoming CONFIG_SHARE message from a peer robot.
+
+        The config is written to ~/.castor/received-configs/ for operator review.
+        It is NEVER auto-installed — the operator must run castor install manually.
+        Requires R2RAM chat-level consent (validated by _check_federation).
+        """
+        from pathlib import Path
+
+        params = doc.get("params", {})
+        content = params.get("config_bundle", "")
+        filename = params.get("filename", "received.rcan.yaml")
+        title = params.get("title", filename)
+        from_rrn = params.get("from_rrn", "unknown")
+
+        log.info("CONFIG_SHARE received from %s — title=%s filename=%s", from_rrn, title, filename)
+
+        # Validate federation consent at chat scope
+        allowed, reason = self._check_federation(cmd_id, doc, scope="chat")
+        if not allowed:
+            log.warning("CONFIG_SHARE from %s blocked: %s", from_rrn, reason)
+            self._update_command_status(cmd_id, "rejected", {"reason": reason})
+            return
+
+        if not content:
+            log.warning("CONFIG_SHARE from %s has empty content — ignoring", from_rrn)
+            self._update_command_status(cmd_id, "rejected", {"reason": "empty content"})
+            return
+
+        # Write to received-configs/ for operator review — never auto-install
+        received_dir = Path.home() / ".castor" / "received-configs"
+        received_dir.mkdir(parents=True, exist_ok=True)
+        dest = received_dir / filename
+        dest.write_text(content)
+
+        log.info("CONFIG_SHARE written to %s — operator must confirm before installing", dest)
+        print(
+            f"\n[bridge] ⬇  Config received from {from_rrn}: '{title}'\n"
+            f"         Saved to: {dest}\n"
+            f"         Review and install: castor install {dest}\n"
+        )
+
+        self._update_command_status(
+            cmd_id,
+            "completed",
+            {
+                "saved_to": str(dest),
+                "from_rrn": from_rrn,
+                "title": title,
+                "auto_installed": False,
+            },
+        )
+
     def _handle_consent_request(self, req_id: str, doc: dict[str, Any]) -> None:
         """Write an incoming consent request to Firestore for the Flutter app."""
         from castor.cloud.firestore_models import ConsentRequestDoc, ConsentStatus
@@ -1212,6 +1265,13 @@ class CastorBridge:
                         args=(cmd_id, doc),
                         daemon=True,
                         name=f"grant-{cmd_id[:8]}",
+                    ).start()
+                elif msg_type == "config_share":
+                    threading.Thread(
+                        target=self._handle_config_share,
+                        args=(cmd_id, doc),
+                        daemon=True,
+                        name=f"cfgshare-{cmd_id[:8]}",
                     ).start()
                 else:
                     threading.Thread(
