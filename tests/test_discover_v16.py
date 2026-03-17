@@ -5,7 +5,7 @@ Verifies that:
   - POST /api/rcan/message with DISCOVER includes v1.6 fields
   - GET /api/v1/media/{chunk_id} returns 404 stub correctly
 
-Spec: RCAN v1.6, OpenCastor v2026.4.1.0
+Spec: RCAN v1.6, OpenCastor v2026.3.17.1
 """
 
 from __future__ import annotations

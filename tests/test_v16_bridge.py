@@ -8,7 +8,7 @@ Tests for v1.6 features in castor.cloud.bridge.CastorBridge:
 
 These tests use mocking to avoid real Firebase connections.
 
-Spec: RCAN v1.6, OpenCastor v2026.4.1.0
+Spec: RCAN v1.6, OpenCastor v2026.3.17.1
 """
 
 from __future__ import annotations

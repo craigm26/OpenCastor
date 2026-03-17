@@ -7,7 +7,7 @@ try:
 
     __version__ = _pkg_version("opencastor")
 except Exception:
-    __version__ = "2026.4.1.0"  # fallback
+    __version__ = "2026.3.17.1"  # fallback
 
 
 def initialize_safety(safety_layer, config: dict):

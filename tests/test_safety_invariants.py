@@ -671,7 +671,7 @@ class TestV15SafetyInvariants:
         assert RCAN_SPEC_VERSION == "1.5"
 
     def test_p66_manifest_rcan_version(self):
-        """P66 manifest declares rcan_version='1.6' (updated from 1.5 in v2026.4.1.0)."""
+        """P66 manifest declares rcan_version='1.6' (updated from 1.5 in v2026.3.17.1)."""
         from castor.safety.p66_manifest import build_manifest
         manifest = build_manifest()
         # v1.6: rcan_version and rcan_spec_version are now "1.6"
@@ -698,10 +698,10 @@ class TestV15SafetyInvariants:
     # ─────────────────────────────────────────────────────────────────
 
     def test_opencastor_version_2026_3_17(self):
-        """OpenCastor version is at least 2026.3.17.0 (now bumped to 2026.4.1.0 for v1.6)."""
+        """OpenCastor version is at least 2026.3.17.0 (now bumped to 2026.3.17.1 for v1.6)."""
         import castor
         version = castor.__version__
-        # v1.6 bump: version is now 2026.4.1.0; accept either 2026.3.17.x or 2026.4.x
+        # v1.6 bump: version is now 2026.3.17.1; accept either 2026.3.17.x or 2026.4.x
         assert version.startswith("2026."), (
             f"Expected version 2026.x.y.z, got {version}"
         )
@@ -714,7 +714,7 @@ class TestV15SafetyInvariants:
         )
         with open(pyproject) as f:
             content = f.read()
-        # v1.6 bump: version changed from 2026.3.17.0 to 2026.4.1.0
-        assert "2026.4.1.0" in content or "2026.3.17.0" in content, (
-            "pyproject.toml must declare version=2026.4.1.0 (or 2026.3.17.0 pre-bump)"
+        # v1.6 bump: version changed from 2026.3.17.0 to 2026.3.17.1
+        assert "2026.3.17.1" in content or "2026.3.17.0" in content, (
+            "pyproject.toml must declare version=2026.3.17.1 (or 2026.3.17.0 pre-bump)"
         )
