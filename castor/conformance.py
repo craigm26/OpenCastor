@@ -83,7 +83,16 @@ class ConformanceChecker:
     def run_all(self) -> list[ConformanceResult]:
         """Run every check and return results."""
         results: list[ConformanceResult] = []
-        for category in ("safety", "provider", "protocol", "performance", "hardware", "rcan_v12"):
+        for category in (
+            "safety",
+            "provider",
+            "protocol",
+            "performance",
+            "hardware",
+            "rcan_v12",
+            "rcan_v15",
+            "rcan_v16",
+        ):
             results.extend(self.run_category(category))
         return results
 
@@ -96,6 +105,8 @@ class ConformanceChecker:
             "performance": self._check_performance,
             "hardware": self._check_hardware,
             "rcan_v12": self._check_rcan_v12,
+            "rcan_v15": self._check_rcan_v15,
+            "rcan_v16": self._check_rcan_v16,
         }
         runner = runners.get(category)
         if runner is None:
@@ -334,7 +345,12 @@ class ConformanceChecker:
 
     def _safety_watchdog_configured(self) -> ConformanceResult:
         cid = "safety.watchdog_configured"
-        watchdog = self._cfg.get("watchdog", {}) or {}
+        # Check both top-level watchdog: and nested safety.watchdog:
+        watchdog = (
+            self._cfg.get("watchdog", {})
+            or (self._cfg.get("safety", {}) or {}).get("watchdog", {})
+            or {}
+        )
         timeout = watchdog.get("timeout_s")
         if timeout is None:
             return ConformanceResult(
@@ -371,8 +387,10 @@ class ConformanceChecker:
 
     def _safety_confidence_gates_configured(self) -> ConformanceResult:
         cid = "safety.confidence_gates_configured"
+        # Check both legacy brain.confidence_gates and current agent.confidence_gates locations
         brain = self._cfg.get("brain", {}) or {}
-        gates = brain.get("confidence_gates")
+        agent = self._cfg.get("agent", {}) or {}
+        gates = brain.get("confidence_gates") or agent.get("confidence_gates")
         if gates is None:
             return ConformanceResult(
                 check_id=cid,
@@ -569,6 +587,14 @@ class ConformanceChecker:
         cid = "provider.api_key_present"
         agent = self._cfg.get("agent", {}) or {}
         provider = (agent.get("provider") or "").strip().lower()
+        # OAuth/ADC authentication doesn't require an API key env var
+        if agent.get("use_oauth") or agent.get("use_adc"):
+            return ConformanceResult(
+                check_id=cid,
+                category="provider",
+                status="pass",
+                detail=f"'{provider}' uses OAuth/ADC — no API key env var required",
+            )
         if not provider:
             return ConformanceResult(
                 check_id=cid,
@@ -929,7 +955,8 @@ class ConformanceChecker:
 
     def _hardware_camera_configured(self) -> ConformanceResult:
         cid = "hardware.camera_configured"
-        camera = self._cfg.get("camera")
+        # Accept both singular `camera:` and plural `cameras:` keys
+        camera = self._cfg.get("camera") or self._cfg.get("cameras")
         agent = self._cfg.get("agent", {}) or {}
         vision_enabled = agent.get("vision_enabled", True)
         if not camera and vision_enabled is not False:
@@ -938,7 +965,7 @@ class ConformanceChecker:
                 category="hardware",
                 status="warn",
                 detail="No camera section configured (vision model with no camera is unusual)",
-                fix="Add a 'camera:' section, or set agent.vision_enabled: false",
+                fix="Add a 'cameras:' section, or set agent.vision_enabled: false",
             )
         if not camera:
             return ConformanceResult(
@@ -947,11 +974,16 @@ class ConformanceChecker:
                 status="pass",
                 detail="No camera section; vision disabled",
             )
+        if isinstance(camera, dict):
+            cam_info = next(iter(camera.values()), camera)
+            cam_type = cam_info.get("type", "unknown") if isinstance(cam_info, dict) else "unknown"
+        else:
+            cam_type = "configured"
         return ConformanceResult(
             check_id=cid,
             category="hardware",
             status="pass",
-            detail=f"Camera configured (type={camera.get('type', 'unknown')})",
+            detail=f"Camera configured (type={cam_type})",
         )
 
     def _hardware_physics_type(self) -> ConformanceResult:
@@ -1295,3 +1327,445 @@ class ConformanceChecker:
                 )
 
         return results
+
+    # ------------------------------------------------------------------
+    # RCAN v1.5 checks — GAP-1 through GAP-13
+    # ------------------------------------------------------------------
+
+    def _check_rcan_v15(self) -> list[ConformanceResult]:
+        return [
+            self._v15_rcan_version(),
+            self._v15_replay_protection(),
+            self._v15_consent_declared(),
+            self._v15_loa_enforcement(),
+            self._v15_estop_qos_bypass(),
+            self._v15_rrn_format(),
+            self._v15_signing_configured(),
+            self._v15_offline_mode(),
+            self._v15_registry_rrn(),
+            self._v15_r2ram_scopes(),
+        ]
+
+    def _v15_rcan_version(self) -> ConformanceResult:
+        cid = "rcan_v15.rcan_version"
+        ver = str(self._cfg.get("rcan_version", "")).strip()
+        try:
+            parts = [int(x) for x in ver.split(".")[:2]]
+            major, minor = parts[0], parts[1] if len(parts) > 1 else 0
+        except (ValueError, IndexError):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v15",
+                status="fail",
+                detail=f"rcan_version='{ver}' is not parseable",
+                fix='Set rcan_version: "1.5" at the top of your config',
+            )
+        if (major, minor) >= (1, 5):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v15",
+                status="pass",
+                detail=f"rcan_version='{ver}' satisfies RCAN v1.5 minimum",
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v15",
+            status="warn",
+            detail=f"rcan_version='{ver}' is below 1.5 — v1.5 features may be unavailable",
+            fix='Update rcan_version: "1.6" and enable v1.5 features',
+        )
+
+    def _v15_replay_protection(self) -> ConformanceResult:
+        cid = "rcan_v15.replay_protection"
+        security = self._cfg.get("security", {}) or {}
+        replay = security.get("replay_protection", {}) or {}
+        enabled = replay.get("enabled", False)
+        if enabled:
+            window = replay.get("window_s", 0)
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v15",
+                status="pass",
+                detail=f"Replay protection enabled (window_s={window})",
+            )
+        rcan_proto = self._cfg.get("rcan_protocol", {}) or {}
+        if rcan_proto.get("enable_jwt"):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v15",
+                status="pass",
+                detail="Replay protection satisfied via JWT (contains exp+iat claims)",
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v15",
+            status="warn",
+            detail="Replay protection is not explicitly configured (RCAN v1.5 §7.3 SHOULD)",
+            fix="Add security.replay_protection.enabled: true with window_s: 30",
+        )
+
+    def _v15_consent_declared(self) -> ConformanceResult:
+        cid = "rcan_v15.consent_declared"
+        consent = self._cfg.get("consent", {}) or {}
+        if consent.get("required") is True or consent.get("mode"):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v15",
+                status="pass",
+                detail=f"Consent declared: mode={consent.get('mode', 'required')}",
+            )
+        p66 = self._cfg.get("p66", {}) or {}
+        if p66.get("consent_required") is True:
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v15",
+                status="pass",
+                detail="Consent declared via p66.consent_required",
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v15",
+            status="warn",
+            detail="Consent mechanism not declared (RCAN v1.5 §8 SHOULD for physical robots)",
+            fix="Add consent: required: true  (or p66.consent_required: true)",
+        )
+
+    def _v15_loa_enforcement(self) -> ConformanceResult:
+        cid = "rcan_v15.loa_enforcement"
+        p66 = self._cfg.get("p66", {}) or {}
+        loa_cfg = self._cfg.get("loa", {}) or {}
+        if p66.get("loa_enforcement") or loa_cfg.get("enforcement"):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v15",
+                status="pass",
+                detail="LoA enforcement enabled (RCAN v1.5 GAP-3)",
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v15",
+            status="warn",
+            detail="LoA enforcement not enabled — Level of Assurance checks skipped (RCAN v1.5 GAP-3 SHOULD)",
+            fix="Add p66.loa_enforcement: true or loa.enforcement: true",
+        )
+
+    def _v15_estop_qos_bypass(self) -> ConformanceResult:
+        cid = "rcan_v15.estop_qos_bypass"
+        p66 = self._cfg.get("p66", {}) or {}
+        safety = self._cfg.get("safety", {}) or {}
+        # P66 manifest or safety.estop_bypass_rate_limit = true means we comply
+        # If P66 is declared at all, the runtime enforces this invariant
+        if p66 or safety.get("local_safety_wins"):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v15",
+                status="pass",
+                detail="ESTOP QoS bypass invariant enforced by P66 runtime layer (never rate-limited)",
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v15",
+            status="fail",
+            detail="ESTOP QoS bypass not confirmed — P66 section missing (RCAN v1.5 §9.1 MUST)",
+            fix="Add p66.enabled: true or safety.local_safety_wins: true",
+        )
+
+    def _v15_rrn_format(self) -> ConformanceResult:
+        cid = "rcan_v15.rrn_format"
+        import re as _re
+
+        metadata = self._cfg.get("metadata", {}) or {}
+        rrn = metadata.get("rrn", "")
+        if not rrn:
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v15",
+                status="fail",
+                detail="metadata.rrn is missing — required for RCAN v1.5 identity (§4.1 MUST)",
+                fix="Add metadata.rrn: RRN-XXXXXXXXXXXX (12-digit zero-padded)",
+            )
+        if _re.match(r"^RRN-\d{12}$", rrn):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v15",
+                status="pass",
+                detail=f"RRN format valid: {rrn}",
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v15",
+            status="warn",
+            detail=f"RRN '{rrn}' does not match canonical RRN-XXXXXXXXXXXX format",
+            fix="Use 12-digit zero-padded RRN, e.g. RRN-000000000001",
+        )
+
+    def _v15_signing_configured(self) -> ConformanceResult:
+        cid = "rcan_v15.message_signing"
+        security = self._cfg.get("security", {}) or {}
+        signing = security.get("signing", {}) or {}
+        rcan_proto = self._cfg.get("rcan_protocol", {}) or {}
+        if signing.get("enabled") or rcan_proto.get("enable_jwt") or signing.get("algorithm"):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v15",
+                status="pass",
+                detail="Message signing configured (RCAN v1.5 §7.2)",
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v15",
+            status="warn",
+            detail="Message signing not configured (RCAN v1.5 §7.2 SHOULD for production robots)",
+            fix="Add security.signing.enabled: true with algorithm: Ed25519",
+        )
+
+    def _v15_offline_mode(self) -> ConformanceResult:
+        cid = "rcan_v15.offline_mode"
+        offline = self._cfg.get("offline", {}) or {}
+        agent = self._cfg.get("agent", {}) or {}
+        if (
+            offline.get("enabled")
+            or offline.get("fallback_provider")
+            or agent.get("offline_provider")
+        ):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v15",
+                status="pass",
+                detail="Offline/graceful-degradation mode configured (RCAN v1.5 GAP-11)",
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v15",
+            status="warn",
+            detail="Offline mode not configured — robot requires cloud connectivity (RCAN v1.5 GAP-11 SHOULD)",
+            fix="Add offline.enabled: true with offline.fallback_provider: ollama",
+        )
+
+    def _v15_registry_rrn(self) -> ConformanceResult:
+        cid = "rcan_v15.registry_rrn_uri"
+        metadata = self._cfg.get("metadata", {}) or {}
+        rrn_uri = metadata.get("rrn_uri", "")
+        if rrn_uri and rrn_uri.startswith("rrn://"):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v15",
+                status="pass",
+                detail=f"Registry RRN URI declared: {rrn_uri}",
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v15",
+            status="warn",
+            detail="metadata.rrn_uri not set — robot not anchored to a registry namespace (RCAN v1.5 §4.2 SHOULD)",
+            fix="Add metadata.rrn_uri: rrn://org/category/model/instance-id",
+        )
+
+    def _v15_r2ram_scopes(self) -> ConformanceResult:
+        cid = "rcan_v15.r2ram_scopes"
+        r2ram = self._cfg.get("r2ram", {}) or {}
+        p66 = self._cfg.get("p66", {}) or {}
+        if r2ram.get("scopes") or p66.get("r2ram"):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v15",
+                status="pass",
+                detail="R2RAM scope hierarchy declared (RCAN v1.5 §10)",
+            )
+        # Minimum: if safety.local_safety_wins is set, scope hierarchy is implicitly enforced
+        if (self._cfg.get("safety", {}) or {}).get("local_safety_wins"):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v15",
+                status="pass",
+                detail="R2RAM scope enforcement satisfied via safety.local_safety_wins",
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v15",
+            status="warn",
+            detail="R2RAM scope hierarchy not declared (RCAN v1.5 §10 SHOULD)",
+            fix="Add r2ram.scopes: [discover, status, chat, control, safety] or set safety.local_safety_wins: true",
+        )
+
+    # ------------------------------------------------------------------
+    # RCAN v1.6 checks — GAP-14, GAP-16, GAP-17, GAP-18
+    # ------------------------------------------------------------------
+
+    def _check_rcan_v16(self) -> list[ConformanceResult]:
+        return [
+            self._v16_rcan_version(),
+            self._v16_human_identity_loa(),
+            self._v16_federated_consent(),
+            self._v16_constrained_transport(),
+            self._v16_multimodal_support(),
+            self._v16_hardware_safety_core(),
+        ]
+
+    def _v16_rcan_version(self) -> ConformanceResult:
+        cid = "rcan_v16.rcan_version"
+        ver = str(self._cfg.get("rcan_version", "")).strip()
+        try:
+            parts = [int(x) for x in ver.split(".")[:2]]
+            major, minor = parts[0], parts[1] if len(parts) > 1 else 0
+        except (ValueError, IndexError):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v16",
+                status="fail",
+                detail=f"rcan_version='{ver}' is not parseable",
+                fix='Set rcan_version: "1.6"',
+            )
+        if (major, minor) >= (1, 6):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v16",
+                status="pass",
+                detail=f"rcan_version='{ver}' is RCAN v1.6 compliant",
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v16",
+            status="warn",
+            detail=f"rcan_version='{ver}' is below 1.6 — GAP-14/16/17/18 features not declared",
+            fix='Update rcan_version: "1.6" to enable v1.6 features',
+        )
+
+    def _v16_human_identity_loa(self) -> ConformanceResult:
+        """GAP-14: Human identity Level-of-Assurance."""
+        cid = "rcan_v16.human_identity_loa"
+        human_id = self._cfg.get("human_identity", {}) or {}
+        loa = self._cfg.get("loa", {}) or {}
+        p66 = self._cfg.get("p66", {}) or {}
+        if human_id.get("loa_required") or loa.get("human_loa") or p66.get("human_identity_loa"):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v16",
+                status="pass",
+                detail="Human identity LoA declared (RCAN v1.6 GAP-14)",
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v16",
+            status="warn",
+            detail=(
+                "human_identity.loa_required not set — RCAN v1.6 GAP-14 SHOULD declare "
+                "minimum LoA for physical-layer commands"
+            ),
+            fix="Add human_identity.loa_required: 2 (0=anonymous, 1=authenticated, 2=verified, 3=physical)",
+        )
+
+    def _v16_federated_consent(self) -> ConformanceResult:
+        """GAP-16: Federated consent across registries."""
+        cid = "rcan_v16.federated_consent"
+        federation = self._cfg.get("federation", {}) or {}
+        consent = self._cfg.get("consent", {}) or {}
+        if (
+            federation.get("consent_bridge")
+            or consent.get("federated")
+            or federation.get("enabled")
+        ):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v16",
+                status="pass",
+                detail="Federated consent bridge declared (RCAN v1.6 GAP-16)",
+            )
+        # If federation is not used, this is only a warning (not all robots federate)
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v16",
+            status="warn",
+            detail=(
+                "Federated consent not configured — cross-registry commands will be "
+                "rejected unless federation.consent_bridge is set (RCAN v1.6 GAP-16 SHOULD)"
+            ),
+            fix="Add federation.enabled: true  # enables cross-registry consent verification",
+        )
+
+    def _v16_constrained_transport(self) -> ConformanceResult:
+        """GAP-17: Constrained transport support (CoAP/MQTT/BLE)."""
+        cid = "rcan_v16.constrained_transport"
+        transport = self._cfg.get("transport", {}) or {}
+        supported = transport.get("supported", []) or []
+        # HTTP is always available; constrained transports are CoAP/MQTT/BLE
+        constrained = {"coap", "mqtt", "ble", "lorawan"}
+        has_constrained = bool(set(str(s).lower() for s in supported) & constrained)
+        if has_constrained or transport.get("constrained_enabled"):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v16",
+                status="pass",
+                detail=f"Constrained transport declared: {supported} (RCAN v1.6 GAP-17)",
+            )
+        # HTTP-only is acceptable but warn
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v16",
+            status="warn",
+            detail=(
+                "Only HTTP transport declared — no constrained transport (RCAN v1.6 GAP-17 SHOULD "
+                "for robots that may operate in bandwidth-limited environments)"
+            ),
+            fix="Add transport.supported: [http, mqtt] to enable constrained transport fallback",
+        )
+
+    def _v16_multimodal_support(self) -> ConformanceResult:
+        """GAP-18: Multi-modal payload support."""
+        cid = "rcan_v16.multimodal_support"
+        multimodal = self._cfg.get("multimodal", {}) or {}
+        agent = self._cfg.get("agent", {}) or {}
+        cameras = self._cfg.get("cameras", {}) or {}
+        has_vision = agent.get("vision_enabled") or bool(cameras)
+        if multimodal.get("enabled") or multimodal.get("max_chunk_bytes") or has_vision:
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v16",
+                status="pass",
+                detail="Multimodal/vision capability declared (RCAN v1.6 GAP-18)",
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v16",
+            status="warn",
+            detail="Multimodal support not declared (RCAN v1.6 GAP-18 SHOULD for camera-equipped robots)",
+            fix="Add multimodal.enabled: true or set agent.vision_enabled: true",
+        )
+
+    def _v16_hardware_safety_core(self) -> ConformanceResult:
+        """Hardware safety core (STM32/MCU watchdog) — v1.6 SHOULD."""
+        cid = "rcan_v16.hardware_safety_core"
+        hw_safety = self._cfg.get("hardware_safety", {}) or {}
+        # Block exists = robot has explicitly declared its hardware safety posture (even if false)
+        # This is honest self-declaration: physical_estop: false means software-only, which is fine
+        if hw_safety:
+            has_estop = hw_safety.get("physical_estop", False)
+            has_mcu = hw_safety.get("hardware_watchdog_mcu", False)
+            if has_estop or has_mcu:
+                detail = "Hardware safety core declared"
+                if has_estop:
+                    detail += " (physical ESTOP present)"
+                if has_mcu:
+                    detail += " (MCU watchdog present)"
+            else:
+                detail = "Hardware safety posture declared (software-only ESTOP — physical ESTOP and MCU watchdog not present)"
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v16",
+                status="pass",
+                detail=detail,
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v16",
+            status="warn",
+            detail=(
+                "No hardware safety core declared — software-only ESTOP (RCAN v1.6 SHOULD "
+                "declare hardware_safety block for physical robots)"
+            ),
+            fix=(
+                "Add hardware_safety:\n"
+                "  physical_estop: false  # true if physical ESTOP button present\n"
+                "  hardware_watchdog_mcu: false  # true if STM32/Arduino safety MCU present"
+            ),
+        )

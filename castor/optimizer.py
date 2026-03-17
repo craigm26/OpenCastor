@@ -218,6 +218,7 @@ class RobotOptimizer:
             if not idle_state:
                 logger.info("Optimizer: robot not idle (%s) — skipping pass", idle_state.summary)
                 report.skipped_active_session = True
+                self._persist_report(report)
                 return report
 
             # Run optimization under IdleGuard — abort if activity resumes mid-pass

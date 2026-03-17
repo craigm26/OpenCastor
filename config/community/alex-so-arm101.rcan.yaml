@@ -1,9 +1,13 @@
+# Alex — Raspberry Pi 5 + SO-ARM101 Leader Arm + OAK-D, RCAN v1.6
+# Hardware: Pi 5 8GB, SO-ARM101 6-DOF arm (Feetech STS3215 servos), OAK-D camera
+# Use case: Precision manipulation, pick-and-place, Lego assembly
+# NOTE: This is the reference config used by opencastor-ops fleet monitor
 rcan_version: '1.6'
 
 metadata:
   robot_name: Alex
   robot_uuid: 00000005-0000-4000-8000-000000000005
-  description: Pi5 + SO-ARM101 leader arm + OAK-D depth camera, RCAN v1.6 full-conformance
+  description: Pi5 + SO-ARM101 leader arm + OAK-D, manipulation specialist
   author: craigm26
   rrn: RRN-000000000005
   rrn_uri: rrn://craigm26/robot/opencastor-pi5-arm/alex-001
@@ -30,23 +34,19 @@ tiered_brain:
   slow_provider: google
   slow_model: gemini-2.0-flash
   planner_interval: 10
-  _note: "Fast tier handles quick status/nav. Slow tier handles complex reasoning and vision."
 
 agent_roster:
-  - id: nav_specialist
-    provider: ollama
-    model: gemma3:4b
-    scope: nav
   - id: arm_specialist
     provider: google
     model: gemini-2.0-flash
     scope: control
+  - id: nav_specialist
+    provider: ollama
+    model: gemma3:4b
+    scope: nav
 
 geofence:
   enabled: false
-  _note: "Set enabled: true and define boundary polygon when deploying in a bounded space."
-  boundary:
-    type: none
 
 physics:
   type: ackermann
@@ -72,7 +72,6 @@ safety:
 hardware_safety:
   physical_estop: false
   hardware_watchdog_mcu: false
-  _note: "Software-only safety layer. Physical ESTOP + STM32 watchdog planned (HARDWARE_001)."
 
 p66:
   enabled: true
@@ -92,17 +91,13 @@ security:
     window_s: 30
   signing:
     enabled: false
-    algorithm: Ed25519
-    _note: "Message signing enabled when key pair provisioned via 'castor keygen'"
 
 loa:
   enforcement: true
   min_loa_for_control: 1
-  _note: "LoA enforcement enabled. Requires LoA ≥ 1 (authenticated) for control commands."
 
 human_identity:
   loa_required: 1
-  _note: "LoA 1 = authenticated user. Upgrade to 2 (verified) for physical commands in production."
 
 federation:
   enabled: true
@@ -114,8 +109,6 @@ transport:
   supported:
     - http
     - mqtt
-  constrained_enabled: false
-  _note: "MQTT support via paho-mqtt bridge. CoAP planned for v1.7."
 
 multimodal:
   enabled: true
@@ -129,7 +122,14 @@ cameras:
   oak_d:
     type: http
     url: http://127.0.0.1:8765/snapshot
-    _note: "OAK-D camera proxy — start with: sudo systemctl start oak-camera-proxy"
+
+r2ram:
+  scopes:
+    - discover
+    - status
+    - chat
+    - control
+    - safety
 
 network:
   allow_remote_override: false
@@ -146,21 +146,3 @@ rcan_protocol:
     - gripper
   enable_mdns: true
   enable_jwt: false
-
-r2ram:
-  scopes:
-    - discover
-    - status
-    - chat
-    - control
-    - safety
-
-owner: rrn://craigm26/robot/opencastor-pi5-arm/alex-001
-firebase_uid: '104403823389784903319'
-
-cloud:
-  firebase_project: opencastor
-  gateway_url: http://127.0.0.1:8000
-  credentials: /home/craigm26/.config/opencastor/firebase-sa-key.json
-  telemetry_interval_s: 30
-  poll_interval_s: 5

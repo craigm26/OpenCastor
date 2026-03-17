@@ -957,9 +957,21 @@ class TestCmdValidate:
 
         cfg = make_valid_config()
         # Force some warns: remove geofence (warn), remove tiered_brain (warn)
-        # Keep everything else valid — must include safety.local_safety_wins: true
-        # so the new RCAN §6 check does not produce a fail.
-        cfg["safety"] = {"local_safety_wins": True}
+        # Keep safety.local_safety_wins: true so RCAN §6 check passes.
+        # Keep p66.enabled: true so v1.5 estop_qos_bypass MUST check passes.
+        cfg["safety"] = {
+            "local_safety_wins": True,
+            "emergency_stop_distance": 0.3,
+            "watchdog": {"timeout_s": 10},
+        }
+        cfg["p66"] = {"enabled": True}
+        cfg["reactive"] = {"min_obstacle_m": 0.3}
+        # Ensure v1.5 RRN check passes (needs metadata.rrn in canonical format)
+        cfg.setdefault("metadata", {})["rrn"] = "RRN-000000000001"
+        cfg.setdefault("metadata", {})["rrn_uri"] = "rrn://test/robot/testbot/001"
+        # Remove geofence and tiered_brain to force warns (not fails)
+        cfg.pop("geofence", None)
+        cfg.pop("tiered_brain", None)
         config_file = tmp_path / "warn.rcan.yaml"
         config_file.write_text(yaml.dump(cfg))
 

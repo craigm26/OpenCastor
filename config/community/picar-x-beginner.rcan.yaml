@@ -1,0 +1,115 @@
+# SunFounder PiCar-X — beginner-friendly starter config, RCAN v1.6
+# Hardware: Raspberry Pi 4 + SunFounder PiCar-X kit
+# Use case: Learning robotics, STEM education, first robot
+rcan_version: '1.6'
+
+metadata:
+  robot_name: PiCar
+  robot_uuid: 00000010-0000-4000-8000-000000000001
+  description: SunFounder PiCar-X, beginner starter config
+  author: community
+  rrn: RRN-000000000010
+  rrn_uri: rrn://community/robot/picar-x/my-picar-001
+
+agent:
+  provider: ollama
+  model: gemma3:4b
+  vision_enabled: false
+  safety_stop: true
+  latency_budget_ms: 5000
+  offline_provider: ollama
+  confidence_gates:
+    - scope: control
+      min_confidence: 0.65
+      on_fail: block
+
+tiered_brain:
+  fast_provider: ollama
+  fast_model: gemma3:1b
+  slow_provider: ollama
+  slow_model: gemma3:4b
+  planner_interval: 15
+
+geofence:
+  enabled: false
+
+physics:
+  type: ackermann
+  dof: 2
+
+drivers:
+  - id: picar_drive
+    protocol: sunfounder_picar
+
+reactive:
+  min_obstacle_m: 0.25
+  fallback_provider: ollama
+
+safety:
+  local_safety_wins: true
+  emergency_stop_distance: 0.25
+  estop_bypass_rate_limit: true
+  watchdog:
+    timeout_s: 15
+
+hardware_safety:
+  physical_estop: false
+  hardware_watchdog_mcu: false
+
+p66:
+  enabled: true
+  loa_enforcement: false
+  consent_required: true
+  manifest:
+    estop_qos_bypass: true
+
+consent:
+  required: true
+  mode: explicit
+  scope_threshold: control
+
+security:
+  replay_protection:
+    enabled: false
+  signing:
+    enabled: false
+
+loa:
+  enforcement: false
+
+human_identity:
+  loa_required: 0
+
+federation:
+  enabled: false
+
+transport:
+  supported:
+    - http
+
+multimodal:
+  enabled: false
+
+offline:
+  enabled: true
+  fallback_provider: ollama
+
+r2ram:
+  scopes:
+    - discover
+    - status
+    - chat
+    - control
+    - safety
+
+network:
+  allow_remote_override: false
+
+rcan_protocol:
+  port: 8080
+  capabilities:
+    - status
+    - nav
+    - chat
+  enable_mdns: true
+  enable_jwt: false

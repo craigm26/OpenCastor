@@ -140,15 +140,25 @@ def _try_import_federation() -> tuple[Any, Any]:
 
 
 def _validate_cross_registry_stub(
-    command: dict[str, Any],
-    trust_cache: Any,
+    msg: Any = None,
+    command: Any = None,
+    trust_cache: Any = None,
+    local_registry: Any = None,
     **kwargs: Any,
 ) -> tuple[bool, str]:
     """Stub: allows all cross-registry commands, logs a warning."""
+    # Accept either positional msg (new API) or legacy command dict
+    cmd_obj = msg if msg is not None else command
+    if isinstance(cmd_obj, dict):
+        cmd_id = cmd_obj.get("id", "unknown")
+    elif hasattr(cmd_obj, "cmd"):
+        cmd_id = getattr(cmd_obj, "cmd", "unknown")
+    else:
+        cmd_id = "unknown"
     log.warning(
         "rcan.federation unavailable — cross-registry validation BYPASSED "
         "(stub allows all). command_id=%s",
-        command.get("id", "unknown"),
+        cmd_id,
     )
     return (True, "stub_allowed")
 

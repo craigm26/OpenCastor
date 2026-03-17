@@ -135,8 +135,10 @@ def _run_conformance_checks(config: dict, config_path: str) -> list[dict]:
         {
             "check_id": r.check_id,
             "status": r.status,
-            "message": r.message,
-            "detail": getattr(r, "detail", None),
+            # ConformanceResult uses 'detail' as the human-readable text
+            "message": getattr(r, "detail", getattr(r, "message", r.check_id)),
+            "detail": getattr(r, "fix", None),
+            "category": getattr(r, "category", ""),
         }
         for r in results
     ]
