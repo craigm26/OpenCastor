@@ -3396,7 +3396,6 @@ def _cmd_eval(args) -> None:
     elif not getattr(args, "eval_all", False):
         print("Specify --skill NAME or --all")
         return
-    dry_run = not getattr(args, "no_dry_run", False)
     code = run_eval_cli(
         skill_names=skill_names,
         output_json=getattr(args, "output_json", False),
@@ -3407,8 +3406,9 @@ def _cmd_eval(args) -> None:
 
 def _cmd_trajectory(args) -> None:
     """castor trajectory — trajectory log management."""
-    from castor.trajectory import TrajectoryLogger
     import json as _json
+
+    from castor.trajectory import TrajectoryLogger
 
     action = getattr(args, "traj_action", None) or "list"
 

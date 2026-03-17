@@ -322,7 +322,7 @@ def _tokenise(text: str) -> list[str]:
     _STOP = {"the", "a", "an", "to", "in", "of", "for", "and", "or", "it",
              "is", "at", "on", "do", "you", "i", "my", "your", "can", "please",
              "with", "that", "this", "what", "when", "how", "me",
-             "use", "when", "asks", "user", "robot", "want", "tell"}
+             "use", "asks", "user", "robot", "want", "tell"}
     words = re.findall(r'\b[a-z]+\b', text.lower())
     return [w for w in words if w not in _STOP and len(w) >= 2]
 
@@ -331,7 +331,7 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     """Cosine similarity between two equal-length vectors."""
     if not a or not b or len(a) != len(b):
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
     mag_a = sum(x * x for x in a) ** 0.5
     mag_b = sum(x * x for x in b) ** 0.5
     if mag_a == 0 or mag_b == 0:

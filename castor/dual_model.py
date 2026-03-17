@@ -41,13 +41,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional
 
 from castor.harness import (
-    AgentHarness,
     ESTOP_TOOLS,
+    PHYSICAL_TOOLS,
+    AgentHarness,
     HarnessContext,
     HarnessHook,
     HarnessResult,
-    PHYSICAL_TOOLS,
-    SCOPE_LEVELS,
 )
 from castor.tools import ToolRegistry
 
@@ -132,8 +131,8 @@ class DualModelHarness(AgentHarness):
 
     def __init__(
         self,
-        primary: "BaseProvider",
-        secondary: "BaseProvider",
+        primary: BaseProvider,
+        secondary: BaseProvider,
         config: Optional[dict] = None,
         tool_registry: Optional[ToolRegistry] = None,
         hooks: Optional[list[HarnessHook]] = None,
@@ -169,7 +168,7 @@ class DualModelHarness(AgentHarness):
         self,
         ctx: HarnessContext,
         built: Any,
-    ) -> tuple["Thought", list, int]:
+    ) -> tuple[Thought, list, int]:
         """Extended tool loop with secondary model integration."""
         from castor.providers.base import Thought as _Thought
 
@@ -420,8 +419,8 @@ class DualModelHarness(AgentHarness):
 # ── Factory function ──────────────────────────────────────────────────────────
 
 def build_dual_harness(
-    primary: "BaseProvider",
-    secondary: "BaseProvider",
+    primary: BaseProvider,
+    secondary: BaseProvider,
     config: Optional[dict] = None,
     tool_registry: Optional[ToolRegistry] = None,
 ) -> DualModelHarness:

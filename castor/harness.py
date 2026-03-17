@@ -109,7 +109,7 @@ class ToolCallRecord:
 class HarnessResult:
     """Full result of a single AgentHarness.run() call."""
 
-    thought: "Thought"
+    thought: Thought
     tools_called: list[ToolCallRecord] = field(default_factory=list)
     skill_triggered: Optional[str] = None
     context_tokens: int = 0
@@ -291,7 +291,7 @@ class AgentHarness:
 
     def __init__(
         self,
-        provider: "BaseProvider",
+        provider: BaseProvider,
         config: Optional[dict] = None,
         tool_registry: Optional[ToolRegistry] = None,
         hooks: Optional[list[HarnessHook]] = None,
@@ -380,7 +380,7 @@ class AgentHarness:
         self, ctx: HarnessContext, run_id: str, t0: float
     ) -> HarnessResult:
         """Full harness pipeline: context → skill → inference → tool loop → log."""
-        from castor.context import ContextBuilder, BuiltContext
+        from castor.context import BuiltContext
 
         # 1. Build context
         builder = self._get_context_builder()
@@ -425,7 +425,7 @@ class AgentHarness:
         self,
         ctx: HarnessContext,
         built: Any,
-    ) -> tuple["Thought", list[ToolCallRecord], int]:
+    ) -> tuple[Thought, list[ToolCallRecord], int]:
         """Run model inference + tool execution loop.
 
         Returns (final_thought, tool_records, iteration_count).
@@ -607,7 +607,7 @@ class AgentHarness:
         surface: str,
         messages: list[dict],
         tools_schema: list[dict],
-    ) -> "Thought":
+    ) -> Thought:
         """Call provider with tool schemas if supported, else fall back to plain think()."""
         # Try provider-native tool calling
         if hasattr(self._provider, "think_with_tools") and tools_schema:
@@ -630,7 +630,7 @@ class AgentHarness:
             return self._provider.think(image_bytes, augmented, surface)
         return self._provider.think(image_bytes, instruction, surface)
 
-    def _extract_tool_calls(self, thought: "Thought") -> list[dict]:
+    def _extract_tool_calls(self, thought: Thought) -> list[dict]:
         """Extract tool calls from a Thought object.
 
         Returns list of {name, args} dicts.  Returns [] for plain text responses.

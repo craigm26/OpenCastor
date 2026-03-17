@@ -30,7 +30,6 @@ import asyncio
 import json
 import logging
 import sqlite3
-import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -134,8 +133,8 @@ class TrajectoryLogger:
     @classmethod
     async def log_async(
         cls,
-        ctx: "HarnessContext",
-        result: "HarnessResult",
+        ctx: HarnessContext,
+        result: HarnessResult,
         robot_rrn: str = "",
         primary_model: str = "",
     ) -> None:
@@ -149,8 +148,8 @@ class TrajectoryLogger:
     @classmethod
     def log_sync(
         cls,
-        ctx: "HarnessContext",
-        result: "HarnessResult",
+        ctx: HarnessContext,
+        result: HarnessResult,
         robot_rrn: str = "",
         primary_model: str = "",
     ) -> None:
@@ -171,7 +170,7 @@ class TrajectoryLogger:
                 (limit,),
             ).fetchall()
             cols = [d[0] for d in conn.execute("SELECT * FROM trajectories LIMIT 0").description]
-            return [dict(zip(cols, row)) for row in rows]
+            return [dict(zip(cols, row, strict=False)) for row in rows]
         except Exception as exc:
             logger.warning("Trajectory list failed: %s", exc)
             return []
@@ -187,7 +186,7 @@ class TrajectoryLogger:
             if row is None:
                 return None
             cols = [d[0] for d in conn.execute("SELECT * FROM trajectories LIMIT 0").description]
-            return dict(zip(cols, row))
+            return dict(zip(cols, row, strict=False))
         except Exception:
             return None
 
@@ -203,7 +202,7 @@ class TrajectoryLogger:
             cols = [d[0] for d in conn.execute("SELECT * FROM trajectories LIMIT 0").description]
             lines = []
             for row in rows:
-                record = dict(zip(cols, row))
+                record = dict(zip(cols, row, strict=False))
                 # Parse nested JSON fields back
                 for json_field in ("tool_calls_json", "secondary_verdict_json"):
                     raw = record.pop(json_field, None)
@@ -247,8 +246,8 @@ class TrajectoryLogger:
     @classmethod
     def _build_record(
         cls,
-        ctx: "HarnessContext",
-        result: "HarnessResult",
+        ctx: HarnessContext,
+        result: HarnessResult,
         robot_rrn: str,
         primary_model: str,
     ) -> TrajectoryRecord:

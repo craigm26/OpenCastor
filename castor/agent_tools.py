@@ -25,7 +25,7 @@ import os
 import time
 import urllib.parse
 import urllib.request
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from castor.tools import ToolRegistry
@@ -35,7 +35,7 @@ logger = logging.getLogger("OpenCastor.AgentTools")
 __all__ = ["register_agent_tools"]
 
 
-def register_agent_tools(registry: "ToolRegistry") -> None:
+def register_agent_tools(registry: ToolRegistry) -> None:
     """Register all agent tools into the given ToolRegistry."""
     registry.register(
         name="web_search",
@@ -261,14 +261,6 @@ def _send_rcan_http(rrn: str, message: str, timeout_s: float) -> dict:
     if not peer_url:
         raise ValueError(f"No HTTP endpoint known for {rrn}")
 
-    payload = json.dumps({
-        "type": "CHAT",
-        "from_rrn": _get_own_rrn(),
-        "to_rrn": rrn,
-        "payload": {"instruction": message},
-        "loa": 2,
-    }).encode()
-
     req = urllib.request.Request(
         f"{peer_url.rstrip('/')}/api/command",
         data=json.dumps({"instruction": message, "scope": "chat"}).encode(),
@@ -287,14 +279,13 @@ def _send_rcan_http(rrn: str, message: str, timeout_s: float) -> dict:
 
 def _send_rcan_firebase(rrn: str, message: str, timeout_s: float) -> dict:
     """Send via Firebase Firestore (bridge relay)."""
-    import uuid
     import time as _time
+    import uuid
 
     try:
-        import firebase_admin
         from firebase_admin import firestore as _fs
     except ImportError:
-        raise RuntimeError("firebase_admin not available")
+        raise RuntimeError("firebase_admin not available") from None
 
     db = _fs.client()
     cmd_id = str(uuid.uuid4())
@@ -421,7 +412,7 @@ def _get_peer_urls() -> dict[str, str]:
 def _cosine_sim(a: list, b: list) -> float:
     if not a or not b or len(a) != len(b):
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
     mag_a = sum(x * x for x in a) ** 0.5
     mag_b = sum(x * x for x in b) ** 0.5
     if mag_a == 0 or mag_b == 0:

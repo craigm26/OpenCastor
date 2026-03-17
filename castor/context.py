@@ -22,7 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
@@ -85,7 +85,7 @@ class ContextBuilder:
     def __init__(
         self,
         config: Optional[dict] = None,
-        tool_registry: Optional["ToolRegistry"] = None,
+        tool_registry: Optional[ToolRegistry] = None,
         skill_loader: Any = None,
     ) -> None:
         self._config = config or {}
@@ -112,7 +112,7 @@ class ContextBuilder:
 
     async def build(
         self,
-        ctx: "HarnessContext",
+        ctx: HarnessContext,
         history: list[dict],
     ) -> BuiltContext:
         """Assemble context window for a single harness turn."""

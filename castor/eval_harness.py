@@ -196,7 +196,6 @@ async def run_skill_eval(
         EvalResult with per-case results and summary statistics.
     """
     from castor.harness import HarnessContext
-    from castor.skills.loader import _BUILTIN_DIR
 
     result = EvalResult(skill_name=skill_name)
     check_registry = _build_check_registry()
@@ -253,7 +252,7 @@ async def run_skill_eval(
                 continue
             try:
                 passed = fn(hresult)
-            except Exception as exc:
+            except Exception:
                 passed = False
             check_results.append(CheckResult(check_id, passed))
 
@@ -307,8 +306,8 @@ def run_eval_cli(
 
     Returns exit code (0 = all passed, 1 = failures).
     """
-    from castor.skills.loader import SkillLoader
     from castor.harness import AgentHarness
+    from castor.skills.loader import SkillLoader
     from castor.tools import ToolRegistry
 
     try:
