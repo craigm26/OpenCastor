@@ -53,38 +53,36 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         </div>
         <div class="mermaid">
 graph TD
-    A["🌐 User · App · RCAN peer<br/>/api/command"] --> B["AgentHarness.run()"]
-
-    B --> ESTOP{"ESTOP?<br/>scope=safety OR<br/>instruction starts ESTOP/HALT"}
-    ESTOP -->|"YES — P66 invariant"| STOP["⛔ Immediate stop<br/>Bypasses ALL hooks<br/>No context · No tools"]
+    A["User / App / RCAN peer"] --> B["/api/command"]
+    B --> C["AgentHarness.run()"]
+    C --> ESTOP{"ESTOP? scope=safety<br/>or ESTOP/HALT prefix"}
+    ESTOP -->|"YES — P66 absolute"| STOP["Stop immediately<br/>No context, no hooks, no log"]
     ESTOP -->|"NO"| CB["ContextBuilder.build()"]
 
-    subgraph Context ["Context Window Assembly (RAM)"]
-        CB --> P["PERSONA<br/>robot identity"]
-        CB --> SK["SKILL<br/>SkillSelector picks best match<br/>(embedding · keyword · explicit /trigger)"]
-        CB --> MEM["MEMORY<br/>episodic RAG · k=3"]
-        CB --> ST["STATUS<br/>telemetry snapshot"]
-        CB --> TL["TOOLS<br/>ToolRegistry schemas"]
-        CB --> HI["HISTORY<br/>last N turns · compacted if needed"]
+    subgraph CTX ["Context Window — RAM"]
+        direction LR
+        CB --> CW["PERSONA + SKILL + MEMORY<br/>STATUS + TOOLS + HISTORY"]
     end
 
-    P & SK & MEM & ST & TL & HI --> PROV["Provider (CPU)<br/>Gemini · Claude · Ollama · HuggingFace"]
+    CW --> PROV["Provider — CPU<br/>Gemini / Claude / Ollama"]
+    PROV --> LOOP["Tool Loop<br/>up to max_iterations"]
 
-    PROV --> LOOP["Tool Loop<br/>max_iterations · tool_calls[]"]
-
-    subgraph Hooks ["Lifecycle Hooks"]
-        LOOP --> H1["P66AuditHook<br/>consent check before physical tools"]
-        LOOP --> H2["DriftDetectionHook<br/>Jaccard similarity · threshold 0.15"]
-        LOOP --> H3["RetryOnErrorHook<br/>retry on tool failure"]
+    subgraph HOOKS ["Lifecycle Hooks"]
+        direction LR
+        LOOP --> H1["P66AuditHook<br/>consent gate"]
+        LOOP --> H2["DriftDetectionHook<br/>Jaccard threshold 0.15"]
+        LOOP --> H3["RetryOnErrorHook"]
     end
 
-    H1 & H2 & H3 --> TRAJ["TrajectoryLogger<br/>SQLite · schema v1<br/>~/.config/opencastor/trajectories.db"]
-    TRAJ --> RESP["Response → User"]
+    H1 --> TRAJ["TrajectoryLogger — SQLite"]
+    H2 --> TRAJ
+    H3 --> TRAJ
+    TRAJ --> RESP["Response"]
 
     style STOP fill:#ef4444,color:#fff,stroke:#dc2626
     style ESTOP fill:#fef2f2,stroke:#fca5a5
-    style Context fill:#f0f9ff,stroke:#bae6fd
-    style Hooks fill:#fefce8,stroke:#fef08a
+    style CTX fill:#f0f9ff,stroke:#bae6fd
+    style HOOKS fill:#fefce8,stroke:#fef08a
         </div>
       </div>
 
@@ -179,11 +177,11 @@ flowchart LR
         <div class="mermaid">
 timeline
     title OpenCastor Agent Harness Evolution
-    Pre-harness (≤v2026.3.13) : Direct think() call : No context curation : No tool execution loop : No trajectory logging : No safety hooks
-    v2026.3.17.3 : AgentHarness orchestrator : ContextBuilder — PERSONA·SKILL·MEMORY·STATUS·TOOLS : TrajectoryLogger — SQLite schema v1 : P66AuditHook — consent + ESTOP absolute : RetryOnErrorHook
-    v2026.3.17.4 : SkillSystem — 5 built-in skills : SkillSelector — embedding + keyword + explicit trigger : 5 Agent Tools — web_search · recall_episode · get_telemetry · send_rcan_message · query_local_knowledge : castor eval CLI — skill eval harness
-    v2026.3.17.5 : DualModelHarness — 5 modes (safety oracle · specialist · consensus · verifier · shadow) : DriftDetectionHook — Jaccard word-overlap · threshold 0.15 : castor trajectory CLI — list · show · export · stats : EvalHarness — deterministic checks + LLM-as-judge
-    v2026.3.17.6 : castor share · install · explore CLI : hub.astro — type filter tabs + skill + harness cards : Two-tier autoresearch — Tier 1 repo · Tier 2 per-robot optimizer
+    Pre-harness : Direct think() call : No context curation : No tool loop : No trajectory log : No safety hooks
+    v2026.3.17.3 : AgentHarness orchestrator : ContextBuilder pipeline : TrajectoryLogger SQLite : P66AuditHook : RetryOnErrorHook
+    v2026.3.17.4 : SkillSystem 5 built-in skills : SkillSelector embedding+keyword : 5 Agent Tools : castor eval CLI
+    v2026.3.17.5 : DualModelHarness 5 modes : DriftDetectionHook Jaccard : castor trajectory CLI : EvalHarness
+    v2026.3.17.6 : castor share install explore : hub.astro type filters : Two-tier autoresearch
         </div>
       </div>
 
