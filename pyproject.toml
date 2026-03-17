@@ -102,6 +102,9 @@ cloud = [
     "firebase-admin>=6.0.0",
     "httpx>=0.27",
 ]  # Firebase bridge for remote fleet management (castor bridge)
+setup = [
+    "qrcode[pil]>=7.0",
+]  # Optional: QR code generation for castor setup wizard
 esp32 = ["websocket-client>=1.7.0"]
 ev3 = ["python-ev3dev2>=2.1.0.post1; sys_platform == 'linux'"]
 spike = ["bleak>=0.22.0"]

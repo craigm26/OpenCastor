@@ -13,7 +13,7 @@
   <a href="https://discord.gg/jMjA8B26Bq"><img src="https://img.shields.io/badge/Discord-join%20server-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
   <a href="./sbom/"><img src="https://img.shields.io/badge/SBOM-CycloneDX-blue" alt="SBOM"></a>
   <a href="https://app.opencastor.com"><img src="https://img.shields.io/badge/Fleet%20UI-app.opencastor.com-orange" alt="Fleet UI"></a>
-  <a href="https://rcan.dev/spec/"><img src="https://img.shields.io/badge/RCAN-v1.4-brightgreen" alt="RCAN v1.4"></a>
+  <a href="https://rcan.dev/spec/"><img src="https://img.shields.io/badge/RCAN-v1.6-brightgreen" alt="RCAN v1.6"></a>
 </p>
 
 <p align="center">
@@ -27,7 +27,73 @@ OpenCastor is an open-source runtime for embodied AI — one implementation of t
 
 > **RCAN is not OpenCastor.** RCAN ([rcan.dev](https://rcan.dev)) is an independent open protocol — like DNS and ICANN, but for robotics. Any robot, any runtime, any manufacturer can implement RCAN and register at the RCAN Registry. OpenCastor is a reference implementation that helped inform the spec. You don't need OpenCastor to use RCAN, and RCAN doesn't require OpenCastor.
 
-## Quick Install
+## Quick Start
+
+### 1. Install
+
+```bash
+pip install opencastor==2026.4.1.0
+```
+
+### 2. Run setup wizard
+
+```bash
+castor setup
+```
+
+The wizard will:
+- Name your robot and assign an RRN
+- Generate a config file (`~/.config/opencastor/<name>.rcan.yaml`)
+- Show a QR code to connect to the Fleet UI
+- Configure your AI brain provider
+
+### 3. Connect to Fleet UI
+
+Open **[app.opencastor.com](https://app.opencastor.com)** (or scan the QR code from the setup wizard).
+
+Sign in with Google → copy your Firebase UID → paste into the terminal.
+
+Your robot will appear in the Fleet dashboard within 30 seconds.
+
+### 4. Start your robot
+
+```bash
+# Start the AI brain + REST API
+castor gateway --config ~/.config/opencastor/bob.rcan.yaml
+
+# Start the cloud bridge (connects to Fleet UI)
+castor bridge --config ~/.config/opencastor/bob.rcan.yaml
+```
+
+### One-command systemd setup
+
+```bash
+castor bridge setup  # generates + optionally installs systemd service
+```
+
+### Docker Quick Start
+
+```bash
+# Run OpenCastor in Docker (for non-Pi hardware)
+docker run -it \
+  -v ~/.config/opencastor:/config \
+  -e OPENCASTOR_CONFIG=/config/bob.rcan.yaml \
+  ghcr.io/craigm26/opencastor:2026.4.1.0 \
+  castor gateway
+
+# Non-interactive setup (CI/Docker)
+docker run -it \
+  -v ~/.config/opencastor:/config \
+  ghcr.io/craigm26/opencastor:2026.4.1.0 \
+  castor setup --non-interactive
+
+# Or use docker-compose (for ARM64/Pi)
+# See: https://github.com/craigm26/OpenCastor/blob/main/docker-compose.arm.yml
+```
+
+---
+
+## Legacy Install
 
 ```bash
 curl -sL opencastor.com/install | bash
@@ -71,22 +137,28 @@ docker compose up
 docker compose restart
 ```
 
-**Or generate the config manually first:**
+**Or use the setup wizard (recommended):**
+```bash
+# Interactive Fleet UI onboarding (shows QR codes, configures brain provider)
+docker run -it --rm -v ~/.config/opencastor:/config opencastor castor setup
+
+# Non-interactive: accept all defaults (CI/CD pipelines)
+docker run -it --rm -v ~/.config/opencastor:/config opencastor castor setup --non-interactive
+
+# With USB hardware (SO-ARM101, Dynamixel, etc.) — pass through USB bus for auto-detect:
+docker run -it --rm --device=/dev/bus/usb --privileged -v ~/.config/opencastor:/config opencastor castor wizard
+```
+
+**Or generate the config manually:**
 ```bash
 # Non-interactive: scaffold a starter config
 castor init --output ./config/robot.rcan.yaml
-
-# Interactive: full setup wizard (requires TTY)
-docker run -it --rm -v ./config:/app/config opencastor castor wizard
-
-# With USB hardware (SO-ARM101, Dynamixel, etc.) — pass through USB bus for auto-detect:
-docker run -it --rm --device=/dev/bus/usb --privileged -v ./config:/app/config opencastor castor wizard
 ```
 
 ## Minimal Config
 
 ```yaml
-rcan_version: "1.4"
+rcan_version: "1.6"
 metadata:
   robot_name: my-robot
 agent:
@@ -410,9 +482,9 @@ castor token --role operator        # issue JWT
 
 Full reference: [`docs/claude/cli-reference.md`](docs/claude/cli-reference.md)
 
-## What's New in v2026.3.13.12
+## What's New in v2026.4.1.0
 
-### 🔌 v2026.3.13.12 — Smarter Hardware Detection
+### 🔌 v2026.4.1.0 — RCAN v1.6 Support
 
 Five new hardware detectors and an expanded I2C lookup table:
 
@@ -448,7 +520,7 @@ OpenCastor is part of a broader open robotics ecosystem:
 |---|---|---|
 | **OpenCastor** | Robot runtime (this repo) | [github.com/craigm26/OpenCastor](https://github.com/craigm26/OpenCastor) |
 | **OpenCastor Fleet UI** | Flutter web app — manage your robots remotely | [app.opencastor.com](https://app.opencastor.com) · [source (private)](https://github.com/craigm26/opencastor-client) |
-| **RCAN Protocol** | Open spec for robot addressing & auth (v1.4) | [rcan.dev](https://rcan.dev) · [spec](https://rcan.dev/spec/) |
+| **RCAN Protocol** | Open spec for robot addressing & auth (v1.6) | [rcan.dev](https://rcan.dev) · [spec](https://rcan.dev/spec/) |
 | **rcan-py** | Python RCAN SDK | [PyPI](https://pypi.org/project/rcan/) · [github](https://github.com/continuonai/rcan-py) |
 | **rcan-ts** | TypeScript RCAN SDK | [npm](https://www.npmjs.com/package/@continuonai/rcan) · [github](https://github.com/continuonai/rcan-ts) |
 | **Robot Registry Foundation** | Global robot identity registry (like ICANN for robots) | [robotregistryfoundation.org](https://robotregistryfoundation.org) |

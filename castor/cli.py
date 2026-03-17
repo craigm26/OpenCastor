@@ -1647,8 +1647,420 @@ def cmd_swarm(args) -> None:
     print("castor swarm: coming soon.")
 
 
+def _ascii_qr(url: str) -> str:
+    """Minimal QR fallback — just print the URL clearly if qrcode unavailable."""
+    width = min(len(url) + 4, 60)
+    border = "█" * width
+    return f"\n{border}\n  {url}\n{border}\n"
+
+
+def _print_qr(url: str, console=None) -> None:
+    """Print a QR code inline. Uses qrcode lib if available, else ASCII fallback."""
+    try:
+        import qrcode
+
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=1,
+            border=1,
+        )
+        qr.add_data(url)
+        qr.make(fit=True)
+        matrix = qr.get_matrix()
+        lines = []
+        for row in matrix:
+            line = "".join("██" if cell else "  " for cell in row)
+            lines.append(line)
+        qr_str = "\n".join(lines)
+        if console:
+            console.print(qr_str)
+        else:
+            print(qr_str)
+    except ImportError:
+        fb = _ascii_qr(url)
+        if console:
+            console.print(fb)
+        else:
+            print(fb)
+
+
+def _detect_platform() -> str:
+    """Detect the hardware platform for the RCAN config."""
+    import platform
+
+    machine = platform.machine().lower()
+    if "aarch64" in machine or "arm64" in machine:
+        # Check for Raspberry Pi model
+        try:
+            model = open("/proc/device-tree/model").read().lower()
+            if "raspberry pi 5" in model:
+                return "rpi5"
+            elif "raspberry pi 4" in model:
+                return "rpi4"
+            return "arm64"
+        except Exception:
+            return "arm64"
+    elif "x86_64" in machine or "amd64" in machine:
+        return "x86"
+    return "unknown"
+
+
+def cmd_setup(args) -> None:
+    """castor setup — interactive Fleet UI onboarding wizard with QR codes."""
+    import uuid as _uuid
+    from pathlib import Path
+
+    import yaml
+
+    non_interactive = getattr(args, "non_interactive", False)
+
+    # Try rich
+    try:
+        from rich.console import Console
+        from rich.panel import Panel  # noqa: F401
+
+        console = Console()
+        HAS_RICH = True
+    except ImportError:
+        console = None
+        HAS_RICH = False
+
+    def _print(msg, **kw):
+        if HAS_RICH and console:
+            console.print(msg, **kw)
+        else:
+            import re
+
+            print(re.sub(r"\[/?[a-z_ /]+\]", "", msg))
+
+    def _prompt(label, default="", password=False):
+        if non_interactive:
+            return default
+        if HAS_RICH and console:
+            from rich.prompt import Prompt
+
+            return Prompt.ask(label, default=default, password=password) or default
+        else:
+            suffix = f" [{default}]" if default else ""
+            val = input(f"{label}{suffix}: ").strip()
+            return val if val else default
+
+    def _confirm(label, default=True):
+        if non_interactive:
+            return default
+        if HAS_RICH and console:
+            from rich.prompt import Confirm
+
+            return Confirm.ask(label, default=default)
+        else:
+            suffix = " [Y/n]" if default else " [y/N]"
+            val = input(f"{label}{suffix}: ").strip().lower()
+            if not val:
+                return default
+            return val in ("y", "yes")
+
+    version = "1.6"
+    try:
+        from castor import __version__
+
+        version = __version__
+    except Exception:
+        pass
+
+    # Banner
+    _print("")
+    if HAS_RICH and console:
+        console.print(
+            Panel(
+                f"[bold cyan]OpenCastor Setup Wizard v{version}[/bold cyan]",
+                border_style="cyan",
+                expand=False,
+            )
+        )
+    else:
+        print(" ╔══════════════════════════════════════╗")
+        print(f" ║  OpenCastor Setup Wizard v{version:<9}  ║")
+        print(" ╚══════════════════════════════════════╝")
+    _print("")
+
+    # ── Step 1: Robot Identity ──────────────────────────────────────────
+    _print("[bold]Step 1/4: Robot Identity[/bold]")
+    _print("─" * 35)
+    robot_name = _prompt("  Robot name", default="my-robot")
+    owner_name = _prompt("  Owner name", default="")
+
+    # ── Step 2: Fleet UI Connection ─────────────────────────────────────
+    _print("")
+    _print("[bold]Step 2/4: Fleet UI Connection[/bold]")
+    _print("─" * 35)
+    connect_fleet = _confirm("  Connect to OpenCastor Fleet UI?", default=True)
+
+    fleet_url = "https://app.opencastor.com"
+    if connect_fleet:
+        _print(f"\n  Fleet UI: [link]{fleet_url}[/link]")
+        _print("\n  Scan this QR code to open Fleet UI on your phone:")
+        _print("")
+        _print_qr(fleet_url, console=console)
+        _print(f"\n  Or open: {fleet_url}")
+        _print("")
+        if not non_interactive:
+            input("  Press Enter once you've signed in to the Fleet UI...")
+
+    # ── Step 3: Firebase Bridge Token ───────────────────────────────────
+    _print("")
+    _print("[bold]Step 3/4: Firebase Bridge Token[/bold]")
+    _print("─" * 35)
+    _print("  Your robot needs a service account key to connect.")
+    _print("")
+
+    setup_params = f"robot={robot_name}"
+    if owner_name:
+        setup_params += f"&owner={owner_name}"
+    setup_link = f"{fleet_url}/setup?{setup_params}"
+    _print(f"  Quick setup link:\n  {setup_link}")
+    _print("\n  Scan QR code to get your setup token:")
+    _print("")
+    _print_qr(setup_link, console=console)
+    _print("")
+
+    firebase_uid = _prompt("  Paste your setup token (Firebase UID)", default="")
+
+    # ── Step 4: Brain Provider ───────────────────────────────────────────
+    _print("")
+    _print("[bold]Step 4/4: Brain Provider[/bold]")
+    _print("─" * 35)
+    _print("  Select AI provider:")
+    _print("    1) Google Gemini (recommended - free tier available)")
+    _print("    2) Anthropic Claude")
+    _print("    3) OpenAI")
+    _print("    4) None (offline mode)")
+    provider_choice = _prompt("  Choice", default="1")
+
+    provider_map = {"1": "google", "2": "anthropic", "3": "openai", "4": "none"}
+    model_map = {
+        "google": "gemini-2.0-flash",
+        "anthropic": "claude-3-5-haiku-20241022",
+        "openai": "gpt-4o-mini",
+        "none": "",
+    }
+    provider = provider_map.get(provider_choice, "google")
+
+    api_key = ""
+    if provider == "google":
+        api_key = _prompt("  Google API key (or press Enter to use ADC)", default="")
+    elif provider == "anthropic":
+        api_key = _prompt("  Anthropic API key", default="")
+    elif provider == "openai":
+        api_key = _prompt("  OpenAI API key", default="")
+
+    # ── Generate config ──────────────────────────────────────────────────
+    rrn_suffix = str(_uuid.uuid4()).replace("-", "").upper()[:12]
+    rrn = f"RRN-{rrn_suffix}"
+    robot_number = f"{robot_name}-001"
+    platform_name = _detect_platform()
+
+    brain_block: dict = {}
+    if provider == "google":
+        brain_block = {
+            "provider": "google",
+            "model": model_map["google"],
+            "google_api_key": api_key,
+        }
+    elif provider == "anthropic":
+        brain_block = {
+            "provider": "anthropic",
+            "model": model_map["anthropic"],
+            "anthropic_api_key": api_key,
+        }
+    elif provider == "openai":
+        brain_block = {
+            "provider": "openai",
+            "model": model_map["openai"],
+            "openai_api_key": api_key,
+        }
+    else:
+        brain_block = {"provider": "none"}
+
+    owner_uri = f"rrn://{owner_name}/robot/opencastor/{robot_number}" if owner_name else ""
+
+    config = {
+        "rrn": rrn,
+        "owner": owner_uri,
+        "name": robot_name,
+        "rcan_version": "1.6",
+        "firebase_uid": firebase_uid,
+        "brain": brain_block,
+        "cloud": {
+            "project_id": "opencastor",
+            "firebase_uid": firebase_uid,
+            "sa_key_path": "~/.config/opencastor/firebase-sa-key.json",
+        },
+        "security": {"replay_window_s": 30},
+        "offline": {"grace_s": 300},
+        "hardware": {"platform": platform_name},
+    }
+
+    config_dir = Path.home() / ".config" / "opencastor"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_path = config_dir / f"{robot_name}.rcan.yaml"
+
+    with open(config_path, "w") as f:
+        yaml.dump(config, f, sort_keys=False, default_flow_style=False)
+
+    # ── Done ─────────────────────────────────────────────────────────────
+    _print("")
+    _print("[bold green]✅ Setup complete![/bold green]")
+    _print("─" * 35)
+    _print(f"  Config written to: [cyan]{config_path}[/cyan]")
+    _print("")
+    _print(f"  Start your robot:   castor gateway --config {config_path}")
+    _print(f"  Start bridge:       castor bridge --config {config_path}")
+    _print(f"  Fleet UI:           {fleet_url}")
+    _print("")
+    _print("  Your robot will appear in the Fleet UI within 30 seconds.")
+    _print("")
+
+
+def cmd_fleet_link(args) -> None:
+    """castor fleet-link — generate Fleet UI deep links and QR codes for this robot."""
+
+    import yaml
+
+    config_path = getattr(args, "config", None) or _find_default_config()
+    rrn = "RRN-000000000001"
+
+    if config_path and os.path.exists(config_path):
+        try:
+            with open(config_path) as f:
+                cfg = yaml.safe_load(f) or {}
+            rrn = cfg.get("rrn", rrn)
+        except Exception:
+            pass
+
+    fleet_base = "https://app.opencastor.com"
+    dashboard_url = f"{fleet_base}/#/fleet"
+    robot_url = f"{fleet_base}/#/robot/{rrn}"
+    observer_url = f"{robot_url}?view=observer"
+
+    try:
+        from rich.console import Console
+
+        console = Console()
+        HAS_RICH = True
+    except ImportError:
+        console = None
+        HAS_RICH = False
+
+    def _print(msg, **kw):
+        if HAS_RICH and console:
+            console.print(msg, **kw)
+        else:
+            import re
+
+            print(re.sub(r"\[/?[a-z_ /]+\]", "", msg))
+
+    _print("")
+    _print("[bold]OpenCastor Fleet UI Links[/bold]")
+    _print("─" * 35)
+    _print(f"  Fleet dashboard:  {dashboard_url}")
+    _print(f"  This robot:       {robot_url}")
+    _print("")
+    _print("  Scan to open on phone:")
+    _print_qr(robot_url, console=console)
+    _print("")
+    _print("  Share invite link (read-only access):")
+    _print(f"  {observer_url}")
+    _print("")
+
+
+def cmd_bridge_setup(args) -> None:
+    """castor bridge setup — generate and optionally install a systemd service for the bridge."""
+    import getpass
+    import shutil
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    import yaml
+
+    config_path = getattr(args, "config", None) or _find_default_config()
+    if not config_path or not os.path.exists(config_path):
+        print("  No rcan.yaml config found. Run `castor setup` first.")
+        raise SystemExit(1)
+
+    with open(config_path) as f:
+        cfg = yaml.safe_load(f) or {}
+
+    robot_name = cfg.get("name", cfg.get("robot_name", "robot"))
+    abs_config = os.path.abspath(config_path)
+    user = getpass.getuser()
+    python_path = sys.executable
+    service_name = f"castor-bridge-{robot_name}"
+    service_filename = f"{service_name}.service"
+
+    service_content = f"""[Unit]
+Description=OpenCastor Bridge - {robot_name}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={user}
+WorkingDirectory={Path.home()}
+ExecStart={python_path} -m castor bridge --config {abs_config}
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+    service_file = Path.cwd() / service_filename
+    service_file.write_text(service_content)
+    print(f"\n  ✅ Generated: {service_file}")
+    print("\n  Install commands:")
+    print(f"    sudo cp {service_filename} /etc/systemd/system/")
+    print(f"    sudo systemctl enable {service_name}")
+    print(f"    sudo systemctl start {service_name}")
+
+    try:
+        answer = input("\n  Install and start now? [y/N]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        answer = "n"
+
+    if answer in ("y", "yes"):
+        if not shutil.which("systemctl"):
+            print("  systemctl not found — cannot install on this platform.")
+            return
+        cmds = [
+            ["sudo", "cp", str(service_file), f"/etc/systemd/system/{service_filename}"],
+            ["sudo", "systemctl", "daemon-reload"],
+            ["sudo", "systemctl", "enable", service_name],
+            ["sudo", "systemctl", "start", service_name],
+        ]
+        for cmd in cmds:
+            print(f"  $ {' '.join(cmd)}")
+            rc = subprocess.call(cmd)
+            if rc != 0:
+                print(f"  ❌ Command failed (exit {rc})")
+                return
+        print(f"\n  ✅ Service {service_name} is running.")
+    else:
+        print("  Skipped. Run the install commands above when ready.")
+    print()
+
+
 def _cmd_bridge(args) -> None:
     """castor bridge — Firebase relay daemon for remote fleet management."""
+    # Handle 'castor bridge setup' subcommand
+    bridge_subcmd = getattr(args, "bridge_subcmd", None)
+    if bridge_subcmd == "setup":
+        cmd_bridge_setup(args)
+        return
+
     from castor.cloud.bridge import run_bridge
 
     run_bridge(args)
@@ -4403,6 +4815,48 @@ def main() -> None:
         metavar="SECONDS",
         help="Telemetry publish interval in seconds (default: 30)",
     )
+    p_bridge_sub = p_bridge.add_subparsers(dest="bridge_subcmd")
+    p_bridge_setup = p_bridge_sub.add_parser(
+        "setup",
+        help="Generate and optionally install a systemd service for the bridge",
+    )
+    p_bridge_setup.add_argument(
+        "--config",
+        default=None,
+        metavar="PATH",
+        help="Path to RCAN config (default: auto-detect)",
+    )
+
+    # castor setup — interactive Fleet UI onboarding wizard
+    p_setup = sub.add_parser(
+        "setup",
+        help="Interactive setup wizard — QR codes, Fleet UI onboarding, config generation",
+        epilog=(
+            "Examples:\n"
+            "  castor setup                     # Interactive wizard\n"
+            "  castor setup --non-interactive   # Accept all defaults (CI/Docker)\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_setup.add_argument(
+        "--non-interactive",
+        action="store_true",
+        dest="non_interactive",
+        help="Accept all defaults without prompting (for CI/Docker)",
+    )
+
+    # castor fleet-link — Fleet UI deep links and QR codes
+    p_fleet_link = sub.add_parser(
+        "fleet-link",
+        help="Show Fleet UI deep links and QR codes for this robot",
+        epilog="Example: castor fleet-link --config bob.rcan.yaml",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_fleet_link.add_argument(
+        "--config",
+        default=None,
+        help="RCAN config file (auto-detect if omitted)",
+    )
 
     # Shell completions (argcomplete)
     try:
@@ -4497,6 +4951,10 @@ def main() -> None:
         "arm": _cmd_arm,
         # Firebase remote fleet bridge
         "bridge": _cmd_bridge,
+        # Fleet UI onboarding wizard
+        "setup": cmd_setup,
+        # Fleet UI deep links + QR codes
+        "fleet-link": cmd_fleet_link,
     }
 
     # Load plugins and merge any plugin-provided commands

@@ -6,6 +6,24 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 
 ---
 
+## [2026.4.1.0] — 2026-04-01
+
+### Added — RCAN v1.6 Support (4 gaps closed)
+
+- **RCAN spec v1.6** (`rcan_version: "1.6"`): All 22 original protocol audit gaps now addressed.
+- **GAP-16 Federated Consent**: `castor bridge` forwards `FEDERATION_SYNC` messages across registries; cross-registry JWT trust chain validation via `_rcan-registry.<domain>` DNSSEC TXT; 3-tier registry hierarchy (root / authoritative / community).
+- **GAP-17 Constrained Transports**: RCAN-Minimal 32-byte ESTOP-only frame for LoRa SF12 / BLE; RCAN-Compact CBOR encoding; BLE L2CAP MTU fragmentation. Transport selection in `castor gateway` respects `transport_encoding` on incoming messages.
+- **GAP-18 Multi-Modal Payloads**: `media_chunks[]` on RCAN messages; SHA-256 audit trail hashes are included in commitment records; TRAINING_DATA messages now require `media_chunks` (JSON-only rejected; WARNING audit event on legacy format).
+- **GAP-14 Identity LoA**: `min_loa_for_control` in Protocol 66 manifest (default 1, backward compat); LoA enforcement in safety layer — control scope requires LoA ≥ 2, safety scope requires LoA ≥ 3 in production mode.
+
+### Changed
+- `castor/__init__.py`: `__version__ = "2026.4.1.0"`
+- `pyproject.toml`: `version = "2026.4.1.0"`
+- Default RCAN config templates emit `rcan_version: "1.6"`
+- P66 manifest gains `min_loa_for_control` field (default: 1)
+
+---
+
 ## [2026.3.13.14] — 2026-03-13
 
 ### Fixed
