@@ -696,7 +696,7 @@ async def send_command(cmd: CommandRequest, request: Request):
         _execute_action(thought.action)
 
     return {
-        "raw_text": thought.raw_text,
+        "raw_text": _strip_action_json(thought.raw_text),
         "action": thought.action,
         "model_used": _provider_name,
         "harness": _harness_enabled,
@@ -4403,14 +4403,24 @@ def _speak_reply(text: str):
 
 
 def _strip_action_json(text: str) -> str:
-    """Remove the inline JSON action block from an AI reply before sending to users.
+    """Remove inline JSON action blocks from an AI reply before sending to users.
 
     The AI appends a JSON object so the runtime can extract the action command.
     This strips that block so users and TTS only hear the natural-language part.
-    Handles flat JSON objects (no nested braces) at the end of the text.
+
+    Handles:
+    - Trailing JSON:  "Ok, doing it. {"type": "wait", ...}"
+    - Mid-text JSON:  "Ok. {"type": "wait"} Ready."
+    - Nested objects: {"type": "move", "params": {"speed": 1}}
     """
-    cleaned = _re.sub(r"\s*\{[^{}]*\}\s*$", "", text, flags=_re.DOTALL)
-    return cleaned.strip()
+    # Strip any {...} blocks that look like action objects (contain "type" key)
+    # Use a pattern that handles one level of nesting
+    cleaned = _re.sub(r"\s*\{[^{}]*\"type\"\s*:[^{}]*(?:\{[^{}]*\}[^{}]*)?\}\s*", " ", text)
+    # Collapse multiple spaces / clean up sentence boundaries
+    cleaned = _re.sub(r"  +", " ", cleaned).strip()
+    # Remove trailing punctuation artifacts like lone periods after stripping
+    cleaned = _re.sub(r"\s+\.\s*$", ".", cleaned).strip()
+    return cleaned if cleaned else text
 
 
 # Map channel names to prompt surface types.
