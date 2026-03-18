@@ -831,6 +831,50 @@ async def system_shutdown(request: Request):
     return {"status": "shutting_down"}
 
 
+@app.post("/api/system/upgrade", dependencies=[Depends(verify_token)])
+async def system_upgrade(request: Request):
+    """Upgrade the opencastor package via pip. Requires admin role.
+
+    Body (optional JSON): {"version": "2026.3.17.13"}
+    If version is omitted, upgrades to the latest PyPI release.
+
+    Returns immediately with status="upgrading" and runs pip in the background.
+    Poll GET /api/status for the updated version after ~30s.
+    """
+    import subprocess
+    import sys
+
+    _check_min_role(request, "admin")
+
+    body: dict = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+
+    version: str | None = body.get("version")
+    pkg = f"opencastor=={version}" if version else "opencastor"
+
+    # Run pip non-blocking; stdout/stderr captured to a temp log
+    cmd = [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--upgrade",
+        "--break-system-packages",
+        pkg,
+    ]
+    logger.info("system_upgrade: running %s", " ".join(cmd))
+    subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+    return {
+        "status": "upgrading",
+        "package": pkg,
+        "note": "Poll /api/status in ~30s to confirm new version",
+    }
+
+
 @app.get("/api/intents", dependencies=[Depends(verify_token)])
 async def list_intents(request: Request):
     """List active and queued orchestration intents."""

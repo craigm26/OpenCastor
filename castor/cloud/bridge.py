@@ -390,6 +390,10 @@ class CastorBridge:
         if is_estop:
             return True
 
+        # System upgrade/reboot allowed even when LLM connectivity is offline
+        if scope == "system":
+            return True
+
         log.warning("OFFLINE MODE: command rejected (scope=%s) — not an ESTOP", scope)
         return False
 
@@ -1072,6 +1076,40 @@ class CastorBridge:
                         json={"instruction": instruction},
                         headers=headers,
                     )
+
+        elif scope == "system":
+            # System-level actions sent from the app (e.g. OTA upgrade, config reload).
+            # instruction format: "UPGRADE: <version>" | "UPGRADE" (latest)
+            #                     "REBOOT"
+            #                     "RELOAD_CONFIG"
+            instr_upper = instruction.upper().strip()
+            if instr_upper.startswith("UPGRADE"):
+                parts = instruction.split(":", 1)
+                version: Optional[str] = parts[1].strip() if len(parts) > 1 else None
+                body: dict[str, Any] = {}
+                if version:
+                    body["version"] = version
+                with httpx.Client(timeout=15.0) as client:
+                    resp = client.post(
+                        f"{self.gateway_url}/api/system/upgrade",
+                        json=body,
+                        headers=headers,
+                    )
+            elif instr_upper == "REBOOT":
+                with httpx.Client(timeout=10.0) as client:
+                    resp = client.post(
+                        f"{self.gateway_url}/api/system/reboot",
+                        headers=headers,
+                    )
+            elif instr_upper == "RELOAD_CONFIG":
+                with httpx.Client(timeout=10.0) as client:
+                    resp = client.post(
+                        f"{self.gateway_url}/api/config/reload",
+                        headers=headers,
+                    )
+            else:
+                log.warning("bridge: unknown system instruction %r — ignored", instruction)
+                return {"status": "ignored", "reason": f"unknown system instruction: {instruction}"}
 
         elif scope in ("chat", "control"):
             payload: dict[str, Any] = {
