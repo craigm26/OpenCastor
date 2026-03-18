@@ -390,9 +390,18 @@ class CastorBridge:
         if is_estop:
             return True
 
-        # System upgrade/reboot allowed even when LLM connectivity is offline
+        # System scope: only REBOOT and RELOAD_CONFIG are allowed offline.
+        # UPGRADE requires network connectivity (downloads package), so it
+        # must be blocked in offline mode.
         if scope == "system":
-            return True
+            instr_upper = instruction.upper().strip()
+            if instr_upper.startswith("UPGRADE"):
+                log.warning(
+                    "OFFLINE MODE: UPGRADE rejected (needs network) — "
+                    "only REBOOT/RELOAD_CONFIG allowed offline (scope=system)"
+                )
+                return False
+            return True  # REBOOT and RELOAD_CONFIG are safe offline
 
         log.warning("OFFLINE MODE: command rejected (scope=%s) — not an ESTOP", scope)
         return False
@@ -552,6 +561,58 @@ class CastorBridge:
                     required,
                 )
                 return False
+        return True
+
+    # ------------------------------------------------------------------
+    # v1.6: Scope-level enforcement helper (RCAN §4.2)
+    # ------------------------------------------------------------------
+
+    #: Canonical scope → numeric level mapping (RCAN v1.6 §4.2)
+    SCOPE_LEVELS: dict[str, int] = {
+        "discover": 0,
+        "status": 1,
+        "chat": 2,
+        "control": 3,
+        "system": 3,
+        "safety": 99,
+        "transparency": 0,
+    }
+
+    def _validate_scope_level(self, scope: str, loa: int) -> bool:
+        """Enforce minimum LoA required for the requested scope.
+
+        Rules (RCAN v1.6 §4.2):
+          - discover / transparency (level 0): always allowed (LoA ≥ 0)
+          - status (level 1):                  LoA ≥ 1
+          - chat   (level 2):                  LoA ≥ 1  (lenient — chat ok with basic auth)
+          - control (level 3):                 LoA ≥ min_loa_for_control (config, default 1)
+          - system  (level 3):                 LoA ≥ min_loa_for_control (same as control)
+          - safety  (level 99):               ALWAYS allowed (P66 invariant)
+
+        Returns True if the command is permitted, False if it should be rejected.
+        """
+        # P66 invariant: safety/ESTOP is always allowed regardless of LoA
+        if scope == "safety":
+            return True
+
+        level = self.SCOPE_LEVELS.get(scope, 0)
+        if level == 0:
+            return True  # discover / transparency — open
+
+        # control and system require min_loa_for_control
+        if scope in ("control", "system"):
+            required = self.min_loa_for_control
+        else:
+            required = 1  # status, chat
+
+        if loa < required:
+            log.warning(
+                "_validate_scope_level: REJECTED scope=%s loa=%d required=%d",
+                scope,
+                loa,
+                required,
+            )
+            return False
         return True
 
     # ------------------------------------------------------------------
@@ -824,7 +885,9 @@ class CastorBridge:
             is_estop = scope == "safety" and "estop" in instruction.lower()
 
             # --- GAP-03: Replay check BEFORE R2RAM (prevents DoS) ----------
-            if not self._check_replay(cmd_id, doc, is_safety=(scope == "safety")):
+            # P66 invariant: ESTOP bypasses replay check unconditionally —
+            # a duplicate ESTOP cmd_id must still be executed.
+            if not is_estop and not self._check_replay(cmd_id, doc, is_safety=(scope == "safety")):
                 log.warning(
                     "Command %s rejected as replay (sender_type=%s, scope=%s)",
                     cmd_id,

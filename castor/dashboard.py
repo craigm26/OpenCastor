@@ -184,6 +184,21 @@ def _hdr() -> dict:
     return {"Authorization": f"Bearer {tok}"} if tok else {}
 
 
+def _warn_no_token() -> bool:
+    """Show a visible warning if no API token is configured.
+
+    Returns True if the token is missing (caller should abort the action).
+    """
+    if not st.session_state.api_token:
+        st.warning(
+            "⚠️ No API token configured. Set **OPENCASTOR_API_TOKEN** or enter a token in "
+            "⚙️ Settings → API Token. Unauthenticated requests will be rejected (401).",
+            icon="🔒",
+        )
+        return True
+    return False
+
+
 # ── API helpers ────────────────────────────────────────────────────────────────
 def _get(path: str, timeout: float = 2.0) -> dict:
     try:
@@ -352,11 +367,19 @@ with _tab_ctrl:
     _estop_c, _clr_c = st.columns(2)
     with _estop_c:
         if st.button("⏹ E-STOP", type="primary", use_container_width=True, key="ctrl_estop"):
-            try:
-                _req.post(f"{GW}/api/stop", headers=_hdr(), timeout=3)
-                st.toast("Motors stopped!", icon="⏹")
-            except Exception as _e:
-                st.error(str(_e))
+            if _warn_no_token():
+                st.error("Cannot send ESTOP — no API token. Configure a token in ⚙️ Settings.")
+            else:
+                try:
+                    _r = _req.post(f"{GW}/api/stop", headers=_hdr(), timeout=3)
+                    if _r.status_code == 401:
+                        st.error(
+                            "ESTOP rejected (401 Unauthorized) — check API token in ⚙️ Settings."
+                        )
+                    else:
+                        st.toast("Motors stopped!", icon="⏹")
+                except Exception as _e:
+                    st.error(str(_e))
     with _clr_c:
         if st.button("▶ Clear", use_container_width=True, key="ctrl_clear"):
             try:
