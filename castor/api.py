@@ -619,7 +619,7 @@ async def send_command(cmd: CommandRequest, request: Request):
     _think_t0 = time.perf_counter()
 
     # ── Agent Harness (when enabled in RCAN config) ──────────────────────────
-    _agent_cfg = state.fs.config.get("agent", {}) if state.fs else {}
+    _agent_cfg = (state.config or {}).get("agent", {})
     _harness_cfg = _agent_cfg.get("harness", {})
     _harness_enabled = _harness_cfg.get("enabled", False)  # opt-in
 
@@ -1078,6 +1078,190 @@ async def config_rollback(req: _ConfigRollbackRequest, request: Request):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"Write failed: {exc}") from exc
+
+
+# ---------------------------------------------------------------------------
+# Harness config endpoints  (GET /api/harness, POST /api/harness)
+# ---------------------------------------------------------------------------
+
+
+class _HarnessApplyRequest(BaseModel):
+    """Request body for POST /api/harness."""
+
+    skills: Optional[dict] = Field(default_factory=dict)
+    hooks: Optional[dict] = Field(default_factory=dict)
+    context: Optional[dict] = Field(default_factory=dict)
+    model_tiers: Optional[dict] = Field(default_factory=dict)
+    trajectory: Optional[dict] = Field(default_factory=dict)
+    max_iterations: Optional[int] = Field(default=None, ge=1, le=50)
+
+
+def _build_harness_response() -> dict:
+    """Build the harness config dict from current AppState."""
+    cfg = state.config or {}
+    agent = cfg.get("agent", {})
+    harness = agent.get("harness", {})
+    hooks = harness.get("hooks", {})
+    context_cfg = harness.get("context", {})
+    trajectory_cfg = harness.get("trajectory", {})
+    model_tiers = cfg.get("model_tiers", {})
+
+    # Skills: derive from state.config['skills'] or fall back to defaults
+    default_skills = [
+        "navigate_to",
+        "camera_describe",
+        "arm_manipulate",
+        "web_lookup",
+        "peer_coordinate",
+        "code_reviewer",
+    ]
+    skills_cfg = cfg.get("skills", {})
+    skills_list = []
+    for idx, skill_key in enumerate(default_skills):
+        skill_data = skills_cfg.get(skill_key, {})
+        skills_list.append(
+            {
+                "id": f"skill-{skill_key.replace('_', '-')}",
+                "name": skill_key,
+                "enabled": skill_data.get("enabled", False),
+                "order": skill_data.get("order", idx),
+                "config": {k: v for k, v in skill_data.items() if k not in ("enabled", "order")},
+            }
+        )
+    # Sort by declared order
+    skills_list.sort(key=lambda s: s["order"])
+
+    return {
+        "skills": skills_list,
+        "hooks": {
+            "p66_audit": hooks.get("p66_audit", True),
+            "retry_on_error": hooks.get("retry_on_error", True),
+            "drift_detection": hooks.get("drift_detection", True),
+            "drift_threshold": hooks.get("drift_threshold", 0.15),
+        },
+        "context": {
+            "memory": context_cfg.get("memory", agent.get("auto_rag", True)),
+            "telemetry": context_cfg.get("telemetry", agent.get("auto_telemetry", True)),
+            "system_prompt": context_cfg.get("system_prompt", True),
+            "skills_context": context_cfg.get("skills_context", True),
+        },
+        "model_tiers": {
+            "fast_provider": model_tiers.get("fast_provider", "ollama"),
+            "fast_model": model_tiers.get("fast_model", "gemma3:1b"),
+            "slow_provider": model_tiers.get("slow_provider", "google"),
+            "slow_model": model_tiers.get("slow_model", agent.get("model", "gemini-2.0-flash")),
+            "confidence_threshold": model_tiers.get("confidence_threshold", 0.7),
+        },
+        "trajectory": {
+            "enabled": trajectory_cfg.get("enabled", harness.get("enabled", True)),
+            "sqlite_path": trajectory_cfg.get("sqlite_path", "trajectory.db"),
+        },
+        "max_iterations": harness.get("max_iterations", 6),
+    }
+
+
+@app.get("/api/harness", dependencies=[Depends(verify_token)])
+async def get_harness(request: Request):
+    """GET /api/harness — Return current harness config (skills, hooks, context, model tiers).
+
+    Requires at minimum ``operator`` role.
+    """
+    _check_min_role(request, "operator")
+    return _build_harness_response()
+
+
+def _validate_harness_request(req: _HarnessApplyRequest) -> None:
+    """Raise HTTPException 422 if the harness request contains invalid values."""
+    # Confidence threshold must be in [0, 1] if provided
+    if req.model_tiers:
+        ct = req.model_tiers.get("confidence_threshold")
+        if ct is not None and not (0.0 <= float(ct) <= 1.0):
+            raise HTTPException(
+                status_code=422,
+                detail="model_tiers.confidence_threshold must be between 0.0 and 1.0",
+            )
+    # drift_threshold must be in [0, 1] if provided
+    if req.hooks:
+        dt = req.hooks.get("drift_threshold")
+        if dt is not None and not (0.0 <= float(dt) <= 1.0):
+            raise HTTPException(
+                status_code=422,
+                detail="hooks.drift_threshold must be between 0.0 and 1.0",
+            )
+        # p66_audit cannot be disabled via API
+        if req.hooks.get("p66_audit") is False:
+            raise HTTPException(
+                status_code=422,
+                detail="hooks.p66_audit cannot be disabled (Protocol 66 invariant)",
+            )
+
+
+@app.post("/api/harness", dependencies=[Depends(verify_token)])
+async def apply_harness(req: _HarnessApplyRequest, request: Request):
+    """POST /api/harness — Apply a new harness config, write to config file, and reload.
+
+    Validates the payload, merges into the running config, writes back to disk,
+    and triggers a live reload of the harness layer.  P66 invariants are enforced:
+    ``hooks.p66_audit`` cannot be set to False.
+
+    Requires at minimum ``operator`` role.
+    """
+    _check_min_role(request, "operator")
+    _validate_harness_request(req)
+
+    if state.config is None:
+        raise HTTPException(status_code=503, detail="Config not loaded")
+
+    config_path = os.getenv("OPENCASTOR_CONFIG", "robot.rcan.yaml")
+
+    # Deep-merge incoming fields into the current config
+    import copy
+
+    new_config = copy.deepcopy(state.config)
+    agent = new_config.setdefault("agent", {})
+    harness = agent.setdefault("harness", {})
+
+    if req.max_iterations is not None:
+        harness["max_iterations"] = req.max_iterations
+
+    if req.hooks:
+        harness.setdefault("hooks", {}).update(req.hooks)
+        # P66 invariant: p66_audit is always True
+        harness["hooks"]["p66_audit"] = True
+
+    if req.context:
+        harness.setdefault("context", {}).update(req.context)
+
+    if req.trajectory:
+        harness.setdefault("trajectory", {}).update(req.trajectory)
+
+    if req.model_tiers:
+        new_config.setdefault("model_tiers", {}).update(req.model_tiers)
+
+    if req.skills:
+        new_config.setdefault("skills", {}).update(req.skills)
+
+    # Persist to config file
+    try:
+        # Record current config to history before overwriting
+        from castor.config_history import get_history
+
+        get_history().record(state.config, config_path=config_path)
+
+        with open(config_path, "w") as _f:
+            yaml.dump(new_config, _f, default_flow_style=False, allow_unicode=True)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Config write failed: {exc}") from exc
+
+    # Apply to live state
+    state.config = new_config
+
+    logger.info("Harness config updated and written to %s", config_path)
+    return {
+        "status": "applied",
+        "config_path": config_path,
+        "harness": _build_harness_response(),
+    }
 
 
 # ---------------------------------------------------------------------------
