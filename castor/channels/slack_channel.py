@@ -134,7 +134,9 @@ class SlackChannel(BaseChannel):
             _scope, _loa = resolve_sender_scope(_sender_id, self.config)
 
             try:
-                reply = await self.handle_message(chat_id, text, sender_scope=_scope, sender_loa=_loa)
+                reply = await self.handle_message(
+                    chat_id, text, sender_scope=_scope, sender_loa=_loa
+                )
                 if reply:
                     await say(reply[:4000])
             except Exception as exc:
@@ -162,7 +164,9 @@ class SlackChannel(BaseChannel):
             if audio_file is not None:
                 text = await _download_and_transcribe_slack(self, audio_file, self.bot_token)
                 if text:
-                    reply = await self.handle_message(chat_id, text, sender_scope=_scope, sender_loa=_loa)
+                    reply = await self.handle_message(
+                        chat_id, text, sender_scope=_scope, sender_loa=_loa
+                    )
                     if reply:
                         await say(reply[:4000])
                 else:
@@ -174,7 +178,9 @@ class SlackChannel(BaseChannel):
                 return
 
             try:
-                reply = await self.handle_message(chat_id, text, sender_scope=_scope, sender_loa=_loa)
+                reply = await self.handle_message(
+                    chat_id, text, sender_scope=_scope, sender_loa=_loa
+                )
                 if reply:
                     await say(reply[:4000])
             except Exception as exc:

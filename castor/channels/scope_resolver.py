@@ -16,9 +16,8 @@ Usage::
 from __future__ import annotations
 
 import contextvars
-import re
 import logging
-from typing import Optional
+import re
 
 logger = logging.getLogger("OpenCastor.Channels.ScopeResolver")
 

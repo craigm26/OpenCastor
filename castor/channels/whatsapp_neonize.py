@@ -339,12 +339,17 @@ class WhatsAppChannel(BaseChannel):
             _scope_sender_id = _normalize_number(chat_user) if not is_group else chat_user
             _sender_scope, _sender_loa = resolve_sender_scope(_scope_sender_id, self.config)
             self.logger.debug(
-                "WhatsApp scope: sender=%s scope=%s loa=%d", _scope_sender_id, _sender_scope, _sender_loa
+                "WhatsApp scope: sender=%s scope=%s loa=%d",
+                _scope_sender_id,
+                _sender_scope,
+                _sender_loa,
             )
 
             # ── Build chat_id and dispatch ────────────────────────────────
             chat_id = f"{chat_user}@{chat_server}"
-            self._dispatch(self._process_and_reply, client, chat, chat_id, text, _sender_scope, _sender_loa)
+            self._dispatch(
+                self._process_and_reply, client, chat, chat_id, text, _sender_scope, _sender_loa
+            )
 
         except Exception as e:
             self.logger.error(f"Error handling incoming message: {e}")
@@ -466,7 +471,9 @@ class WhatsAppChannel(BaseChannel):
         sender_loa: int = 0,
     ):
         """Call the AI brain and send the reply."""
-        reply = await self.handle_message(chat_id, text, sender_scope=sender_scope, sender_loa=sender_loa)
+        reply = await self.handle_message(
+            chat_id, text, sender_scope=sender_scope, sender_loa=sender_loa
+        )
         if reply:
             await self._loop.run_in_executor(
                 None, lambda: client.send_message(chat_jid, reply[:4096])
