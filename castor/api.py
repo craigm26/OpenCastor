@@ -1553,12 +1553,15 @@ async def get_peers():
     return {"peers": [], "note": "mDNS not enabled"}
 
 
-@app.post("/api/rcan/message", dependencies=[Depends(_verify_rcan_or_token)])
+@app.post("/api/rcan/message")
 async def rcan_receive_message(request: Request):
     """Receive an inbound RCAN message from a remote robot (federation endpoint).
 
-    Accepts either a Bearer token (API token) or an ``RCAN-Signature`` header
-    (R2R HMAC path).  See ``_verify_rcan_or_token`` for auth details.
+    Auth rules (RCAN v1.6 §2.6):
+      - DISCOVER (msg_type=1): unauthenticated — public peer-handshake; only
+        returns public capability info, no sensitive data exposed.
+      - All other message types: require Bearer token OR ``RCAN-Signature``
+        header; see ``_verify_rcan_or_token``.
 
     For outbound sends, use ``castor.rcan.http_transport.send_message()``.
     """
@@ -1575,6 +1578,17 @@ async def rcan_receive_message(request: Request):
     # Determine message type and source from either format
     msg_type = data.get("type") or data.get("msg_type")
     source = data.get("source") or data.get("source_ruri", "unknown")
+
+    # DISCOVER (msg_type=1) is a public peer-handshake — allow unauthenticated.
+    # All other message types require Bearer or RCAN-Signature auth.
+    if msg_type != 1:
+        try:
+            await _verify_rcan_or_token(request)
+        except HTTPException as exc:
+            return JSONResponse(
+                {"error": exc.detail, "code": f"HTTP_{exc.status_code}", "status": exc.status_code},
+                status_code=exc.status_code,
+            )
 
     logger.info("RCAN inbound from %s: type=%s", source, msg_type)
 

@@ -8,6 +8,7 @@ Covers:
   - Commitment chain integrity
   - mDNS peer allowlist config
 """
+
 from __future__ import annotations
 
 import json
@@ -19,6 +20,7 @@ import pytest
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_bridge_instance(extra_rcan: dict | None = None):
     """Construct a minimal CastorBridge with attributes set directly (no real init)."""
@@ -37,6 +39,7 @@ def _make_bridge_instance(extra_rcan: dict | None = None):
 
 def _make_intent(scope: str = "chat") -> "DelegatedIntent":
     from castor.swarm.consensus import DelegatedIntent
+
     return DelegatedIntent(
         intent_id=str(uuid.uuid4()),
         task_id=str(uuid.uuid4()),
@@ -52,6 +55,7 @@ def _make_intent(scope: str = "chat") -> "DelegatedIntent":
 def _make_consensus():
     from castor.swarm.consensus import SwarmConsensus
     from castor.swarm.shared_memory import SharedMemory
+
     mem = SharedMemory(robot_id="RRN-000000000001")
     sc = SwarmConsensus.__new__(SwarmConsensus)
     sc._mem = mem
@@ -66,6 +70,7 @@ def _make_consensus():
 # Group 1: Federation trust flag
 # ---------------------------------------------------------------------------
 
+
 class TestFederationTrustFlag:
     def test_require_false_is_default(self):
         bridge = _make_bridge_instance()
@@ -77,6 +82,7 @@ class TestFederationTrustFlag:
 
     def test_federation_stub_active_is_bool(self):
         from castor.cloud.bridge import _FEDERATION_STUB_ACTIVE
+
         assert isinstance(_FEDERATION_STUB_ACTIVE, bool)
 
     def test_fail_open_logic_when_require_false(self):
@@ -107,6 +113,7 @@ class TestFederationTrustFlag:
         """Verify the rejection guard is in _check_federation source."""
         import inspect
         from castor.cloud.bridge import CastorBridge
+
         src = inspect.getsource(CastorBridge._check_federation)
         assert "require_federation_trust" in src
         assert "_FEDERATION_STUB_ACTIVE" in src
@@ -116,9 +123,11 @@ class TestFederationTrustFlag:
 # Group 2: Scope level validation
 # ---------------------------------------------------------------------------
 
+
 class TestScopeLevelValidation:
     def test_scope_levels_dict_on_bridge(self):
         from castor.cloud.bridge import CastorBridge
+
         sl = CastorBridge.SCOPE_LEVELS
         assert sl["discover"] == 0
         assert sl["status"] == 1
@@ -138,6 +147,7 @@ class TestScopeLevelValidation:
 
     def test_control_blocked_at_loa_0_when_min_is_1(self):
         from castor.cloud.bridge import CastorBridge
+
         bridge = _make_bridge_instance({"min_loa_for_control": 1})
         bridge.min_loa_for_control = 1
         bridge._validate_scope_level = CastorBridge._validate_scope_level.__get__(bridge)
@@ -145,6 +155,7 @@ class TestScopeLevelValidation:
 
     def test_control_allowed_at_loa_1_when_min_is_1(self):
         from castor.cloud.bridge import CastorBridge
+
         bridge = _make_bridge_instance({"min_loa_for_control": 1})
         bridge.min_loa_for_control = 1
         bridge._validate_scope_level = CastorBridge._validate_scope_level.__get__(bridge)
@@ -152,12 +163,14 @@ class TestScopeLevelValidation:
 
     def test_system_scope_uses_same_level_as_control(self):
         from castor.cloud.bridge import CastorBridge
+
         assert CastorBridge.SCOPE_LEVELS["system"] == CastorBridge.SCOPE_LEVELS["control"]
 
 
 # ---------------------------------------------------------------------------
 # Group 3: CONFIG_SHARE forbidden-key scrubbing
 # ---------------------------------------------------------------------------
+
 
 class TestConfigShareScrubbing:
     def test_scrub_removes_safety_key(self):
@@ -193,6 +206,7 @@ class TestConfigShareScrubbing:
 
     def test_config_forbidden_keys_set(self):
         from castor.cloud.bridge import CastorBridge
+
         fk = CastorBridge._CONFIG_FORBIDDEN_KEYS
         assert "safety" in fk
         assert "auth" in fk
@@ -203,45 +217,57 @@ class TestConfigShareScrubbing:
 # Group 4: /api/rcan/message endpoint auth
 # ---------------------------------------------------------------------------
 
+
 class TestRcanMessageEndpointAuth:
     def test_verify_rcan_or_token_exists(self):
         import castor.api as api_mod
+
         assert hasattr(api_mod, "_verify_rcan_or_token"), (
             "_verify_rcan_or_token not found in castor.api"
         )
 
     def test_rcan_message_route_exists(self):
         import castor.api as api_mod
+
         routes = {getattr(r, "path", ""): r for r in api_mod.app.routes}
         assert "/api/rcan/message" in routes, "/api/rcan/message route missing"
 
-    def test_rcan_message_route_has_dependencies(self):
+    def test_rcan_message_non_discover_requires_auth(self):
+        """Non-DISCOVER msg_types must trigger auth check (inline, not FastAPI dep).
+
+        DISCOVER (msg_type=1) is public; all other types require Bearer or
+        RCAN-Signature.  Verify the inline auth guard exists in source.
+        """
+        import inspect
         import castor.api as api_mod
-        routes = {getattr(r, "path", ""): r for r in api_mod.app.routes}
-        route = routes.get("/api/rcan/message")
-        deps = getattr(route, "dependencies", [])
-        assert len(deps) > 0, "/api/rcan/message has no auth dependency"
+
+        src = inspect.getsource(api_mod.rcan_receive_message)
+        assert "_verify_rcan_or_token" in src, (
+            "rcan_receive_message must call _verify_rcan_or_token for non-DISCOVER types"
+        )
+        assert "msg_type != 1" in src, "DISCOVER (msg_type=1) must be exempted from auth check"
 
     # Lightweight logic tests (no FastAPI test client)
-    @pytest.mark.parametrize("auth,sig,expected", [
-        ("Bearer validtoken", "", True),
-        ("", "v1:abc123==", True),
-        ("", "", False),
-        ("Bearer ", "", False),          # empty bearer
-        ("Basic abc", "", False),        # wrong scheme, no sig
-    ])
+    @pytest.mark.parametrize(
+        "auth,sig,expected",
+        [
+            ("Bearer validtoken", "", True),
+            ("", "v1:abc123==", True),
+            ("", "", False),
+            ("Bearer ", "", False),  # empty bearer
+            ("Basic abc", "", False),  # wrong scheme, no sig
+        ],
+    )
     def test_auth_logic(self, auth, sig, expected):
         """Simulate the _verify_rcan_or_token decision."""
-        allowed = (
-            (auth.startswith("Bearer ") and len(auth) > 7)
-            or bool(sig)
-        )
+        allowed = (auth.startswith("Bearer ") and len(auth) > 7) or bool(sig)
         assert allowed is expected
 
 
 # ---------------------------------------------------------------------------
 # Group 5: Swarm scope non-escalation
 # ---------------------------------------------------------------------------
+
 
 class TestSwarmScopeNonEscalation:
     def test_chat_to_control_rejected(self):
@@ -289,6 +315,7 @@ class TestSwarmScopeNonEscalation:
 
     def test_scope_levels_in_consensus(self):
         from castor.swarm.consensus import SCOPE_LEVELS
+
         assert SCOPE_LEVELS["discover"] == 0
         assert SCOPE_LEVELS["status"] == 1
         assert SCOPE_LEVELS["chat"] == 2
@@ -299,6 +326,7 @@ class TestSwarmScopeNonEscalation:
     def test_scope_levels_match_bridge(self):
         from castor.cloud.bridge import CastorBridge
         from castor.swarm.consensus import SCOPE_LEVELS
+
         for scope, level in SCOPE_LEVELS.items():
             assert CastorBridge.SCOPE_LEVELS.get(scope) == level, (
                 f"bridge/consensus mismatch for {scope!r}"
@@ -309,9 +337,11 @@ class TestSwarmScopeNonEscalation:
 # Group 6: Commitment chain integrity
 # ---------------------------------------------------------------------------
 
+
 class TestCommitmentChain:
     def _fresh_chain(self, tmp_path):
         from castor.rcan.commitment_chain import CommitmentChain
+
         return CommitmentChain(log_path=str(tmp_path / "chain.jsonl"))
 
     def _append(self, chain, action: str, robot_uri: str = "rcan://test/bot"):
@@ -369,6 +399,7 @@ class TestCommitmentChain:
 # ---------------------------------------------------------------------------
 # Group 7: mDNS peer allowlist
 # ---------------------------------------------------------------------------
+
 
 class TestMdnsPeerAllowlist:
     def test_peers_list_stored_in_rcan_cfg(self):
