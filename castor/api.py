@@ -855,23 +855,49 @@ async def system_upgrade(request: Request):
     version: str | None = body.get("version")
     pkg = f"opencastor=={version}" if version else "opencastor"
 
-    # Run pip non-blocking; stdout/stderr captured to a temp log
+    # Run pip, then restart the gateway process so new code is actually loaded.
+    # Detect venv vs system Python: in a venv sys.prefix != sys.base_prefix.
+    # Venv pip doesn't need --break-system-packages; system Python does.
+    import sys as _sys
+
+    _in_venv = _sys.prefix != _sys.base_prefix
     cmd = [
         sys.executable,
         "-m",
         "pip",
         "install",
         "--upgrade",
-        "--break-system-packages",
         pkg,
     ]
-    logger.info("system_upgrade: running %s", " ".join(cmd))
-    subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if not _in_venv:
+        cmd.insert(-1, "--break-system-packages")
+
+    # Build a self-restart wrapper: pip install, then os.execv to reload with new code
+    _restart_script = "\n".join(
+        [
+            "import subprocess, sys, os, time",
+            f"pip_cmd = {cmd!r}",
+            "res = subprocess.run(pip_cmd, capture_output=True)",
+            "if res.returncode == 0:",
+            "    time.sleep(2)  # let pip finalize",
+            "    os.execv(sys.executable, [sys.executable] + sys.argv[:])",
+            "else:",
+            "    print('pip failed:', res.stderr.decode(), file=sys.stderr)",
+        ]
+    )
+
+    logger.info("system_upgrade: installing %s then restarting gateway", pkg)
+    subprocess.Popen(
+        [sys.executable, "-c", _restart_script],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
 
     return {
         "status": "upgrading",
         "package": pkg,
-        "note": "Poll /api/status in ~30s to confirm new version",
+        "note": "Gateway will restart automatically after pip succeeds (~30s). "
+        "Poll /api/status to confirm new version.",
     }
 
 
