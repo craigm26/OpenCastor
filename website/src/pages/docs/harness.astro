@@ -43,19 +43,19 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <div class="section-header reveal">
         <p class="section-label">Diagram 1</p>
         <h2 class="section-title">Current Architecture</h2>
-        <p class="section-desc">Full request path from user input to response — v2026.3.17.5+</p>
+        <p class="section-desc">Full request path from user input to response — v2026.3.17.13+</p>
       </div>
 
       <div class="mermaid-card reveal">
         <div class="mermaid-header">
           <span class="mermaid-label">opencastor/castor/harness.py · context.py · trajectory.py</span>
-          <span class="mermaid-version">v2026.3.17.5+</span>
+          <span class="mermaid-version">v2026.3.17.13+</span>
         </div>
         <div class="mermaid">
-graph TD
+flowchart TD
     A["User / App / RCAN peer"] --> B["/api/command"]
     B --> C["AgentHarness.run()"]
-    C --> ESTOP{"ESTOP? scope=safety<br/>or ESTOP/HALT prefix"}
+    C --> ESTOP{"ESTOP?<br/>scope=safety<br/>or ESTOP/HALT prefix"}
     ESTOP -->|"YES — P66 absolute"| STOP["Stop immediately<br/>No context, no hooks, no log"]
     ESTOP -->|"NO"| CB["ContextBuilder.build()"]
 
@@ -70,7 +70,7 @@ graph TD
     subgraph HOOKS ["Lifecycle Hooks"]
         direction LR
         LOOP --> H1["P66AuditHook<br/>consent gate"]
-        LOOP --> H2["DriftDetectionHook<br/>Jaccard threshold 0.15"]
+        LOOP --> H2["DriftDetectionHook<br/>Jaccard 0.15"]
         LOOP --> H3["RetryOnErrorHook"]
     end
 
@@ -120,15 +120,15 @@ graph TD
         </div>
         <div class="mermaid">
 flowchart LR
-    IN["Incoming command"] --> E1{"ESTOP signal?\nscope=safety\nor ESTOP prefix"}
-    E1 -->|YES| BYPASS["⛔ Immediate stop\nBypasses ALL:\n· Context builder\n· Hooks\n· Tool loop\n· Trajectory log"]
-    E1 -->|NO| E2{"Physical tool\nrequested?\nmove · grip · actuate"}
-    E2 -->|YES| E3{"User consent\nexplicitly granted?\nin this session"}
-    E3 -->|NO| BLOCK["🚫 Blocked\nconsent_required\nBot sends ask-first message"]
-    E3 -->|YES| E4{"LoA sufficient?\nrequired scope ≤ granted scope"}
-    E4 -->|NO| LOA["🚫 LoA enforced\nEscalation required"]
-    E4 -->|YES| AUDIT["✓ Execute\nAudit record written\nTrajectory flagged p66_consent_ok=true"]
-    E2 -->|NO| PASS["✓ Execute normally\nno physical gate"]
+    IN["Incoming command"] --> E1{"ESTOP signal?<br/>scope=safety<br/>or ESTOP prefix"}
+    E1 -->|YES| BYPASS["STOP Immediate stop<br/>Bypasses ALL:<br/>Context builder<br/>Hooks<br/>Tool loop<br/>Trajectory log"]
+    E1 -->|NO| E2{"Physical tool<br/>requested?<br/>move / grip / actuate"}
+    E2 -->|YES| E3{"User consent<br/>explicitly granted?<br/>in this session"}
+    E3 -->|NO| BLOCK["BLOCKED<br/>consent_required<br/>Bot sends ask-first message"]
+    E3 -->|YES| E4{"LoA sufficient?<br/>required scope &lt;= granted scope"}
+    E4 -->|NO| LOA["BLOCKED<br/>LoA enforced<br/>Escalation required"]
+    E4 -->|YES| AUDIT["EXECUTE<br/>Audit record written<br/>p66_consent_ok=true"]
+    E2 -->|NO| PASS["EXECUTE<br/>No physical gate"]
 
     style BYPASS fill:#ef4444,color:#fff,stroke:#dc2626
     style BLOCK fill:#f97316,color:#fff,stroke:#ea580c
@@ -177,12 +177,34 @@ flowchart LR
         <div class="mermaid">
 timeline
     title OpenCastor Agent Harness Evolution
-    Pre-harness : Direct think() call : No context curation : No tool loop : No trajectory log : No safety hooks
-    v2026.3.17.3 : AgentHarness orchestrator : ContextBuilder pipeline : TrajectoryLogger SQLite : P66AuditHook : RetryOnErrorHook
-    v2026.3.17.4 : SkillSystem 5 built-in skills : SkillSelector embedding+keyword : 5 Agent Tools : castor eval CLI
-    v2026.3.17.5 : DualModelHarness 5 modes : DriftDetectionHook Jaccard : castor trajectory CLI : EvalHarness
-    v2026.3.17.6 : castor share install explore : hub.astro type filters : Two-tier autoresearch
-    v2026.3.17.13 : optimizer.py v1 : RCAN v1.6 conformance 100/100 : Community Hub Phase 2 : code-reviewer skill
+    section Pre-harness
+        Pre-harness : Direct think() call
+                    : No context curation
+                    : No tool loop
+                    : No trajectory log
+                    : No safety hooks
+    section v2026.3
+        v2026.3.17.3 : AgentHarness orchestrator
+                     : ContextBuilder pipeline
+                     : TrajectoryLogger SQLite
+                     : P66AuditHook
+                     : RetryOnErrorHook
+        v2026.3.17.4 : SkillSystem 5 built-in skills
+                     : SkillSelector embedding+keyword
+                     : 5 Agent Tools
+                     : castor eval CLI
+        v2026.3.17.5 : DualModelHarness 5 modes
+                     : DriftDetectionHook Jaccard
+                     : castor trajectory CLI
+                     : EvalHarness
+        v2026.3.17.6 : castor share install explore
+                     : hub.astro type filters
+                     : Two-tier autoresearch
+        v2026.3.17.13 : optimizer.py v1
+                      : RCAN v1.6 conformance 100/100
+                      : Community Hub all phases
+                      : Mission threads R2R2H
+                      : RCAN security audit 219/219
         </div>
       </div>
 
@@ -220,7 +242,7 @@ timeline
         <pre class="code-body" id="ascii-art" style="white-space:pre;overflow-x:auto;font-size:0.75rem;line-height:1.5">
 ┌─────────────────────────────────────────────────────────────────┐
 │                  OpenCastor Agent Harness                       │
-│                       v2026.3.17.5+                             │
+│                      v2026.3.17.13+                             │
 └─────────────────────────────────────────────────────────────────┘
 
 User / App / RCAN peer
@@ -289,41 +311,116 @@ ESTOP: absolute — bypasses context, hooks, tools, logging
       <div class="code-block reveal" style="max-width:760px;margin:0 auto">
         <div class="code-header">
           <div class="code-dots"><span></span><span></span><span></span></div>
-          <span class="code-filename">robot.rcan.yaml — agent.harness block</span>
+          <span class="code-filename">robot.rcan.yaml — RCAN v1.6 canonical (100/100 conformance)</span>
+          <a href="https://github.com/craigm26/OpenCastor/blob/main/config/arm.rcan.yaml" class="copy-btn" target="_blank" rel="noopener">View on GitHub →</a>
         </div>
         <div class="code-body">
-<span class="cm"># Agent Harness — add to your existing RCAN config</span>
+<span class="k">rcan_version</span>: <span class="s">'1.6'</span>
+
+<span class="k">metadata</span>:
+  <span class="k">robot_name</span>: MyRobot
+  <span class="k">robot_uuid</span>: <span class="s">00000000-0000-4000-8000-000000000001</span>
+  <span class="k">description</span>: <span class="s">RCAN v1.6 full-conformance config</span>
+  <span class="k">author</span>: your-github-handle
+  <span class="k">license</span>: <span class="s">Apache-2.0</span>
+  <span class="k">rrn</span>: <span class="s">RRN-000000000001</span>
+  <span class="k">rrn_uri</span>: <span class="s">rrn://you/robot/opencastor/my-robot-001</span>
+
 <span class="k">agent</span>:
   <span class="k">provider</span>: google
   <span class="k">model</span>: gemini-2.0-flash
+  <span class="k">vision_enabled</span>: <span class="s">true</span>
+  <span class="k">safety_stop</span>: <span class="s">true</span>
+  <span class="k">latency_budget_ms</span>: <span class="s">3000</span>
+  <span class="k">offline_provider</span>: ollama
+  <span class="k">confidence_gates</span>:
+    - <span class="k">scope</span>: control
+      <span class="k">min_confidence</span>: <span class="s">0.75</span>
+      <span class="k">on_fail</span>: block
+    - <span class="k">scope</span>: safety
+      <span class="k">min_confidence</span>: <span class="s">0.90</span>
+      <span class="k">on_fail</span>: block
 
-  <span class="k">harness</span>:
-    <span class="k">enabled</span>: <span class="s">true</span>          <span class="cm"># default: false (opt-in)</span>
+<span class="k">tiered_brain</span>:
+  <span class="k">fast_provider</span>: ollama
+  <span class="k">fast_model</span>: gemma3:1b         <span class="cm"># handles status / quick nav</span>
+  <span class="k">slow_provider</span>: google
+  <span class="k">slow_model</span>: gemini-2.0-flash   <span class="cm"># handles complex reasoning + vision</span>
+  <span class="k">planner_interval</span>: <span class="s">10</span>
 
-    <span class="cm"># Context window</span>
-    <span class="k">context_budget</span>: <span class="s">0.8</span>    <span class="cm"># fraction of model context to use</span>
-    <span class="k">max_history</span>: <span class="s">20</span>        <span class="cm"># turns of history to include</span>
+<span class="k">safety</span>:
+  <span class="k">local_safety_wins</span>: <span class="s">true</span>
+  <span class="k">emergency_stop_distance</span>: <span class="s">0.4</span>
+  <span class="k">estop_bypass_rate_limit</span>: <span class="s">true</span>
+  <span class="k">watchdog</span>:
+    <span class="k">timeout_s</span>: <span class="s">10</span>
 
-    <span class="cm"># Tool loop</span>
-    <span class="k">max_iterations</span>: <span class="s">5</span>      <span class="cm"># tool calls per turn before stopping</span>
+<span class="k">hardware_safety</span>:
+  <span class="k">physical_estop</span>: <span class="s">false</span>
+  <span class="k">hardware_watchdog_mcu</span>: <span class="s">false</span>
 
-    <span class="cm"># Hooks (all enabled by default)</span>
-    <span class="k">hooks</span>:
-      <span class="k">p66_audit</span>: <span class="s">true</span>        <span class="cm"># P66 safety invariants</span>
-      <span class="k">drift_detection</span>: <span class="s">true</span>  <span class="cm"># detect model drift after 3+ iterations</span>
-      <span class="k">retry_on_error</span>: <span class="s">true</span>   <span class="cm"># retry tool calls on failure</span>
+<span class="k">p66</span>:
+  <span class="k">enabled</span>: <span class="s">true</span>
+  <span class="k">loa_enforcement</span>: <span class="s">true</span>
+  <span class="k">consent_required</span>: <span class="s">true</span>
+  <span class="k">manifest</span>:
+    <span class="k">estop_qos_bypass</span>: <span class="s">true</span>
 
-    <span class="cm"># Secondary model (optional)</span>
-    <span class="k">secondary</span>:
-      <span class="k">enabled</span>: <span class="s">false</span>
-      <span class="k">mode</span>: safety_oracle    <span class="cm"># safety_oracle|specialist|consensus|verifier|shadow</span>
-      <span class="k">provider</span>: ollama
-      <span class="k">model</span>: gemma3:1b
+<span class="k">consent</span>:
+  <span class="k">required</span>: <span class="s">true</span>
+  <span class="k">mode</span>: explicit
+  <span class="k">scope_threshold</span>: control
 
-    <span class="cm"># Trajectory logging</span>
-    <span class="k">trajectory</span>:
-      <span class="k">enabled</span>: <span class="s">true</span>
-      <span class="k">db_path</span>: <span class="s">~/.config/opencastor/trajectories.db</span>
+<span class="k">security</span>:
+  <span class="k">replay_protection</span>:
+    <span class="k">enabled</span>: <span class="s">true</span>
+    <span class="k">window_s</span>: <span class="s">30</span>
+  <span class="k">signing</span>:
+    <span class="k">enabled</span>: <span class="s">false</span>
+    <span class="k">algorithm</span>: Ed25519
+
+<span class="k">loa</span>:
+  <span class="k">enforcement</span>: <span class="s">true</span>
+  <span class="k">min_loa_for_control</span>: <span class="s">1</span>
+
+<span class="k">geofence</span>:
+  <span class="k">enabled</span>: <span class="s">false</span>
+  <span class="k">boundary</span>:
+    <span class="k">type</span>: none
+
+<span class="k">transport</span>:
+  <span class="k">supported</span>: [http, mqtt]
+  <span class="k">constrained_enabled</span>: <span class="s">false</span>
+
+<span class="k">multimodal</span>:
+  <span class="k">enabled</span>: <span class="s">true</span>
+  <span class="k">max_chunk_bytes</span>: <span class="s">1048576</span>
+
+<span class="k">offline</span>:
+  <span class="k">enabled</span>: <span class="s">true</span>
+  <span class="k">fallback_provider</span>: ollama
+
+<span class="k">federation</span>:
+  <span class="k">enabled</span>: <span class="s">true</span>
+  <span class="k">consent_bridge</span>: <span class="s">false</span>
+
+<span class="k">r2ram</span>:
+  <span class="k">scopes</span>: [discover, status, chat, control, safety]
+
+<span class="k">network</span>:
+  <span class="k">allow_remote_override</span>: <span class="s">false</span>
+
+<span class="k">rcan_protocol</span>:
+  <span class="k">port</span>: <span class="s">8000</span>
+  <span class="k">capabilities</span>: [status, nav, teleop, chat]
+  <span class="k">enable_mdns</span>: <span class="s">true</span>
+  <span class="k">enable_jwt</span>: <span class="s">false</span>
+
+<span class="k">cloud</span>:
+  <span class="k">firebase_project</span>: opencastor
+  <span class="k">gateway_url</span>: <span class="s">http://127.0.0.1:8000</span>
+  <span class="k">telemetry_interval_s</span>: <span class="s">30</span>
+  <span class="k">poll_interval_s</span>: <span class="s">5</span>
         </div>
       </div>
     </div>
