@@ -1132,9 +1132,10 @@ class CastorBridge:
                     response_text = (
                         result.get("thought", "")
                         or result.get("response", "")
+                        or result.get("raw_text", "")
                         or result.get("result", "")
                         or result.get("raw", "")
-                        or str(result)
+                        or str(result.get("raw_text", result))
                     )
                 elif isinstance(result, str):
                     response_text = result
