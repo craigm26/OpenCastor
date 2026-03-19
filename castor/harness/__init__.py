@@ -42,6 +42,7 @@ __all__ = [
     "PHYSICAL_TOOLS",
     "ESTOP_TOOLS",
     "SCOPE_LEVELS",
+    "_word_overlap_similarity",
     # Production-grade harness components (opt-in via RCAN config)
     "CircuitBreaker",
     "RollbackManager",

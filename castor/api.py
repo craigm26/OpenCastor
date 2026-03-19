@@ -8461,8 +8461,8 @@ async def rollback_restore(req: _RollbackRestoreRequest, request: Request):
         return {"ok": True, "snapshot_id": req.snapshot_id, "snapshot": snapshot}
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ImportError:
-        raise HTTPException(status_code=503, detail="Rollback component not available")
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="Rollback component not available") from exc
 
 
 @app.get("/api/rollback/recent", dependencies=[Depends(verify_token)])
@@ -8474,8 +8474,8 @@ async def rollback_list(request: Request, limit: int = 10):
 
         mgr = RollbackManager(_get_db_path())
         return {"snapshots": mgr.list_recent(limit=limit)}
-    except ImportError:
-        raise HTTPException(status_code=503, detail="Rollback component not available")
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="Rollback component not available") from exc
 
 
 # ── Dead Letter Queue ─────────────────────────────────────────────────────────
@@ -8492,8 +8492,8 @@ async def dlq_list(request: Request, limit: int = 20):
             "pending_count": dlq.count_pending(),
             "items": dlq.list_pending(limit=limit),
         }
-    except ImportError:
-        raise HTTPException(status_code=503, detail="DLQ component not available")
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="DLQ component not available") from exc
 
 
 @app.post("/api/dlq/{dlq_id}/review", dependencies=[Depends(verify_token)])
@@ -8506,8 +8506,8 @@ async def dlq_review(dlq_id: str, request: Request):
         dlq = DeadLetterQueue(_get_db_path())
         dlq.mark_reviewed(dlq_id)
         return {"ok": True, "dlq_id": dlq_id}
-    except ImportError:
-        raise HTTPException(status_code=503, detail="DLQ component not available")
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="DLQ component not available") from exc
 
 
 # ── Span Tracer ───────────────────────────────────────────────────────────────
@@ -8521,8 +8521,8 @@ async def traces_list(request: Request, limit: int = 50):
 
         tracer = SpanTracer({})
         return {"traces": tracer.list_traces(limit=limit)}
-    except ImportError:
-        raise HTTPException(status_code=503, detail="SpanTracer component not available")
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="SpanTracer component not available") from exc
 
 
 @app.get("/api/traces/{trace_id}", dependencies=[Depends(verify_token)])
@@ -8537,8 +8537,8 @@ async def traces_get(trace_id: str, request: Request):
         if not spans:
             raise HTTPException(status_code=404, detail=f"Trace {trace_id!r} not found")
         return {"trace_id": trace_id, "spans": spans}
-    except ImportError:
-        raise HTTPException(status_code=503, detail="SpanTracer component not available")
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="SpanTracer component not available") from exc
 
 
 # ── Circuit Breaker status ────────────────────────────────────────────────────
