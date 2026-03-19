@@ -196,9 +196,7 @@ def check_update_chain(version: str) -> tuple[bool, str]:
         dirty = [
             ln
             for ln in result.stdout.strip().splitlines()
-            if ln.strip()
-            and not ln.strip().startswith("??")
-            and "castor/" in ln
+            if ln.strip() and not ln.strip().startswith("??") and "castor/" in ln
         ]
         if dirty:
             return False, f"dirty_working_tree:{len(dirty)}_files"

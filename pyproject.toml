@@ -173,6 +173,7 @@ include = ["castor*"]
 
 [tool.setuptools.package-data]
 castor = ["py.typed"]
+"castor.harness" = ["*.yaml"]
 "castor.profiles" = ["**/*.yaml"]
 "castor.profiles.hlabs" = ["*.yaml"]
 "castor.profiles.lerobot" = ["*.yaml"]
@@ -180,6 +181,7 @@ castor = ["py.typed"]
 "castor.profiles.arduino" = ["*.yaml"]
 "castor.profiles.odrive" = ["*.yaml"]
 "castor.profiles.coral" = ["*.yaml"]
+"castor.templates" = ["**/*"]
 
 [tool.ruff]
 line-length = 100

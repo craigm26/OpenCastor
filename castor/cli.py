@@ -2260,6 +2260,15 @@ def cmd_upgrade(args) -> None:
         capture_output=True,
     )
 
+    # Re-run attestation after upgrade to refresh measurements
+    try:
+        from castor.attestation_generator import generate_attestation
+
+        generate_attestation()
+        print("  Security attestation refreshed.")
+    except Exception:
+        pass
+
     # Reload to get new version string
     import importlib
 
@@ -3238,10 +3247,12 @@ def cmd_install_service(args) -> None:
     import os
 
     from castor.daemon import (
+        ATTESTATION_SERVICE_NAME,
         DASHBOARD_SERVICE_NAME,
         DASHBOARD_SERVICE_PATH,
         SERVICE_NAME,
         SERVICE_PATH,
+        enable_attestation_service,
         enable_daemon,
         enable_dashboard,
     )
@@ -3256,12 +3267,19 @@ def cmd_install_service(args) -> None:
         return
 
     if dry_run:
-        from castor.daemon import generate_dashboard_service_file, generate_service_file
+        from castor.daemon import (
+            ATTESTATION_SERVICE_PATH,
+            generate_attestation_service_file,
+            generate_dashboard_service_file,
+            generate_service_file,
+        )
 
         print(f"  [dry-run] Gateway service → {SERVICE_PATH}")
         print(generate_service_file(abs_config))
         print(f"  [dry-run] Dashboard service → {DASHBOARD_SERVICE_PATH}")
         print(generate_dashboard_service_file(port=dashboard_port))
+        print(f"  [dry-run] Attestation service → {ATTESTATION_SERVICE_PATH}")
+        print(generate_attestation_service_file(abs_config))
         return
 
     print("  Installing gateway service...")
@@ -3279,11 +3297,21 @@ def cmd_install_service(args) -> None:
     else:
         print(f"  Dashboard service failed: {dash['message']}")
 
+    print("  Installing attestation service...")
+    att = enable_attestation_service(abs_config)
+    if att["ok"]:
+        print(f"  Attestation service installed: {att['service_path']}")
+        print("  Security posture will be verified on every boot.")
+    else:
+        print(f"  Attestation service failed: {att['message']}")
+        print("  Security posture will show 'degraded' until attestation runs.")
+
     if gw["ok"] and dash["ok"]:
-        print("\n  Both services are enabled and will start automatically on boot.")
+        print("\n  All services are enabled and will start automatically on boot.")
         print("  Manage with:")
         print(f"    sudo systemctl status {SERVICE_NAME}")
         print(f"    sudo systemctl status {DASHBOARD_SERVICE_NAME}")
+        print(f"    sudo systemctl status {ATTESTATION_SERVICE_NAME}")
 
 
 def cmd_learn(args) -> None:
