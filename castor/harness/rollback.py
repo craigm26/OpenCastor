@@ -118,10 +118,7 @@ class RollbackManager:
                 "ORDER BY created_at DESC LIMIT ?",
                 (limit,),
             ).fetchall()
-        return [
-            {"id": r[0], "run_id": r[1], "created_at": r[2], "used_at": r[3]}
-            for r in rows
-        ]
+        return [{"id": r[0], "run_id": r[1], "created_at": r[2], "used_at": r[3]} for r in rows]
 
     def is_physical_tool(self, tool_name: str) -> bool:
         """Return True if tool_name is in the PHYSICAL_TOOLS set."""

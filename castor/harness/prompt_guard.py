@@ -65,8 +65,7 @@ class PromptGuard:
         self._threshold: float = float(config.get("block_threshold", 0.5))
         # Compile all patterns case-insensitively
         self._compiled: list[tuple[str, re.Pattern]] = [
-            (p, re.compile(p, re.IGNORECASE | re.DOTALL))
-            for p in INJECTION_PATTERNS
+            (p, re.compile(p, re.IGNORECASE | re.DOTALL)) for p in INJECTION_PATTERNS
         ]
 
     def check(self, instruction: str) -> GuardResult:

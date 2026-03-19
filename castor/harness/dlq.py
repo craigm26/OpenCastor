@@ -116,9 +116,7 @@ class DeadLetterQueue:
     def count_pending(self) -> int:
         """Return the number of unreviewed dead letters."""
         with self._conn() as conn:
-            row = conn.execute(
-                "SELECT COUNT(*) FROM dead_letters WHERE reviewed = 0"
-            ).fetchone()
+            row = conn.execute("SELECT COUNT(*) FROM dead_letters WHERE reviewed = 0").fetchone()
         return row[0] if row else 0
 
     def purge_old(self, older_than_days: int = 7) -> int:
@@ -129,9 +127,7 @@ class DeadLetterQueue:
         """
         cutoff = time.time() - older_than_days * 86400
         with self._conn() as conn:
-            cur = conn.execute(
-                "DELETE FROM dead_letters WHERE created_at < ?", (cutoff,)
-            )
+            cur = conn.execute("DELETE FROM dead_letters WHERE created_at < ?", (cutoff,))
         return cur.rowcount
 
     # ── Internal ──────────────────────────────────────────────────────────────

@@ -89,8 +89,7 @@ class ContextCompressor:
         try:
             provider = await self._get_provider()
             text = "\n".join(
-                f"{m.get('role', '?')}: {str(m.get('content', ''))[:300]}"
-                for m in messages
+                f"{m.get('role', '?')}: {str(m.get('content', ''))[:300]}" for m in messages
             )
             prompt = (
                 "Summarise this conversation concisely in 2–4 sentences, "

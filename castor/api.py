@@ -8437,13 +8437,16 @@ if __name__ == "__main__":
 
 # ── Harness Component Endpoints ───────────────────────────────────────────────
 
+
 # Shared lazy accessors for harness components
 def _get_db_path() -> str:
     import os as _os
+
     return _os.path.expanduser("~/.config/opencastor/trajectories.db")
 
 
 # ── Rollback ──────────────────────────────────────────────────────────────────
+
 
 class _RollbackRestoreRequest(BaseModel):
     snapshot_id: str
@@ -8480,6 +8483,7 @@ async def rollback_list(request: Request, limit: int = 10):
 
 # ── Dead Letter Queue ─────────────────────────────────────────────────────────
 
+
 @app.get("/api/dlq", dependencies=[Depends(verify_token)])
 async def dlq_list(request: Request, limit: int = 20):
     """Return pending dead letters (requires status scope)."""
@@ -8512,6 +8516,7 @@ async def dlq_review(dlq_id: str, request: Request):
 
 # ── Span Tracer ───────────────────────────────────────────────────────────────
 
+
 @app.get("/api/traces", dependencies=[Depends(verify_token)])
 async def traces_list(request: Request, limit: int = 50):
     """List recent trace IDs (requires status scope)."""
@@ -8543,10 +8548,10 @@ async def traces_get(trace_id: str, request: Request):
 
 # ── Circuit Breaker status ────────────────────────────────────────────────────
 
+
 @app.get("/api/circuit-breaker/status", dependencies=[Depends(verify_token)])
 async def circuit_breaker_status(request: Request):
     """Return circuit breaker state for all tracked skills (requires status scope)."""
     _check_min_role(request, "status")
     # The circuit breaker is in-process; this endpoint is informational only.
     return {"note": "Circuit breaker state is in-memory per process. Use harness logs for details."}
-

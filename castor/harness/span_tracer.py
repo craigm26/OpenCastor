@@ -62,7 +62,9 @@ class SpanTracer:
     def start_trace(self, name: str, attributes: Optional[dict] = None) -> Span:
         """Start a new root span (new trace_id)."""
         trace_id = str(uuid.uuid4())
-        return self.start_span(name=name, parent=None, attributes=attributes or {}, trace_id=trace_id)
+        return self.start_span(
+            name=name, parent=None, attributes=attributes or {}, trace_id=trace_id
+        )
 
     def start_span(
         self,

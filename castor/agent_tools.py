@@ -578,7 +578,6 @@ def share_config_with_peer(
     }
 
 
-
 # ── Working Memory tools ───────────────────────────────────────────────────────
 
 

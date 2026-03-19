@@ -1334,7 +1334,11 @@ class CastorBridge:
                 with httpx.Client(timeout=30.0) as client:
                     resp = client.post(
                         f"{self.gateway_url}/api/command",
-                        json={"instruction": instruction, "scope": "status", "channel": "opencastor_app"},
+                        json={
+                            "instruction": instruction,
+                            "scope": "status",
+                            "channel": "opencastor_app",
+                        },
                         headers=headers,
                     )
             else:

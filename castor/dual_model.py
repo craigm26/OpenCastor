@@ -440,7 +440,9 @@ class DualModelHarness(AgentHarness):
 
     # ── Override post-turn for shadow mode ────────────────────────────────────
 
-    async def _run_pipeline(self, ctx: HarnessContext, run_id: str, t0: float, root_span=None) -> HarnessResult:
+    async def _run_pipeline(
+        self, ctx: HarnessContext, run_id: str, t0: float, root_span=None
+    ) -> HarnessResult:
         result = await super()._run_pipeline(ctx, run_id, t0)
         # Shadow mode: fire secondary async without blocking
         if self._mode == "shadow" and ctx.scope in self._scope_filter:

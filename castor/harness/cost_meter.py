@@ -130,8 +130,10 @@ class CostMeter:
     def _resolve_pricing(model_name: str, overrides: dict) -> dict[str, float]:
         """Return pricing for ``model_name``, with optional user overrides."""
         if overrides:
-            return {"input": float(overrides.get("input", 0.001)),
-                    "output": float(overrides.get("output", 0.004))}
+            return {
+                "input": float(overrides.get("input", 0.001)),
+                "output": float(overrides.get("output", 0.004)),
+            }
         model_lower = model_name.lower()
         for key, pricing in PRICE_PER_1K.items():
             if key in model_lower:

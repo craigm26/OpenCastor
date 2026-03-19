@@ -400,6 +400,7 @@ class AgentHarness:
 
         # Trajectories DB path (shared by rollback + DLQ)
         import os as _os
+
         _db_path: str = str(
             cfg.get("trajectories_db")
             or _os.path.expanduser("~/.config/opencastor/trajectories.db")
@@ -408,33 +409,25 @@ class AgentHarness:
         # Circuit Breaker
         _cb_cfg = cfg.get("circuit_breaker", {})
         self.circuit_breaker: Any = (
-            _CircuitBreaker(_cb_cfg)
-            if _CircuitBreaker and _cb_cfg.get("enabled")
-            else None
+            _CircuitBreaker(_cb_cfg) if _CircuitBreaker and _cb_cfg.get("enabled") else None
         )
 
         # Rollback Manager
         _rb_cfg = cfg.get("rollback", {})
         self.rollback: Any = (
-            _RollbackManager(_db_path)
-            if _RollbackManager and _rb_cfg.get("enabled")
-            else None
+            _RollbackManager(_db_path) if _RollbackManager and _rb_cfg.get("enabled") else None
         )
 
         # Dead Letter Queue
         _dlq_cfg = cfg.get("dlq", {})
         self.dlq: Any = (
-            _DeadLetterQueue(_db_path)
-            if _DeadLetterQueue and _dlq_cfg.get("enabled")
-            else None
+            _DeadLetterQueue(_db_path) if _DeadLetterQueue and _dlq_cfg.get("enabled") else None
         )
 
         # Prompt Guard (initialised from top-level config key)
         _pg_cfg = cfg.get("prompt_guard", {})
         self.prompt_guard: Any = (
-            _PromptGuard(_pg_cfg)
-            if _PromptGuard and _pg_cfg.get("enabled")
-            else None
+            _PromptGuard(_pg_cfg) if _PromptGuard and _pg_cfg.get("enabled") else None
         )
 
         # Context Compressor
@@ -456,17 +449,13 @@ class AgentHarness:
         # Span Tracer
         _st_cfg = cfg.get("span_tracer", {})
         self.span_tracer: Any = (
-            _SpanTracer(_st_cfg)
-            if _SpanTracer and _st_cfg.get("enabled")
-            else None
+            _SpanTracer(_st_cfg) if _SpanTracer and _st_cfg.get("enabled") else None
         )
 
         # Cost Meter
         _cm_cfg = cfg.get("cost_meter", {})
         self.cost_meter: Any = (
-            _CostMeter(_cm_cfg)
-            if _CostMeter and _cm_cfg.get("enabled")
-            else None
+            _CostMeter(_cm_cfg) if _CostMeter and _cm_cfg.get("enabled") else None
         )
 
         # Register working memory tools if enabled
