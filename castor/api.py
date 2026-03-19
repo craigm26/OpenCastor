@@ -1316,6 +1316,7 @@ _BUILTIN_CLI_COMMANDS: list[dict] = [
         "args": [{"name": "version", "optional": True}],
     },
     {"cmd": "/reboot", "description": "Reboot robot", "scope": "system", "instant": False},
+    {"cmd": "/attestation", "description": "Show security attestation status", "scope": "status", "instant": True},
     {
         "cmd": "/reload-config",
         "description": "Reload RCAN config",

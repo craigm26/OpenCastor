@@ -1622,6 +1622,33 @@ def cmd_status(args) -> None:
     print()
 
 
+def cmd_attestation(args) -> None:
+    """castor attestation — show or regenerate software attestation status."""
+    import json
+    from pathlib import Path
+
+    from castor.attestation_generator import generate_attestation
+
+    config_path = Path(args.config) if getattr(args, "config", None) else None
+    out_path = Path(args.out) if getattr(args, "out", None) else None
+    result = generate_attestation(config_path=config_path, out_path=out_path)
+
+    if getattr(args, "output_json", False):
+        print(json.dumps(result, indent=2))
+    else:
+        status = "VERIFIED" if result["verified"] else "DEGRADED"
+        print(f"\n  OpenCastor Software Attestation: {status}\n")
+        print(f"  secure_boot   (code integrity):    {result['secure_boot']}")
+        print(f"    {result['claims_detail']['secure_boot']}")
+        print(f"  measured_boot (config integrity):   {result['measured_boot']}")
+        print(f"    {result['claims_detail']['measured_boot']}")
+        print(f"  signed_updates (update chain):      {result['signed_updates']}")
+        print(f"    {result['claims_detail']['signed_updates']}")
+        print(f"\n  Profile: {result['profile']}")
+        print(f"  Token:   {result['token'][:16]}...")
+        print()
+
+
 def cmd_swarm(args) -> None:
     """castor swarm — placeholder."""
     print("castor swarm: coming soon.")
@@ -5509,6 +5536,22 @@ def main() -> None:
     )
     p_conformance.add_argument("--json", action="store_true", help="Output raw JSON manifest")
 
+    p_attest = sub.add_parser(
+        "attestation",
+        help="Show or regenerate software attestation status",
+        epilog=(
+            "Examples:\n"
+            "  castor attestation\n"
+            "  castor attestation --config bob.rcan.yaml\n"
+            "  castor attestation --json\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_attest.add_argument("--config", default=None, help="Path to RCAN config file")
+    p_attest.add_argument("--out", default=None, help="Output path for attestation JSON")
+    p_attest.add_argument("--json", action="store_true", dest="output_json", help="Output JSON")
+    p_attest.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
+
     p_audit = sub.add_parser(
         "audit",
         help="View the append-only audit log",
@@ -5904,6 +5947,7 @@ def main() -> None:
         "monitor": _cmd_monitor,
         "safety": cmd_safety,
         "conformance": cmd_conformance,
+        "attestation": cmd_attestation,
         "login": cmd_login,
         "flash": cmd_flash,
         "hub": cmd_hub,
