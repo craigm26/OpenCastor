@@ -169,6 +169,8 @@ class DualModelHarness(AgentHarness):
         self,
         ctx: HarnessContext,
         built: Any,
+        run_id: str = "",
+        root_span: Any = None,
     ) -> tuple[Thought, list, int]:
         """Extended tool loop with secondary model integration."""
         from castor.providers.base import Thought as _Thought
@@ -438,7 +440,7 @@ class DualModelHarness(AgentHarness):
 
     # ── Override post-turn for shadow mode ────────────────────────────────────
 
-    async def _run_pipeline(self, ctx: HarnessContext, run_id: str, t0: float) -> HarnessResult:
+    async def _run_pipeline(self, ctx: HarnessContext, run_id: str, t0: float, root_span=None) -> HarnessResult:
         result = await super()._run_pipeline(ctx, run_id, t0)
         # Shadow mode: fire secondary async without blocking
         if self._mode == "shadow" and ctx.scope in self._scope_filter:

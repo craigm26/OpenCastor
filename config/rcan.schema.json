@@ -443,7 +443,11 @@
             "diff_drive",
             "differential",
             "arm",
-            "wheeled"
+            "wheeled",
+            "legged",
+            "quadruped",
+            "biped",
+            "hexapod"
           ]
         },
         "dof": {

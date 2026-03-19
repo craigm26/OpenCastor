@@ -20,6 +20,7 @@ from castor.harness.core import (
     P66AuditHook,
     RetryOnErrorHook,
     ToolCallRecord,
+    _word_overlap_similarity,
 )
 from castor.harness.cost_meter import CostMeter
 from castor.harness.dlq import DeadLetterQueue
