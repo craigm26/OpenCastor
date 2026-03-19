@@ -218,7 +218,7 @@ class MessageRouter:
         capability = target.capability or "status"
         required_scope = _CAP_SCOPE_MAP.get(capability, Scope.STATUS)
 
-        if principal and not principal.has_scope(required_scope):
+        if principal is None or not principal.has_scope(required_scope):
             return RCANMessage.error(
                 source=source_ruri,
                 target=message.source,
