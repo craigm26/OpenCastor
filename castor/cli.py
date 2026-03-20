@@ -6354,23 +6354,6 @@ def main() -> None:
         "provider": cmd_provider,
     }
 
-    # castor provider — gated model provider management
-    p_provider = sub.add_parser(
-        "provider",
-        help="Manage gated model providers (auth, list, status)",
-        epilog="Example: castor provider auth pi-foundation --config robot.rcan.yaml",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    p_provider_sub = p_provider.add_subparsers(dest="provider_action")
-    p_prov_auth = p_provider_sub.add_parser("auth", help="Test provider authentication")
-    p_prov_auth.add_argument(
-        "provider_name", nargs="?", default="", help="Provider name from config"
-    )
-    p_prov_auth.add_argument("--config", default="robot.rcan.yaml", help="RCAN config file")
-    p_prov_list = p_provider_sub.add_parser("list", help="List configured providers")
-    p_prov_list.add_argument("--config", default="robot.rcan.yaml", help="RCAN config file")
-    p_provider_sub.add_parser("status", help="Show status of active providers on running gateway")
-
     # castor eval — skill evaluation harness
     p_eval = sub.add_parser("eval", help="Evaluate a skill against its test suite")
     p_eval.add_argument("--skill", "-s", metavar="NAME", help="Skill name to evaluate")
