@@ -438,14 +438,14 @@ ESTOP: absolute — bypasses context, hooks, tools, logging
       <span class="k">label</span>: P66 Safety
       <span class="k">enabled</span>: <span class="s">true</span>
       <span class="k">can_disable</span>: <span class="s">false</span>
-      <span class="k">config</span>: { <span class="k">p66_audit</span>: <span class="s">true</span> }
+      <span class="k">config</span>: &#123; <span class="k">p66_audit</span>: <span class="s">true</span> &#125;
 
     <span class="cm"># ── SECURITY & VALIDATION ──</span>
     - <span class="k">id</span>: prompt-guard
       <span class="k">type</span>: guard
       <span class="k">label</span>: Prompt Guard
       <span class="k">enabled</span>: <span class="s">true</span>
-      <span class="k">config</span>: { <span class="k">block_jailbreak</span>: <span class="s">true</span>, <span class="k">risk_threshold</span>: <span class="s">0.6</span> }
+      <span class="k">config</span>: &#123; <span class="k">block_jailbreak</span>: <span class="s">true</span>, <span class="k">risk_threshold</span>: <span class="s">0.6</span> &#125;
 
     <span class="cm"># ── CONTEXT ASSEMBLY ──</span>
     - <span class="k">id</span>: context-builder
@@ -453,13 +453,13 @@ ESTOP: absolute — bypasses context, hooks, tools, logging
       <span class="k">label</span>: Context Builder
       <span class="k">enabled</span>: <span class="s">true</span>
       <span class="k">can_disable</span>: <span class="s">false</span>
-      <span class="k">config</span>: { <span class="k">memory</span>: <span class="s">true</span>, <span class="k">telemetry</span>: <span class="s">true</span>, <span class="k">system_prompt</span>: <span class="s">true</span>, <span class="k">skills_context</span>: <span class="s">true</span>, <span class="k">rcan_identity</span>: <span class="s">true</span> }
+      <span class="k">config</span>: &#123; <span class="k">memory</span>: <span class="s">true</span>, <span class="k">telemetry</span>: <span class="s">true</span>, <span class="k">system_prompt</span>: <span class="s">true</span>, <span class="k">skills_context</span>: <span class="s">true</span>, <span class="k">rcan_identity</span>: <span class="s">true</span> &#125;
 
     <span class="cm"># ── WORKING MEMORY ──</span>
     - <span class="k">id</span>: working-memory
       <span class="k">type</span>: memory
       <span class="k">label</span>: Working Memory
-      <span class="k">config</span>: { <span class="k">max_entries</span>: <span class="s">50</span>, <span class="k">ttl_s</span>: <span class="s">1800</span>, <span class="k">persist</span>: <span class="s">false</span> }
+      <span class="k">config</span>: &#123; <span class="k">max_entries</span>: <span class="s">50</span>, <span class="k">ttl_s</span>: <span class="s">1800</span>, <span class="k">persist</span>: <span class="s">false</span> &#125;
 
     <span class="cm"># ── SKILLS ──</span>
     - <span class="k">id</span>: skill-navigate-to         <span class="cm"># order: 0, enabled</span>
@@ -470,9 +470,9 @@ ESTOP: absolute — bypasses context, hooks, tools, logging
 
     <span class="cm"># ── CONFIDENCE & SAFETY GATES ──</span>
     - <span class="k">id</span>: circuit-breaker
-      <span class="k">config</span>: { <span class="k">failure_threshold</span>: <span class="s">3</span>, <span class="k">cooldown_s</span>: <span class="s">30</span> }
+      <span class="k">config</span>: &#123; <span class="k">failure_threshold</span>: <span class="s">3</span>, <span class="k">cooldown_s</span>: <span class="s">30</span> &#125;
     - <span class="k">id</span>: hitl-physical
-      <span class="k">config</span>: { <span class="k">timeout_s</span>: <span class="s">30</span>, <span class="k">on_timeout</span>: block, <span class="k">require_auth</span>: <span class="s">true</span> }
+      <span class="k">config</span>: &#123; <span class="k">timeout_s</span>: <span class="s">30</span>, <span class="k">on_timeout</span>: block, <span class="k">require_auth</span>: <span class="s">true</span> &#125;
 
     <span class="cm"># ── MODEL ROUTING ──</span>
     - <span class="k">id</span>: model-dual
@@ -485,20 +485,20 @@ ESTOP: absolute — bypasses context, hooks, tools, logging
 
     <span class="cm"># ── COST & DRIFT MONITORING ──</span>
     - <span class="k">id</span>: cost-gate
-      <span class="k">config</span>: { <span class="k">budget_usd</span>: <span class="s">0.10</span>, <span class="k">on_exceed</span>: block, <span class="k">alert_at_pct</span>: <span class="s">80</span> }
+      <span class="k">config</span>: &#123; <span class="k">budget_usd</span>: <span class="s">0.10</span>, <span class="k">on_exceed</span>: block, <span class="k">alert_at_pct</span>: <span class="s">80</span> &#125;
     - <span class="k">id</span>: hook-drift
-      <span class="k">config</span>: { <span class="k">drift_threshold</span>: <span class="s">0.15</span> }
+      <span class="k">config</span>: &#123; <span class="k">drift_threshold</span>: <span class="s">0.15</span> &#125;
 
     <span class="cm"># ── OBSERVABILITY ──</span>
     - <span class="k">id</span>: span-tracer
-      <span class="k">config</span>: { <span class="k">export</span>: sqlite, <span class="k">db_path</span>: <span class="s">traces.db</span> }
+      <span class="k">config</span>: &#123; <span class="k">export</span>: sqlite, <span class="k">db_path</span>: <span class="s">traces.db</span> &#125;
     - <span class="k">id</span>: dlq
-      <span class="k">config</span>: { <span class="k">db_path</span>: <span class="s">dlq.db</span>, <span class="k">max_size</span>: <span class="s">500</span> }
+      <span class="k">config</span>: &#123; <span class="k">db_path</span>: <span class="s">dlq.db</span>, <span class="k">max_size</span>: <span class="s">500</span> &#125;
 
     <span class="cm"># ── AUDIT (always-on, always last) ──</span>
     - <span class="k">id</span>: trajectory-logger
       <span class="k">can_disable</span>: <span class="s">false</span>
-      <span class="k">config</span>: { <span class="k">sqlite_path</span>: <span class="s">trajectory.db</span> }
+      <span class="k">config</span>: &#123; <span class="k">sqlite_path</span>: <span class="s">trajectory.db</span> &#125;
         </pre>
       </div>
     </div>

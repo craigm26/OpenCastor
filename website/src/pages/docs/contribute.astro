@@ -130,11 +130,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         </div>
         <div class="mermaid">
 flowchart TD
-    IDLE["Robot idle > threshold"] --> CHECK{"Active command?"}
+    IDLE["Robot idle > threshold"] --> CHECK&#123;"Active command?"&#125;
     CHECK -->|YES| WAIT["Wait &mdash; robot busy"]
     CHECK -->|NO| FETCH["Fetch work unit\nfrom coordinator"]
     FETCH --> RUN["Run inference\non Hailo NPU / CPU"]
-    RUN --> PREEMPT{"Command received?"}
+    RUN --> PREEMPT&#123;"Command received?"&#125;
     PREEMPT -->|"YES &mdash; P66"| CANCEL["Cancel immediately\nReturn partial result"]
     PREEMPT -->|NO| SUBMIT["Submit result\nto coordinator"]
     SUBMIT --> LOG["Log to telemetry\nupdate fleet dashboard"]
@@ -302,7 +302,7 @@ flowchart TD
             <span class="code-filename">Response</span>
           </div>
           <div class="code-body">
-{
+&#123;
   <span class="k">"enabled"</span>: <span class="s">true</span>,
   <span class="k">"active"</span>: <span class="s">true</span>,
   <span class="k">"state"</span>: <span class="s">"running"</span>,            <span class="cm">// idle | fetching | running | submitting</span>
@@ -311,21 +311,21 @@ flowchart TD
   <span class="k">"work_unit_id"</span>: <span class="s">"wu-482991"</span>,
   <span class="k">"progress_pct"</span>: <span class="s">67.3</span>,
   <span class="k">"elapsed_s"</span>: <span class="s">142</span>,
-  <span class="k">"stats"</span>: {
+  <span class="k">"stats"</span>: &#123;
     <span class="k">"units_completed_today"</span>: <span class="s">14</span>,
     <span class="k">"units_completed_lifetime"</span>: <span class="s">2847</span>,
     <span class="k">"minutes_contributed_today"</span>: <span class="s">287</span>,
     <span class="k">"minutes_contributed_lifetime"</span>: <span class="s">48210</span>,
     <span class="k">"preemptions_today"</span>: <span class="s">3</span>
-  },
-  <span class="k">"hardware"</span>: {
+  &#125;,
+  <span class="k">"hardware"</span>: &#123;
     <span class="k">"npu"</span>: <span class="s">"hailo-8l"</span>,
     <span class="k">"npu_tops"</span>: <span class="s">26</span>,
     <span class="k">"cpu"</span>: <span class="s">"cortex-a76"</span>,
     <span class="k">"camera"</span>: <span class="s">false</span>,
     <span class="k">"microphone"</span>: <span class="s">false</span>
-  }
-}
+  &#125;
+&#125;
           </div>
         </div>
 
