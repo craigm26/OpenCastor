@@ -5450,6 +5450,32 @@ async def on_startup():
             except Exception as e:
                 logger.debug(f"mDNS startup skipped: {e}")
 
+    # Start RCAN-MQTT transport (opt-in via rcan_protocol.mqtt_transport.enabled)
+    if state.config:
+        mqtt_cfg = state.config.get("rcan_protocol", {}).get("mqtt_transport", {})
+        if mqtt_cfg.get("enabled"):
+            try:
+                from castor.channels.rcan_mqtt_transport import RCANMQTTTransport
+
+                local_rrn = state.rrn or "unknown"
+                state.rcan_mqtt = RCANMQTTTransport(
+                    config=mqtt_cfg,
+                    local_rrn=local_rrn,
+                    on_message=lambda msg, is_estop: logger.info(
+                        "RCAN-MQTT %s: %s",
+                        "ESTOP" if is_estop else "msg",
+                        msg.get("cmd", "?"),
+                    ),
+                )
+                state.rcan_mqtt.connect()
+                logger.info(
+                    "RCAN-MQTT transport started (broker=%s:%s)",
+                    mqtt_cfg.get("broker_host", "localhost"),
+                    mqtt_cfg.get("broker_port", 1883),
+                )
+            except Exception as e:
+                logger.debug("RCAN-MQTT startup skipped: %s", e)
+
     await _start_channels()
 
     host = os.getenv("OPENCASTOR_API_HOST", "127.0.0.1")
@@ -8406,6 +8432,15 @@ async def on_shutdown():
 
     await _stop_channels()
 
+    # Stop RCAN-MQTT transport
+    if hasattr(state, "rcan_mqtt") and state.rcan_mqtt is not None:
+        try:
+            state.rcan_mqtt.disconnect()
+            log.info("RCAN-MQTT transport disconnected")
+        except Exception:
+            pass
+        state.rcan_mqtt = None
+
     # Stop mDNS
     if state.mdns_broadcaster:
         state.mdns_broadcaster.stop()
@@ -8677,3 +8712,39 @@ async def get_contribute_endpoint(request: Request):
             "work_units_total": 0,
             "contribute_minutes_today": 0,
         }
+
+
+@app.post("/api/contribute/start", dependencies=[Depends(verify_token)])
+async def start_contribute_endpoint(request: Request):
+    """POST /api/contribute/start — Start idle compute contribution."""
+    _check_min_role(request, "operator")
+    try:
+        from castor.skills.contribute import start_contribute
+
+        return start_contribute()
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+@app.post("/api/contribute/stop", dependencies=[Depends(verify_token)])
+async def stop_contribute_endpoint(request: Request):
+    """POST /api/contribute/stop — Stop idle compute contribution."""
+    _check_min_role(request, "operator")
+    try:
+        from castor.skills.contribute import stop_contribute
+
+        return stop_contribute()
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+@app.get("/api/contribute/history", dependencies=[Depends(verify_token)])
+async def get_contribute_history_endpoint(request: Request):
+    """GET /api/contribute/history — Return daily contribution history (90 days)."""
+    _check_min_role(request, "operator")
+    try:
+        from castor.skills.contribute import get_contribute_history
+
+        return {"history": get_contribute_history()}
+    except Exception:
+        return {"history": []}

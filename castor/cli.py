@@ -300,6 +300,160 @@ def cmd_token(args) -> None:
         raise SystemExit(1) from exc
 
 
+def cmd_peer_test(args) -> None:
+    """Test non-HTTP RCAN transport to discovered peers."""
+    import json as _json
+    import time as _time
+
+    peer_host = getattr(args, "peer", None)
+    transport = getattr(args, "transport", "all")
+    dry_run = getattr(args, "dry_run", True)
+
+    print("\n  OpenCastor Peer Transport Test")
+    print("  " + "═" * 43)
+
+    # Discover peers
+    peers: list[dict] = []
+    try:
+        import httpx
+
+        token = os.getenv("OPENCASTOR_API_TOKEN", "")
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        r = httpx.get("http://127.0.0.1:8001/api/peers", headers=headers, timeout=3)
+        if r.status_code == 200:
+            peers = r.json().get("peers", [])
+    except Exception:
+        pass
+
+    if peer_host:
+        peers = [{"name": peer_host, "host": peer_host, "rrn": peer_host}]
+
+    if not peers:
+        print("  No peers discovered.")
+        print("  Specify a peer: castor peer-test <hostname>")
+        return
+
+    print(f"\n  Discovered: {', '.join(p.get('name', p.get('host', '?')) for p in peers)}\n")
+
+    for peer in peers:
+        name = peer.get("name", peer.get("host", "unknown"))
+        host = peer.get("host", name)
+        rrn = peer.get("rrn", name)
+
+        print(f"  Testing {name} ({rrn})")
+        print("  " + "─" * 43)
+
+        test_msg = {
+            "msg_id": f"peer-test-{int(_time.time())}",
+            "cmd": "PING",
+            "target": f"rcan://{rrn}",
+        }
+        json_size = len(_json.dumps(test_msg))
+
+        # HTTP test
+        if transport in ("all", "http"):
+            try:
+                import httpx
+
+                t0 = _time.monotonic()
+                r = httpx.get(f"http://{host}:8001/api/status", timeout=3)
+                ms = int((_time.monotonic() - t0) * 1000)
+                status = "✅" if r.status_code == 200 else "⚠️"
+                print(f"    HTTP (JSON)       {status}  {ms}ms   {json_size} bytes")
+            except Exception as e:
+                print(f"    HTTP (JSON)       ❌  {str(e)[:30]}")
+
+        # Compact encoding test
+        if transport in ("all", "mqtt", "compact"):
+            try:
+                from rcan import RCANMessage
+                from rcan.transport import encode_compact
+
+                msg = RCANMessage(cmd="PING", target=f"rcan://opencastor.com/acme/bot/v1/{rrn}")
+                payload = encode_compact(msg)
+                savings = int((1 - len(payload) / json_size) * 100)
+                print(f"    Compact           ✅  —     {len(payload)} bytes  (-{savings}%)")
+            except Exception as e:
+                print(f"    Compact           ❌  {str(e)[:30]}")
+
+        # Minimal ESTOP test
+        if transport in ("all", "mqtt", "minimal"):
+            try:
+                from rcan import RCANMessage
+                from rcan.transport import encode_minimal
+
+                msg = RCANMessage(cmd="ESTOP", target=f"rcan://opencastor.com/acme/bot/v1/{rrn}")
+                raw = encode_minimal(msg)
+                label = "✅" if not dry_run else "✅ (dry-run)"
+                print(f"    Minimal (ESTOP)   {label}  —     {len(raw)} bytes")
+            except Exception as e:
+                print(f"    Minimal (ESTOP)   ❌  {str(e)[:30]}")
+
+        print()
+
+    if dry_run:
+        print("  Dry-run: encoding tested, no messages sent to peers")
+        print("  Live test: castor peer-test --no-dry-run\n")
+
+
+def cmd_contribute_cli(args) -> None:
+    """Manage idle compute contribution."""
+    action = getattr(args, "contribute_action", "status")
+
+    try:
+        import httpx
+
+        token = os.getenv("OPENCASTOR_API_TOKEN", "")
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        base = "http://127.0.0.1:8001"
+
+        if action == "start":
+            r = httpx.post(f"{base}/api/contribute/start", headers=headers, timeout=5)
+            data = r.json()
+            print(f"\n  Contribute: {'started' if data.get('active') else 'failed to start'}")
+
+        elif action == "stop":
+            r = httpx.post(f"{base}/api/contribute/stop", headers=headers, timeout=5)
+            print("\n  Contribute: stopped")
+
+        elif action == "history":
+            r = httpx.get(f"{base}/api/contribute/history", headers=headers, timeout=5)
+            history = r.json().get("history", [])
+            if not history:
+                print("\n  No contribution history yet.")
+                return
+            print("\n  Contribution History (last 90 days)")
+            print("  " + "─" * 40)
+            for entry in history[-14:]:  # Show last 2 weeks
+                print(
+                    f"    {entry['date']}  {entry['minutes']:>4} min  "
+                    f"{entry['work_units']:>3} units"
+                )
+            print()
+
+        else:  # status
+            r = httpx.get(f"{base}/api/contribute", headers=headers, timeout=5)
+            data = r.json()
+            enabled = data.get("enabled", False)
+            active = data.get("active", False)
+            print("\n  Idle Compute Contribution")
+            print("  " + "─" * 30)
+            print(
+                f"    Status:    {'🟢 Active' if active else '🟡 Enabled (idle)' if enabled else '⚫ Disabled'}"
+            )
+            print(f"    Project:   {data.get('project', '—')}")
+            print(
+                f"    Today:     {data.get('contribute_minutes_today', 0)} min / {data.get('work_units_today', 0)} units"
+            )
+            print(
+                f"    Lifetime:  {data.get('contribute_minutes_lifetime', 0)} min / {data.get('work_units_total', 0)} units"
+            )
+            print()
+
+    except Exception as exc:
+        print(f"\n  Error: {exc}\n  Is the gateway running? (castor run)")
+
+
 def cmd_discover(args) -> None:
     """Discover RCAN peers on the local network."""
     print("\n  Scanning for RCAN peers (5 seconds)...\n")
@@ -4425,6 +4579,35 @@ def main() -> None:
         help="Extra arguments (e.g. limit N for history)",
     )
 
+    p_peer_test = sub.add_parser(
+        "peer-test",
+        help="Test direct RCAN communication with discovered peers",
+    )
+    p_peer_test.add_argument("peer", nargs="?", help="Peer hostname or address")
+    p_peer_test.add_argument(
+        "--transport",
+        choices=["all", "http", "mqtt", "compact", "minimal"],
+        default="all",
+    )
+    p_peer_test.add_argument(
+        "--no-dry-run",
+        dest="dry_run",
+        action="store_false",
+        default=True,
+    )
+
+    p_contribute = sub.add_parser(
+        "contribute",
+        help="Manage idle compute contribution",
+    )
+    p_contribute.add_argument(
+        "contribute_action",
+        nargs="?",
+        choices=["status", "start", "stop", "history"],
+        default="status",
+        help="Contribute sub-command (default: status)",
+    )
+
     p_doctor = sub.add_parser(
         "doctor",
         help="Run system health checks",
@@ -5982,6 +6165,8 @@ def main() -> None:
         "scan": cmd_scan,
         "stop": cmd_stop,
         "daemon": cmd_daemon,
+        "peer-test": cmd_peer_test,
+        "contribute": cmd_contribute_cli,
         "deploy": cmd_deploy,
         # Issue #348
         "snapshot": cmd_snapshot,
