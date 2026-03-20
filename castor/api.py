@@ -8436,7 +8436,7 @@ async def on_shutdown():
     if hasattr(state, "rcan_mqtt") and state.rcan_mqtt is not None:
         try:
             state.rcan_mqtt.disconnect()
-            log.info("RCAN-MQTT transport disconnected")
+            logger.info("RCAN-MQTT transport disconnected")
         except Exception:
             pass
         state.rcan_mqtt = None
