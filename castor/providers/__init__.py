@@ -3,6 +3,7 @@ from .apple_provider import AppleProvider
 from .consensus_provider import ConsensusProvider
 from .deepseek_provider import DeepSeekProvider
 from .embedding_backend import EmbeddingBackend
+from .gated import GatedModelProvider
 from .google_provider import GoogleProvider
 from .grok_provider import GrokProvider
 from .groq_provider import GroqProvider
@@ -29,6 +30,7 @@ __all__ = [
     "MLXProvider",
     "OllamaProvider",
     "OpenAIProvider",
+    "GatedModelProvider",
     "OpenRouterProvider",
     "VertexAIProvider",
     "VLAProvider",
@@ -103,6 +105,3 @@ def get_provider(config: dict):
     from castor.registry import get_registry
 
     return get_registry().get_provider(config)
-
-
-from .gated import GatedModelProvider
