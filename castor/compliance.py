@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 # Constants
 # ---------------------------------------------------------------------------
 
-SPEC_VERSION = "1.6"
+SPEC_VERSION = "1.8"
 
 # All RCAN spec versions that this runtime can accept (for inbound message validation).
 # Robots running older spec versions are still interoperable; newer versions are warned.

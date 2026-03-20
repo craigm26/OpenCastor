@@ -4,10 +4,10 @@
 
 ## What Is OpenCastor?
 
-OpenCastor is the open-source **reference implementation of the RCAN protocol** (v1.6.1). It connects LLM "brains" to robot "bodies" through a plug-and-play architecture and exposes them to messaging platforms for remote control.
+OpenCastor is the open-source **reference implementation of the RCAN protocol** (v1.8.0)). It connects LLM "brains" to robot "bodies" through a plug-and-play architecture and exposes them to messaging platforms for remote control.
 
-- **Version**: 2026.3.17.13 (date-based: `YYYY.MM.DD.patch`)
-- **RCAN**: v1.6.1 — see [rcan.dev/spec](https://rcan.dev/spec/)
+- **Version**: 2026.3.20.1 (date-based: `YYYY.MM.DD.patch`)
+- **RCAN**: v1.8.0 — see [rcan.dev/spec](https://rcan.dev/spec/)
 - **License**: Apache 2.0 | **Python**: 3.10+ | **Tests**: 7804+ passing
 
 ## Quick Start
@@ -146,7 +146,7 @@ move(cmd)  ──►  SafetyLayer.check(cmd)  ──►  _move(cmd)  ──►  
 | `GET` | `/api/contribute` | Idle compute contribution status |
 | `GET` | `/api/harness` | Current harness configuration |
 
-## RCAN Protocol (v1.6.1)
+## RCAN Protocol (v1.8.0)
 
 ### MessageTypes
 ```python
@@ -189,7 +189,7 @@ VISION       → planner preferred
 SEARCH       → planner preferred
 ```
 
-## RCAN Config Format (v1.6.1)
+## RCAN Config Format (v1.8.0)
 
 ```yaml
 rcan_version: "1.6.1"
@@ -198,7 +198,7 @@ metadata:
   rrn: RRN-000000000001
   rrn_uri: rrn://org/robot/model/id
   rcan_uri: rcan://robot.local:8000/my-robot
-  version: 2026.3.17.13
+  version: 2026.3.20.1
 agent:
   provider: google
   model: gemini-1.5-flash

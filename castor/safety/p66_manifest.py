@@ -430,7 +430,7 @@ def build_manifest(safety_layer: Any = None, hardware_caps: Optional[dict] = Non
     return {
         "manifest_version": "1.0",
         "protocol": "ContinuonOS Protocol 66 (OpenCastor independent implementation)",
-        "rcan_spec_version": "1.6",
+        "rcan_spec_version": "1.8",
         "rcan_version": "1.6",  # v1.6: explicit rcan_version field
         "replay_cache_enabled": True,  # v1.5: GAP-03 replay prevention active
         "sender_type_logged": True,  # v1.5: GAP-08 cloud relay audit trail
