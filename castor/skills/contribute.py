@@ -107,7 +107,7 @@ class ContributeSkill:
 
     def status(self) -> dict:
         self._check_daily_reset()
-        return {
+        result: dict = {
             "enabled": self._config.get("enabled", False),
             "active": self._active,
             "project": (self._config.get("projects") or [None])[0],
@@ -116,16 +116,29 @@ class ContributeSkill:
             "contribute_minutes_today": self._stats.get("contribute_minutes_today", 0),
             "contribute_minutes_lifetime": self._stats.get("contribute_minutes_lifetime", 0),
         }
+        if "hardware_tier" in self._stats:
+            result["hardware_tier"] = self._stats["hardware_tier"]
+        return result
 
     def _contribute_loop(self) -> None:
-        from castor.contribute.coordinator import make_coordinator
+        from castor.contribute.coordinator import HarnessEvalCoordinator, make_coordinator
+        from castor.contribute.hardware_profile import get_hw_profile
+        from castor.contribute.harness_eval import detect_hardware_tier
         from castor.contribute.runner import run_work_unit
 
-        projects = self._config.get("projects", ["science"])
+        projects = self._config.get("projects", ["science", "harness_research"])
         coordinator_type = self._config.get("coordinator", "simulated")
         coordinator_url = self._config.get("boinc_url", "")
-        coordinator = make_coordinator(coordinator_type, coordinator_url)
-        hw: dict = {}
+
+        if "harness_research" in projects:
+            coordinator = HarnessEvalCoordinator()
+            hw = get_hw_profile()
+            tier = detect_hardware_tier(hw)
+            log.info("Contributing to OpenCastor harness research (hardware tier: %s)", tier)
+            self._stats["hardware_tier"] = tier
+        else:
+            coordinator = make_coordinator(coordinator_type, coordinator_url)
+            hw = {}
         while self._active and not self._cancel_flag[0]:
             self._check_daily_reset()
             try:

@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+WORK_UNIT_TYPE_HARNESS_EVAL = "harness_eval"
+WORK_UNIT_TYPE_BOINC = "boinc"
+WORK_UNIT_TYPE_SIMULATED = "simulated"
+
 
 @dataclass
 class WorkUnit:
@@ -15,6 +19,7 @@ class WorkUnit:
     input_data: Any
     timeout_seconds: int = 30
     priority: int = 0
+    hardware_tier: str | None = None
 
 
 @dataclass

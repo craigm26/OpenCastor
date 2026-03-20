@@ -173,7 +173,184 @@ class SimulatedCoordinator(Coordinator):
         return True
 
 
+class HarnessEvalCoordinator(Coordinator):
+    """Coordinator that pulls harness candidate configs for fleet evaluation.
+
+    Tries Firestore first; falls back to synthetic candidates so the robot
+    can still contribute when offline.
+    """
+
+    def __init__(self, project: str = "opencastor", credentials_path: str = "") -> None:
+        self.project = project
+        self.credentials_path = credentials_path
+        self._last_fetch_attempt: float = 0
+        self._backoff_seconds: int = 5
+
+    def _get_firestore_client(self):
+        """Create Firestore client; raises on failure."""
+        import os
+
+        from google.cloud import firestore as _firestore  # type: ignore[import-untyped]
+
+        creds_path = self.credentials_path or os.environ.get(
+            "GOOGLE_APPLICATION_CREDENTIALS",
+            str(__import__("pathlib").Path.home() / ".config/opencastor/firebase-sa-key.json"),
+        )
+        try:
+            from google.oauth2 import service_account  # type: ignore[import-untyped]
+
+            creds = service_account.Credentials.from_service_account_file(
+                creds_path,
+                scopes=[
+                    "https://www.googleapis.com/auth/datastore",
+                    "https://www.googleapis.com/auth/cloud-platform",
+                ],
+            )
+            return _firestore.Client(project=self.project, credentials=creds)
+        except Exception:
+            import google.auth  # type: ignore[import-untyped]
+
+            creds, proj = google.auth.default()
+            return _firestore.Client(project=proj or self.project, credentials=creds)
+
+    def fetch_work_unit(self, hw_profile: dict, projects: list[str]) -> WorkUnit | None:
+        from .harness_eval import detect_hardware_tier, get_robot_rrn
+
+        now = time.time()
+        if now - self._last_fetch_attempt < self._backoff_seconds:
+            return None
+        self._last_fetch_attempt = now
+
+        hardware_tier = detect_hardware_tier(hw_profile)
+        rrn = get_robot_rrn()
+
+        # Try Firestore queue
+        try:
+            db = self._get_firestore_client()
+            queue_ref = (
+                db.collection("harness_eval_queue")
+                .document(hardware_tier)
+                .collection("candidates")
+            )
+            pending = list(
+                queue_ref.where("status", "==", "pending").limit(1).stream()
+            )
+            if pending:
+                doc = pending[0]
+                data = doc.to_dict() or {}
+                candidate_id = data.get("candidate_id", doc.id)
+                # Mark as assigned
+                doc.reference.update(
+                    {
+                        "status": "assigned",
+                        "assigned_to": rrn,
+                        "assigned_at": int(time.time()),
+                    }
+                )
+                self._backoff_seconds = 5  # reset on success
+                return WorkUnit(
+                    work_unit_id=candidate_id,
+                    project="harness_research",
+                    coordinator_url=f"firestore://{self.project}",
+                    model_format="harness_eval",
+                    input_data={
+                        "candidate_id": candidate_id,
+                        "config": data.get("config", {}),
+                        "description": data.get("description", ""),
+                        "hardware_tier": hardware_tier,
+                    },
+                    timeout_seconds=35,
+                    hardware_tier=hardware_tier,
+                )
+            # Queue empty — use synthetic fallback
+            log.debug("Harness eval queue empty for tier %s — using synthetic candidate", hardware_tier)
+        except Exception as exc:
+            log.debug("Firestore unavailable for harness eval: %s — using synthetic candidate", exc)
+
+        # Synthetic fallback: always available offline
+        self._backoff_seconds = min(self._backoff_seconds * 2, 300)
+        synthetic = self._make_synthetic_candidate(hardware_tier)
+        return WorkUnit(
+            work_unit_id=synthetic["candidate_id"],
+            project="harness_research",
+            coordinator_url="synthetic://localhost",
+            model_format="harness_eval",
+            input_data=synthetic,
+            timeout_seconds=35,
+            hardware_tier=hardware_tier,
+        )
+
+    def submit_result(self, result: WorkUnitResult) -> bool:
+        # Actual Firestore write is handled inside run_harness_eval_unit.
+        # Here we only update the queue document status if possible.
+        try:
+            db = self._get_firestore_client()
+            output = result.output or {}
+            hardware_tier = output.get("hardware_tier", "")
+            candidate_id = result.work_unit_id
+            if hardware_tier:
+                (
+                    db.collection("harness_eval_queue")
+                    .document(hardware_tier)
+                    .collection("candidates")
+                    .document(candidate_id)
+                    .update({"status": "completed", "completed_at": int(time.time())})
+                )
+        except Exception as exc:
+            log.debug("HarnessEvalCoordinator submit_result Firestore update skipped: %s", exc)
+        return True
+
+    def _make_synthetic_candidate(self, hardware_tier: str) -> dict:
+        """Return a random synthetic candidate for offline/fallback use."""
+        _tier_configs: dict[str, list[dict]] = {
+            "pi5-hailo8l": [
+                {"max_iterations": 5, "thinking_budget": 512, "context_budget": 8192,
+                 "p66_consent_threshold": "physical", "retry_on_error": True,
+                 "drift_detection": True, "cost_gate_usd": 0.005},
+                {"max_iterations": 4, "thinking_budget": 768, "context_budget": 8192,
+                 "p66_consent_threshold": "verbal", "retry_on_error": True,
+                 "drift_detection": True, "cost_gate_usd": 0.01},
+            ],
+            "pi5-8gb": [
+                {"max_iterations": 6, "thinking_budget": 1024, "context_budget": 8192,
+                 "p66_consent_threshold": "physical", "retry_on_error": True,
+                 "drift_detection": True, "cost_gate_usd": 0.02},
+                {"max_iterations": 8, "thinking_budget": 2048, "context_budget": 12288,
+                 "p66_consent_threshold": "verbal", "retry_on_error": False,
+                 "drift_detection": True, "cost_gate_usd": 0.03},
+            ],
+            "pi4-8gb": [
+                {"max_iterations": 4, "thinking_budget": 512, "context_budget": 4096,
+                 "p66_consent_threshold": "physical", "retry_on_error": True,
+                 "drift_detection": False, "cost_gate_usd": 0.01},
+                {"max_iterations": 3, "thinking_budget": 768, "context_budget": 4096,
+                 "p66_consent_threshold": "physical", "retry_on_error": True,
+                 "drift_detection": True, "cost_gate_usd": 0.015},
+            ],
+            "server": [
+                {"max_iterations": 10, "thinking_budget": 4096, "context_budget": 32768,
+                 "p66_consent_threshold": "physical", "retry_on_error": True,
+                 "drift_detection": True, "cost_gate_usd": 0.05},
+                {"max_iterations": 8, "thinking_budget": 2048, "context_budget": 16384,
+                 "p66_consent_threshold": "verbal", "retry_on_error": True,
+                 "drift_detection": True, "cost_gate_usd": 0.03},
+            ],
+        }
+        configs = _tier_configs.get(hardware_tier, _tier_configs["pi5-8gb"])
+        config = random.choice(configs)
+        ts = int(time.time())
+        candidate_id = f"synthetic_{hardware_tier}_{ts}"
+        return {
+            "candidate_id": candidate_id,
+            "config": config,
+            "description": f"Synthetic harness candidate for {hardware_tier}",
+            "hardware_tier": hardware_tier,
+        }
+
+
 def make_coordinator(coordinator_type: str, url: str, account_key: str = "") -> Coordinator:
     if coordinator_type == "simulated":
         return SimulatedCoordinator()
+    if coordinator_type == "harness_eval":
+        return HarnessEvalCoordinator(url, credentials_path=account_key)
     return BOINCCoordinator(url, account_key=account_key)

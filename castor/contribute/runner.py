@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from .hardware_profile import get_hw_profile
-from .work_unit import WorkUnit, WorkUnitResult
+from .work_unit import WORK_UNIT_TYPE_HARNESS_EVAL, WorkUnit, WorkUnitResult
 
 log = logging.getLogger("OpenCastor.Contribute")
 
@@ -111,6 +111,12 @@ def run_work_unit(
                 status="failed",
                 error="thermal_throttle",
             )
+
+        # harness_eval: local harness candidate evaluation
+        if wu.model_format == WORK_UNIT_TYPE_HARNESS_EVAL:
+            from .harness_eval import run_harness_eval_unit
+
+            return run_harness_eval_unit(wu, hw, cancelled_flag=cancelled_flag)
 
         # Try NPU path first
         npu_result = _run_npu_inference(wu, hw)
