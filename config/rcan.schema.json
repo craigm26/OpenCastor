@@ -7,13 +7,9 @@
   "required": [
     "rcan_version",
     "metadata",
-    "agent",
-    "physics",
-    "drivers",
-    "network",
-    "rcan_protocol"
+    "agent"
   ],
-  "additionalProperties": false,
+  "additionalProperties": true,
   "properties": {
     "rcan_version": {
       "type": "string",
@@ -80,12 +76,12 @@
     },
     "agent": {
       "type": "object",
-      "description": "AI provider and model configuration.",
+      "description": "Agent/LLM configuration. Core fields are validated; additional harness/plugin keys (circuit_breaker, working_memory, etc.) are allowed.",
       "required": [
         "provider",
         "model"
       ],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "provider": {
           "type": "string",
@@ -263,7 +259,7 @@
     "tiered_brain": {
       "type": "object",
       "description": "Tiered brain architecture \u2014 reactive (<1ms), fast (~500ms), planner (~12s).",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "planner_interval": {
           "type": "integer",
@@ -372,7 +368,7 @@
     "learner": {
       "type": "object",
       "description": "Self-improving loop (Sisyphus pattern). Disabled by default \u2014 enable via wizard or `castor improve --enable`.",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -542,7 +538,7 @@
                 "maxItems": 2
               }
             },
-            "additionalProperties": false
+            "additionalProperties": true
           }
         }
       }
@@ -780,13 +776,13 @@
           "additionalProperties": true
         }
       },
-      "additionalProperties": false
+      "additionalProperties": true
     },
     "network": {
       "type": "object",
       "description": "Network and telemetry settings.",
       "required": [],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "telemetry_stream": {
           "type": "boolean"
@@ -802,7 +798,7 @@
     "rcan_protocol": {
       "type": "object",
       "description": "RCAN protocol settings. Required for safety invariants, RURI identity, RBAC, and capability declaration.",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "port": {
           "type": "integer",
@@ -894,7 +890,7 @@
     "swarm": {
       "type": "object",
       "description": "Multi-robot swarm coordination (Phase 4).",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -1081,6 +1077,51 @@
     "provider_fallback": {
       "type": "object",
       "description": "Fallback AI provider/model when primary is unreachable (legacy top-level placement).",
+      "additionalProperties": true
+    },
+    "circuit_breaker": {
+      "type": "object",
+      "description": "Harness plugin configuration: circuit_breaker",
+      "additionalProperties": true
+    },
+    "context_compressor": {
+      "type": "object",
+      "description": "Harness plugin configuration: context_compressor",
+      "additionalProperties": true
+    },
+    "cost_meter": {
+      "type": "object",
+      "description": "Harness plugin configuration: cost_meter",
+      "additionalProperties": true
+    },
+    "dlq": {
+      "type": "object",
+      "description": "Harness plugin configuration: dlq",
+      "additionalProperties": true
+    },
+    "prompt_guard": {
+      "type": "object",
+      "description": "Harness plugin configuration: prompt_guard",
+      "additionalProperties": true
+    },
+    "rollback": {
+      "type": "object",
+      "description": "Harness plugin configuration: rollback",
+      "additionalProperties": true
+    },
+    "span_tracer": {
+      "type": "object",
+      "description": "Harness plugin configuration: span_tracer",
+      "additionalProperties": true
+    },
+    "working_memory": {
+      "type": "object",
+      "description": "Harness plugin configuration: working_memory",
+      "additionalProperties": true
+    },
+    "jwt_auth": {
+      "type": "object",
+      "description": "JWT authentication configuration",
       "additionalProperties": true
     }
   }
