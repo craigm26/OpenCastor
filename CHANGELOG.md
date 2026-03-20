@@ -6,6 +6,23 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 
 ---
 
+## [2026.3.20.4] — 2026-03-20
+
+### Added
+- `castor provider auth/list/status` CLI — test and inspect gated model provider credentials (#723)
+- Harness per-layer provider routing — `model: provider/name` per layer, `get_provider_for_layer()` with fallback (#724)
+- Autoresearch pipeline live — nightly Gemini 2.0 Flash harness optimization, direct push to main (no PRs); first champion: `lower_cost` (cost_gate_usd 0.01, score 0.9101)
+- Hardware-profile harness optimization roadmap — per-tier champions fed by `castor contribute` fleet evals
+
+### Fixed
+- RCAN JSON schema `additionalProperties` relaxed — 40/40 configs pass validation (arm.rcan.yaml blocked by harness plugin keys)
+- Gemini trailing-comma JSON parse error in autoresearch generator
+- `my-robot.rcan.yaml` metadata.author field added (was failing schema required check)
+
+### Changed
+- `castor/harness/default_harness.yaml` — champion config applied (cost_gate_usd 0.05→0.01)
+- Harness automerge workflow removed — pipeline pushes directly to main
+
 ## [2026.3.20.3] — 2026-03-20
 
 ### Added — RCAN v1.8: Canonical MessageType & Idle Compute Contribution
