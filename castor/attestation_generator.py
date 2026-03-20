@@ -280,7 +280,9 @@ def generate_attestation(
         target = _FALLBACK_OUT
         try:
             target.write_text(json.dumps(attestation, indent=2) + "\n")
-            os.environ["OPENCASTOR_ATTESTATION_PATH"] = str(target)
+            # Note: do NOT set OPENCASTOR_ATTESTATION_PATH here — it would
+            # contaminate other processes and tests. Callers that need the
+            # fallback path can read it from _FALLBACK_OUT directly.
             logger.info("Attestation written to fallback %s", target)
         except OSError as exc:
             logger.warning("Could not write attestation: %s", exc)
