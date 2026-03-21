@@ -8818,3 +8818,68 @@ async def get_contribute_history_endpoint(request: Request):
         return {"history": get_contribute_history()}
     except Exception:
         return {"history": []}
+
+
+@app.get("/api/credits", dependencies=[Depends(verify_token)])
+async def get_credits_endpoint(request: Request):
+    """GET /api/credits — Return Castor Credits summary for this robot's owner."""
+    _check_min_role(request, "operator")
+    try:
+        from castor.contribute.credits import get_credits
+        from castor.contribute.harness_eval import _get_firestore_client, get_robot_rrn
+
+        rrn = get_robot_rrn()
+        try:
+            db = _get_firestore_client()
+            robot_doc = db.collection("robots").document(rrn).get()
+            owner_uid = (
+                (robot_doc.to_dict() or {}).get("owner_uid", rrn)
+                if robot_doc.exists
+                else rrn
+            )
+        except Exception:
+            owner_uid = rrn
+
+        return get_credits(owner_uid)
+    except Exception as exc:
+        return {"credits": 0, "credits_redeemable": 0, "badge": "none", "credit_log": [], "error": str(exc)}
+
+
+class RedeemRequest(BaseModel):
+    type: str = Field(..., description="Redemption type: pro_month, harness_run, api_boost, champion_badge")
+
+
+@app.post("/api/credits/redeem", dependencies=[Depends(verify_token)])
+async def redeem_credits_endpoint(request: Request, body: RedeemRequest):
+    """POST /api/credits/redeem — Redeem credits for a feature or badge."""
+    _check_min_role(request, "operator")
+    try:
+        from castor.contribute.credits import redeem_credits
+        from castor.contribute.harness_eval import _get_firestore_client, get_robot_rrn
+
+        rrn = get_robot_rrn()
+        try:
+            db = _get_firestore_client()
+            robot_doc = db.collection("robots").document(rrn).get()
+            owner_uid = (
+                (robot_doc.to_dict() or {}).get("owner_uid", rrn)
+                if robot_doc.exists
+                else rrn
+            )
+        except Exception:
+            owner_uid = rrn
+
+        return redeem_credits(owner_uid, body.type)
+    except Exception as exc:
+        return {"success": False, "credits_spent": 0, "credits_remaining": 0, "error": str(exc)}
+
+
+@app.get("/api/credits/leaderboard")
+async def get_credits_leaderboard_endpoint():
+    """GET /api/credits/leaderboard — Public top-20 contributors by lifetime credits."""
+    try:
+        from castor.contribute.credits import get_credits_leaderboard
+
+        return {"leaderboard": get_credits_leaderboard()}
+    except Exception as exc:
+        return {"leaderboard": [], "error": str(exc)}

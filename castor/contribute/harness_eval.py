@@ -252,6 +252,61 @@ def run_harness_eval_unit(
             composite_score,
             hardware_tier,
         )
+
+        # Determine champion score for beat_champion flag
+        try:
+            champ_ref = (
+                db.collection("harness_leaderboard")
+                .document(hardware_tier)
+                .collection("robots")
+                .order_by("last_score", direction="DESCENDING")
+                .limit(1)
+                .stream()
+            )
+            champ_docs = list(champ_ref)
+            champion_score = champ_docs[0].to_dict().get("last_score", 0.0) if champ_docs else 0.0
+        except Exception:
+            champion_score = 0.0
+
+        beat_champion = composite_score > champion_score
+
+        # Count contributors in this tier to determine rare_tier
+        try:
+            tier_robots = list(
+                db.collection("harness_leaderboard")
+                .document(hardware_tier)
+                .collection("robots")
+                .stream()
+            )
+            rare_tier = len(tier_robots) < 3
+        except Exception:
+            rare_tier = False
+
+        # Award credits — use rrn as owner_uid fallback
+        try:
+            owner_uid_ref = db.collection("robots").document(rrn).get()
+            owner_uid = (
+                (owner_uid_ref.to_dict() or {}).get("owner_uid", rrn)
+                if owner_uid_ref.exists
+                else rrn
+            )
+        except Exception:
+            owner_uid = rrn
+
+        try:
+            from castor.contribute.credits import award_credits
+
+            award_credits(
+                owner_uid=owner_uid,
+                rrn=rrn,
+                scenarios_completed=len(scenario_results),
+                beat_champion=beat_champion,
+                rare_tier=rare_tier,
+                tier=hardware_tier,
+            )
+        except Exception as credits_exc:
+            log.debug("Credits award skipped: %s", credits_exc)
+
     except Exception as exc:
         log.debug("Firestore submit skipped (unavailable): %s", exc)
 
