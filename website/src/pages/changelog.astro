@@ -19,11 +19,31 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     <div class="container">
       <div class="changelog-timeline">
 
+        <!-- v2026.3.21.1 -->
+        <div class="changelog-release current reveal" id="v2026.3.21.1">
+          <div class="release-header">
+            <span class="release-version">v2026.3.21.1</span>
+            <span class="release-badge badge-new">Latest</span>
+            <span class="release-date">March 21, 2026</span>
+          </div>
+          <div class="release-body">
+            <h3>Competition Engine &mdash; Sprint, Threshold Race &amp; Bracket Seasons</h3>
+            <ul>
+              <li><strong>Sprint format</strong> &mdash; time-boxed competitions with announced prize pools, tiered payout (50/30/20), anti-snipe 1h lock (<code>castor/competitions/sprint.py</code>)</li>
+              <li><strong>Threshold Race</strong> &mdash; jackpot mechanic, first robot to hit target score wins, 3&times; independent verification re-run with 2% tolerance (<code>castor/competitions/threshold_race.py</code>)</li>
+              <li><strong>Model&times;Hardware Bracket Seasons</strong> &mdash; monthly seasons, 5 hardware&times;model classes, class champions (2000/1000 credits), grand champion bonus 5000 credits (<code>castor/competitions/bracket_season.py</code>)</li>
+              <li><strong>Competition API endpoints</strong>: GET/POST <code>/api/competitions</code>, <code>/api/competitions/races</code>, <code>/api/seasons/current</code></li>
+              <li><strong>Gemini 2.5 migration</strong> &mdash; all Gemini 2.0/1.5 model strings updated ahead of June 2026 deprecation</li>
+              <li><strong>Contribute 10&times; throughput</strong> &mdash; Firestore client and queue state now cached; fetch latency 4.6s &rarr; 14ms</li>
+              <li>Auto-start contribute on gateway startup via <code>agent.contribute</code> config</li>
+            </ul>
+          </div>
+        </div>
+
         <!-- v2026.3.19.0 -->
-        <div class="changelog-release current reveal" id="v2026.3.19.0">
+        <div class="changelog-release reveal" id="v2026.3.19.0">
           <div class="release-header">
             <span class="release-version">v2026.3.19.0</span>
-            <span class="release-badge badge-new">Latest</span>
             <span class="release-date">March 19, 2026</span>
           </div>
           <div class="release-body">

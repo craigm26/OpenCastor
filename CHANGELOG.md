@@ -6,6 +6,24 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 
 ---
 
+## [2026.3.21.1] - 2026-03-21
+
+### Added
+- Competition engine: Sprint format — time-boxed competitions with announced prize pools, tiered payout (50/30/20), anti-snipe 1h lock (`castor/competitions/sprint.py`)
+- Competition engine: Threshold Race — jackpot mechanic, first robot to hit target score wins, 3x independent verification re-run with 2% tolerance (`castor/competitions/threshold_race.py`)
+- Competition engine: Model×Hardware Bracket Seasons — monthly seasons, 5 hardware×model classes, class champions (2000/1000 credits), grand champion bonus 5000 credits (`castor/competitions/bracket_season.py`)
+- Competition API endpoints: GET/POST /api/competitions, /api/competitions/races, /api/seasons/current
+
+### Changed
+- All Gemini 2.0/1.5 model strings updated to Gemini 2.5 (gemini-2.0-flash → gemini-2.5-flash, gemini-1.5-pro → gemini-2.5-pro) ahead of June 2026 deprecation
+- Firestore client and queue state now cached — contribute throughput improved 10x (fetch latency 4.6s → 14ms)
+- Auto-start contribute on gateway startup via agent.contribute config
+
+### Fixed
+- FieldFilter import moved to module level (ruff I001)
+
+---
+
 ## [2026.3.20.4] — 2026-03-20
 
 ### Added
