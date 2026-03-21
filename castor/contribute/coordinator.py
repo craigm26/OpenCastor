@@ -10,6 +10,11 @@ import xml.etree.ElementTree as ET
 
 from .work_unit import WorkUnit, WorkUnitResult
 
+try:
+    from google.cloud.firestore_v1.base_query import FieldFilter  # type: ignore[import-untyped]
+except ImportError:
+    FieldFilter = None  # type: ignore[assignment,misc]
+
 log = logging.getLogger("OpenCastor.Contribute")
 
 
@@ -178,8 +183,6 @@ def reclaim_stale_claims(db, tier: str) -> None:
     cutoff = int(time.time()) - 1800
     queue_ref = db.collection("harness_eval_queue").document(tier).collection("candidates")
     try:
-        from google.cloud.firestore_v1.base_query import FieldFilter  # type: ignore[import-untyped]
-
         stale = list(
             queue_ref.where(filter=FieldFilter("status", "==", "assigned"))
             .where(filter=FieldFilter("assigned_at", "<", cutoff))
@@ -273,8 +276,6 @@ class HarnessEvalCoordinator(Coordinator):
             claimed_doc = None
             claimed_data: dict = {}
             for attempt in range(3):
-                from google.cloud.firestore_v1.base_query import FieldFilter  # type: ignore[import-untyped]
-
                 pending = list(
                     queue_ref.where(filter=FieldFilter("status", "==", "pending"))
                     .limit(attempt + 1)
