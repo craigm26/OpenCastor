@@ -8828,16 +8828,25 @@ async def get_contribute_endpoint(request: Request):
 async def start_contribute_endpoint(request: Request):
     """POST /api/contribute/start — Start idle compute contribution.
 
-    Accepts optional JSON body: {"projects": ["harness_research"], "enabled": true}
+    Accepts optional JSON body:
+        {"projects": ["harness_research"], "enabled": true, "run_type": "personal"|"community"}
+    run_type defaults to "personal" (private, no leaderboard, no credits).
+    Set run_type="community" to opt in to public leaderboard + Castor Credits.
     """
     _check_min_role(request, "operator")
     try:
+        from castor.contribute.work_unit import _VALID_RUN_TYPES
         from castor.skills.contribute import start_contribute
 
         try:
             body = await request.json()
         except Exception:
             body = {}
+        run_type = (body or {}).get("run_type", "personal")
+        if run_type not in _VALID_RUN_TYPES:
+            return {"error": f"run_type must be one of {sorted(_VALID_RUN_TYPES)!r}"}
+        if body:
+            body["run_type"] = run_type
         return start_contribute(config=body if body else None)
     except Exception as exc:
         return {"error": str(exc)}
