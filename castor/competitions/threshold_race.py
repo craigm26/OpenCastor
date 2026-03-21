@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from castor.competitions.models import RaceStatus, ThresholdEntry, ThresholdRace, VerificationStatus
 
@@ -266,7 +266,7 @@ class ThresholdRaceManager:
         if race.status != RaceStatus.OPEN:
             return {"action": "already_closed", "rrn": race.winner_rrn, "credits_awarded": 0}
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if now < race.soft_deadline:
             return {"action": "none", "rrn": None, "credits_awarded": 0}
 
