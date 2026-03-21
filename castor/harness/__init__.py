@@ -53,6 +53,24 @@ __all__ = [
     "SpanTracer",
     "Span",
     "CostMeter",
+    # memory
+    "FilesystemBackend",
+    "FirestoreBackend",
+    "MemoryBackend",
+    "MemoryManager",
+    "OverflowStrategy",
+    "WorkingMemoryBackend",
+    # pattern
+    "InitializerExecutor",
+    "MultiAgent",
+    "PatternBase",
+    "SingleAgentSupervisor",
+    "get_pattern",
+    # security
+    "OPAGuardrail",
+    "SecurityContext",
+    "TelemetryEvent",
+    "TelemetryExporter",
 ]
 from castor.harness.memory import (
     FilesystemBackend,

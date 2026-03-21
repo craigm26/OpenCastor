@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Memory backends and overflow strategies for AgentHarness (#743)."""
+
+from __future__ import annotations
 
 import abc
 import enum

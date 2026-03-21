@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """OPA guardrail and telemetry exporter for AgentHarness (#744)."""
+
+from __future__ import annotations
 
 import dataclasses
 import datetime
@@ -84,8 +84,7 @@ class TelemetryExporter:
     def export(self, event: TelemetryEvent) -> None:
         if "stdout" in self.backends:
             print(
-                f"[telemetry] {event.timestamp} {event.session_id} "
-                f"{event.event_type} {event.data}"
+                f"[telemetry] {event.timestamp} {event.session_id} {event.event_type} {event.data}"
             )
         if "sqlite" in self.backends:
             try:
@@ -110,7 +109,7 @@ class SecurityContext:
     exporter: TelemetryExporter = dataclasses.field(default_factory=TelemetryExporter)
 
     @classmethod
-    def from_config(cls, cfg: dict[str, Any]) -> "SecurityContext":
+    def from_config(cls, cfg: dict[str, Any]) -> SecurityContext:
         g_cfg = cfg.get("guardrail", {})
         t_cfg = cfg.get("telemetry", {})
         return cls(

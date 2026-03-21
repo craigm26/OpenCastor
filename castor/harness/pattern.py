@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Orchestration patterns for AgentHarness (#742)."""
+
+from __future__ import annotations
 
 import abc
 import json
@@ -15,7 +15,7 @@ class PatternBase(abc.ABC):
     def run(self, **kwargs: Any) -> dict[str, Any]: ...
 
     @classmethod
-    def from_config(cls, cfg: dict[str, Any]) -> "PatternBase":
+    def from_config(cls, cfg: dict[str, Any]) -> PatternBase:
         return cls()
 
 
@@ -26,10 +26,14 @@ class SingleAgentSupervisor(PatternBase):
         self.max_retries = max_retries
 
     def run(self, **kwargs: Any) -> dict[str, Any]:
-        return {"pattern": "single_agent_supervisor", "status": "ok", "max_retries": self.max_retries}
+        return {
+            "pattern": "single_agent_supervisor",
+            "status": "ok",
+            "max_retries": self.max_retries,
+        }
 
     @classmethod
-    def from_config(cls, cfg: dict[str, Any]) -> "SingleAgentSupervisor":
+    def from_config(cls, cfg: dict[str, Any]) -> SingleAgentSupervisor:
         return cls(max_retries=cfg.get("max_retries", 3))
 
 
@@ -55,7 +59,7 @@ class InitializerExecutor(PatternBase):
         return {"pattern": "initializer_executor", "status": "ok"}
 
     @classmethod
-    def from_config(cls, cfg: dict[str, Any]) -> "InitializerExecutor":
+    def from_config(cls, cfg: dict[str, Any]) -> InitializerExecutor:
         return cls(ledger_dir=cfg.get("ledger_dir", "/tmp"))
 
 
@@ -77,7 +81,7 @@ class MultiAgent(PatternBase):
         }
 
     @classmethod
-    def from_config(cls, cfg: dict[str, Any]) -> "MultiAgent":
+    def from_config(cls, cfg: dict[str, Any]) -> MultiAgent:
         return cls(roles=cfg.get("roles"), mode=cfg.get("mode", "sequential"))
 
 
