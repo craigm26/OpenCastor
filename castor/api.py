@@ -1465,6 +1465,103 @@ async def research_status():
         "queue_depth": queue_depth,
         "next_run_estimate": next_run_iso,
         "total_runs": total_runs,
+        "search_space_size": 263424,
+    }
+
+
+@app.get("/api/research/contributors", dependencies=[Depends(verify_token)])
+async def research_contributors():
+    """GET /api/research/contributors — Contributor lineage for the current champion.
+
+    Returns which robots evaluated the current champion candidate, their total
+    work unit count, and their credit share percentage.
+
+    Response schema:
+      {
+        "champion": {"candidate_id": str, "score": float, "promoted_at": str|null},
+        "contributors": [{"rrn": str, "work_units_total": int,
+                          "champion_evals": int, "credit_share_pct": float}],
+        "total_evaluated": int,
+        "search_space_size": 263424,
+        "explored_pct": float,
+      }
+    """
+    SEARCH_SPACE_SIZE = 263424
+
+    ops_dir = Path(os.environ.get("OPENCASTOR_OPS_DIR", Path.home() / "opencastor-ops"))
+    champion_path = ops_dir / "harness-research" / "champion.yaml"
+
+    def _safe_yaml(p: Path) -> dict:
+        try:
+            return yaml.safe_load(p.read_text()) or {}
+        except Exception:
+            return {}
+
+    # Champion info
+    champion_raw = _safe_yaml(champion_path)
+    champion: dict | None = None
+    if champion_raw:
+        champion = {
+            "candidate_id": champion_raw.get("candidate_id", champion_raw.get("id", "unknown")),
+            "score": champion_raw.get("score", 0.0),
+            "promoted_at": champion_raw.get("date"),
+        }
+
+    # Contributor data from Firestore
+    contributors: list[dict] = []
+    total_evaluated = 0
+    try:
+        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            import firebase_admin
+            from firebase_admin import credentials as fb_creds
+            from firebase_admin import firestore as fb_store
+
+            if not firebase_admin._apps:
+                cred = fb_creds.ApplicationDefault()
+                firebase_admin.initialize_app(cred)
+
+            db = fb_store.client()
+
+            # All eval results
+            all_results = db.collection("harness_eval_results").stream()
+            by_rrn: dict[str, dict] = {}
+            for doc in all_results:
+                d = doc.to_dict() or {}
+                rrn = d.get("evaluator_rrn", "unknown")
+                total_evaluated += 1
+                if rrn not in by_rrn:
+                    by_rrn[rrn] = {"work_units_total": 0, "champion_evals": 0}
+                by_rrn[rrn]["work_units_total"] += 1
+                if d.get("is_champion"):
+                    by_rrn[rrn]["champion_evals"] += 1
+
+            total_champion_evals = sum(v["champion_evals"] for v in by_rrn.values())
+            for rrn, info in by_rrn.items():
+                share = (
+                    round(info["champion_evals"] / total_champion_evals * 100, 1)
+                    if total_champion_evals > 0
+                    else 0.0
+                )
+                contributors.append(
+                    {
+                        "rrn": rrn,
+                        "work_units_total": info["work_units_total"],
+                        "champion_evals": info["champion_evals"],
+                        "credit_share_pct": share,
+                    }
+                )
+            contributors.sort(key=lambda x: x["work_units_total"], reverse=True)
+    except Exception:
+        pass
+
+    explored_pct = round(total_evaluated / SEARCH_SPACE_SIZE * 100, 4) if total_evaluated else 0.0
+
+    return {
+        "champion": champion,
+        "contributors": contributors,
+        "total_evaluated": total_evaluated,
+        "search_space_size": SEARCH_SPACE_SIZE,
+        "explored_pct": explored_pct,
     }
 
 
