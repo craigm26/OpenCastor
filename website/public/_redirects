@@ -6,3 +6,19 @@
 /discord    https://discord.gg/jMjA8B26Bq  302
 
 # /docs/getting-started routes to the actual page (removed stale redirect)
+
+# Redirect all /docs/* to docs.opencastor.com (MkDocs canonical site)
+/docs/getting-started   https://docs.opencastor.com/getting-started/quickstart/        301
+/docs/configuration     https://docs.opencastor.com/getting-started/configuration/     301
+/docs/safety            https://docs.opencastor.com/runtime/safety/                    301
+/docs/harness           https://docs.opencastor.com/runtime/harness/                   301
+/docs/contribute        https://docs.opencastor.com/runtime/contribute/                301
+/docs/providers         https://docs.opencastor.com/runtime/overview/                  301
+/docs/ecosystem         https://docs.opencastor.com/getting-started/quickstart/        301
+/docs/setup-wizard      https://docs.opencastor.com/runtime/cli/                       301
+/docs/architecture      https://docs.opencastor.com/runtime/overview/                  301
+/docs/peripherals       https://docs.opencastor.com/getting-started/hardware-profiles/ 301
+/docs/hardware/*        https://docs.opencastor.com/getting-started/hardware-profiles/ 301
+/docs/provider-auth     https://docs.opencastor.com/runtime/overview/                  301
+/docs/*                 https://docs.opencastor.com/:splat                             301
+/docs                   https://docs.opencastor.com                                    301
