@@ -5,6 +5,7 @@ import { CompetitionFormats } from './components/CompetitionFormats'
 import { OptimizationGuide } from './components/OptimizationGuide'
 import { BenchmarkTransparency } from './components/BenchmarkTransparency'
 import { ConfigLibrary } from './components/ConfigLibrary'
+import { RcanV2Proposal } from './components/RcanV2Proposal'
 
 const DOMAIN_LABELS: Record<Domain, string> = { general: '⚙️ General', home: '🏠 Home', industrial: '🏭 Industrial' }
 
@@ -430,6 +431,8 @@ export default function App() {
         <BenchmarkTransparency />
 
         <ResearchSynthesis />
+
+        <RcanV2Proposal />
 
         {/* CTA */}
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 28, textAlign: 'center' }}>
