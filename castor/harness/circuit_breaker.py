@@ -14,7 +14,7 @@ RCAN config::
     circuit_breaker:
       enabled: true
       failure_threshold: 3
-      cooldown_s: 300
+      cooldown_s: 30
       half_open_probe: true
 """
 

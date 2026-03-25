@@ -1,4 +1,4 @@
-rcan_version: "1.6"
+rcan_version: "1.9"
 
 metadata:
   robot_name: opencastor-default
@@ -6,10 +6,11 @@ metadata:
   author: OpenCastor Team
   license: Apache-2.0
   description: >
-    The default OpenCastor agent harness. Shows the full two-tier brain
-    (TieredBrain: fast local + slow cloud), all 6 builtin skills, memory
-    consolidation, and RCAN v1.6 safety invariants. Fork this as your
-    starting point.
+    The default OpenCastor agent harness. Shows the full Tiered Brain
+    (fast local + slow cloud), 5 harness skill layers, memory
+    consolidation, and RCAN v1.9 safety invariants. Fork this as your
+    starting point. The code-reviewer skill is registered via the skill
+    registry, not as a harness layer.
   tags:
     - official
     - harness
@@ -24,11 +25,6 @@ metadata:
     - code-reviewer
   public_profile: true
 
-_note: >
-  Official OpenCastor default harness. Demonstrates TieredBrain (fast local
-  + slow cloud), all 6 builtin skills, memory consolidation, and P66 safety.
-  Fork this config as your starting point.
-
 agent:
   provider: google
   model: gemini-2.5-flash
@@ -37,7 +33,7 @@ agent:
     You are an OpenCastor robot agent. You are helpful, safety-conscious,
     and follow RCAN protocol scope constraints. Use your skills when
     relevant. Always respect the P66 safety invariants.
-  vision_enabled: false
+  vision_enabled: true
   safety_stop: true
 
 tiered_brain:

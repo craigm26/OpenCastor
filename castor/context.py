@@ -104,6 +104,8 @@ class ContextBuilder:
         harness_cfg = self._config.get("harness", {})
         self._auto_rag: bool = bool(harness_cfg.get("auto_rag", True))
         self._auto_telemetry: bool = bool(harness_cfg.get("auto_telemetry", True))
+        # context_budget: if > 1.0, treat as absolute token count; otherwise as
+        # a ratio of the model's context limit.
         self._context_budget: float = float(harness_cfg.get("context_budget", 0.8))
 
         # Detect model for context limit
@@ -171,7 +173,12 @@ class ContextBuilder:
 
         # 9. Compact if needed
         was_compacted = False
-        budget_tokens = int(self._context_limit * self._context_budget)
+        if self._context_budget > 1.0:
+            # Absolute token count (e.g. 8192)
+            budget_tokens = int(self._context_budget)
+        else:
+            # Ratio of model context limit (e.g. 0.8)
+            budget_tokens = int(self._context_limit * self._context_budget)
         if token_estimate > budget_tokens and len(messages) > 4:
             messages, was_compacted = await self._compact_history(messages, budget_tokens)
             token_estimate = self._estimate_tokens(system_prompt, messages)

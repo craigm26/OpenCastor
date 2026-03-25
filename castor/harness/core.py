@@ -292,12 +292,12 @@ class DriftDetectionHook(HarnessHook):
     """Detects when the model's response has drifted off-task.
 
     After 3+ tool iterations, compares the final response against the
-    original instruction using cosine similarity of simple word vectors.
+    original instruction using Jaccard word-overlap similarity.
     Below ``threshold`` → logs drift warning and records ``drift_score``
     on the result.
 
     Args:
-        threshold: Cosine similarity below this value is considered drift.
+        threshold: Similarity below this value is considered drift.
                    Default 0.15 (loose — avoids false positives on short
                    instructions that legitimately produce long responses).
     """

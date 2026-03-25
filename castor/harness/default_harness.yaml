@@ -22,7 +22,7 @@ harness:
       block_injection: true
       block_jailbreak: true
       block_role_switch: true
-      risk_threshold: 0.6
+      block_threshold: 0.6
     description: Blocks jailbreak, injection, and role-switch attempts
     enabled: true
     id: prompt-guard
@@ -43,9 +43,7 @@ harness:
     type: context
   - config:
       max_entries: 50
-      persist: false
-      ttl_s: 1800
-    description: Per-session scratchpad for multi-step reasoning
+    description: Per-run scratchpad for multi-step reasoning (cleared each run)
     enabled: true
     id: working-memory
     label: Working Memory
@@ -120,14 +118,14 @@ harness:
       slow_provider: google
     description: "Fast local (Gemma 3) \xB7 Slow cloud (Gemini 2.5) by confidence"
     enabled: true
-    id: model-dual
-    label: Dual Model
+    id: model-tiered-brain
+    label: Tiered Brain
     type: model
   - config:
       alert_at_pct: 80
       budget_usd: 0.1
       on_exceed: block
-    description: 'Halts if LLM spend exceeds $0.10/session (cost_gate_usd: 0.01)'
+    description: "Halts if LLM spend exceeds $0.10/run (top-level cost_gate_usd is the API-layer gate)"
     enabled: true
     id: cost-gate
     label: Cost Gate
@@ -139,17 +137,14 @@ harness:
     id: hook-drift
     label: Drift Detection
     type: hook
-  - config:
-      db_path: traces.db
-      export: sqlite
-    description: "OpenTelemetry-style execution traces \u2192 SQLite"
+  - config: {}
+    description: "OpenTelemetry-style execution traces \u2192 JSONL"
     enabled: true
     id: span-tracer
     label: Span Tracer
     type: tracer
   - config:
       db_path: dlq.db
-      max_size: 500
     description: Failed commands queued for human review
     enabled: true
     id: dlq
