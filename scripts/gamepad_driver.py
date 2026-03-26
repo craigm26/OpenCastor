@@ -41,7 +41,7 @@ log = logging.getLogger("gamepad_driver")
 
 try:
     import evdev
-    from evdev import InputDevice, categorize, ecodes
+    from evdev import InputDevice, ecodes
 except ImportError:
     sys.exit("evdev not installed — run: pip install evdev")
 

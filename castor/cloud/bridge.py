@@ -205,7 +205,23 @@ def _try_import_loa() -> tuple[Any, Any]:
 
 
 def _extract_loa_stub(token: str, **kwargs: Any) -> int:
-    """Stub: always returns LoA 1 (email-verified baseline)."""
+    """Stub: try to read loa/acr claim from JWT payload, default to LoA 1."""
+    if token:
+        try:
+            import base64
+            import json
+
+            parts = token.split(".")
+            if len(parts) >= 2:
+                # Decode JWT payload (second segment)
+                payload_b64 = parts[1] + "=" * (-len(parts[1]) % 4)
+                payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+                if "loa" in payload:
+                    return int(payload["loa"])
+                if "acr" in payload:
+                    return int(payload["acr"])
+        except Exception:
+            pass
     return 1
 
 
@@ -243,6 +259,9 @@ def _try_decode_compact_transport(payload: bytes) -> dict[str, Any]:
 
 # Pre-load v1.6 module references
 _validate_cross_registry_command, _TrustAnchorCacheCls = _try_import_federation()
+
+# True when rcan.federation is unavailable and we fell back to the stub
+_FEDERATION_STUB_ACTIVE: bool = _TrustAnchorCacheCls is _TrustAnchorCacheStub
 _extract_loa_from_jwt, _validate_loa_for_scope = _try_import_loa()
 
 
@@ -331,7 +350,15 @@ class CastorBridge:
 
         # v1.6: LoA enforcement policy (GAP-16)
         self.min_loa_for_control: int = int(config.get("min_loa_for_control", 1))
-        self.loa_enforcement: bool = bool(config.get("loa_enforcement", False))
+        self.loa_enforcement: bool = bool(config.get("loa_enforcement", True))
+
+        # v1.6: Federation trust enforcement (GAP-14 fail-closed option)
+        # When True and rcan.federation stub is active, cross-registry commands are REJECTED.
+        # Default False = fail-open (backward-compatible).
+        self.require_federation_trust: bool = bool(rcan.get("require_federation_trust", False))
+
+        # Store rcan_protocol section for later use (e.g. peer allowlist)
+        self._rcan_cfg: dict[str, Any] = rcan
 
     # ------------------------------------------------------------------
     # v1.5 Offline mode helpers (GAP-06)
@@ -389,6 +416,26 @@ class CastorBridge:
         is_estop = scope == "safety" and "estop" in instruction.lower()
         if is_estop:
             return True
+
+        # System scope: REBOOT, RELOAD_CONFIG, PAUSE, RESUME, SHUTDOWN are
+        # safe offline. UPGRADE/OPTIMIZE/SHARE_CONFIG/INSTALL need network.
+        if scope == "system":
+            instr_upper = instruction.upper().strip()
+            _NEEDS_NETWORK = ("UPGRADE", "OPTIMIZE", "SHARE_CONFIG", "INSTALL:")
+            if any(instr_upper.startswith(p) for p in _NEEDS_NETWORK):
+                log.warning(
+                    "OFFLINE MODE: %r rejected (needs network) — "
+                    "only REBOOT/RELOAD_CONFIG/PAUSE/RESUME/SHUTDOWN allowed offline",
+                    instruction,
+                )
+                return False
+            return True  # REBOOT, RELOAD_CONFIG, PAUSE, RESUME, SHUTDOWN safe offline
+
+        # Status scope: SNAPSHOT is safe offline (local operation)
+        if scope == "status":
+            _instr_norm = instruction.upper().strip()
+            if _instr_norm == "SNAPSHOT":
+                return True
 
         log.warning("OFFLINE MODE: command rejected (scope=%s) — not an ESTOP", scope)
         return False
@@ -500,6 +547,17 @@ class CastorBridge:
                 self.signature = d.get("signature")
                 self.params = d.get("params", {})
 
+        # Fail-closed: when require_federation_trust is True and we're using
+        # the stub (rcan.federation unavailable), reject all cross-registry commands.
+        if _FEDERATION_STUB_ACTIVE and self.require_federation_trust:
+            log.warning(
+                "federation_check: REJECTED cross-registry cmd from %s — "
+                "require_federation_trust=True but rcan.federation stub active cmd_id=%s",
+                from_registry,
+                cmd_id,
+            )
+            return False
+
         allowed, reason = _validate_cross_registry_command(
             msg=_MsgShim(doc),
             local_registry=self.owner,
@@ -549,6 +607,129 @@ class CastorBridge:
                 )
                 return False
         return True
+
+    # ------------------------------------------------------------------
+    # v1.6: Scope-level enforcement helper (RCAN §4.2)
+    # ------------------------------------------------------------------
+
+    #: Canonical scope → numeric level mapping (RCAN v1.6 §4.2)
+    SCOPE_LEVELS: dict[str, int] = {
+        "discover": 0,
+        "status": 1,
+        "chat": 2,
+        "control": 3,
+        "system": 3,
+        "safety": 99,
+        "transparency": 0,
+    }
+
+    def _validate_scope_level(self, scope: str, loa: int) -> bool:
+        """Enforce minimum LoA required for the requested scope.
+
+        Rules (RCAN v1.6 §4.2):
+          - discover / transparency (level 0): always allowed (LoA ≥ 0)
+          - status (level 1):                  LoA ≥ 1
+          - chat   (level 2):                  LoA ≥ 1  (lenient — chat ok with basic auth)
+          - control (level 3):                 LoA ≥ min_loa_for_control (config, default 1)
+          - system  (level 3):                 LoA ≥ min_loa_for_control (same as control)
+          - safety  (level 99):               ALWAYS allowed (P66 invariant)
+
+        Returns True if the command is permitted, False if it should be rejected.
+        """
+        # P66 invariant: safety/ESTOP is always allowed regardless of LoA
+        if scope == "safety":
+            return True
+
+        level = self.SCOPE_LEVELS.get(scope, 0)
+        if level == 0:
+            return True  # discover / transparency — open
+
+        # control and system require min_loa_for_control
+        if scope in ("control", "system"):
+            required = self.min_loa_for_control
+        else:
+            required = 1  # status, chat
+
+        if loa < required:
+            log.warning(
+                "_validate_scope_level: REJECTED scope=%s loa=%d required=%d",
+                scope,
+                loa,
+                required,
+            )
+            return False
+        return True
+
+    # ------------------------------------------------------------------
+    # v1.6: Config scrubbing — remove forbidden top-level YAML keys
+    # ------------------------------------------------------------------
+
+    #: Top-level config keys that must never be shared between peers
+    _CONFIG_FORBIDDEN_KEYS: frozenset[str] = frozenset({"safety", "auth", "p66"})
+
+    def _scrub_config_content(self, content: str) -> str:
+        """Strip forbidden top-level keys from a YAML config string.
+
+        Removes ``safety``, ``auth``, and ``p66`` sections before storing a
+        peer-shared config bundle — these keys must never leave the local
+        trust boundary.
+
+        Args:
+            content: Raw YAML text received from a peer robot.
+
+        Returns:
+            Scrubbed YAML text with forbidden sections removed.
+        """
+        try:
+            import yaml as _yaml
+
+            data = _yaml.safe_load(content) or {}
+        except Exception:
+            log.warning("_scrub_config_content: failed to parse YAML — returning empty config")
+            return ""
+
+        if not isinstance(data, dict):
+            return content
+
+        scrubbed = {k: v for k, v in data.items() if k not in self._CONFIG_FORBIDDEN_KEYS}
+        removed = [k for k in data if k in self._CONFIG_FORBIDDEN_KEYS]
+        if removed:
+            log.warning(
+                "_scrub_config_content: removed forbidden keys=%s from peer config", removed
+            )
+        try:
+            import yaml as _yaml
+
+            return _yaml.dump(scrubbed, default_flow_style=False)
+        except Exception:
+            return content
+
+    # ------------------------------------------------------------------
+    # v1.6: mDNS peer allowlist check
+    # ------------------------------------------------------------------
+
+    def _is_peer_allowed(self, peer_id: str) -> bool:
+        """Check whether a discovered mDNS peer is in the configured allowlist.
+
+        The ``rcan_protocol.peers`` config key holds an explicit list of allowed
+        peer identifiers (RRNs, hostnames, or RURIs).  If the list is absent or
+        empty, no peers are allowed (fail-closed).
+
+        Args:
+            peer_id: The peer's identifier (RRN, hostname, or RURI).
+
+        Returns:
+            True if the peer is in the allowlist, False otherwise.
+        """
+        rcan_cfg: dict[str, Any] = self._rcan_cfg
+        allowed_peers: list[str] = rcan_cfg.get("peers", [])
+        if not allowed_peers:
+            log.debug("_is_peer_allowed: empty allowlist — no peers allowed (peer=%s)", peer_id)
+            return False
+        result = peer_id in allowed_peers
+        if not result:
+            log.warning("_is_peer_allowed: peer %s not in allowlist=%s", peer_id, allowed_peers)
+        return result
 
     # ------------------------------------------------------------------
     # v1.6: Transport encoding detection (GAP-17)
@@ -744,12 +925,48 @@ class CastorBridge:
             except Exception:
                 pass
 
+            # Also fetch harness config so the Flutter app can display it
+            try:
+                with httpx.Client(timeout=5.0) as client:
+                    hr2 = client.get(f"{self.gateway_url}/api/harness", headers=headers)
+                if hr2.status_code == 200:
+                    telemetry["harness_config"] = hr2.json()
+            except Exception:
+                pass
+
+            # Fetch contribution status for Flutter client
+            try:
+                with httpx.Client(timeout=5.0) as client:
+                    cr = client.get(f"{self.gateway_url}/api/contribute", headers=headers)
+                if cr.status_code == 200:
+                    telemetry["contribute"] = cr.json()
+            except Exception:
+                pass
+
+            # Normalise: ensure opencastor_version is always set at both
+            # telemetry.opencastor_version AND top-level opencastor_version so
+            # all app screens (fleet card reads telemetry.version, detail page
+            # reads opencastor_version) show the same value.
+            oc_version: str = telemetry.get("version", "unknown")
+            telemetry.setdefault("opencastor_version", oc_version)
+
+            # RCAN v1.5/v1.6 capability fields (read by Flutter client)
+            capabilities = telemetry.get("capabilities", [])
+            if isinstance(capabilities, list):
+                telemetry.setdefault(
+                    "rcan_capabilities",
+                    [c for c in capabilities if isinstance(c, str)],
+                )
+            telemetry.setdefault("rcan_max_payload_bytes", 65536)
+            telemetry.setdefault("rcan_transport_supported", ["http", "compact", "minimal"])
+
             self._robot_ref().set(
                 {
                     "telemetry": {
                         **telemetry,
                         "last_seen": datetime.now(timezone.utc).isoformat(),
                     },
+                    "opencastor_version": oc_version,
                     "status": {
                         "online": True,
                         "last_seen": datetime.now(timezone.utc).isoformat(),
@@ -820,7 +1037,9 @@ class CastorBridge:
             is_estop = scope == "safety" and "estop" in instruction.lower()
 
             # --- GAP-03: Replay check BEFORE R2RAM (prevents DoS) ----------
-            if not self._check_replay(cmd_id, doc, is_safety=(scope == "safety")):
+            # P66 invariant: ESTOP bypasses replay check unconditionally —
+            # a duplicate ESTOP cmd_id must still be executed.
+            if not is_estop and not self._check_replay(cmd_id, doc, is_safety=(scope == "safety")):
                 log.warning(
                     "Command %s rejected as replay (sender_type=%s, scope=%s)",
                     cmd_id,
@@ -957,6 +1176,23 @@ class CastorBridge:
             # --- Dispatch to local gateway -----------------------------------
             result = self._dispatch_to_gateway(scope, instruction, doc, media_chunks=media_chunks)
 
+            # --- Mission thread: write robot response back to Firestore ------
+            if doc.get("context") == "mission_thread":
+                response_text: str = ""
+                if isinstance(result, dict):
+                    response_text = (
+                        result.get("thought", "")
+                        or result.get("response", "")
+                        or result.get("raw_text", "")
+                        or result.get("result", "")
+                        or result.get("raw", "")
+                        or str(result.get("raw_text", result))
+                    )
+                elif isinstance(result, str):
+                    response_text = result
+                if response_text:
+                    self._write_mission_response(doc, response_text, cmd_id)
+
             # --- GAP-08: Build audit entry with sender_type -----------------
             complete_entry: dict[str, Any] = {
                 "status": "complete",
@@ -1034,21 +1270,137 @@ class CastorBridge:
     # Gateway dispatch
     # ------------------------------------------------------------------
 
+    def _build_mission_context(self, doc: dict[str, Any]) -> Optional[str]:
+        """Build a mission system-context string when context == 'mission_thread'.
+
+        Returns a prepend string for the agent's system prompt, or None if
+        this is not a mission thread command.
+        """
+        if doc.get("context") != "mission_thread":
+            return None
+
+        mission_id: str = doc.get("mission_id", "unknown")
+        participants: list[str] = doc.get("participants", [])
+
+        # Build a readable participant list
+        participant_names: list[str] = []
+        for rrn in participants:
+            # We only know RRNs here; use them directly
+            participant_names.append(f"{rrn}")
+
+        parts_str = ", ".join(participant_names) if participant_names else "unknown"
+
+        context_block = (
+            f"You are in a multi-robot mission (id: {mission_id}) "
+            f"with participants: {parts_str}. "
+            "You can @mention other robots by their RRN. "
+            "When you respond, your message will be visible to all participants in the mission thread. "
+            "Stay collaborative and concise."
+        )
+        return context_block
+
+    def _write_mission_response(
+        self,
+        doc: dict[str, Any],
+        response_text: str,
+        cmd_id: str,
+    ) -> None:
+        """Write the robot's response back to the mission messages subcollection.
+
+        This enables all mission participants (robots + humans) to see the response
+        in real-time via the Flutter app's onSnapshot listener.
+        """
+        mission_id: str = doc.get("mission_id", "")
+        if not mission_id or not self._db:
+            return
+
+        try:
+            import uuid as _uuid
+            from datetime import datetime, timezone
+
+            msg_id = f"msg-{_uuid.uuid4().hex[:12]}"
+            now = datetime.now(timezone.utc).isoformat()
+
+            msg_doc: dict[str, Any] = {
+                "id": msg_id,
+                "from_type": "robot",
+                "from_rrn": self.rrn,
+                "from_name": self.robot_name,
+                "content": response_text,
+                "mentions": [],
+                "timestamp": now,
+                "scope": "chat",
+                "status": "responded",
+                "in_reply_to_cmd": cmd_id,
+                "in_reply_to_msg": doc.get("mission_msg_id", ""),
+            }
+
+            self._db.collection("missions").document(mission_id).collection("messages").document(
+                msg_id
+            ).set(msg_doc)
+
+            # Update last_message_at on the mission doc
+            self._db.collection("missions").document(mission_id).update({"last_message_at": now})
+
+            log.info(
+                "Mission response written: mission_id=%s msg_id=%s robot=%s",
+                mission_id,
+                msg_id,
+                self.rrn,
+            )
+        except Exception as exc:
+            log.warning(
+                "Failed to write mission response to Firestore: %s (mission_id=%s)",
+                exc,
+                mission_id,
+            )
+
     def _dispatch_to_gateway(
         self,
         scope: str,
         instruction: str,
         doc: dict[str, Any],
         media_chunks: Optional[list[dict[str, Any]]] = None,
+        mission_context: Optional[str] = None,
     ) -> dict[str, Any]:
         """Forward a validated command to the local castor gateway."""
         import httpx
 
+        # Build mission context from doc if not explicitly provided
+        if mission_context is None:
+            mission_context = self._build_mission_context(doc)
+
         headers = self._auth_headers()
 
         if scope == "status":
-            with httpx.Client(timeout=10.0) as client:
-                resp = client.get(f"{self.gateway_url}/api/status", headers=headers)
+            # Route rich-instruction status commands to /api/command so the LLM
+            # can answer them (e.g. LIST_SKILLS, DESCRIBE_SKILLS, CAPABILITIES).
+            # Bare STATUS → /api/status for the structured status dict.
+            _STATUS_COMMAND_INSTRUCTIONS = {"LIST_SKILLS", "DESCRIBE_SKILLS", "CAPABILITIES"}
+            _instr_norm = instruction.upper().strip()
+            if _instr_norm == "SNAPSHOT":
+                with httpx.Client(timeout=10.0) as client:
+                    resp = client.post(
+                        f"{self.gateway_url}/api/snapshot/take",
+                        headers=headers,
+                    )
+            elif _instr_norm in _STATUS_COMMAND_INSTRUCTIONS or (
+                _instr_norm not in {"STATUS", "GET_STATUS", ""}
+                and not _instr_norm.startswith("STATUS")
+            ):
+                with httpx.Client(timeout=30.0) as client:
+                    resp = client.post(
+                        f"{self.gateway_url}/api/command",
+                        json={
+                            "instruction": instruction,
+                            "scope": "status",
+                            "channel": "opencastor_app",
+                        },
+                        headers=headers,
+                    )
+            else:
+                with httpx.Client(timeout=10.0) as client:
+                    resp = client.get(f"{self.gateway_url}/api/status", headers=headers)
 
         elif scope == "safety":
             if "estop" in instruction.lower():
@@ -1073,12 +1425,113 @@ class CastorBridge:
                         headers=headers,
                     )
 
+        elif scope == "system":
+            # System-level actions sent from the app (e.g. OTA upgrade, config reload).
+            # instruction format: "UPGRADE: <version>" | "UPGRADE" (latest)
+            #                     "REBOOT"
+            #                     "RELOAD_CONFIG"
+            instr_upper = instruction.upper().strip()
+            if instr_upper.startswith("UPGRADE"):
+                parts = instruction.split(":", 1)
+                version: Optional[str] = parts[1].strip() if len(parts) > 1 else None
+                body: dict[str, Any] = {}
+                if version:
+                    body["version"] = version
+                with httpx.Client(timeout=15.0) as client:
+                    resp = client.post(
+                        f"{self.gateway_url}/api/system/upgrade",
+                        json=body,
+                        headers=headers,
+                    )
+            elif instr_upper == "REBOOT":
+                with httpx.Client(timeout=10.0) as client:
+                    resp = client.post(
+                        f"{self.gateway_url}/api/system/reboot",
+                        headers=headers,
+                    )
+            elif instr_upper == "RELOAD_CONFIG":
+                with httpx.Client(timeout=10.0) as client:
+                    resp = client.post(
+                        f"{self.gateway_url}/api/config/reload",
+                        headers=headers,
+                    )
+            elif instr_upper == "PAUSE":
+                with httpx.Client(timeout=5.0) as client:
+                    resp = client.post(
+                        f"{self.gateway_url}/api/runtime/pause",
+                        headers=headers,
+                    )
+            elif instr_upper == "RESUME":
+                with httpx.Client(timeout=5.0) as client:
+                    resp = client.post(
+                        f"{self.gateway_url}/api/runtime/resume",
+                        headers=headers,
+                    )
+            elif instr_upper == "SHUTDOWN":
+                with httpx.Client(timeout=10.0) as client:
+                    resp = client.post(
+                        f"{self.gateway_url}/api/system/shutdown",
+                        headers=headers,
+                    )
+            elif instr_upper == "OPTIMIZE":
+                with httpx.Client(timeout=60.0) as client:
+                    resp = client.post(
+                        f"{self.gateway_url}/api/command",
+                        json={
+                            "instruction": "OPTIMIZE",
+                            "scope": "system",
+                            "channel": "opencastor_app",
+                        },
+                        headers=headers,
+                    )
+            elif instr_upper == "SHARE_CONFIG":
+                with httpx.Client(timeout=30.0) as client:
+                    resp = client.post(
+                        f"{self.gateway_url}/api/command",
+                        json={
+                            "instruction": "SHARE_CONFIG",
+                            "scope": "system",
+                            "channel": "opencastor_app",
+                        },
+                        headers=headers,
+                    )
+            elif instr_upper.startswith("INSTALL:"):
+                with httpx.Client(timeout=30.0) as client:
+                    resp = client.post(
+                        f"{self.gateway_url}/api/command",
+                        json={
+                            "instruction": instruction,
+                            "scope": "system",
+                            "channel": "opencastor_app",
+                        },
+                        headers=headers,
+                    )
+            else:
+                # Unknown system instruction — route to /api/command as fallback
+                # so the agent can interpret it rather than silently dropping it.
+                log.warning(
+                    "bridge: unknown system instruction %r — routing to /api/command", instruction
+                )
+                with httpx.Client(timeout=30.0) as client:
+                    resp = client.post(
+                        f"{self.gateway_url}/api/command",
+                        json={
+                            "instruction": instruction,
+                            "scope": "system",
+                            "channel": "opencastor_app",
+                        },
+                        headers=headers,
+                    )
+
         elif scope in ("chat", "control"):
             payload: dict[str, Any] = {
                 "instruction": instruction,
                 "channel": "opencastor_app",
                 "context": "opencastor_fleet_ui",
             }
+            # Mission thread: inject system context for multi-robot coordination
+            if mission_context:
+                payload["system_context"] = mission_context
             # v1.6 GAP-18: pass media_chunks as context for vision-capable providers
             if media_chunks:
                 payload["media_chunks"] = media_chunks
@@ -1095,6 +1548,8 @@ class CastorBridge:
                 "channel": "opencastor_app",
                 "context": "opencastor_fleet_ui",
             }
+            if mission_context:
+                payload_else["system_context"] = mission_context
             if media_chunks:
                 payload_else["media_chunks"] = media_chunks
             with httpx.Client(timeout=30.0) as client:
@@ -1112,6 +1567,60 @@ class CastorBridge:
     # ------------------------------------------------------------------
     # Consent request handling
     # ------------------------------------------------------------------
+
+    def _handle_config_share(self, cmd_id: str, doc: dict[str, Any]) -> None:
+        """Handle an incoming CONFIG_SHARE message from a peer robot.
+
+        The config is written to ~/.castor/received-configs/ for operator review.
+        It is NEVER auto-installed — the operator must run castor install manually.
+        Requires R2RAM chat-level consent (validated by _check_federation).
+        """
+        from pathlib import Path
+
+        params = doc.get("params", {})
+        content = params.get("config_bundle", "")
+        filename = params.get("filename", "received.rcan.yaml")
+        title = params.get("title", filename)
+        from_rrn = params.get("from_rrn", "unknown")
+
+        log.info("CONFIG_SHARE received from %s — title=%s filename=%s", from_rrn, title, filename)
+
+        # Validate federation consent at chat scope
+        allowed = self._check_federation(cmd_id, doc, scope="chat")
+        reason = "federation trust check failed" if not allowed else ""
+        if not allowed:
+            log.warning("CONFIG_SHARE from %s blocked: %s", from_rrn, reason)
+            self._update_command_status(cmd_id, "rejected", {"reason": reason})
+            return
+
+        if not content:
+            log.warning("CONFIG_SHARE from %s has empty content — ignoring", from_rrn)
+            self._update_command_status(cmd_id, "rejected", {"reason": "empty content"})
+            return
+
+        # Write to received-configs/ for operator review — never auto-install
+        received_dir = Path.home() / ".castor" / "received-configs"
+        received_dir.mkdir(parents=True, exist_ok=True)
+        dest = received_dir / filename
+        dest.write_text(content)
+
+        log.info("CONFIG_SHARE written to %s — operator must confirm before installing", dest)
+        print(
+            f"\n[bridge] ⬇  Config received from {from_rrn}: '{title}'\n"
+            f"         Saved to: {dest}\n"
+            f"         Review and install: castor install {dest}\n"
+        )
+
+        self._update_command_status(
+            cmd_id,
+            "completed",
+            {
+                "saved_to": str(dest),
+                "from_rrn": from_rrn,
+                "title": title,
+                "auto_installed": False,
+            },
+        )
 
     def _handle_consent_request(self, req_id: str, doc: dict[str, Any]) -> None:
         """Write an incoming consent request to Firestore for the Flutter app."""
@@ -1212,6 +1721,13 @@ class CastorBridge:
                         args=(cmd_id, doc),
                         daemon=True,
                         name=f"grant-{cmd_id[:8]}",
+                    ).start()
+                elif msg_type == "config_share":
+                    threading.Thread(
+                        target=self._handle_config_share,
+                        args=(cmd_id, doc),
+                        daemon=True,
+                        name=f"cfgshare-{cmd_id[:8]}",
                     ).start()
                 else:
                     threading.Thread(

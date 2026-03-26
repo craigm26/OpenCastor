@@ -43,7 +43,7 @@ def fresh_db(tmp_path: Path) -> str:
     from castor.memory.episode import EpisodeMemory
 
     db_path = str(tmp_path / "memory.db")
-    mem = EpisodeMemory(db_path=db_path)
+    EpisodeMemory(db_path=db_path)
     return db_path
 
 

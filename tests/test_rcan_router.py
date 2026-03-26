@@ -35,16 +35,22 @@ def router(ruri, caps):
     return r
 
 
+@pytest.fixture
+def admin_principal():
+    """A fully-privileged principal for tests that exercise routing, not auth."""
+    return RCANPrincipal(name="test-admin", role=RCANRole.CREATOR)
+
+
 class TestRouterBasic:
     """Basic routing."""
 
-    def test_route_status(self, router):
+    def test_route_status(self, router, admin_principal):
         msg = RCANMessage.command(
             source="rcan://client.app.xyz",
             target="rcan://opencastor.rover.abc12345/status",
             payload={},
         )
-        resp = router.route(msg)
+        resp = router.route(msg, admin_principal)
         assert resp.type == MessageType.ACK
         assert resp.payload["uptime"] == 42.0
         assert resp.reply_to == msg.id
@@ -60,26 +66,26 @@ class TestRouterBasic:
         assert resp.type == MessageType.ACK
         assert resp.payload["accepted"]
 
-    def test_messages_routed_counter(self, router):
+    def test_messages_routed_counter(self, router, admin_principal):
         assert router.messages_routed == 0
         msg = RCANMessage.command(
             source="rcan://a.b.c",
             target="rcan://opencastor.rover.abc12345/status",
             payload={},
         )
-        router.route(msg)
+        router.route(msg, admin_principal)
         assert router.messages_routed == 1
-        router.route(msg)
+        router.route(msg, admin_principal)
         assert router.messages_routed == 2
 
-    def test_default_capability_is_status(self, router):
+    def test_default_capability_is_status(self, router, admin_principal):
         """Target without capability path defaults to 'status'."""
         msg = RCANMessage.command(
             source="rcan://a.b.c",
             target="rcan://opencastor.rover.abc12345",
             payload={},
         )
-        resp = router.route(msg)
+        resp = router.route(msg, admin_principal)
         assert resp.type == MessageType.ACK
 
 
@@ -106,13 +112,13 @@ class TestRouterValidation:
         assert resp.type == MessageType.ERROR
         assert resp.payload["code"] == "NOT_FOR_ME"
 
-    def test_wildcard_target_matches(self, router):
+    def test_wildcard_target_matches(self, router, admin_principal):
         msg = RCANMessage.command(
             source="rcan://a.b.c",
             target="rcan://*.*.*/status",
             payload={},
         )
-        resp = router.route(msg)
+        resp = router.route(msg, admin_principal)
         assert resp.type == MessageType.ACK
 
     def test_expired_message(self, router):
@@ -128,24 +134,24 @@ class TestRouterValidation:
         assert resp.type == MessageType.ERROR
         assert resp.payload["code"] == "EXPIRED"
 
-    def test_capability_not_found(self, router):
+    def test_capability_not_found(self, router, admin_principal):
         msg = RCANMessage.command(
             source="rcan://a.b.c",
             target="rcan://opencastor.rover.abc12345/nonexistent",
             payload={},
         )
-        resp = router.route(msg)
+        resp = router.route(msg, admin_principal)
         assert resp.type == MessageType.ERROR
         assert resp.payload["code"] == "CAPABILITY_NOT_FOUND"
 
-    def test_no_handler_registered(self, ruri, caps):
+    def test_no_handler_registered(self, ruri, caps, admin_principal):
         router = MessageRouter(ruri, caps)  # No handlers registered
         msg = RCANMessage.command(
             source="rcan://a.b.c",
             target="rcan://opencastor.rover.abc12345/status",
             payload={},
         )
-        resp = router.route(msg)
+        resp = router.route(msg, admin_principal)
         assert resp.type == MessageType.ERROR
         assert resp.payload["code"] == "NO_HANDLER"
 
@@ -184,15 +190,16 @@ class TestRouterAuthorization:
         resp = router.route(msg, user)
         assert resp.type == MessageType.ACK
 
-    def test_no_principal_allows_all(self, router):
-        """When no principal is provided (e.g. local calls), allow through."""
+    def test_no_principal_denied(self, router):
+        """None principal is treated as unauthorized (security fix #703)."""
         msg = RCANMessage.command(
             source="rcan://a.b.c",
             target="rcan://opencastor.rover.abc12345/nav",
             payload={},
         )
-        resp = router.route(msg)  # No principal
-        assert resp.type == MessageType.ACK
+        resp = router.route(msg)  # No principal → should be denied
+        assert resp.type == MessageType.ERROR
+        assert "UNAUTHORIZED" in (resp.payload or {}).get("code", "")
 
 
 class TestInvokeFamily:
@@ -309,7 +316,8 @@ class TestRouterHandlerErrors:
             target="rcan://opencastor.rover.abc12345/status",
             payload={},
         )
-        resp = router.route(msg)
+        principal = RCANPrincipal(name="test-admin", role=RCANRole.CREATOR)
+        resp = router.route(msg, principal)
         assert resp.type == MessageType.ERROR
         assert resp.payload["code"] == "HANDLER_ERROR"
         assert "something went wrong" in resp.payload["detail"]

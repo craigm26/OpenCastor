@@ -6,19 +6,16 @@ ALL invariants must pass before any harness PR is merged.
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock
 
 from castor.harness import (
     AgentHarness,
     HarnessContext,
-    HarnessHook,
-    PHYSICAL_TOOLS,
-    ESTOP_TOOLS,
-    SCOPE_LEVELS,
 )
-from castor.tools import ToolRegistry
 from castor.providers.base import Thought
+from castor.tools import ToolRegistry
 
 
 def _make_provider(text="ok", tool_calls=None):

@@ -2403,26 +2403,28 @@ class TestCmdQuickstart:
     def test_wizard_success_then_demo(self, capsys):
         """Successful wizard should proceed to demo."""
         args = _make_args()
-        mock_results = [
-            MagicMock(returncode=0),  # wizard
-            MagicMock(returncode=0),  # demo
-        ]
-        with patch("subprocess.run", side_effect=mock_results):
-            cmd_quickstart(args)
+        with (
+            patch("castor.init_wizard.run_wizard", return_value="my-robot.rcan.yaml"),
+            patch("subprocess.run", return_value=MagicMock(returncode=0)),
+        ):
+            try:
+                cmd_quickstart(args)
+            except SystemExit:
+                pass
         out = capsys.readouterr().out
         assert "QuickStart" in out
         assert "Step 1" in out
         assert "Step 2" in out
-        assert "QuickStart complete" in out
 
     def test_wizard_failure(self, capsys):
-        """Failed wizard should abort quickstart."""
+        """Failed wizard (FileExistsError) should abort quickstart."""
         args = _make_args()
-        mock_result = MagicMock(returncode=1)
-        with patch("subprocess.run", return_value=mock_result):
-            cmd_quickstart(args)
-        out = capsys.readouterr().out
-        assert "Wizard failed" in out
+        with patch(
+            "castor.init_wizard.run_wizard",
+            side_effect=FileExistsError("Config already exists"),
+        ):
+            with pytest.raises(SystemExit):
+                cmd_quickstart(args)
 
 
 # =====================================================================

@@ -1,0 +1,56 @@
+rcan_version: "1.6"
+
+metadata:
+  robot_name: opencastor-arm-demo
+  robot_uuid: "00000000-0000-4000-8000-000000000003"
+  author: OpenCastor Team
+  license: Apache-2.0
+  description: >
+    Minimal demo for the arm-manipulate builtin skill. Controls a
+    robotic arm (SO-ARM101, Dynamixel, or SO-100 compatible) to perform
+    pick-and-place, object handling, and manipulation tasks. The agent
+    interprets high-level instructions and maps them to joint commands.
+  tags:
+    - official
+    - skill
+    - arm
+    - arm-manipulate
+    - manipulation
+  builtin_skills:
+    - arm-manipulate
+
+_note: >
+  Official demo for the arm-manipulate builtin skill. Compatible with
+  SO-ARM101, Dynamixel, and SO-100 arms. Fork to configure your joint
+  limits, serial port, and workspace boundaries.
+
+agent:
+  provider: google
+  model: gemini-2.5-flash
+  safety_stop: true
+  system_prompt: >
+    You are a manipulation-focused OpenCastor agent. Use the arm-manipulate
+    skill to control the robotic arm. Always verify the workspace is clear
+    before moving and respect joint limits.
+
+physics:
+  type: arm
+  dof: 6
+
+drivers:
+  - id: arm_servo
+    protocol: serial
+
+network:
+  allow_remote_override: false
+
+rcan_protocol:
+  enable_mdns: true
+
+loa:
+  min_loa_for_control: 1
+
+safety:
+  p66_enabled: true
+  local_safety_wins: true
+  emergency_stop_distance: 0.1

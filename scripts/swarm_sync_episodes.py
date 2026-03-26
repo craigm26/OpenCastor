@@ -11,9 +11,8 @@ Designed to run as a cron job every 5 minutes:
 
 import json
 import logging
-import sys
-import urllib.request
 import urllib.error
+import urllib.request
 from datetime import datetime
 
 logging.basicConfig(

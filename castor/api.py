@@ -22,6 +22,7 @@ import re as _re
 import signal
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -197,6 +198,7 @@ class AppState:
     mdns_broadcaster = None
     mdns_browser = None
     rcan_router = None  # RCAN message router
+    rcan_node_client = None  # rcan.NodeClient (registry connection)
     capability_registry = None  # Capability registry
     offline_fallback = None  # OfflineFallbackManager (optional)
     provider_fallback = None  # ProviderFallbackManager (optional, for quota errors)
@@ -332,6 +334,8 @@ class CommandRequest(BaseModel):
     # v1.6 RCAN fields
     transport: str = "http"  # GAP-17: transport encoding ("http" | "compact")
     media_chunks: list[dict] = []  # GAP-18: multi-modal payload chunks
+    # R2R2H mission thread context (§2.8) — if present, prepended to agent system prompt
+    system_context: Optional[str] = None  # mission_context from bridge
 
 
 class ActionRequest(BaseModel):
@@ -541,6 +545,7 @@ async def get_status(request: Request):
         "brain_active_model": _brain_active_model,
         "speaking": getattr(getattr(state, "speaker", None), "is_speaking", False),
         "caption": getattr(getattr(state, "speaker", None), "current_caption", ""),
+        "rcan_bridge": state.rcan_node_client is not None,
     }
 
     if state.fs:
@@ -616,8 +621,15 @@ async def send_command(cmd: CommandRequest, request: Request):
     _surface = cmd.channel or cmd.context or "whatsapp"
     _think_t0 = time.perf_counter()
 
+    # §2.8 R2R2H Mission context — prepend to instruction so the agent is aware
+    # of the multi-robot mission context without modifying the system prompt globally.
+    if cmd.system_context:
+        cmd = cmd.model_copy(
+            update={"instruction": f"[MISSION CONTEXT] {cmd.system_context}\n\n{cmd.instruction}"}
+        )
+
     # ── Agent Harness (when enabled in RCAN config) ──────────────────────────
-    _agent_cfg = state.fs.config.get("agent", {}) if state.fs else {}
+    _agent_cfg = (state.config or {}).get("agent", {})
     _harness_cfg = _agent_cfg.get("harness", {})
     _harness_enabled = _harness_cfg.get("enabled", False)  # opt-in
 
@@ -694,7 +706,7 @@ async def send_command(cmd: CommandRequest, request: Request):
         _execute_action(thought.action)
 
     return {
-        "raw_text": thought.raw_text,
+        "raw_text": _strip_action_json(thought.raw_text),
         "action": thought.action,
         "model_used": _provider_name,
         "harness": _harness_enabled,
@@ -827,6 +839,80 @@ async def system_shutdown(request: Request):
     _check_min_role(request, "admin")
     subprocess.Popen(["sudo", "shutdown", "-h", "now"])
     return {"status": "shutting_down"}
+
+
+@app.post("/api/system/upgrade", dependencies=[Depends(verify_token)])
+async def system_upgrade(request: Request):
+    """Upgrade the opencastor package via pip. Requires admin role.
+
+    Body (optional JSON): {"version": "2026.3.17.13"}
+    If version is omitted, upgrades to the latest PyPI release.
+
+    Returns immediately with status="upgrading" and runs pip in the background.
+    Poll GET /api/status for the updated version after ~30s.
+    """
+    import subprocess
+    import sys
+
+    _check_min_role(request, "admin")
+
+    body: dict = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+
+    version: str | None = body.get("version")
+    pkg = f"opencastor=={version}" if version else "opencastor"
+
+    # Run pip, then restart the gateway process so new code is actually loaded.
+    # Detect venv vs system Python: in a venv sys.prefix != sys.base_prefix.
+    # Venv pip doesn't need --break-system-packages; system Python does.
+    import sys as _sys
+
+    _in_venv = _sys.prefix != _sys.base_prefix
+    cmd = [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--upgrade",
+        pkg,
+    ]
+    if not _in_venv:
+        cmd.insert(-1, "--break-system-packages")
+
+    # Build a restart wrapper: pip install, then SIGTERM the parent gateway process.
+    # NOTE: os.execv(sys.executable, sys.argv) does NOT work here because this
+    # script runs as `python -c <script>`, so sys.argv == ['-c'] — execv would
+    # just rerun the no-op subprocess, never restarting the actual gateway.
+    # Instead we kill the gateway (our parent); systemd Restart=on-failure revives it.
+    _restart_script = "\n".join(
+        [
+            "import subprocess, sys, os, time, signal",
+            f"pip_cmd = {cmd!r}",
+            "res = subprocess.run(pip_cmd, capture_output=True)",
+            "if res.returncode == 0:",
+            "    time.sleep(2)  # let pip finalize before restart",
+            "    os.kill(os.getppid(), signal.SIGTERM)  # kill gateway; systemd restarts it",
+            "else:",
+            "    print('pip failed:', res.stderr.decode(), file=sys.stderr)",
+        ]
+    )
+
+    logger.info("system_upgrade: installing %s then restarting gateway", pkg)
+    subprocess.Popen(
+        [sys.executable, "-c", _restart_script],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+
+    return {
+        "status": "upgrading",
+        "package": pkg,
+        "note": "Gateway will restart automatically after pip succeeds (~30s). "
+        "Poll /api/status to confirm new version.",
+    }
 
 
 @app.get("/api/intents", dependencies=[Depends(verify_token)])
@@ -1006,6 +1092,786 @@ async def config_rollback(req: _ConfigRollbackRequest, request: Request):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"Write failed: {exc}") from exc
+
+
+# ---------------------------------------------------------------------------
+# Harness config endpoints  (GET /api/harness, POST /api/harness)
+# ---------------------------------------------------------------------------
+
+
+class _HarnessApplyRequest(BaseModel):
+    """Request body for POST /api/harness."""
+
+    skills: Optional[dict] = Field(default_factory=dict)
+    hooks: Optional[dict] = Field(default_factory=dict)
+    context: Optional[dict] = Field(default_factory=dict)
+    model_tiers: Optional[dict] = Field(default_factory=dict)
+    trajectory: Optional[dict] = Field(default_factory=dict)
+    max_iterations: Optional[int] = Field(default=None, ge=1, le=50)
+
+
+def _build_harness_response() -> dict:
+    """Build the harness config dict from current AppState."""
+    cfg = state.config or {}
+    agent = cfg.get("agent", {})
+    harness = agent.get("harness", {})
+    hooks = harness.get("hooks", {})
+    context_cfg = harness.get("context", {})
+    trajectory_cfg = harness.get("trajectory", {})
+    model_tiers = cfg.get("model_tiers", {})
+
+    # Skills: derive from state.config['skills'] or fall back to defaults
+    default_skills = [
+        "navigate_to",
+        "camera_describe",
+        "arm_manipulate",
+        "web_lookup",
+        "peer_coordinate",
+        "code_reviewer",
+    ]
+    skills_cfg = cfg.get("skills", {})
+    skills_list = []
+    for idx, skill_key in enumerate(default_skills):
+        skill_data = skills_cfg.get(skill_key, {})
+        skills_list.append(
+            {
+                "id": f"skill-{skill_key.replace('_', '-')}",
+                "name": skill_key,
+                "enabled": skill_data.get("enabled", False),
+                "order": skill_data.get("order", idx),
+                "config": {k: v for k, v in skill_data.items() if k not in ("enabled", "order")},
+            }
+        )
+    # Sort by declared order
+    skills_list.sort(key=lambda s: s["order"])
+
+    return {
+        "skills": skills_list,
+        "hooks": {
+            "p66_audit": hooks.get("p66_audit", True),
+            "retry_on_error": hooks.get("retry_on_error", True),
+            "drift_detection": hooks.get("drift_detection", True),
+            "drift_threshold": hooks.get("drift_threshold", 0.15),
+        },
+        "context": {
+            "memory": context_cfg.get("memory", agent.get("auto_rag", True)),
+            "telemetry": context_cfg.get("telemetry", agent.get("auto_telemetry", True)),
+            "system_prompt": context_cfg.get("system_prompt", True),
+            "skills_context": context_cfg.get("skills_context", True),
+        },
+        "model_tiers": {
+            "fast_provider": model_tiers.get("fast_provider", "ollama"),
+            "fast_model": model_tiers.get("fast_model", "gemma3:1b"),
+            "slow_provider": model_tiers.get("slow_provider", "google"),
+            "slow_model": model_tiers.get("slow_model", agent.get("model", "gemini-2.5-flash")),
+            "confidence_threshold": model_tiers.get("confidence_threshold", 0.7),
+        },
+        "trajectory": {
+            "enabled": trajectory_cfg.get("enabled", harness.get("enabled", True)),
+            "sqlite_path": trajectory_cfg.get("sqlite_path", "trajectory.db"),
+        },
+        "max_iterations": harness.get("max_iterations", 6),
+    }
+
+
+@app.get("/api/harness", dependencies=[Depends(verify_token)])
+async def get_harness(request: Request):
+    """GET /api/harness — Return current harness config (skills, hooks, context, model tiers).
+
+    Requires at minimum ``operator`` role.
+    """
+    _check_min_role(request, "operator")
+    return _build_harness_response()
+
+
+def _validate_harness_request(req: _HarnessApplyRequest) -> None:
+    """Raise HTTPException 422 if the harness request contains invalid values."""
+    # Confidence threshold must be in [0, 1] if provided
+    if req.model_tiers:
+        ct = req.model_tiers.get("confidence_threshold")
+        if ct is not None and not (0.0 <= float(ct) <= 1.0):
+            raise HTTPException(
+                status_code=422,
+                detail="model_tiers.confidence_threshold must be between 0.0 and 1.0",
+            )
+    # drift_threshold must be in [0, 1] if provided
+    if req.hooks:
+        dt = req.hooks.get("drift_threshold")
+        if dt is not None and not (0.0 <= float(dt) <= 1.0):
+            raise HTTPException(
+                status_code=422,
+                detail="hooks.drift_threshold must be between 0.0 and 1.0",
+            )
+        # p66_audit cannot be disabled via API
+        if req.hooks.get("p66_audit") is False:
+            raise HTTPException(
+                status_code=422,
+                detail="hooks.p66_audit cannot be disabled (Protocol 66 invariant)",
+            )
+
+
+@app.post("/api/harness", dependencies=[Depends(verify_token)])
+async def apply_harness(req: _HarnessApplyRequest, request: Request):
+    """POST /api/harness — Apply a new harness config, write to config file, and reload.
+
+    Validates the payload, merges into the running config, writes back to disk,
+    and triggers a live reload of the harness layer.  P66 invariants are enforced:
+    ``hooks.p66_audit`` cannot be set to False.
+
+    Requires at minimum ``operator`` role.
+    """
+    _check_min_role(request, "admin")
+    _validate_harness_request(req)
+
+    if state.config is None:
+        raise HTTPException(status_code=503, detail="Config not loaded")
+
+    config_path = os.getenv("OPENCASTOR_CONFIG", "robot.rcan.yaml")
+
+    # Deep-merge incoming fields into the current config
+    import copy
+
+    new_config = copy.deepcopy(state.config)
+    agent = new_config.setdefault("agent", {})
+    harness = agent.setdefault("harness", {})
+
+    if req.max_iterations is not None:
+        harness["max_iterations"] = req.max_iterations
+
+    if req.hooks:
+        harness.setdefault("hooks", {}).update(req.hooks)
+        # P66 invariant: p66_audit is always True
+        harness["hooks"]["p66_audit"] = True
+
+    if req.context:
+        harness.setdefault("context", {}).update(req.context)
+
+    if req.trajectory:
+        harness.setdefault("trajectory", {}).update(req.trajectory)
+
+    if req.model_tiers:
+        new_config.setdefault("model_tiers", {}).update(req.model_tiers)
+
+    if req.skills:
+        new_config.setdefault("skills", {}).update(req.skills)
+
+    # RCAN §2.6 compliance: safety / auth / p66 top-level keys must never be
+    # modified or removed via the harness API — always restore from original.
+    _HARNESS_FORBIDDEN_KEYS: frozenset[str] = frozenset({"safety", "auth", "p66"})
+    import copy as _copy_mod
+
+    for _fk in _HARNESS_FORBIDDEN_KEYS:
+        _orig_val = state.config.get(_fk)  # type: ignore[union-attr]
+        if _orig_val is not None:
+            new_config[_fk] = _copy_mod.deepcopy(_orig_val)
+        else:
+            new_config.pop(_fk, None)  # remove only if it wasn't in the original
+
+    # Persist to config file
+    try:
+        # Record current config to history before overwriting
+        from castor.config_history import get_history
+
+        get_history().record(state.config, config_path=config_path)
+
+        with open(config_path, "w") as _f:
+            yaml.dump(new_config, _f, default_flow_style=False, allow_unicode=True)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Config write failed: {exc}") from exc
+
+    # Apply to live state
+    state.config = new_config
+
+    logger.info("Harness config updated and written to %s", config_path)
+    return {
+        "status": "applied",
+        "config_path": config_path,
+        "harness": _build_harness_response(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Slash command registry  (GET /api/skills)
+# ---------------------------------------------------------------------------
+
+#: Mapping from builtin skill name → RCAN command scope
+_SKILL_SCOPE_MAP: dict[str, str] = {
+    "navigate-to": "control",
+    "arm-manipulate": "control",
+    "camera-describe": "status",
+    "web-lookup": "chat",
+    "peer-coordinate": "chat",
+    "code-reviewer": "chat",
+}
+
+#: Static builtin CLI commands exposed via the slash command palette
+_BUILTIN_CLI_COMMANDS: list[dict] = [
+    {"cmd": "/status", "description": "Get robot status", "scope": "status", "instant": True},
+    {"cmd": "/skills", "description": "List active skills", "scope": "status", "instant": True},
+    {"cmd": "/optimize", "description": "Run optimizer pass", "scope": "system", "instant": False},
+    {
+        "cmd": "/upgrade",
+        "description": "Upgrade to latest version",
+        "scope": "system",
+        "instant": False,
+        "args": [{"name": "version", "optional": True}],
+    },
+    {"cmd": "/reboot", "description": "Reboot robot", "scope": "system", "instant": False},
+    {
+        "cmd": "/attestation",
+        "description": "Show security attestation status",
+        "scope": "status",
+        "instant": True,
+    },
+    {
+        "cmd": "/reload-config",
+        "description": "Reload RCAN config",
+        "scope": "system",
+        "instant": False,
+    },
+    {
+        "cmd": "/share",
+        "description": "Share config to hub",
+        "scope": "system",
+        "instant": False,
+    },
+    {
+        "cmd": "/install",
+        "description": "Install config from hub",
+        "scope": "system",
+        "instant": False,
+        "args": [{"name": "id", "optional": False}],
+    },
+    {
+        "cmd": "/pause",
+        "description": "Pause the perception-action loop",
+        "scope": "system",
+        "instant": False,
+    },
+    {
+        "cmd": "/resume",
+        "description": "Resume the perception-action loop",
+        "scope": "system",
+        "instant": False,
+    },
+    {"cmd": "/shutdown", "description": "Shutdown robot host", "scope": "system", "instant": False},
+    {
+        "cmd": "/snapshot",
+        "description": "Take a diagnostic snapshot",
+        "scope": "status",
+        "instant": True,
+    },
+    {
+        "cmd": "/contribute",
+        "description": "Show idle compute contribution status",
+        "scope": "status",
+        "instant": True,
+    },
+    {
+        "cmd": "/peer-test",
+        "description": "Test direct RCAN communication with discovered peers",
+        "scope": "status",
+        "instant": True,
+    },
+]
+
+
+@app.get("/api/research/status", dependencies=[Depends(verify_token)])
+async def research_status():
+    """GET /api/research/status — Return harness research pipeline status.
+
+    Reads OPENCASTOR_OPS_DIR env var (default ~/opencastor-ops).
+    All fields are returned with graceful fallback on file errors.
+    Firestore queue_depth requires firebase_admin; returns null if unavailable.
+    """
+    ops_dir = Path(os.environ.get("OPENCASTOR_OPS_DIR", Path.home() / "opencastor-ops"))
+    harness_dir = ops_dir / "harness-research"
+    champion_path = harness_dir / "champion.yaml"
+    candidates_dir = harness_dir / "candidates"
+
+    def _safe_yaml(p: Path) -> dict:
+        try:
+            return yaml.safe_load(p.read_text()) or {}
+        except Exception:
+            return {}
+
+    # Champion
+    champion_data: dict | None = None
+    try:
+        raw = _safe_yaml(champion_path)
+        if raw:
+            champion_data = {
+                "id": raw.get("candidate_id", "unknown"),
+                "score": raw.get("score", 0.0),
+                "date": raw.get("date"),
+                "config": raw.get("config", {}),
+            }
+    except Exception:
+        pass
+
+    # Last run — most recent *-winner.yaml
+    last_run: dict | None = None
+    total_runs = 0
+    try:
+        if candidates_dir.exists():
+            winner_files = sorted(candidates_dir.glob("*-winner.yaml"), reverse=True)
+            total_runs = len(winner_files)
+            if winner_files:
+                latest = _safe_yaml(winner_files[0])
+                champ_score = champion_data["score"] if champion_data else 0.0
+                best_score = latest.get("score", 0.0)
+                last_run = {
+                    "date": latest.get("date") or winner_files[0].name.replace("-winner.yaml", ""),
+                    "candidates": latest.get("candidates_evaluated", None),
+                    "improved": best_score > champ_score,
+                    "best_challenger_score": best_score,
+                }
+    except Exception:
+        pass
+
+    # Queue depth from Firestore
+    queue_depth: dict | None = None
+    try:
+        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            import firebase_admin
+            from firebase_admin import credentials as fb_creds
+            from firebase_admin import firestore as fb_store
+
+            if not firebase_admin._apps:
+                cred = fb_creds.ApplicationDefault()
+                firebase_admin.initialize_app(cred)
+
+            db = fb_store.client()
+            docs = db.collection("harness_research_queue").where("status", "==", "pending").stream()
+            counts: dict[str, int] = {}
+            for doc in docs:
+                d = doc.to_dict() or {}
+                tier = d.get("hardware_tier", "unknown")
+                counts[tier] = counts.get(tier, 0) + 1
+            queue_depth = counts
+    except Exception:
+        queue_depth = None
+
+    # Next run estimate: next occurrence of 08:00 UTC
+    now_utc = datetime.now(timezone.utc)
+    next_run = now_utc.replace(hour=8, minute=0, second=0, microsecond=0)
+    if now_utc.hour >= 8:
+        next_run += timedelta(days=1)
+    next_run_iso = next_run.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    return {
+        "champion": champion_data,
+        "last_run": last_run,
+        "queue_depth": queue_depth,
+        "next_run_estimate": next_run_iso,
+        "total_runs": total_runs,
+        "search_space_size": 790272,
+    }
+
+
+@app.get("/api/research/contributors", dependencies=[Depends(verify_token)])
+async def research_contributors():
+    """GET /api/research/contributors — Contributor lineage for the current champion.
+
+    Returns which robots evaluated the current champion candidate, their total
+    work unit count, and their credit share percentage.
+
+    Response schema:
+      {
+        "champion": {"candidate_id": str, "score": float, "promoted_at": str|null},
+        "contributors": [{"rrn": str, "work_units_total": int,
+                          "champion_evals": int, "credit_share_pct": float}],
+        "total_evaluated": int,
+        "search_space_size": 790272,
+        "explored_pct": float,
+      }
+    """
+    SEARCH_SPACE_SIZE = 790272
+
+    ops_dir = Path(os.environ.get("OPENCASTOR_OPS_DIR", Path.home() / "opencastor-ops"))
+    champion_path = ops_dir / "harness-research" / "champion.yaml"
+
+    def _safe_yaml(p: Path) -> dict:
+        try:
+            return yaml.safe_load(p.read_text()) or {}
+        except Exception:
+            return {}
+
+    # Champion info
+    champion_raw = _safe_yaml(champion_path)
+    champion: dict | None = None
+    if champion_raw:
+        champion = {
+            "candidate_id": champion_raw.get("candidate_id", champion_raw.get("id", "unknown")),
+            "score": champion_raw.get("score", 0.0),
+            "promoted_at": champion_raw.get("date"),
+        }
+
+    # Contributor data from Firestore
+    contributors: list[dict] = []
+    total_evaluated = 0
+    try:
+        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            import firebase_admin
+            from firebase_admin import credentials as fb_creds
+            from firebase_admin import firestore as fb_store
+
+            if not firebase_admin._apps:
+                cred = fb_creds.ApplicationDefault()
+                firebase_admin.initialize_app(cred)
+
+            db = fb_store.client()
+
+            # All eval results
+            all_results = db.collection("harness_eval_results").stream()
+            by_rrn: dict[str, dict] = {}
+            for doc in all_results:
+                d = doc.to_dict() or {}
+                rrn = d.get("evaluator_rrn", "unknown")
+                total_evaluated += 1
+                if rrn not in by_rrn:
+                    by_rrn[rrn] = {"work_units_total": 0, "champion_evals": 0}
+                by_rrn[rrn]["work_units_total"] += 1
+                if d.get("is_champion"):
+                    by_rrn[rrn]["champion_evals"] += 1
+
+            total_champion_evals = sum(v["champion_evals"] for v in by_rrn.values())
+            for rrn, info in by_rrn.items():
+                share = (
+                    round(info["champion_evals"] / total_champion_evals * 100, 1)
+                    if total_champion_evals > 0
+                    else 0.0
+                )
+                contributors.append(
+                    {
+                        "rrn": rrn,
+                        "work_units_total": info["work_units_total"],
+                        "champion_evals": info["champion_evals"],
+                        "credit_share_pct": share,
+                    }
+                )
+            contributors.sort(key=lambda x: x["work_units_total"], reverse=True)
+    except Exception:
+        pass
+
+    explored_pct = round(total_evaluated / SEARCH_SPACE_SIZE * 100, 4) if total_evaluated else 0.0
+
+    return {
+        "champion": champion,
+        "contributors": contributors,
+        "total_evaluated": total_evaluated,
+        "search_space_size": SEARCH_SPACE_SIZE,
+        "explored_pct": explored_pct,
+    }
+
+
+@app.post("/api/harness/apply-champion", dependencies=[Depends(verify_token)])
+async def apply_champion_harness(request: Request):
+    """POST /api/harness/apply-champion — Apply the current research champion config.
+
+    Reads the champion config from Firestore (harness_pending) or ops repo champion.yaml
+    and applies it to this robot's live harness via the same merge path as POST /api/harness.
+
+    This is the opt-in deployment endpoint — champion configs are NEVER auto-applied.
+    Users trigger this explicitly from the app, CLI, or by enabling auto_apply_champion.
+
+    Body (optional):
+      {} — apply champion to this robot only
+      {"dry_run": true} — preview what would change without applying
+
+    Requires: operator role minimum.
+    Response:
+      {"applied": true, "candidate_id": str, "score": float, "config": {...}}
+      {"applied": false, "reason": "no_pending_champion"}
+    """
+    _check_min_role(request, "operator")
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    dry_run = bool((body or {}).get("dry_run", False))
+
+    ops_dir = Path(os.environ.get("OPENCASTOR_OPS_DIR", Path.home() / "opencastor-ops"))
+    champion_path = ops_dir / "harness-research" / "champion.yaml"
+
+    # ── Load champion ─────────────────────────────────────────────────────────
+    champion_data: dict | None = None
+
+    # 1. Try Firestore harness_pending for this robot's RRN
+    rrn = getattr(state, "rrn", None) or os.environ.get("CASTOR_RRN")
+    if rrn:
+        try:
+            import firebase_admin
+            from firebase_admin import credentials as fb_creds
+            from firebase_admin import firestore as fb_store
+
+            sa_path = Path.home() / ".config" / "opencastor" / "firebase-sa-key.json"
+            if not firebase_admin._apps and sa_path.exists():
+                cred = fb_creds.Certificate(str(sa_path))
+                firebase_admin.initialize_app(cred)
+
+            db = fb_store.client()
+            robot_doc = db.collection("robots").document(rrn).get()
+            if robot_doc.exists:
+                robot_data = robot_doc.to_dict() or {}
+                pending = robot_data.get("harness_pending")
+                if pending:
+                    champion_data = {
+                        "candidate_id": pending.pop("_candidate_id", "unknown"),
+                        "score": pending.pop("_score", 0.0),
+                        "config": {k: v for k, v in pending.items() if not k.startswith("_")},
+                    }
+                    pending.pop("_pending_since", None)
+        except Exception as exc:
+            logger.debug("Firestore pending lookup failed: %s", exc)
+
+    # 2. Fall back to ops repo champion.yaml
+    if champion_data is None and champion_path.exists():
+        try:
+            raw = yaml.safe_load(champion_path.read_text()) or {}
+            if raw.get("config"):
+                champion_data = {
+                    "candidate_id": raw.get("candidate_id", raw.get("id", "unknown")),
+                    "score": raw.get("score", 0.0),
+                    "config": raw["config"],
+                }
+        except Exception as exc:
+            logger.warning("champion.yaml read failed: %s", exc)
+
+    if not champion_data or not champion_data.get("config"):
+        return {"applied": False, "reason": "no_champion_available"}
+
+    config = champion_data["config"]
+    candidate_id = champion_data["candidate_id"]
+    score = champion_data["score"]
+
+    if dry_run:
+        return {
+            "applied": False,
+            "dry_run": True,
+            "candidate_id": candidate_id,
+            "score": score,
+            "config": config,
+            "message": "dry_run=true — no changes made",
+        }
+
+    # ── Apply: merge tunables into live config via same path as POST /api/harness ──
+    TUNABLE_KEYS = {
+        "max_iterations",
+        "thinking_budget",
+        "context_budget",
+        "p66_consent_threshold",
+        "retry_on_error",
+        "drift_detection",
+        "cost_gate_usd",
+        "enabled",
+    }
+
+    if state.config is None:
+        return {"applied": False, "reason": "config_not_loaded"}
+
+    import copy
+
+    new_config = copy.deepcopy(state.config)
+    agent = new_config.setdefault("agent", {})
+    harness = agent.setdefault("harness", {})
+
+    applied_keys: dict = {}
+    for key, value in config.items():
+        if key in TUNABLE_KEYS:
+            harness[key] = value
+            applied_keys[key] = value
+
+    # P66 invariant: never touch safety hooks
+    harness.pop("p66_audit", None)  # ensure we never disable it
+
+    # Write back to config file
+    config_path = os.getenv("OPENCASTOR_CONFIG", "robot.rcan.yaml")
+    try:
+        with open(config_path, "w") as f:
+            yaml.dump(new_config, f, default_flow_style=False)
+        state.config = new_config
+        logger.info(
+            "Applied champion harness '%s' (score=%.4f): %s",
+            candidate_id,
+            score,
+            applied_keys,
+        )
+    except Exception as exc:
+        return {"applied": False, "reason": f"write_failed: {exc}"}
+
+    # Clear pending flag from Firestore
+    if rrn:
+        try:
+            from firebase_admin import firestore as fb_store
+
+            db = fb_store.client()
+            db.collection("robots").document(rrn).update(
+                {
+                    "harness_pending": fb_store.DELETE_FIELD,
+                    "harness_tunables": applied_keys,
+                }
+            )
+        except Exception:
+            pass
+
+    return {
+        "applied": True,
+        "candidate_id": candidate_id,
+        "score": score,
+        "config": applied_keys,
+    }
+
+
+@app.post("/api/harness/auto-apply", dependencies=[Depends(verify_token)])
+async def set_auto_apply_champion(request: Request):
+    """POST /api/harness/auto-apply — Toggle auto-apply of future champion configs.
+
+    Body: {"enabled": true|false}
+    When enabled=true, future champion promotions will be applied immediately to this robot.
+    When enabled=false (default), champion configs are stored as pending for manual review.
+
+    Requires: operator role.
+    """
+    _check_min_role(request, "operator")
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    enabled = bool((body or {}).get("enabled", False))
+
+    rrn = getattr(state, "rrn", None) or os.environ.get("CASTOR_RRN")
+    if not rrn:
+        return {"error": "robot RRN not available"}
+
+    try:
+        import firebase_admin
+        from firebase_admin import credentials as fb_creds
+        from firebase_admin import firestore as fb_store
+
+        sa_path = Path.home() / ".config" / "opencastor" / "firebase-sa-key.json"
+        if not firebase_admin._apps and sa_path.exists():
+            cred = fb_creds.Certificate(str(sa_path))
+            firebase_admin.initialize_app(cred)
+
+        db = fb_store.client()
+        db.collection("robots").document(rrn).update(
+            {
+                "contribute.auto_apply_champion": enabled,
+            }
+        )
+        logger.info("Set auto_apply_champion=%s for robot %s", enabled, rrn)
+        return {"auto_apply_champion": enabled, "rrn": rrn}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+@app.get("/api/skills")
+async def get_skills(request: Request):
+    """GET /api/skills — Return available skills and CLI commands as slash command registry.
+
+    Public endpoint (no auth required) — returns command metadata only, no config secrets.
+    Used by the Flutter app slash command palette.
+
+    Returns a JSON object with:
+    - ``builtin_commands``: static CLI commands (status, reboot, upgrade, etc.)
+    - ``skills``: enabled skills loaded from RCAN config + skill config.json files
+    - ``rcan_version``: the RCAN protocol version string
+    - ``robot_rrn``: robot identifier from metadata config
+    """
+    cfg = state.config or {}
+
+    # Determine enabled skills from RCAN config
+    skills_cfg = cfg.get("skills", {})
+    # Support both "builtin_skills" list format and keyed format
+    builtin_skills_list: list[str] = []
+    if "builtin_skills" in skills_cfg:
+        raw = skills_cfg["builtin_skills"]
+        if isinstance(raw, list):
+            builtin_skills_list = [s for s in raw if isinstance(s, str)]
+    else:
+        # Keyed format: {"navigate-to": {"enabled": True}, ...}
+        # Accept both hyphen and underscore variants
+        for skill_key, skill_val in skills_cfg.items():
+            if skill_key in ("builtin_skills",):
+                continue
+            norm_key = skill_key.replace("_", "-")
+            if norm_key in _SKILL_SCOPE_MAP:
+                if isinstance(skill_val, dict) and skill_val.get("enabled", True):
+                    builtin_skills_list.append(norm_key)
+                elif isinstance(skill_val, bool) and skill_val:
+                    builtin_skills_list.append(norm_key)
+
+    # Load skill metadata from config.json files
+    _skills_base = Path(__file__).parent / "skills" / "builtin"
+    skills_entries: list[dict] = []
+
+    for skill_name in builtin_skills_list:
+        scope = _SKILL_SCOPE_MAP.get(skill_name, "chat")
+        config_path = _skills_base / skill_name / "config.json"
+        skill_meta: dict[str, Any] = {}
+        skill_md_path = _skills_base / skill_name / "SKILL.md"
+
+        # Prefer SKILL.md frontmatter for description (richer metadata)
+        description = f"Run {skill_name} skill"
+        if skill_md_path.exists():
+            try:
+                md_text = skill_md_path.read_text(encoding="utf-8")
+                for line in md_text.splitlines():
+                    line = line.strip()
+                    if line.startswith("description:"):
+                        description = line[len("description:") :].strip().strip(">").strip()
+                        break
+            except Exception:
+                pass
+
+        args: list[dict] = []
+        if config_path.exists():
+            try:
+                import json as _json
+
+                skill_meta = _json.loads(config_path.read_text(encoding="utf-8"))
+                # Extract any explicit description from config.json
+                if skill_meta.get("description"):
+                    description = skill_meta["description"]
+                # Extract args if present in config.json
+                if "args" in skill_meta:
+                    args = skill_meta["args"]
+            except Exception:
+                pass
+
+        # Navigate-to: destination arg
+        if skill_name == "navigate-to" and not args:
+            args = [{"name": "destination", "optional": False}]
+        elif skill_name == "arm-manipulate" and not args:
+            args = [{"name": "object", "optional": False}]
+        elif skill_name == "web-lookup" and not args:
+            args = [{"name": "query", "optional": False}]
+        elif skill_name == "peer-coordinate" and not args:
+            args = [{"name": "robot", "optional": False}, {"name": "message", "optional": False}]
+
+        entry: dict[str, Any] = {
+            "cmd": f"/{skill_name}",
+            "description": description,
+            "scope": scope,
+            "instant": False,
+        }
+        if args:
+            entry["args"] = args
+        skills_entries.append(entry)
+
+    robot_rrn = cfg.get("metadata", {}).get("rrn") or cfg.get("metadata", {}).get(
+        "robot_rrn", "RRN-000000000001"
+    )
+    rcan_version = cfg.get("rcan_version", "1.6")
+
+    return {
+        "builtin_commands": _BUILTIN_CLI_COMMANDS,
+        "skills": skills_entries,
+        "rcan_version": rcan_version,
+        "robot_rrn": robot_rrn,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1445,6 +2311,51 @@ async def get_media_chunk(chunk_id: str):
     raise HTTPException(status_code=404, detail="media storage not yet implemented")
 
 
+async def _verify_rcan_or_token(
+    request: Request,
+) -> None:
+    """Accept either Bearer token OR RCAN-Signature header for R2R messages.
+
+    Robots posting inbound RCAN messages may use a per-robot HMAC signature
+    (``RCAN-Signature: v1:<base64-hmac-sha256>``) instead of sharing the local
+    API bearer token.  If neither is present the request is rejected.
+
+    When ``RCAN_SECRET`` is set the signature is verified via HMAC-SHA256;
+    otherwise a deprecation warning is logged and the request is accepted in
+    legacy mode (insecure — configure ``RCAN_SECRET`` to enable verification).
+    """
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        # Delegate to the standard multi-layer token check
+        await verify_token(request)
+        return
+
+    sig = request.headers.get("RCAN-Signature", "")
+    if sig:
+        body = await request.body()
+        secret = os.getenv("RCAN_SECRET", "")
+        if secret:
+            import base64 as _b64
+            import hashlib as _hl
+            import hmac as _hm
+
+            try:
+                _, b64 = sig.split(":", 1)
+                provided = _b64.b64decode(b64)
+            except Exception as exc:
+                raise HTTPException(status_code=401, detail="Malformed RCAN-Signature") from exc
+            expected = _hm.new(secret.encode(), body, _hl.sha256).digest()
+            if not _hm.compare_digest(provided, expected):
+                logger.warning("RCAN-Signature HMAC mismatch — rejected")
+                raise HTTPException(status_code=401, detail="RCAN-Signature verification failed")
+        else:
+            logger.warning(
+                "RCAN_SECRET not configured — RCAN-Signature accepted in legacy mode (insecure)"
+            )
+        return
+    raise HTTPException(status_code=401, detail="Missing Authorization or RCAN-Signature")
+
+
 @app.get("/api/rcan/peers", dependencies=[Depends(verify_token)])
 async def get_peers():
     """List discovered RCAN peers on the local network."""
@@ -1457,9 +2368,11 @@ async def get_peers():
 async def rcan_receive_message(request: Request):
     """Receive an inbound RCAN message from a remote robot (federation endpoint).
 
-    This endpoint is intentionally unauthenticated so peer robots can reach it
-    without sharing API tokens.  It accepts both the OpenCastor internal dict
-    format and the RCAN v1.2 spec format.
+    Auth rules (RCAN v1.6 §2.6):
+      - DISCOVER (msg_type=1): unauthenticated — public peer-handshake; only
+        returns public capability info, no sensitive data exposed.
+      - All other message types: require Bearer token OR ``RCAN-Signature``
+        header; see ``_verify_rcan_or_token``.
 
     For outbound sends, use ``castor.rcan.http_transport.send_message()``.
     """
@@ -1476,6 +2389,17 @@ async def rcan_receive_message(request: Request):
     # Determine message type and source from either format
     msg_type = data.get("type") or data.get("msg_type")
     source = data.get("source") or data.get("source_ruri", "unknown")
+
+    # DISCOVER (msg_type=1) is a public peer-handshake — allow unauthenticated.
+    # All other message types require Bearer or RCAN-Signature auth.
+    if msg_type != 1:
+        try:
+            await _verify_rcan_or_token(request)
+        except HTTPException as exc:
+            return JSONResponse(
+                {"error": exc.detail, "code": f"HTTP_{exc.status_code}", "status": exc.status_code},
+                status_code=exc.status_code,
+            )
 
     logger.info("RCAN inbound from %s: type=%s", source, msg_type)
 
@@ -2074,6 +2998,28 @@ async def _build_telemetry_payload() -> dict:
     }
 
 
+def _ws_auth_ok(token: str) -> bool:
+    """Return True if the WS token is valid (API_TOKEN match or valid JWT)."""
+    if API_TOKEN and token == API_TOKEN:
+        return True
+    if token:
+        try:
+            import castor.auth as _auth
+
+            if hasattr(_auth, "decode_token"):
+                _auth.decode_token(token)
+                return True
+            elif hasattr(_auth, "verify_jwt"):
+                _auth.verify_jwt(token)
+                return True
+        except Exception:
+            pass
+    if not API_TOKEN:
+        logger.warning("WS: no auth configured — accepting unauthenticated connection (dev mode)")
+        return True
+    return False
+
+
 @app.websocket("/ws/telemetry")
 async def ws_telemetry(websocket: WebSocket, token: str = ""):
     """WebSocket endpoint that pushes telemetry JSON every 200 ms.
@@ -2101,7 +3047,7 @@ async def ws_telemetry(websocket: WebSocket, token: str = ""):
         {"cmd": "stop"}  — triggers driver.stop() if a driver is active.
     """
     # --- Auth check ---
-    if API_TOKEN and token != API_TOKEN:
+    if not _ws_auth_ok(token):
         await websocket.close(code=1008)
         return
 
@@ -2788,7 +3734,7 @@ async def ws_arduino_sensors(websocket: WebSocket, token: str = ""):
 
     Requires an ``ArduinoSerialDriver`` as the active driver.
     """
-    if API_TOKEN and token != API_TOKEN:
+    if not _ws_auth_ok(token):
         await websocket.close(code=1008)
         return
 
@@ -2917,10 +3863,39 @@ async def list_webhooks():
     return {"webhooks": get_dispatcher().list_hooks()}
 
 
+def _validate_webhook_url(url: str) -> None:
+    """Validate webhook URL — block SSRF targets (metadata endpoints, link-local)."""
+    import ipaddress as _ipaddress
+    from urllib.parse import urlparse as _urlparse
+
+    try:
+        parsed = _urlparse(url)
+    except Exception as exc:
+        raise ValueError(f"Invalid URL: {exc}") from exc
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("Webhook URL must use http or https")
+    host = parsed.hostname or ""
+    _BLOCKED = {"169.254.169.254", "metadata.google.internal"}
+    if host in _BLOCKED:
+        raise ValueError(f"Blocked host: {host}")
+    try:
+        addr = _ipaddress.ip_address(host)
+        if addr.is_link_local or addr.is_multicast:
+            raise ValueError(f"Link-local/multicast address not allowed: {host}")
+    except ValueError as ve:
+        if "not allowed" in str(ve) or "Blocked" in str(ve):
+            raise
+
+
 @app.post("/api/webhooks", dependencies=[Depends(verify_token)])
 async def add_webhook(req: _WebhookAddRequest):
     """POST /api/webhooks — Register a new outbound webhook."""
     from castor.webhooks import WEBHOOK_EVENTS, get_dispatcher
+
+    try:
+        _validate_webhook_url(req.url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     bad = [e for e in (req.events or []) if e not in WEBHOOK_EVENTS and e != "*"]
     if bad:
@@ -3386,8 +4361,8 @@ async def safety_manifest():
 async def ws_safety(websocket: WebSocket):
     """WS /ws/safety — Real-time safety event push at 2Hz."""
     token = websocket.query_params.get("token", "")
-    if API_TOKEN and token != API_TOKEN:
-        await websocket.close(code=4003)
+    if not _ws_auth_ok(token):
+        await websocket.close(code=1008)
         return
     await websocket.accept()
     from castor.safety_telemetry import get_telemetry
@@ -4357,14 +5332,24 @@ def _speak_reply(text: str):
 
 
 def _strip_action_json(text: str) -> str:
-    """Remove the inline JSON action block from an AI reply before sending to users.
+    """Remove inline JSON action blocks from an AI reply before sending to users.
 
     The AI appends a JSON object so the runtime can extract the action command.
     This strips that block so users and TTS only hear the natural-language part.
-    Handles flat JSON objects (no nested braces) at the end of the text.
+
+    Handles:
+    - Trailing JSON:  "Ok, doing it. {"type": "wait", ...}"
+    - Mid-text JSON:  "Ok. {"type": "wait"} Ready."
+    - Nested objects: {"type": "move", "params": {"speed": 1}}
     """
-    cleaned = _re.sub(r"\s*\{[^{}]*\}\s*$", "", text, flags=_re.DOTALL)
-    return cleaned.strip()
+    # Strip any {...} blocks that look like action objects (contain "type" key)
+    # Use a pattern that handles one level of nesting
+    cleaned = _re.sub(r"\s*\{[^{}]*\"type\"\s*:[^{}]*(?:\{[^{}]*\}[^{}]*)?\}\s*", " ", text)
+    # Collapse multiple spaces / clean up sentence boundaries
+    cleaned = _re.sub(r"  +", " ", cleaned).strip()
+    # Remove trailing punctuation artifacts like lone periods after stripping
+    cleaned = _re.sub(r"\s+\.\s*$", ".", cleaned).strip()
+    return cleaned if cleaned else text
 
 
 # Map channel names to prompt surface types.
@@ -4388,6 +5373,32 @@ def _handle_channel_message(channel_name: str, chat_id: str, text: str) -> str:
     if state.brain is None:
         return "Robot brain is not initialized. Please load a config first."
 
+    # ── Channel scope gate ────────────────────────────────────────────────
+    # Read the RCAN scope that was set by the channel adapter before invoking
+    # this callback.  Inbound chat messages may not exceed "chat" scope.
+    try:
+        from castor.channels.scope_resolver import _current_sender_scope, clamp_scope
+
+        sender_scope: str = _current_sender_scope.get()
+        _allowed_chat_scopes = {"discover", "status", "chat"}
+        if sender_scope not in _allowed_chat_scopes:
+            logger.warning(
+                "/api/chat: sender_scope=%s not allowed at chat endpoint — downgrading to chat",
+                sender_scope,
+            )
+            sender_scope = "chat"
+        # Clamp: never let an inbound message exceed "chat"
+        sender_scope = clamp_scope(sender_scope, "chat")
+    except Exception:
+        sender_scope = "discover"
+
+    logger.debug(
+        "_handle_channel_message: channel=%s chat_id=%s scope=%s",
+        channel_name,
+        chat_id,
+        sender_scope,
+    )
+
     # Resolve prompt surface from channel name (default: whatsapp)
     surface = _CHANNEL_SURFACE.get(channel_name.lower(), "whatsapp")
 
@@ -4407,6 +5418,10 @@ def _handle_channel_message(channel_name: str, chat_id: str, text: str) -> str:
 
     # Use live camera frame so the brain can see what's in front of it
     image_bytes = _capture_live_frame()
+
+    # Annotate the instruction with the sender's scope so the brain can
+    # apply scope-aware restrictions in its response generation.
+    instruction = f"[rcan_scope={sender_scope}] {instruction}"
 
     active_provider = _get_active_brain()
     try:
@@ -4600,6 +5615,22 @@ async def on_startup():
                 logger.info(f"RCAN capabilities: {state.capability_registry.names}")
             except Exception as e:
                 logger.debug(f"RCAN router init skipped: {e}")
+
+            # Initialize RCAN NodeClient (registry connection)
+            try:
+                from rcan import NodeClient
+
+                rcan_cfg = state.config.get("rcan_protocol", {})
+                _rcan_client = NodeClient(
+                    root_url=rcan_cfg.get("registry", "https://rcan.dev"),
+                )
+                state.rcan_node_client = _rcan_client
+                logger.info(
+                    "RCAN NodeClient connected to registry: %s",
+                    rcan_cfg.get("registry", "https://rcan.dev"),
+                )
+            except Exception as e:
+                logger.debug(f"RCAN NodeClient init skipped: {e}")
 
             # Initialize brain
             from castor.providers import get_provider
@@ -4810,6 +5841,49 @@ async def on_startup():
                 state.mdns_browser.start()
             except Exception as e:
                 logger.debug(f"mDNS startup skipped: {e}")
+
+    # Start RCAN-MQTT transport (opt-in via rcan_protocol.mqtt_transport.enabled)
+    if state.config:
+        mqtt_cfg = state.config.get("rcan_protocol", {}).get("mqtt_transport", {})
+        if mqtt_cfg.get("enabled"):
+            try:
+                from castor.channels.rcan_mqtt_transport import RCANMQTTTransport
+
+                local_rrn = state.rrn or "unknown"
+                state.rcan_mqtt = RCANMQTTTransport(
+                    config=mqtt_cfg,
+                    local_rrn=local_rrn,
+                    on_message=lambda msg, is_estop: logger.info(
+                        "RCAN-MQTT %s: %s",
+                        "ESTOP" if is_estop else "msg",
+                        msg.get("cmd", "?"),
+                    ),
+                )
+                state.rcan_mqtt.connect()
+                logger.info(
+                    "RCAN-MQTT transport started (broker=%s:%s)",
+                    mqtt_cfg.get("broker_host", "localhost"),
+                    mqtt_cfg.get("broker_port", 1883),
+                )
+            except Exception as e:
+                logger.debug("RCAN-MQTT startup skipped: %s", e)
+
+    # Auto-start contribute (opt-in via agent.contribute.enabled in RCAN config)
+    if state.config:
+        contribute_cfg = state.config.get("agent", {}).get("contribute", {})
+        if contribute_cfg.get("enabled"):
+            try:
+                from castor.skills.contribute import start_contribute
+
+                result = start_contribute(config=contribute_cfg)
+                logger.info(
+                    "Contribute auto-started: project=%s tier=%s units=%s",
+                    contribute_cfg.get("projects"),
+                    result.get("hardware_tier", "unknown"),
+                    result.get("work_units_total", 0),
+                )
+            except Exception as _contrib_exc:
+                logger.debug("Contribute auto-start skipped: %s", _contrib_exc)
 
     await _start_channels()
 
@@ -5048,18 +6122,15 @@ async def webrtc_offer(body: _WebRTCOfferRequest):
 async def setup_wizard():
     """Serve the web-based setup wizard UI.
 
-    Injects OPENCASTOR_API_TOKEN as window.__OC_TOKEN so the wizard JS can
-    attach Authorization headers to /setup/api/* calls when auth is enabled.
-    The token is only sent to this same-origin page — not exposed externally.
+    The wizard prompts for credentials via its own login form — the master API
+    token is never injected into the HTML response.
     """
     from fastapi.responses import HTMLResponse
 
     try:
         from castor.web_wizard import _HTML_TEMPLATE
 
-        token_script = f"<script>window.__OC_TOKEN = {repr(API_TOKEN or '')};</script>"
-        html = _HTML_TEMPLATE.replace("</head>", f"{token_script}\n</head>", 1)
-        return HTMLResponse(content=html)
+        return HTMLResponse(content=_HTML_TEMPLATE)
     except Exception as exc:
         return HTMLResponse(
             content=f"<html><body><h1>Setup Wizard Error</h1><pre>{exc}</pre></body></html>",
@@ -6174,7 +7245,7 @@ async def pointcloud_json():
     return get_capture().to_json_dict()
 
 
-@app.get("/api/depth/pointcloud.ply")
+@app.get("/api/depth/pointcloud.ply", dependencies=[Depends(verify_token)])
 async def pointcloud_ply():
     from fastapi.responses import Response
 
@@ -6198,7 +7269,7 @@ async def pointcloud_stats():
 # ── Object Detection ───────────────────────────────────────────────────────────
 
 
-@app.get("/api/detection/frame")
+@app.get("/api/detection/frame", dependencies=[Depends(verify_token)])
 async def detection_frame():
     """Return JPEG with bounding box overlays."""
     from fastapi.responses import Response
@@ -7416,6 +8487,145 @@ async def hardware_scan(
 
 
 # ---------------------------------------------------------------------------
+# Hardware profile for LLMFit Model Garage
+# ---------------------------------------------------------------------------
+
+
+def _compute_hardware_tier(ram_gb: float, cpu_model: str, accelerators: list) -> str:
+    """Determine a human-readable hardware tier for LLMFit model matching."""
+    if "hailo" in str(accelerators).lower():
+        return "pi5-hailo"
+    if ram_gb >= 16:
+        return "server"
+    if ram_gb >= 8:
+        return "pi5-8gb" if "a76" in cpu_model.lower() else "pi4-8gb"
+    if ram_gb >= 4:
+        return "pi5-4gb" if "a76" in cpu_model.lower() else "pi4-4gb"
+    return "minimal"
+
+
+def _read_cpuinfo() -> tuple[str, int]:
+    """Parse /proc/cpuinfo on Linux; returns (cpu_model, cpu_cores)."""
+    cpu_model = ""
+    cpu_cores = os.cpu_count() or 1
+    try:
+        with open("/proc/cpuinfo") as f:
+            text = f.read()
+        for line in text.splitlines():
+            if "model name" in line.lower() or "hardware" in line.lower():
+                parts = line.split(":", 1)
+                if len(parts) == 2 and not cpu_model:
+                    cpu_model = parts[1].strip()
+            if "processor" in line.lower():
+                cpu_cores = max(cpu_cores, 1)
+        # Fallback: count "processor\t:" occurrences
+        cpu_cores = max(text.lower().count("processor\t:"), cpu_cores, 1)
+    except OSError:
+        pass
+    return cpu_model, cpu_cores
+
+
+def _get_ollama_models() -> list[str]:
+    """Run `ollama list` and return pulled model names; fails silently."""
+    try:
+        import subprocess as _sp
+
+        result = _sp.run(
+            ["ollama", "list"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return []
+        lines = result.stdout.strip().splitlines()
+        models = []
+        for line in lines[1:]:  # skip header
+            parts = line.split()
+            if parts:
+                models.append(parts[0])
+        return models
+    except Exception:
+        return []
+
+
+@app.get("/api/hardware", dependencies=[Depends(verify_token)])
+async def get_hardware(request: Request):
+    """GET /api/hardware — Return robot hardware profile for LLMFit matching.
+
+    Returns cpu, ram_gb, accelerators, storage_gb, arch, hostname, platform.
+    Requires token auth (operator role).
+    """
+    import platform as _platform
+
+    hostname = _platform.node()
+    arch = _platform.machine()
+    plat = _platform.system().lower()
+
+    cpu_model, cpu_cores = _read_cpuinfo()
+    if not cpu_model:
+        cpu_model = _platform.processor() or "unknown"
+
+    # RAM / storage via psutil (optional)
+    ram_gb: float = 0.0
+    ram_available_gb: float = 0.0
+    storage_free_gb: float = 0.0
+    try:
+        import psutil  # type: ignore[import]
+
+        mem = psutil.virtual_memory()
+        ram_gb = round(mem.total / (1024**3), 1)
+        ram_available_gb = round(mem.available / (1024**3), 1)
+        disk = psutil.disk_usage("/")
+        storage_free_gb = round(disk.free / (1024**3), 1)
+    except ImportError:
+        # Fallback: read /proc/meminfo
+        try:
+            with open("/proc/meminfo") as f:
+                for line in f:
+                    if line.startswith("MemTotal:"):
+                        kb = int(line.split()[1])
+                        ram_gb = round(kb / (1024**2), 1)
+                    elif line.startswith("MemAvailable:"):
+                        kb = int(line.split()[1])
+                        ram_available_gb = round(kb / (1024**2), 1)
+        except OSError:
+            pass
+
+    # Declared accessories from RCAN config
+    rcan_hardware: dict = {}
+    accessories: list[str] = []
+    accelerators: list[str] = []
+    if state.config:
+        rcan_hardware = state.config.get("hardware", {})
+        accessories = rcan_hardware.get("accessories", [])
+        accelerators = rcan_hardware.get("accelerators", [])
+        # auto-detect hailo from accessories if not in accelerators
+        for acc in accessories:
+            if "hailo" in str(acc).lower() and not any("hailo" in a.lower() for a in accelerators):
+                accelerators.append(acc)
+
+    hardware_tier = _compute_hardware_tier(ram_gb, cpu_model, accelerators)
+    ollama_models = _get_ollama_models()
+
+    return {
+        "hostname": hostname,
+        "arch": arch,
+        "platform": plat,
+        "cpu_model": cpu_model,
+        "cpu_cores": cpu_cores,
+        "ram_gb": ram_gb,
+        "ram_available_gb": ram_available_gb,
+        "storage_free_gb": storage_free_gb,
+        "accelerators": accelerators,
+        "accessories": accessories,
+        "hardware_tier": hardware_tier,
+        "ollama_models": ollama_models,
+        "rcan_hardware": rcan_hardware,
+    }
+
+
+# ---------------------------------------------------------------------------
 # ACB driver telemetry (#524)
 # ---------------------------------------------------------------------------
 
@@ -7631,6 +8841,15 @@ async def on_shutdown():
 
     await _stop_channels()
 
+    # Stop RCAN-MQTT transport
+    if hasattr(state, "rcan_mqtt") and state.rcan_mqtt is not None:
+        try:
+            state.rcan_mqtt.disconnect()
+            logger.info("RCAN-MQTT transport disconnected")
+        except Exception:
+            pass
+        state.rcan_mqtt = None
+
     # Stop mDNS
     if state.mdns_broadcaster:
         state.mdns_broadcaster.stop()
@@ -7760,3 +8979,541 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# ── Harness Component Endpoints ───────────────────────────────────────────────
+
+
+# Shared lazy accessors for harness components
+def _get_db_path() -> str:
+    import os as _os
+
+    return _os.path.expanduser("~/.config/opencastor/trajectories.db")
+
+
+# ── Rollback ──────────────────────────────────────────────────────────────────
+
+
+class _RollbackRestoreRequest(BaseModel):
+    snapshot_id: str
+
+
+@app.post("/api/rollback", dependencies=[Depends(verify_token)])
+async def rollback_restore(req: _RollbackRestoreRequest, request: Request):
+    """Restore a rollback snapshot (requires control scope)."""
+    _check_min_role(request, "control")
+    try:
+        from castor.harness.rollback import RollbackManager
+
+        mgr = RollbackManager(_get_db_path())
+        snapshot = mgr.restore(req.snapshot_id)
+        return {"ok": True, "snapshot_id": req.snapshot_id, "snapshot": snapshot}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="Rollback component not available") from exc
+
+
+@app.get("/api/rollback/recent", dependencies=[Depends(verify_token)])
+async def rollback_list(request: Request, limit: int = 10):
+    """List recent rollback snapshots (requires status scope)."""
+    _check_min_role(request, "status")
+    try:
+        from castor.harness.rollback import RollbackManager
+
+        mgr = RollbackManager(_get_db_path())
+        return {"snapshots": mgr.list_recent(limit=limit)}
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="Rollback component not available") from exc
+
+
+# ── Dead Letter Queue ─────────────────────────────────────────────────────────
+
+
+@app.get("/api/dlq", dependencies=[Depends(verify_token)])
+async def dlq_list(request: Request, limit: int = 20):
+    """Return pending dead letters (requires status scope)."""
+    _check_min_role(request, "status")
+    try:
+        from castor.harness.dlq import DeadLetterQueue
+
+        dlq = DeadLetterQueue(_get_db_path())
+        return {
+            "pending_count": dlq.count_pending(),
+            "items": dlq.list_pending(limit=limit),
+        }
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="DLQ component not available") from exc
+
+
+@app.post("/api/dlq/{dlq_id}/review", dependencies=[Depends(verify_token)])
+async def dlq_review(dlq_id: str, request: Request):
+    """Mark a dead letter as reviewed (requires control scope)."""
+    _check_min_role(request, "control")
+    try:
+        from castor.harness.dlq import DeadLetterQueue
+
+        dlq = DeadLetterQueue(_get_db_path())
+        dlq.mark_reviewed(dlq_id)
+        return {"ok": True, "dlq_id": dlq_id}
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="DLQ component not available") from exc
+
+
+# ── Span Tracer ───────────────────────────────────────────────────────────────
+
+
+@app.get("/api/traces", dependencies=[Depends(verify_token)])
+async def traces_list(request: Request, limit: int = 50):
+    """List recent trace IDs (requires status scope)."""
+    _check_min_role(request, "status")
+    try:
+        from castor.harness.span_tracer import SpanTracer
+
+        tracer = SpanTracer({})
+        return {"traces": tracer.list_traces(limit=limit)}
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="SpanTracer component not available") from exc
+
+
+@app.get("/api/traces/{trace_id}", dependencies=[Depends(verify_token)])
+async def traces_get(trace_id: str, request: Request):
+    """Return full trace as JSON (requires status scope)."""
+    _check_min_role(request, "status")
+    try:
+        from castor.harness.span_tracer import SpanTracer
+
+        tracer = SpanTracer({})
+        spans = tracer.get_trace_from_disk(trace_id)
+        if not spans:
+            raise HTTPException(status_code=404, detail=f"Trace {trace_id!r} not found")
+        return {"trace_id": trace_id, "spans": spans}
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="SpanTracer component not available") from exc
+
+
+# ── Circuit Breaker status ────────────────────────────────────────────────────
+
+
+@app.get("/api/circuit-breaker/status", dependencies=[Depends(verify_token)])
+async def circuit_breaker_status(request: Request):
+    """Return circuit breaker state for all tracked skills (requires status scope)."""
+    _check_min_role(request, "status")
+    # The circuit breaker is in-process; this endpoint is informational only.
+    return {"note": "Circuit breaker state is in-memory per process. Use harness logs for details."}
+
+
+# ── Contribute (idle compute) status ─────────────────────────────────────────
+
+
+@app.get("/api/contribute", dependencies=[Depends(verify_token)])
+async def get_contribute_endpoint(request: Request):
+    """GET /api/contribute — Return idle compute contribution status."""
+    _check_min_role(request, "operator")
+    try:
+        from castor.skills.contribute import get_contribute_status
+
+        return get_contribute_status()
+    except Exception:
+        return {
+            "enabled": False,
+            "active": False,
+            "work_units_total": 0,
+            "contribute_minutes_today": 0,
+        }
+
+
+@app.post("/api/contribute/start", dependencies=[Depends(verify_token)])
+async def start_contribute_endpoint(request: Request):
+    """POST /api/contribute/start — Start idle compute contribution.
+
+    Accepts optional JSON body:
+        {"projects": ["harness_research"], "enabled": true, "run_type": "personal"|"community"}
+    run_type defaults to "personal" (private, no leaderboard, no credits).
+    Set run_type="community" to opt in to public leaderboard + Castor Credits.
+    """
+    _check_min_role(request, "operator")
+    try:
+        from castor.contribute.work_unit import _VALID_RUN_TYPES
+        from castor.skills.contribute import start_contribute
+
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        run_type = (body or {}).get("run_type", "personal")
+        if run_type not in _VALID_RUN_TYPES:
+            return {"error": f"run_type must be one of {sorted(_VALID_RUN_TYPES)!r}"}
+        if body:
+            body["run_type"] = run_type
+        return start_contribute(config=body if body else None)
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+@app.post("/api/contribute/stop", dependencies=[Depends(verify_token)])
+async def stop_contribute_endpoint(request: Request):
+    """POST /api/contribute/stop — Stop idle compute contribution."""
+    _check_min_role(request, "operator")
+    try:
+        from castor.skills.contribute import stop_contribute
+
+        return stop_contribute()
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+@app.get("/api/contribute/leaderboard", dependencies=[Depends(verify_token)])
+async def get_contribute_leaderboard_endpoint(request: Request, tier: str | None = None):
+    """GET /api/contribute/leaderboard — Return harness eval leaderboard from Firestore."""
+    _check_min_role(request, "operator")
+    try:
+        import os
+        from pathlib import Path as _Path
+
+        try:
+            from google.cloud import firestore as _firestore  # type: ignore[import-untyped]
+        except ImportError:
+            return {"robots": [], "error": "offline"}
+
+        creds_path = os.environ.get(
+            "GOOGLE_APPLICATION_CREDENTIALS",
+            str(_Path.home() / ".config" / "opencastor" / "firebase-sa-key.json"),
+        )
+        try:
+            from google.oauth2 import service_account  # type: ignore[import-untyped]
+
+            creds = service_account.Credentials.from_service_account_file(
+                creds_path,
+                scopes=[
+                    "https://www.googleapis.com/auth/datastore",
+                    "https://www.googleapis.com/auth/cloud-platform",
+                ],
+            )
+            db = _firestore.Client(project="opencastor", credentials=creds)
+        except Exception:
+            import google.auth  # type: ignore[import-untyped]
+
+            _creds, _proj = google.auth.default()
+            db = _firestore.Client(project=_proj or "opencastor", credentials=_creds)
+
+        tiers_to_query = [tier] if tier else []
+        if not tiers_to_query:
+            tier_docs = list(db.collection("harness_leaderboard").stream())
+            tiers_to_query = [doc.id for doc in tier_docs]
+
+        robots = []
+        updated_at = ""
+        for t in tiers_to_query:
+            robots_ref = db.collection("harness_leaderboard").document(t).collection("robots")
+            for rdoc in robots_ref.stream():
+                data = rdoc.to_dict() or {}
+                robots.append(
+                    {
+                        "rrn": data.get("rrn", rdoc.id),
+                        "score": float(data.get("last_score", 0.0)),
+                        "candidates_evaluated": int(data.get("candidates_evaluated", 0)),
+                        "last_eval": str(data.get("last_submitted_at", "")),
+                        "trusted": bool(data.get("trusted", True)),
+                        "flags": int(data.get("flags", 0)),
+                    }
+                )
+                if not updated_at and data.get("last_submitted_at"):
+                    updated_at = str(data["last_submitted_at"])
+
+        return {"tier": tier or "", "updated_at": updated_at, "robots": robots}
+    except Exception:
+        return {"robots": [], "error": "offline"}
+
+
+@app.get("/api/contribute/history", dependencies=[Depends(verify_token)])
+async def get_contribute_history_endpoint(request: Request):
+    """GET /api/contribute/history — Return daily contribution history (90 days)."""
+    _check_min_role(request, "operator")
+    try:
+        from castor.skills.contribute import get_contribute_history
+
+        return {"history": get_contribute_history()}
+    except Exception:
+        return {"history": []}
+
+
+@app.get("/api/credits", dependencies=[Depends(verify_token)])
+async def get_credits_endpoint(request: Request):
+    """GET /api/credits — Return Castor Credits summary for this robot's owner."""
+    _check_min_role(request, "operator")
+    try:
+        from castor.contribute.credits import get_credits
+        from castor.contribute.harness_eval import _get_firestore_client, get_robot_rrn
+
+        rrn = get_robot_rrn()
+        try:
+            db = _get_firestore_client()
+            robot_doc = db.collection("robots").document(rrn).get()
+            owner_uid = (
+                (robot_doc.to_dict() or {}).get("owner_uid", rrn) if robot_doc.exists else rrn
+            )
+        except Exception:
+            owner_uid = rrn
+
+        return get_credits(owner_uid)
+    except Exception as exc:
+        return {
+            "credits": 0,
+            "credits_redeemable": 0,
+            "badge": "none",
+            "credit_log": [],
+            "error": str(exc),
+        }
+
+
+class RedeemRequest(BaseModel):
+    type: str = Field(
+        ..., description="Redemption type: pro_month, harness_run, api_boost, champion_badge"
+    )
+
+
+@app.post("/api/credits/redeem", dependencies=[Depends(verify_token)])
+async def redeem_credits_endpoint(request: Request, body: RedeemRequest):
+    """POST /api/credits/redeem — Redeem credits for a feature or badge."""
+    _check_min_role(request, "operator")
+    try:
+        from castor.contribute.credits import redeem_credits
+        from castor.contribute.harness_eval import _get_firestore_client, get_robot_rrn
+
+        rrn = get_robot_rrn()
+        try:
+            db = _get_firestore_client()
+            robot_doc = db.collection("robots").document(rrn).get()
+            owner_uid = (
+                (robot_doc.to_dict() or {}).get("owner_uid", rrn) if robot_doc.exists else rrn
+            )
+        except Exception:
+            owner_uid = rrn
+
+        return redeem_credits(owner_uid, body.type)
+    except Exception as exc:
+        return {"success": False, "credits_spent": 0, "credits_remaining": 0, "error": str(exc)}
+
+
+@app.get("/api/credits/leaderboard")
+async def get_credits_leaderboard_endpoint():
+    """GET /api/credits/leaderboard — Public top-20 contributors by lifetime credits."""
+    try:
+        from castor.contribute.credits import get_credits_leaderboard
+
+        return {"leaderboard": get_credits_leaderboard()}
+    except Exception as exc:
+        return {"leaderboard": [], "error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# Competitions — Threshold Race (#736)
+# ---------------------------------------------------------------------------
+
+_threshold_race_manager = None
+
+
+def _get_threshold_race_manager():
+    global _threshold_race_manager
+    if _threshold_race_manager is None:
+        from castor.competitions.threshold_race import ThresholdRaceManager
+
+        _threshold_race_manager = ThresholdRaceManager()
+    return _threshold_race_manager
+
+
+@app.get("/api/competitions/races", dependencies=[Depends(verify_token)])
+async def list_threshold_races(request: Request):
+    """GET /api/competitions/races — List all open threshold races (#736)."""
+    _check_min_role(request, "viewer")
+    try:
+        mgr = _get_threshold_race_manager()
+        races = mgr.list_open_races()
+        return {"races": [r.to_dict() for r in races]}
+    except Exception as exc:
+        return {"races": [], "error": str(exc)}
+
+
+@app.get("/api/competitions/races/{race_id}/standings", dependencies=[Depends(verify_token)])
+async def get_race_standings(race_id: str, request: Request):
+    """GET /api/competitions/races/{race_id}/standings — Sorted entries for a race (#736)."""
+    _check_min_role(request, "viewer")
+    try:
+        mgr = _get_threshold_race_manager()
+        entries = mgr.get_standings(race_id)
+        return {"race_id": race_id, "standings": [e.to_dict() for e in entries]}
+    except Exception as exc:
+        return {"race_id": race_id, "standings": [], "error": str(exc)}
+
+
+@app.post("/api/competitions/races", dependencies=[Depends(verify_token)])
+async def create_threshold_race(request: Request):
+    """POST /api/competitions/races — Create a new threshold race (admin only) (#736)."""
+    _check_min_role(request, "admin")
+    try:
+        from datetime import datetime, timezone
+
+        body = await request.json()
+        name = body["name"]
+        hardware_tier = body["hardware_tier"]
+        model_id = body.get("model_id")
+        target_score = float(body["target_score"])
+        prize_pool = int(body.get("prize_pool_credits", 0))
+        soft_deadline_raw = body.get("soft_deadline")
+        if soft_deadline_raw is not None:
+            soft_deadline = datetime.fromisoformat(str(soft_deadline_raw))
+        else:
+            soft_deadline = datetime.max.replace(tzinfo=timezone.utc)
+        scenario_pack_id = body.get("scenario_pack_id", "default")
+
+        mgr = _get_threshold_race_manager()
+        race = mgr.create_race(
+            name=name,
+            hardware_tier=hardware_tier,
+            model_id=model_id,
+            target_score=target_score,
+            prize_pool=prize_pool,
+            soft_deadline=soft_deadline,
+            scenario_pack_id=scenario_pack_id,
+        )
+        return {"race": race.to_dict()}
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=f"Missing required field: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+# ---------------------------------------------------------------------------
+# Competition endpoints (#735)
+# ---------------------------------------------------------------------------
+
+
+class CreateSprintRequest(BaseModel):
+    name: str = Field(..., description="Competition display name")
+    hardware_tiers: list[str] = Field(..., description="Eligible hardware tier strings")
+    model_id: Optional[str] = Field(None, description="Optional model constraint")
+    starts_at: str = Field(..., description="ISO 8601 start datetime (UTC)")
+    ends_at: str = Field(..., description="ISO 8601 end datetime (UTC)")
+    prize_pool_credits: int = Field(..., description="Total credits to award to top-3")
+
+
+@app.get("/api/competitions", dependencies=[Depends(verify_token)])
+async def list_competitions_endpoint(request: Request, status: str | None = None):
+    """GET /api/competitions — List active/upcoming sprint competitions."""
+    _check_min_role(request, "operator")
+    try:
+        from castor.competitions.models import CompetitionStatus
+        from castor.competitions.sprint import SprintManager
+
+        mgr = SprintManager()
+        status_filter = CompetitionStatus(status) if status else None
+        comps = mgr.list_competitions(status=status_filter)
+        return {"competitions": [c.to_dict() for c in comps]}
+    except Exception as exc:
+        return {"competitions": [], "error": str(exc)}
+
+
+@app.get("/api/competitions/{competition_id}/leaderboard", dependencies=[Depends(verify_token)])
+async def get_competition_leaderboard_endpoint(request: Request, competition_id: str):
+    """GET /api/competitions/{id}/leaderboard — Return leaderboard entries with rank."""
+    _check_min_role(request, "operator")
+    try:
+        from castor.competitions.sprint import SprintManager
+
+        mgr = SprintManager()
+        entries = mgr.get_leaderboard(competition_id)
+        return {"competition_id": competition_id, "entries": [e.to_dict() for e in entries]}
+    except Exception as exc:
+        return {"competition_id": competition_id, "entries": [], "error": str(exc)}
+
+
+@app.post("/api/competitions", dependencies=[Depends(verify_token)])
+async def create_sprint_endpoint(request: Request, body: CreateSprintRequest):
+    """POST /api/competitions — Create a new sprint competition (admin only)."""
+    _check_min_role(request, "admin")
+    try:
+        from datetime import datetime, timezone
+
+        from castor.competitions.sprint import SprintManager
+
+        def _parse(s: str) -> datetime:
+            return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(timezone.utc)
+
+        mgr = SprintManager()
+        comp = mgr.create_sprint(
+            name=body.name,
+            hardware_tiers=body.hardware_tiers,
+            model_id=body.model_id,
+            starts_at=_parse(body.starts_at),
+            ends_at=_parse(body.ends_at),
+            prize_pool=body.prize_pool_credits,
+        )
+        return comp.to_dict()
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# Bracket Season endpoints (#737)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/seasons/current", dependencies=[Depends(verify_token)])
+async def get_current_season_endpoint():
+    """GET /api/seasons/current — Return current ACTIVE or most recent UPCOMING bracket season."""
+    try:
+        from castor.competitions.bracket_season import BracketSeasonManager
+
+        mgr = BracketSeasonManager()
+        season = mgr.get_current_season()
+        if season is None:
+            return {"season": None}
+        return {"season": season.to_dict()}
+    except Exception as exc:
+        return {"season": None, "error": str(exc)}
+
+
+@app.get(
+    "/api/seasons/{season_id}/classes/{class_id}/leaderboard",
+    dependencies=[Depends(verify_token)],
+)
+async def get_bracket_class_leaderboard_endpoint(season_id: str, class_id: str):
+    """GET /api/seasons/{season_id}/classes/{class_id}/leaderboard — Ranked class leaderboard."""
+    try:
+        from castor.competitions.bracket_season import BracketSeasonManager
+
+        mgr = BracketSeasonManager()
+        entries = mgr.get_class_leaderboard(season_id, class_id)
+        return {
+            "season_id": season_id,
+            "class_id": class_id,
+            "leaderboard": [e.to_dict() for e in entries],
+        }
+    except Exception as exc:
+        return {
+            "season_id": season_id,
+            "class_id": class_id,
+            "leaderboard": [],
+            "error": str(exc),
+        }
+
+
+@app.get("/api/seasons/{season_id}/champions", dependencies=[Depends(verify_token)])
+async def get_season_champions_endpoint(season_id: str):
+    """GET /api/seasons/{season_id}/champions — Return finalized champions for a season."""
+    try:
+        from castor.contribute.harness_eval import _get_firestore_client
+
+        db = _get_firestore_client()
+        if db is None:
+            return {"season_id": season_id, "champions": [], "error": "offline"}
+        champ_docs = list(
+            db.collection("seasons").document(season_id).collection("champions").stream()
+        )
+        return {
+            "season_id": season_id,
+            "champions": [doc.to_dict() for doc in champ_docs],
+        }
+    except Exception as exc:
+        return {"season_id": season_id, "champions": [], "error": str(exc)}

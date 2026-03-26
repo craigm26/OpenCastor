@@ -15,7 +15,7 @@ with open(os.path.join(brand_dir, "icon.svg"), "w", encoding="utf-8") as f:
     f.write(icon_svg)
 with open(os.path.join(r"c:\Users\CraigM\source\repos\OpenCastor\site\assets", "icon.svg"), "w", encoding="utf-8") as f:
     f.write(icon_svg)
-    
+
 lockup_svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" role="img" aria-label="OpenCastor logo">
   <defs>
     <linearGradient id="text-grad" x1="0%" y1="0%" x2="100%" y2="100%">

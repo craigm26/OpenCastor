@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import os
-import tempfile
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from castor.agent_tools import (
     get_telemetry,
@@ -97,7 +93,6 @@ class TestQueryLocalKnowledge:
 
     def test_k_limit_respected(self, tmp_path):
         """Results should not exceed k."""
-        import os as _os
         knowledge_dir = tmp_path / "knowledge"
         knowledge_dir.mkdir()
         # Create files with overlapping content

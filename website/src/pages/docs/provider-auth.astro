@@ -1,0 +1,166 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+const title = 'Provider Authentication — OpenCastor Docs';
+---
+<BaseLayout title={title}>
+  <main class="max-w-4xl mx-auto px-4 py-16">
+    <div class="prose prose-lg prose-invert max-w-none">
+      <h1>Provider Authentication</h1>
+      <p class="lead text-xl text-gray-300">
+        Configure authenticated access to gated, closed, and frontier AI model APIs.
+      </p>
+
+      <h2>Overview</h2>
+      <p>
+        OpenCastor supports six authentication methods for connecting to gated model providers.
+        The runtime handles token refresh, rate limiting, and fallback automatically — credentials
+        are never logged, never included in telemetry, and never sent to the robot registry.
+      </p>
+
+      <h2>Configuration</h2>
+      <p>Add providers to your robot's <code>config.yaml</code>:</p>
+
+      <pre><code>providers:
+  # OAuth2 — for Physical Intelligence, enterprise APIs
+  pi-foundation:
+    type: gated
+    base_url: https://api.physicalintelligence.company/v1
+    auth:
+      method: oauth2
+      client_id: $&#123;PI_CLIENT_ID&#125;
+      client_secret: $&#123;PI_CLIENT_SECRET&#125;
+      token_url: https://auth.physicalintelligence.company/oauth/token
+      scopes: [model:inference, model:pi0]
+    models: [pi0, pi0.5-grasp]
+    fallback_provider: ollama
+    fallback_model: rt2-x
+    timeout: 30
+
+  # HuggingFace gated models
+  hf-gated:
+    type: gated
+    base_url: https://api-inference.huggingface.co
+    auth:
+      method: huggingface
+      token: $&#123;HF_TOKEN&#125;
+      validate_model: meta-llama/Llama-3.1-70B-Instruct
+    models:
+      - meta-llama/Llama-3.1-70B-Instruct
+      - google/gemma-2-27b-it
+
+  # Mutual TLS — enterprise/government
+  enterprise:
+    type: gated
+    base_url: https://models.corp.example.com/v1
+    auth:
+      method: mutual_tls
+      client_cert: /etc/opencastor/certs/client.pem
+      client_key: /etc/opencastor/certs/client-key.pem
+      ca_bundle: /etc/opencastor/certs/ca.pem
+    models: [corp-vision-v3]</code></pre>
+
+      <h2>Authentication Methods</h2>
+
+      <h3><code>api_key</code></h3>
+      <p>Simple bearer token authentication (OpenAI, Anthropic, Cohere style).</p>
+      <pre><code>auth:
+  method: api_key
+  api_key: $&#123;PROVIDER_API_KEY&#125;
+  header: Authorization   # optional, default
+  prefix: Bearer          # optional, default</code></pre>
+
+      <h3><code>bearer</code></h3>
+      <p>Pre-issued JWT or access token with optional refresh.</p>
+      <pre><code>auth:
+  method: bearer
+  token: $&#123;PROVIDER_TOKEN&#125;
+  refresh_url: https://auth.example.com/refresh  # optional</code></pre>
+
+      <h3><code>oauth2</code></h3>
+      <p>Client credentials flow with automatic token refresh. Best for enterprise and frontier model APIs.</p>
+      <pre><code>auth:
+  method: oauth2
+  client_id: $&#123;CLIENT_ID&#125;
+  client_secret: $&#123;CLIENT_SECRET&#125;
+  token_url: https://auth.example.com/oauth/token
+  scopes: [model:inference]</code></pre>
+
+      <h3><code>huggingface</code></h3>
+      <p>HuggingFace Hub authentication with optional model gate validation.</p>
+      <pre><code>auth:
+  method: huggingface
+  token: $&#123;HF_TOKEN&#125;               # or set HF_TOKEN env var
+  validate_model: meta-llama/Llama-3.1-70B-Instruct  # optional</code></pre>
+      <p>If <code>validate_model</code> is set, the runtime checks that your token has access to the gated model at startup.</p>
+
+      <h3><code>mutual_tls</code></h3>
+      <p>Certificate-based authentication for enterprise and government deployments.</p>
+      <pre><code>auth:
+  method: mutual_tls
+  client_cert: /path/to/client.pem
+  client_key: /path/to/client-key.pem
+  ca_bundle: /path/to/ca.pem  # optional</code></pre>
+
+      <h3><code>oidc</code></h3>
+      <p>OpenID Connect for cloud-native deployments (GCP workload identity, Azure managed identity).</p>
+      <pre><code>auth:
+  method: oidc
+  gcp_workload_identity: true  # use Application Default Credentials
+  # OR standard OIDC:
+  issuer: https://accounts.google.com
+  audience: https://models.example.com
+  client_id: $&#123;OIDC_CLIENT_ID&#125;
+  client_secret: $&#123;OIDC_CLIENT_SECRET&#125;</code></pre>
+
+      <h2>Secret Resolution</h2>
+      <p>All credential fields support three resolution methods:</p>
+      <ul>
+        <li><code>$&#123;ENV_VAR&#125;</code> — resolved from environment variable</li>
+        <li><code>file:/path/to/secret</code> — read from file (trimmed)</li>
+        <li>Plain string — used directly (not recommended for production)</li>
+      </ul>
+
+      <h2>Fallback Behavior</h2>
+      <p>Configure a local fallback model for when gated providers are unavailable:</p>
+      <pre><code>fallback_provider: ollama     # or any local provider
+fallback_model: rt2-x        # local model name</code></pre>
+      <p>The provider automatically falls back when:</p>
+      <ul>
+        <li>Authentication fails (token expired and refresh fails)</li>
+        <li>Rate limit exceeded (<code>429</code> response)</li>
+        <li>3+ consecutive request failures</li>
+        <li>Network unreachable</li>
+      </ul>
+
+      <h2>Telemetry</h2>
+      <p>Provider status is available via <code>/api/status</code> telemetry without exposing credentials:</p>
+      <pre><code>&#123;
+  "provider": "pi-foundation",
+  "available": true,
+  "auth_valid": true,
+  "auth_method": "oauth2",
+  "models": ["pi0", "pi0.5-grasp"],
+  "consecutive_failures": 0,
+  "rate_limit_remaining": 847,
+  "has_fallback": true
+&#125;</code></pre>
+
+      <h2>Harness Integration</h2>
+      <p>Route different harness layers to different providers (coming in v2026.3.21):</p>
+      <pre><code>harness:
+  layers:
+    - name: reasoning
+      model: anthropic/claude-sonnet-4-6
+    - name: manipulation
+      model: pi-foundation/pi0.5-bimanual
+      fallback: local/rt2-x
+    - name: perception
+      model: hf-gated/google/gemma-2-27b-it</code></pre>
+
+      <p class="text-gray-400 mt-8">
+        <a href="https://docs.opencastor.com" class="text-blue-400 hover:underline">← Back to Docs</a> ·
+        <a href="/blog/gated-providers" class="text-blue-400 hover:underline">Blog Post →</a>
+      </p>
+    </div>
+  </main>
+</BaseLayout>

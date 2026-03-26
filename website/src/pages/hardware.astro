@@ -11,7 +11,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 <main>
     <section class="page-hero">
       <p class="section-label reveal">Compatible Hardware</p>
-      <h1 class="reveal reveal-d1">Built for every robot.</h1>
+      <h1 class="reveal reveal-d1"><span class="gradient-text">Built for every robot.</span></h1>
       <p class="reveal reveal-d2">From $35 Raspberry Pi to Nvidia Jetson. Pre-built presets for popular kits, or bring
         your own config.</p>
     </section>
@@ -28,12 +28,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <div class="card reveal" style="background: white;">
             <div class="card-icon" style="background: var(--purple-light, #f3e8ff);">🦾</div>
             <h3>1. Install</h3>
-            <pre style="background:#1e1e2e;color:#cdd6f4;padding:1rem;border-radius:8px;font-size:0.85rem;overflow-x:auto;">pip install opencastor[lerobot]</pre>
+            <pre style="background:var(--code-bg);color:var(--code-text);padding:1rem;border-radius:8px;font-size:0.85rem;overflow-x:auto;">pip install opencastor[lerobot]</pre>
           </div>
           <div class="card reveal reveal-d1" style="background: white;">
             <div class="card-icon" style="background: var(--green-light, #dcfce7);">🔍</div>
             <h3>2. Scan</h3>
-            <pre style="background:#1e1e2e;color:#cdd6f4;padding:1rem;border-radius:8px;font-size:0.85rem;overflow-x:auto;">castor scan
+            <pre style="background:var(--code-bg);color:var(--code-text);padding:1rem;border-radius:8px;font-size:0.85rem;overflow-x:auto;">castor scan
 # ✓ Feetech STS3215 board on /dev/ttyUSB0
 # ✓ Detected: 1 arm → preset: so_arm101_follower
 # Tip: connect 2 boards for bimanual preset</pre>
@@ -41,14 +41,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <div class="card reveal reveal-d2" style="background: white;">
             <div class="card-icon" style="background: var(--cyan-light, #e0f2fe);">⚙️</div>
             <h3>3. Configure</h3>
-            <pre style="background:#1e1e2e;color:#cdd6f4;padding:1rem;border-radius:8px;font-size:0.85rem;overflow-x:auto;">castor wizard --preset so_arm101
+            <pre style="background:var(--code-bg);color:var(--code-text);padding:1rem;border-radius:8px;font-size:0.85rem;overflow-x:auto;">castor wizard --preset so_arm101
 # Guides: follower / leader / bimanual
 # Writes so_arm101.rcan.yaml automatically</pre>
           </div>
           <div class="card reveal reveal-d3" style="background: white;">
             <div class="card-icon" style="background: var(--orange-light, #fff7ed);">🚀</div>
             <h3>4. Run</h3>
-            <pre style="background:#1e1e2e;color:#cdd6f4;padding:1rem;border-radius:8px;font-size:0.85rem;overflow-x:auto;">castor gateway --config so_arm101.rcan.yaml
+            <pre style="background:var(--code-bg);color:var(--code-text);padding:1rem;border-radius:8px;font-size:0.85rem;overflow-x:auto;">castor gateway --config so_arm101.rcan.yaml
 # API live at :8000
 # Send commands via WhatsApp, Telegram, REST</pre>
           </div>
@@ -481,7 +481,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <li>🎓 End-of-year FIRST Robotics / VEX program donations</li>
           </ul>
           <p style="margin-top:20px; font-size:0.875rem; color:var(--text-muted);">
-            Not sure what protocol your hardware uses? <a href="/docs#hardware-guide"
+            Not sure what protocol your hardware uses? <a href="https://docs.opencastor.com/getting-started/hardware-profiles/"
               style="color:var(--accent); text-decoration:underline; text-underline-offset:3px;">Check the hardware
               guide →</a>
           </p>
@@ -496,7 +496,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         support.</p>
       <div class="hero-actions reveal reveal-d2">
         <a href="https://github.com/craigm26/OpenCastor/issues" class="btn btn-primary">Request Hardware Support</a>
-        <a href="/docs" class="btn btn-secondary">Write a Driver</a>
+        <a href="https://docs.opencastor.com" class="btn btn-secondary">Write a Driver</a>
         <a href="/beginners" class="btn btn-secondary">Beginner Guide →</a>
       </div>
     </section>
@@ -513,11 +513,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <p>The universal runtime for embodied AI.</p>
         </div>
         <div class="footer-col">
-          <h4>Product</h4><a href="/docs">Documentation</a><a href="/hardware">Hardware</a><a
+          <h4>Product</h4><a href="https://docs.opencastor.com">Documentation</a><a href="/hardware">Hardware</a><a
             href="https://rcan.dev/spec/">RCAN Spec</a><a href="https://pypi.org/project/opencastor/">PyPI</a>
         </div>
         <div class="footer-col">
-          <h4>Resources</h4><a href="/docs">Getting Started</a><a
+          <h4>Resources</h4><a href="https://docs.opencastor.com">Getting Started</a><a
             href="https://github.com/craigm26/OpenCastor">GitHub</a><a
             href="https://github.com/craigm26/OpenCastor/issues">Issues</a><a
             href="https://discord.gg/jMjA8B26Bq">Discord</a>

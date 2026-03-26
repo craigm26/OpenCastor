@@ -1,0 +1,42 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --obsidian: #0e1416;
+  --surface: #131c1f;
+  --surface2: #1a2527;
+  --border: rgba(85, 215, 237, 0.12);
+  --cyan: #55d7ed;
+  --cyan-dim: rgba(85, 215, 237, 0.15);
+  --amber: #ffba38;
+  --amber-dim: rgba(255, 186, 56, 0.15);
+  --green: #4ade80;
+  --red: #f87171;
+  --text: #e8f0f2;
+  --text-muted: rgba(232, 240, 242, 0.5);
+  --font-head: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--obsidian);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+#root { min-height: 100vh; }
+
+h1, h2, h3, h4 { font-family: var(--font-head); }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+button { cursor: pointer; font-family: var(--font-body); }
+a { color: var(--cyan); text-decoration: none; }
+a:hover { text-decoration: underline; }

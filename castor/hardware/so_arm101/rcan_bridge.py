@@ -64,8 +64,27 @@ def send_arm_pose_rcan(
             "timestamp_ms": int(time.time() * 1000),
         }
         logger.info("RCAN arm_pose: %s", json.dumps(msg, indent=2))
-        # TODO: when RCAN transport is available, send via rcan client
-        # For now: log the message (audit trail) and return True
+        # Send via RCAN HTTP transport
+        try:
+            from castor.rcan.http_transport import send_message
+
+            cfg = None
+            config_path = Path(rcan_config_path).expanduser()
+            if config_path.exists():
+                import yaml as _yaml  # type: ignore[import]
+
+                with open(config_path) as _f:
+                    cfg = _yaml.safe_load(_f)
+            target_host = (
+                cfg.get("rcan_protocol", {}).get("peers", [{}])[0].get("host") if cfg else None
+            )
+            if target_host:
+                send_message(target_host, msg)
+                logger.info("RCAN arm_pose sent to %s", target_host)
+            else:
+                logger.debug("No RCAN peers configured — message logged only")
+        except Exception as _e:
+            logger.debug("RCAN transport send failed (non-fatal): %s", _e)
         return True
     except Exception as exc:
         logger.debug("RCAN pose send failed (non-fatal): %s", exc)

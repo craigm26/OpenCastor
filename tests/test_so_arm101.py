@@ -8,14 +8,13 @@ from unittest.mock import patch
 
 import pytest
 
+from castor.hardware.so_arm101.assembly_guide import assembly_steps_json
+from castor.hardware.so_arm101.config_generator import generate_config
 from castor.hardware.so_arm101.constants import (
     FOLLOWER_ASSEMBLY_STEPS,
     FOLLOWER_MOTORS,
     LEADER_MOTORS,
 )
-from castor.hardware.so_arm101.config_generator import generate_config
-from castor.hardware.so_arm101.assembly_guide import assembly_steps_json
-
 
 # ── constants ─────────────────────────────────────────────────────────────────
 
@@ -165,15 +164,17 @@ def test_arm_cli_help():
 
 
 def test_arm_cli_detect_no_crash(capsys):
-    from castor.hardware.so_arm101.cli import cmd_detect
     import argparse
+
+    from castor.hardware.so_arm101.cli import cmd_detect
 
     cmd_detect(argparse.Namespace())
 
 
 def test_arm_cli_config_dry(tmp_path):
-    from castor.hardware.so_arm101.cli import cmd_config
     import argparse
+
+    from castor.hardware.so_arm101.cli import cmd_config
 
     out = str(tmp_path / "test.rcan.yaml")
     cmd_config(argparse.Namespace(
@@ -227,7 +228,7 @@ def test_motor_setup_dry_run_uses_native_when_no_lerobot():
 def test_arm_cli_calibrate_no_lerobot(capsys):
     """calibrate should print install instructions when LeRobot not available."""
     import argparse
-    from unittest.mock import patch
+
     from castor.hardware.so_arm101.cli import cmd_calibrate
 
     with patch("castor.hardware.so_arm101.lerobot_bridge.lerobot_available", return_value=False):
@@ -239,6 +240,7 @@ def test_arm_cli_calibrate_no_lerobot(capsys):
 
 def test_arm_cli_status_no_crash(capsys):
     import argparse
+
     from castor.hardware.so_arm101.cli import cmd_status
 
     cmd_status(argparse.Namespace())
@@ -249,7 +251,8 @@ def test_arm_cli_status_no_crash(capsys):
 def test_record_no_lerobot(capsys):
     """cmd_record should return 1 and print a helpful message when LeRobot is absent."""
     import argparse
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock
+
     from castor.hardware.so_arm101.cli import cmd_record
 
     mock_bridge = MagicMock()
@@ -277,8 +280,8 @@ def test_record_no_lerobot(capsys):
 def test_record_with_lerobot(capsys):
     """cmd_record should invoke lerobot-record via subprocess when LeRobot is present."""
     import argparse
-    import subprocess
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock
+
     from castor.hardware.so_arm101.cli import cmd_record
 
     mock_bridge = MagicMock()
@@ -313,7 +316,7 @@ def test_record_with_lerobot(capsys):
 def test_grasp_hook_no_hailo(capsys):
     """cmd_grasp should print a helpful message when hailo_vision is not available."""
     import argparse
-    from unittest.mock import patch
+
     from castor.hardware.so_arm101.cli import cmd_grasp
 
     # Patch both the importlib spec lookup and the local file existence check
@@ -350,6 +353,7 @@ class TestSafetyBridge:
     def test_safety_bridge_calls_safety_layer(self):
         """write_arm_command delegates to safety_layer.write() with /dev/arm/<joint>."""
         from unittest.mock import MagicMock
+
         from castor.hardware.so_arm101.safety_bridge import write_arm_command
 
         mock_sl = MagicMock()
@@ -388,7 +392,6 @@ class TestSafetyBridge:
 
 def test_get_camera_frame_roi_no_camera():
     """Returns None gracefully when cv2 is unavailable."""
-    import sys
     from unittest.mock import patch
 
     # Hide cv2 so the import fails
@@ -407,7 +410,8 @@ def test_get_camera_frame_roi_returns_none_on_bad_device():
         import pytest
         pytest.skip("cv2 not installed")
 
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock
+
     from castor.hardware.so_arm101.vision import get_camera_frame_roi
 
     mock_cap = MagicMock()
@@ -423,8 +427,6 @@ def test_get_camera_frame_roi_returns_none_on_bad_device():
 
 def test_send_arm_pose_rcan_no_config():
     """Returns True (graceful) even without rcan.yaml and without yaml installed."""
-    import sys
-    from unittest.mock import patch
     from castor.hardware.so_arm101.rcan_bridge import send_arm_pose_rcan
 
     # Ensure yaml is importable (it usually is); rcan config file won't exist
@@ -438,7 +440,7 @@ def test_send_arm_pose_rcan_no_config():
 def test_send_arm_pose_rcan_builds_message():
     """Verify the built message has message_type=1 and action='arm_pose'."""
     import json
-    from unittest.mock import patch, MagicMock
+
     from castor.hardware.so_arm101.rcan_bridge import send_arm_pose_rcan
 
     captured_msgs = []

@@ -15,14 +15,11 @@ from castor.idle import (
     IdleGuard,
     IdleState,
     _check_p66_active,
-    _get_battery_pct,
     _last_activity_seconds,
     idle_guard,
     install_cron_schedule,
     is_robot_idle,
-    uninstall_cron_schedule,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

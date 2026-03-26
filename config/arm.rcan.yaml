@@ -7,10 +7,15 @@ metadata:
   author: craigm26
   rrn: RRN-000000000005
   rrn_uri: rrn://craigm26/robot/opencastor-pi5-arm/alex-001
+  # §2 required fields for L1 conformance
+  manufacturer: OpenCastor
+  model: SO-ARM101-Pi5
+  version: '1.0'
+  device_id: alex-001
 
 agent:
   provider: google
-  model: gemini-2.0-flash
+  model: gemini-2.5-flash
   use_oauth: true
   vision_enabled: true
   safety_stop: true
@@ -23,12 +28,24 @@ agent:
     - scope: safety
       min_confidence: 0.90
       on_fail: block
+  # §16 L3 conformance — human-in-the-loop gates for physical actions
+  hitl_gates:
+    - action_types:
+        - move
+        - actuate
+        - grip
+        - rotate
+        - extend
+        - retract
+      require_auth: true
+      on_fail: block
+      timeout_s: 30
 
 tiered_brain:
   fast_provider: ollama
   fast_model: gemma3:1b
   slow_provider: google
-  slow_model: gemini-2.0-flash
+  slow_model: gemini-2.5-flash
   planner_interval: 10
   _note: "Fast tier handles quick status/nav. Slow tier handles complex reasoning and vision."
 
@@ -39,7 +56,7 @@ agent_roster:
     scope: nav
   - id: arm_specialist
     provider: google
-    model: gemini-2.0-flash
+    model: gemini-2.5-flash
     scope: control
 
 geofence:
@@ -146,6 +163,11 @@ rcan_protocol:
     - gripper
   enable_mdns: true
   enable_jwt: false
+  # §8 L2 conformance — JWT validation mode (enforcement in rcan_bridge)
+  jwt_auth:
+    enabled: true
+    algorithm: HS256
+    require_rrn_claim: true
 
 r2ram:
   scopes:
@@ -164,3 +186,42 @@ cloud:
   credentials: /home/craigm26/.config/opencastor/firebase-sa-key.json
   telemetry_interval_s: 30
   poll_interval_s: 5
+
+# ── Production-grade harness components (all opt-in) ──────────────────────────
+
+circuit_breaker:
+  enabled: true
+  failure_threshold: 3
+  cooldown_s: 300
+  half_open_probe: true
+
+rollback:
+  enabled: true
+
+dlq:
+  enabled: true
+
+prompt_guard:
+  enabled: true
+  block_threshold: 0.5
+
+context_compressor:
+  enabled: false  # enable when history gets long
+  trigger_at: 0.8
+  summary_model: gemma3:1b
+  keep_recent: 5
+
+working_memory:
+  enabled: true
+  max_keys: 50
+  log_to_trajectory: true
+
+span_tracer:
+  enabled: true
+  max_trace_age_days: 7
+
+cost_meter:
+  enabled: true
+  budget_usd: 0.05
+  alert_at: 0.8
+  model: gemini-2.5-flash

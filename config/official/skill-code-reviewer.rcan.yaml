@@ -1,0 +1,54 @@
+rcan_version: "1.6"
+
+metadata:
+  robot_name: opencastor-code-reviewer-demo
+  robot_uuid: "00000000-0000-4000-8000-000000000006"
+  author: OpenCastor Team
+  license: Apache-2.0
+  description: >
+    Minimal demo for the code-reviewer builtin skill. Enables an OpenCastor
+    agent to review robot control code, RCAN configs, and skill scripts for
+    correctness, safety issues, and style. Ideal for CI pipelines, pull
+    request review bots, and development-time code quality checks.
+  tags:
+    - official
+    - skill
+    - code-review
+    - code-reviewer
+    - developer-tools
+  builtin_skills:
+    - code-reviewer
+
+_note: >
+  Official demo for the code-reviewer builtin skill. Stationary agent that
+  reviews robot code and RCAN configs. No physical hardware required.
+  Ideal for CI/CD pipelines and PR automation.
+
+agent:
+  provider: google
+  model: gemini-2.5-flash
+  safety_stop: false
+  system_prompt: >
+    You are a code review-focused OpenCastor agent. Use the code-reviewer
+    skill to analyze robot code and configs. Flag safety issues, logic errors,
+    and style problems. Provide actionable, constructive feedback.
+
+physics:
+  type: custom
+  dof: 1  # minimal dof for software-only agent
+
+drivers:
+  - id: virtual
+    protocol: none
+
+network:
+  allow_remote_override: false
+
+rcan_protocol:
+  enable_mdns: false
+
+loa:
+  min_loa_for_control: 1
+
+safety:
+  p66_enabled: true

@@ -4,11 +4,11 @@
 
 ## What Is OpenCastor?
 
-OpenCastor is the open-source **reference implementation of the RCAN protocol** (v1.4). It connects LLM "brains" to robot "bodies" through a plug-and-play architecture and exposes them to messaging platforms for remote control.
+OpenCastor is the open-source **reference implementation of the RCAN protocol** (v1.9.0)). It connects LLM "brains" to robot "bodies" through a plug-and-play architecture and exposes them to messaging platforms for remote control.
 
-- **Version**: 2026.3.14.6 (date-based: `YYYY.MM.DD.patch`)
-- **RCAN**: v1.4 — see [rcan.dev/spec](https://rcan.dev/spec/)
-- **License**: Apache 2.0 | **Python**: 3.10+ | **Tests**: 161+ passing
+- **Version**: 2026.3.21.1 (date-based: `YYYY.MM.DD.patch`)
+- **RCAN**: v1.9.0 — see [rcan.dev/spec](https://rcan.dev/spec/)
+- **License**: Apache 2.0 | **Python**: 3.10+ | **Tests**: 7804+ passing
 
 ## Quick Start
 
@@ -33,6 +33,12 @@ OpenCastor/
 │   │   └── base.py         # BaseProvider ABC + Thought dataclass
 │   ├── drivers/            # Hardware drivers (see full list below)
 │   ├── channels/           # Messaging channels (WhatsApp, Telegram, Discord, ...)
+│   │   └── rcan_mqtt_transport.py  # RCAN-over-MQTT carrier (compact/minimal encoding)
+│   ├── contribute/         # Idle compute donation skill
+│   │   ├── coordinator.py  # BOINC + simulated coordinators
+│   │   ├── runner.py       # Work unit runner with cancellation
+│   │   ├── work_unit.py    # WorkUnit / WorkUnitResult dataclasses
+│   │   └── hardware_profile.py  # NPU/CPU detection
 │   ├── rcan/               # RCAN protocol implementation
 │   │   ├── registry.py     # RRN validation, REGISTRY_REGISTER/RESOLVE (§21)
 │   │   ├── invoke.py       # InvokeRequest/Result, SkillRegistry (§19)
@@ -137,8 +143,10 @@ move(cmd)  ──►  SafetyLayer.check(cmd)  ──►  _move(cmd)  ──►  
 | `POST` | `/rcan` | RCAN message dispatch (INVOKE, COMMAND, REGISTRY_*) |
 | `GET` | `/health` | Gateway health + driver status |
 | `POST` | `/invoke` | Direct skill invocation shortcut |
+| `GET` | `/api/contribute` | Idle compute contribution status |
+| `GET` | `/api/harness` | Current harness configuration |
 
-## RCAN Protocol (v1.4)
+## RCAN Protocol (v1.9.0)
 
 ### MessageTypes
 ```python
@@ -181,16 +189,16 @@ VISION       → planner preferred
 SEARCH       → planner preferred
 ```
 
-## RCAN Config Format (v1.4)
+## RCAN Config Format (v1.9.0)
 
 ```yaml
-rcan_version: "1.4"
+rcan_version: "1.6.1"
 metadata:
   robot_name: my-robot
   rrn: RRN-000000000001
   rrn_uri: rrn://org/robot/model/id
   rcan_uri: rcan://robot.local:8000/my-robot
-  version: 2026.3.14.6
+  version: 2026.3.21.1
 agent:
   provider: google
   model: gemini-1.5-flash
@@ -293,3 +301,11 @@ Versioning: `YYYY.MM.DD.patch` — bump patch for each commit, date when date ch
 - §21 Registry: https://rcan.dev/spec/section-21/
 - Robot Registry Foundation: https://robotregistryfoundation.org/
 - rcan-py SDK: https://github.com/continuonai/rcan-py
+
+## Recent Features (2026-03-19)
+
+- **Harness research pipeline**: `opencastor-autoresearch/harness_research/` — discovers optimal agent harness YAML configurations
+- **Default harness**: `castor/harness/default_harness.yaml` (canonical source, auto-updated via harness-promote workflow)
+- **Security fixes**: RCAN-Signature HMAC verification, None principal scope enforcement, `/setup` token removed, WebSocket JWT auth, webhook SSRF validation, LoA enforcement default=True
+- **CLI consistency**: `/pause` `/resume` `/shutdown` `/snapshot` added to API + dashboard + client
+- **pytest-asyncio**: `asyncio_mode=auto` configured project-wide

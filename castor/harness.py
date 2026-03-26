@@ -40,6 +40,47 @@ from castor.tools import ToolRegistry, ToolResult
 if TYPE_CHECKING:
     from castor.providers.base import BaseProvider, Thought
 
+# ── Optional harness components (all opt-in via RCAN config) ─────────────────
+try:
+    from castor.harness.circuit_breaker import CircuitBreaker as _CircuitBreaker
+except ImportError:
+    _CircuitBreaker = None  # type: ignore[assignment,misc]
+
+try:
+    from castor.harness.rollback import RollbackManager as _RollbackManager
+except ImportError:
+    _RollbackManager = None  # type: ignore[assignment,misc]
+
+try:
+    from castor.harness.dlq import DeadLetterQueue as _DeadLetterQueue
+except ImportError:
+    _DeadLetterQueue = None  # type: ignore[assignment,misc]
+
+try:
+    from castor.harness.prompt_guard import PromptGuard as _PromptGuard
+except ImportError:
+    _PromptGuard = None  # type: ignore[assignment,misc]
+
+try:
+    from castor.harness.context_compressor import ContextCompressor as _ContextCompressor
+except ImportError:
+    _ContextCompressor = None  # type: ignore[assignment,misc]
+
+try:
+    from castor.harness.working_memory import WorkingMemory as _WorkingMemory
+except ImportError:
+    _WorkingMemory = None  # type: ignore[assignment,misc]
+
+try:
+    from castor.harness.span_tracer import SpanTracer as _SpanTracer
+except ImportError:
+    _SpanTracer = None  # type: ignore[assignment,misc]
+
+try:
+    from castor.harness.cost_meter import CostMeter as _CostMeter
+except ImportError:
+    _CostMeter = None  # type: ignore[assignment,misc]
+
 logger = logging.getLogger("OpenCastor.Harness")
 
 __all__ = [
@@ -354,10 +395,91 @@ class AgentHarness:
         # Lazy import context builder to avoid circular deps
         self._context_builder: Any = None
 
+        # ── Optional production-grade harness components ───────────────────
+        cfg = self._config
+
+        # Trajectories DB path (shared by rollback + DLQ)
+        import os as _os
+
+        _db_path: str = str(
+            cfg.get("trajectories_db")
+            or _os.path.expanduser("~/.config/opencastor/trajectories.db")
+        )
+
+        # Circuit Breaker
+        _cb_cfg = cfg.get("circuit_breaker", {})
+        self.circuit_breaker: Any = (
+            _CircuitBreaker(_cb_cfg) if _CircuitBreaker and _cb_cfg.get("enabled") else None
+        )
+
+        # Rollback Manager
+        _rb_cfg = cfg.get("rollback", {})
+        self.rollback: Any = (
+            _RollbackManager(_db_path) if _RollbackManager and _rb_cfg.get("enabled") else None
+        )
+
+        # Dead Letter Queue
+        _dlq_cfg = cfg.get("dlq", {})
+        self.dlq: Any = (
+            _DeadLetterQueue(_db_path) if _DeadLetterQueue and _dlq_cfg.get("enabled") else None
+        )
+
+        # Prompt Guard (initialised from top-level config key)
+        _pg_cfg = cfg.get("prompt_guard", {})
+        self.prompt_guard: Any = (
+            _PromptGuard(_pg_cfg) if _PromptGuard and _pg_cfg.get("enabled") else None
+        )
+
+        # Context Compressor
+        _cc_cfg = cfg.get("context_compressor", {})
+        self.context_compressor: Any = (
+            _ContextCompressor(_cc_cfg, provider_factory=None)
+            if _ContextCompressor and _cc_cfg.get("enabled")
+            else None
+        )
+
+        # Working Memory
+        _wm_cfg = cfg.get("working_memory", {})
+        self.working_memory: Any = (
+            _WorkingMemory(max_keys=int(_wm_cfg.get("max_keys", 50)))
+            if _WorkingMemory and _wm_cfg.get("enabled")
+            else None
+        )
+
+        # Span Tracer
+        _st_cfg = cfg.get("span_tracer", {})
+        self.span_tracer: Any = (
+            _SpanTracer(_st_cfg) if _SpanTracer and _st_cfg.get("enabled") else None
+        )
+
+        # Cost Meter
+        _cm_cfg = cfg.get("cost_meter", {})
+        self.cost_meter: Any = (
+            _CostMeter(_cm_cfg) if _CostMeter and _cm_cfg.get("enabled") else None
+        )
+
+        # Register working memory tools if enabled
+        if self.working_memory is not None:
+            try:
+                from castor.agent_tools import register_working_memory_tools
+
+                register_working_memory_tools(self._tool_registry, self.working_memory)
+            except Exception as _wm_exc:
+                logger.debug("Working memory tools registration skipped: %s", _wm_exc)
+
         logger.info(
-            "AgentHarness initialised (enabled=%s, max_iter=%d)",
+            "AgentHarness initialised (enabled=%s, max_iter=%d, "
+            "circuit_breaker=%s, rollback=%s, dlq=%s, prompt_guard=%s, "
+            "working_memory=%s, span_tracer=%s, cost_meter=%s)",
             self._enabled,
             self._max_iterations,
+            self.circuit_breaker is not None,
+            self.rollback is not None,
+            self.dlq is not None,
+            self.prompt_guard is not None,
+            self.working_memory is not None,
+            self.span_tracer is not None,
+            self.cost_meter is not None,
         )
 
     # ── Public API ────────────────────────────────────────────────────────────
@@ -370,7 +492,32 @@ class AgentHarness:
         t0 = time.perf_counter()
         run_id = str(uuid.uuid4())
 
-        # ── P66 ESTOP bypass (absolute) ─────────────────────────────────────
+        # ── 0. Clear working memory at start of run ──────────────────────────
+        if self.working_memory is not None:
+            self.working_memory.clear()
+
+        # ── 1. Prompt guard (FIRST — before ESTOP check) ────────────────────
+        if self.prompt_guard is not None:
+            guard_result = self.prompt_guard.check(ctx.instruction)
+            if guard_result.blocked:
+                logger.warning(
+                    "PromptGuard: blocked instruction (score=%.2f) session=%s",
+                    guard_result.risk_score,
+                    ctx.session_id,
+                )
+                from castor.providers.base import Thought as _T
+
+                return HarnessResult(
+                    thought=_T(
+                        raw_text="Command blocked: potential prompt injection detected.",
+                        provider="harness",
+                    ),
+                    run_id=run_id,
+                    total_latency_ms=(time.perf_counter() - t0) * 1000,
+                    error="prompt_injection_blocked",
+                )
+
+        # ── 2. P66 ESTOP bypass (absolute) ──────────────────────────────────
         if self._is_estop(ctx):
             return await self._run_estop(ctx, run_id, t0)
 
@@ -378,11 +525,39 @@ class AgentHarness:
         if not self._enabled:
             return await self._run_legacy(ctx, run_id, t0)
 
-        # ── Full harness pipeline ────────────────────────────────────────────
+        # ── 3. Root span (wraps entire run) ─────────────────────────────────
+        root_span = None
+        if self.span_tracer is not None:
+            root_span = self.span_tracer.start_trace(
+                "harness.run",
+                attributes={"session_id": ctx.session_id, "scope": ctx.scope},
+            )
+
+        # ── 4. Full harness pipeline ─────────────────────────────────────────
         try:
-            return await self._run_pipeline(ctx, run_id, t0)
+            result = await self._run_pipeline(ctx, run_id, t0, root_span=root_span)
+            if root_span is not None and self.span_tracer is not None:
+                self.span_tracer.end_span(root_span, status="ok")
+                self.span_tracer.export_trace(root_span.trace_id)
+            return result
         except Exception as exc:
             logger.exception("Harness pipeline error: %s", exc)
+            # Push to DLQ
+            if self.dlq is not None:
+                try:
+                    self.dlq.push(
+                        command_id=run_id,
+                        instruction=ctx.instruction[:500],
+                        scope=ctx.scope,
+                        error=str(exc),
+                        metadata={"session_id": ctx.session_id},
+                    )
+                except Exception as _dlq_exc:
+                    logger.debug("DLQ push failed (non-fatal): %s", _dlq_exc)
+            # End root span as error
+            if root_span is not None and self.span_tracer is not None:
+                self.span_tracer.end_span(root_span, status="error", error=str(exc))
+                self.span_tracer.export_trace(root_span.trace_id)
             # Give hooks a chance to recover
             for hook in self.hooks:
                 recovery = await hook.on_error(ctx, exc)
@@ -406,7 +581,9 @@ class AgentHarness:
 
     # ── Internal pipeline ─────────────────────────────────────────────────────
 
-    async def _run_pipeline(self, ctx: HarnessContext, run_id: str, t0: float) -> HarnessResult:
+    async def _run_pipeline(
+        self, ctx: HarnessContext, run_id: str, t0: float, root_span: Any = None
+    ) -> HarnessResult:
         """Full harness pipeline: context → skill → inference → tool loop → log."""
         from castor.context import BuiltContext
 
@@ -416,10 +593,17 @@ class AgentHarness:
 
         # 2. Run pre-turn hooks
         for hook in self.hooks:
-            await hook.on_pre_turn(ctx, built)
+            span_name = f"hook.pre_turn.{type(hook).__name__}"
+            if self.span_tracer and root_span:
+                with self.span_tracer.span(span_name, parent=root_span):
+                    await hook.on_pre_turn(ctx, built)
+            else:
+                await hook.on_pre_turn(ctx, built)
 
         # 3. Tool loop
-        thought, tools_called, iterations = await self._tool_loop(ctx, built)
+        thought, tools_called, iterations = await self._tool_loop(
+            ctx, built, run_id=run_id, root_span=root_span
+        )
 
         # 4. Aggregate P66 fields
         any_phys = any(r.p66_consent_required for r in tools_called)
@@ -440,11 +624,23 @@ class AgentHarness:
             run_id=run_id,
         )
 
-        # 5. Post-turn hooks
-        for hook in self.hooks:
-            await hook.on_post_turn(ctx, result)
+        # 5. Snapshot working memory into result if enabled
+        if self.working_memory is not None:
+            _wm_cfg = self._config.get("working_memory", {})
+            if _wm_cfg.get("log_to_trajectory", True):
+                result.error = result.error  # no-op; snapshot stored below in trajectory log
 
-        # 6. Log trajectory (fire-and-forget)
+        # 6. Post-turn hooks
+        for hook in self.hooks:
+            if self.span_tracer and root_span:
+                with self.span_tracer.span(
+                    f"hook.post_turn.{type(hook).__name__}", parent=root_span
+                ):
+                    await hook.on_post_turn(ctx, result)
+            else:
+                await hook.on_post_turn(ctx, result)
+
+        # 7. Log trajectory (fire-and-forget)
         asyncio.ensure_future(self._log_trajectory(ctx, result))
 
         return result
@@ -453,6 +649,8 @@ class AgentHarness:
         self,
         ctx: HarnessContext,
         built: Any,
+        run_id: str = "",
+        root_span: Any = None,
     ) -> tuple[Thought, list[ToolCallRecord], int]:
         """Run model inference + tool execution loop.
 
@@ -468,7 +666,24 @@ class AgentHarness:
         consent_granted = ctx.consent_granted
 
         for iteration in range(self._max_iterations):
-            # Call provider with tools
+            # ── Cost meter: check budget before each iteration ───────────────
+            if self.cost_meter is not None and run_id:
+                if self.cost_meter.is_over_budget(run_id):
+                    logger.warning("CostMeter: budget cap reached for run=%s", run_id)
+                    budget_thought = _Thought(
+                        raw_text="Budget cap reached. Run halted.",
+                        provider="harness",
+                    )
+                    return budget_thought, tools_called, iteration
+
+            # Call provider with tools (wrapped in span if tracer enabled)
+            if self.span_tracer and root_span:
+                model_span = self.span_tracer.start_span(
+                    "harness.think_with_tools",
+                    parent=root_span,
+                    attributes={"iteration": iteration},
+                )
+
             raw_response = await asyncio.to_thread(
                 self._think_with_tools,
                 ctx.image_bytes,
@@ -477,6 +692,20 @@ class AgentHarness:
                 messages,
                 tools_schema,
             )
+
+            # ── Cost meter: record tokens after model call ───────────────────
+            if self.cost_meter is not None and run_id:
+                try:
+                    _usage = getattr(raw_response, "usage", None) or {}
+                    _in = int(_usage.get("input_tokens", 0) or _usage.get("prompt_tokens", 0))
+                    _out = int(_usage.get("output_tokens", 0) or _usage.get("completion_tokens", 0))
+                    if _in or _out:
+                        self.cost_meter.record(run_id, _in, _out)
+                except Exception as _cost_exc:
+                    logger.debug("CostMeter record failed: %s", _cost_exc)
+
+            if self.span_tracer and root_span:
+                self.span_tracer.end_span(model_span, status="ok")
 
             # Check if provider returned tool calls
             tool_calls = self._extract_tool_calls(raw_response)
@@ -490,6 +719,15 @@ class AgentHarness:
                 name = call.get("name", "")
                 args = call.get("args", {})
 
+                # ── Span: tool call ──────────────────────────────────────────
+                tool_span_ctx = None
+                if self.span_tracer and root_span:
+                    tool_span_ctx = self.span_tracer.start_span(
+                        f"tool.{name}",
+                        parent=root_span,
+                        attributes={"tool_name": name, "scope": ctx.scope},
+                    )
+
                 # P66: ESTOP always executes
                 if name in ESTOP_TOOLS:
                     tr = await asyncio.to_thread(self._execute_tool, name, args)
@@ -502,6 +740,8 @@ class AgentHarness:
                     tools_called.append(record)
                     for hook in self.hooks:
                         await hook.on_tool_call(call, tr)
+                    if tool_span_ctx and self.span_tracer:
+                        self.span_tracer.end_span(tool_span_ctx, status="ok")
                     continue
 
                 # P66: physical tools require consent and control scope
@@ -518,6 +758,8 @@ class AgentHarness:
                         )
                         tools_called.append(record)
                         logger.info("P66: blocked physical tool '%s' (consent not granted)", name)
+                        if tool_span_ctx and self.span_tracer:
+                            self.span_tracer.end_span(tool_span_ctx, status="ok")
                         # Return consent-request thought
                         consent_thought = _Thought(
                             raw_text=(
@@ -527,6 +769,31 @@ class AgentHarness:
                             provider="harness",
                         )
                         return consent_thought, tools_called, iteration + 1
+
+                    # ── Rollback: capture state before physical tool ──────────
+                    if self.rollback is not None:
+                        try:
+                            _state = getattr(ctx, "mission_state", {}) or {}
+                            self.rollback.capture(run_id or ctx.session_id, _state)
+                        except Exception as _rb_exc:
+                            logger.debug("Rollback capture failed (non-fatal): %s", _rb_exc)
+
+                # ── Circuit Breaker: check before tool execution ─────────────
+                _skill_id = name  # use tool name as skill_id proxy
+                if self.circuit_breaker is not None and self.circuit_breaker.is_open(_skill_id):
+                    logger.warning("CircuitBreaker: skill=%s is open, skipping", _skill_id)
+                    if tool_span_ctx and self.span_tracer:
+                        self.span_tracer.end_span(
+                            tool_span_ctx, status="error", error="circuit_open"
+                        )
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "name": name,
+                            "content": f"Error: skill {name!r} is temporarily disabled (circuit open).",
+                        }
+                    )
+                    continue
 
                 # Execute non-blocked tool
                 tr = await asyncio.to_thread(self._execute_tool, name, args)
@@ -541,8 +808,26 @@ class AgentHarness:
                     error=tr.error,
                 )
                 tools_called.append(record)
+
+                # ── Circuit Breaker: record result ───────────────────────────
+                if self.circuit_breaker is not None:
+                    if tr.ok:
+                        self.circuit_breaker.record_success(_skill_id)
+                    else:
+                        self.circuit_breaker.record_failure(_skill_id)
+
                 for hook in self.hooks:
-                    await hook.on_tool_call(call, tr)
+                    if self.span_tracer and root_span:
+                        with self.span_tracer.span(
+                            f"hook.tool_call.{type(hook).__name__}", parent=root_span
+                        ):
+                            await hook.on_tool_call(call, tr)
+                    else:
+                        await hook.on_tool_call(call, tr)
+
+                if tool_span_ctx and self.span_tracer:
+                    _ts = "ok" if tr.ok else "error"
+                    self.span_tracer.end_span(tool_span_ctx, status=_ts, error=tr.error)
 
                 # Append tool result to messages for next iteration
                 messages.append(

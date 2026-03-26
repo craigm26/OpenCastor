@@ -1,0 +1,13 @@
+{
+  "name": "code-reviewer",
+  "version": "1.0",
+  "max_iterations": 1,
+  "scope": "chat",
+  "requires_consent": false,
+  "use_cases": [
+    "autoresearch peer review from Bob",
+    "code quality review on request",
+    "RCAN config validation review"
+  ],
+  "timeout_s": 30
+}

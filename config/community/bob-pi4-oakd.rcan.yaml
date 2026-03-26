@@ -14,7 +14,7 @@ metadata:
 
 agent:
   provider: google
-  model: gemini-2.0-flash
+  model: gemini-2.5-flash
   use_oauth: true
   vision_enabled: true
   safety_stop: true
@@ -29,7 +29,7 @@ tiered_brain:
   fast_provider: ollama
   fast_model: gemma3:1b
   slow_provider: google
-  slow_model: gemini-2.0-flash
+  slow_model: gemini-2.5-flash
   planner_interval: 10
 
 agent_roster:

@@ -1,106 +1,184 @@
-rcan_version: "1.3"
-
+rcan_version: '1.6'
 metadata:
-  robot_name: "Makeblock_mBot"
-  robot_uuid: "00000000-0000-0000-0000-000000000013"
-  author: "OpenCastor Default"
-  license: "Apache-2.0"
+  robot_name: Makeblock_mBot
+  robot_uuid: fdd5fc13-ff4c-4b38-9f1b-8a76581d1610
+  author: OpenCastor Default
+  license: Apache-2.0
   tags:
-    - mobile
-    - educational
-    - makeblock
-    - mbot
-    - arduino
-    - stem
-    - second-hand
-  description: >
-    Makeblock mBot — one of the most popular STEM toy robots ever made (~$50 new).
-    Abundantly available on eBay, Amazon Warehouse, and Goodwill. Based on the
-    Makeblock Orion board (Arduino Mega-compatible) with integrated TB6612FNG dual
-    motor driver. Connects via USB serial, 2.4GHz wireless module, or BLE dongle.
+  - mobile
+  - educational
+  - makeblock
+  - mbot
+  - arduino
+  - stem
+  - second-hand
+  description: 'Makeblock mBot — one of the most popular STEM toy robots ever made
+    (~$50 new). Abundantly available on eBay, Amazon Warehouse, and Goodwill. Based
+    on the Makeblock Orion board (Arduino Mega-compatible) with integrated TB6612FNG
+    dual motor driver. Connects via USB serial, 2.4GHz wireless module, or BLE dongle.
     Two DC gearmotors (6V, 200 RPM), ultrasonic sensor, line-follower sensor, buzzer.
 
+    '
+  rrn: RRN-561092813372
+  rrn_uri: rrn://community/robot/opencastor/makeblock-mbot/makeblock_mbot
 agent:
-  provider: "anthropic"
-  model: "claude-sonnet-4-5"
+  provider: anthropic
+  model: claude-sonnet-4-5
   vision_enabled: false
   latency_budget_ms: 200
   safety_stop: true
-
+  offline_provider: ollama
+  confidence_gates:
+  - scope: control
+    min_confidence: 0.75
+    on_fail: block
+  - scope: safety
+    min_confidence: 0.9
+    on_fail: block
 physics:
-  type: "differential_drive"
+  type: differential
   dof: 2
   chassis:
     wheel_base_mm: 170
     wheel_radius_mm: 26
-
 drivers:
-  - id: "motor_driver"
-    protocol: "makeblock_serial"
-    # Uses Makeblock Scratch Firmware + mCore protocol over serial
-    port: "/dev/ttyUSB0"    # Linux; macOS: /dev/cu.wchusbserial*; Win: COMx
-    baud: 115200
-    channels:
-      left_motor: 1         # M1 on mCore board
-      right_motor: 2        # M2 on mCore board (inverted)
-    motor_voltage_v: 6.0
-    max_pwm: 255
-
-  - id: "ultrasonic_sensor"
-    protocol: "makeblock_serial"
-    port: "/dev/ttyUSB0"
-    baud: 115200
-    sensor_type: "ultrasonic"
-    mcore_port: 3           # RJ25 port 3
-
-  - id: "line_follower"
-    protocol: "makeblock_serial"
-    port: "/dev/ttyUSB0"
-    baud: 115200
-    sensor_type: "line_follower"
-    mcore_port: 2
-
-  - id: "rgb_led"
-    protocol: "makeblock_serial"
-    port: "/dev/ttyUSB0"
-    baud: 115200
-    sensor_type: "on_board_rgb"
-
-  - id: "buzzer"
-    protocol: "makeblock_serial"
-    port: "/dev/ttyUSB0"
-    baud: 115200
-    sensor_type: "buzzer"
-
-connection:
-  type: "serial"
-  port: "/dev/ttyUSB0"
+- id: motor_driver
+  protocol: makeblock_serial
+  port: /dev/ttyUSB0
   baud: 115200
-  # Alternative: BLE via HC-06 module (baud 9600)
+  channels:
+    left_motor: 1
+    right_motor: 2
+  motor_voltage_v: 6.0
+  max_pwm: 255
+- id: ultrasonic_sensor
+  protocol: makeblock_serial
+  port: /dev/ttyUSB0
+  baud: 115200
+  sensor_type: ultrasonic
+  mcore_port: 3
+- id: line_follower
+  protocol: makeblock_serial
+  port: /dev/ttyUSB0
+  baud: 115200
+  sensor_type: line_follower
+  mcore_port: 2
+- id: rgb_led
+  protocol: makeblock_serial
+  port: /dev/ttyUSB0
+  baud: 115200
+  sensor_type: on_board_rgb
+- id: buzzer
+  protocol: makeblock_serial
+  port: /dev/ttyUSB0
+  baud: 115200
+  sensor_type: buzzer
+connection:
+  type: serial
+  port: /dev/ttyUSB0
+  baud: 115200
   ble_alternative:
     enabled: false
     baud: 9600
-
 network:
   telemetry_stream: true
   sim_to_real_sync: false
-  allow_remote_override: true
-
+  allow_remote_override: false
 rcan_protocol:
   port: 8000
-  capabilities: [status, nav, teleop, chat]
+  capabilities:
+  - status
+  - nav
+  - teleop
+  - chat
   enable_mdns: false
   enable_jwt: false
-
 notes:
-  setup: >
-    1. Install mBlock 5 or Arduino IDE with Makeblock libraries.
-    2. Flash the "Makeblock default firmware" (Scratch firmware) to the mCore.
-       This firmware accepts the serial command protocol OpenCastor uses.
-    3. pip install pyserial makeblock (community Python library)
-    4. castor run --config makeblock_mbot.rcan.yaml
-  second_hand_tips: >
-    Check that the USB-B port on the mCore board is not damaged (very common).
-    The Orion board is the older larger version; mCore is the integrated newer one.
-    Both are compatible with this preset. BLE 2.4G modules can be missing — USB
-    serial always works as a fallback.
+  setup: "1. Install mBlock 5 or Arduino IDE with Makeblock libraries. 2. Flash the\
+    \ \"Makeblock default firmware\" (Scratch firmware) to the mCore.\n   This firmware\
+    \ accepts the serial command protocol OpenCastor uses.\n3. pip install pyserial\
+    \ makeblock (community Python library) 4. castor run --config makeblock_mbot.rcan.yaml\n"
+  second_hand_tips: 'Check that the USB-B port on the mCore board is not damaged (very
+    common). The Orion board is the older larger version; mCore is the integrated
+    newer one. Both are compatible with this preset. BLE 2.4G modules can be missing
+    — USB serial always works as a fallback.
+
+    '
+tiered_brain:
+  fast_provider: ollama
+  fast_model: gemma3:1b
+  slow_provider: anthropic
+  slow_model: claude-sonnet-4-5
+  planner_interval: 10
+agent_roster:
+- id: nav_specialist
+  provider: ollama
+  model: gemma3:4b
+  scope: nav
+- id: chat_specialist
+  provider: anthropic
+  model: claude-sonnet-4-5
+  scope: chat
+geofence:
+  enabled: false
+  boundary:
+    type: none
+reactive:
+  min_obstacle_m: 0.3
+  fallback_provider: ollama
+cameras:
+  main:
+    type: http
+    url: http://127.0.0.1:8765/snapshot
+safety:
+  local_safety_wins: true
+  emergency_stop_distance: 0.4
+  estop_bypass_rate_limit: true
+  watchdog:
+    timeout_s: 10
+hardware_safety:
+  physical_estop: false
+  hardware_watchdog_mcu: false
+p66:
+  enabled: true
+  loa_enforcement: true
+  consent_required: true
+  manifest:
+    estop_qos_bypass: true
+consent:
+  required: true
+  mode: explicit
+  scope_threshold: control
+security:
+  replay_protection:
+    enabled: true
+    window_s: 30
+  signing:
+    enabled: false
+    algorithm: Ed25519
+loa:
+  enforcement: true
+  min_loa_for_control: 1
+human_identity:
+  loa_required: 1
+transport:
+  supported:
+  - http
+  - mqtt
+  constrained_enabled: false
+multimodal:
+  enabled: true
+  max_chunk_bytes: 1048576
+offline:
+  enabled: true
+  fallback_provider: ollama
+r2ram:
+  scopes:
+  - discover
+  - status
+  - chat
+  - control
+  - safety
+federation:
+  enabled: true
+  consent_bridge: false

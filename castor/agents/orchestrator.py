@@ -26,6 +26,10 @@ from typing import Any, Optional
 from .base import BaseAgent
 from .shared_state import Intent, SharedState
 
+# Lazy import guard: SwarmConsensus is optional (fleet configs only).
+# We type-hint as Any to avoid a hard dependency at module level.
+_SwarmConsensusType = Any
+
 logger = logging.getLogger("OpenCastor.Agents.Orchestrator")
 
 
@@ -53,9 +57,11 @@ class OrchestratorAgent(BaseAgent):
         self,
         config: Optional[dict[str, Any]] = None,
         shared_state: Optional[SharedState] = None,
+        consensus: Optional[_SwarmConsensusType] = None,
     ):
         super().__init__(config)
         self._state = shared_state or SharedState()
+        self._consensus = consensus  # Optional SwarmConsensus for delegated-intent recording
         self._tick = 0
         self._last_action: Optional[dict[str, Any]] = None
         self._log: list[dict[str, Any]] = []  # last 100 delegation entries
@@ -89,24 +95,84 @@ class OrchestratorAgent(BaseAgent):
         deadline_ts: Optional[float] = None,
         safety_class: str = "normal",
         owner: str = "system",
+        scope: str = "chat",
     ) -> dict[str, Any]:
-        """Create and enqueue a new orchestration intent."""
+        """Create and enqueue a new orchestration intent.
+
+        Args:
+            goal: Human-readable task objective.
+            priority: Higher = more urgent.
+            deadline_ts: Optional unix timestamp deadline.
+            safety_class: Safety classification string.
+            owner: Issuer/owner identifier.
+            scope: RCAN scope of the originating command (default ``"chat"``).
+                Sub-agents must not exceed this scope level.
+        """
         intent = Intent(
             goal=goal,
             priority=priority,
             deadline_ts=deadline_ts,
             safety_class=safety_class,
             owner=owner,
+            scope=scope,
         )
         result = self._state.add_intent(intent)
         logger.info(
-            "Intent queued: %s (priority=%s safety=%s preempted=%s)",
+            "Intent queued: %s (priority=%s safety=%s scope=%s preempted=%s)",
             intent.intent_id,
             priority,
             safety_class,
+            scope,
             result.get("preempted"),
         )
         return {"intent": intent.to_dict(), **result}
+
+    def _dispatch_delegated_intent(
+        self,
+        intent: Intent,
+        action: str,
+        params: Optional[dict[str, Any]] = None,
+        assigned_robot_id: str = "local",
+    ) -> Optional[Any]:
+        """Record a delegated intent in SwarmConsensus with scope enforcement.
+
+        Only active when a ``SwarmConsensus`` instance was provided at
+        construction time.  Passes ``originating_scope=intent.scope`` so that
+        RCAN scope non-escalation (§4.2) is enforced inside consensus.
+
+        Args:
+            intent: The orchestration intent being delegated.
+            action: Action name / type string.
+            params: Optional action parameters.
+            assigned_robot_id: Target robot/agent id.
+
+        Returns:
+            The recorded ``DelegatedIntent`` or ``None`` when no consensus
+            layer is configured.
+        """
+        if self._consensus is None:
+            return None
+
+        try:
+            from castor.swarm.consensus import DelegatedIntent
+        except ImportError:
+            return None
+
+        delegated = DelegatedIntent(
+            intent_id=intent.intent_id,
+            task_id=intent.intent_id,
+            origin_robot_id=intent.owner,
+            assigned_robot_id=assigned_robot_id,
+            action=action,
+            params=params or {},
+            policy_constraints={"scope": intent.scope},
+            issued_at=time.time(),
+            ttl_s=120.0,
+        )
+        return self._consensus.record_delegated_intent(
+            delegated,
+            originating_scope=intent.scope,
+        )
 
     def list_intents(self) -> list[dict[str, Any]]:
         """List active and queued intents."""
@@ -181,6 +247,16 @@ class OrchestratorAgent(BaseAgent):
         self._tick += 1
         action = self._resolve(context)
         self._last_action = action
+
+        # Propagate scope from the active intent into the action dict so downstream
+        # agents (e.g. GuardianAgent) can enforce scope constraints without needing
+        # to re-read SharedState.
+        current_intent = context.get("current_intent") or {}
+        if isinstance(current_intent, dict) and "scope" in current_intent:
+            action.setdefault("scope", current_intent["scope"])
+        # Fall back to sensor_data scope (set by TieredBrain from RCAN command context)
+        if "scope" not in action:
+            action["scope"] = context.get("scope", "chat")
 
         self._log.append({"tick": self._tick, "ts": time.time(), "action": action})
         if len(self._log) > 100:

@@ -24,6 +24,8 @@ SERVICE_NAME = "castor-gateway"
 SERVICE_PATH = Path(f"/etc/systemd/system/{SERVICE_NAME}.service")
 DASHBOARD_SERVICE_NAME = "castor-dashboard"
 DASHBOARD_SERVICE_PATH = Path(f"/etc/systemd/system/{DASHBOARD_SERVICE_NAME}.service")
+ATTESTATION_SERVICE_NAME = "opencastor-attestation"
+ATTESTATION_SERVICE_PATH = Path(f"/etc/systemd/system/{ATTESTATION_SERVICE_NAME}.service")
 SECURITY_INSTALL_PATH = Path("/etc/opencastor/security")
 
 
@@ -502,6 +504,140 @@ def disable_dashboard() -> dict:
 
     _run(["sudo", "systemctl", "daemon-reload"])
     return {"ok": True, "removed": removed, "message": "Dashboard service stopped and disabled"}
+
+
+# ── Attestation service ──────────────────────────────────────────────────
+
+
+def generate_attestation_service_file(
+    config_path: str,
+    user: Optional[str] = None,
+    python_path: Optional[str] = None,
+    working_dir: Optional[str] = None,
+) -> str:
+    """Generate the opencastor-attestation.service content.
+
+    Args:
+        config_path: Path to the RCAN config file.
+        user:        System user. Defaults to current user.
+        python_path: Python interpreter path. Auto-detected if omitted.
+        working_dir: Working directory. Defaults to config file's parent.
+    """
+    user = user or os.environ.get("USER", "pi")
+    python_bin = python_path or f"{_systemd_path(sys.prefix).rstrip('/')}/bin/python"
+    config_abs = _systemd_path(config_path)
+    if working_dir is None:
+        working_dir = str(PurePosixPath(config_abs).parent)
+    else:
+        working_dir = _systemd_path(working_dir)
+
+    # Try loading from template file first
+    try:
+        from castor.templates import load_template
+
+        tmpl = load_template("systemd/opencastor-attestation.service.tmpl")
+        return tmpl.format(
+            user=user,
+            python=python_bin,
+            config=config_abs,
+            working_dir=working_dir,
+        )
+    except Exception:
+        pass
+
+    # Inline fallback
+    return f"""\
+[Unit]
+Description=OpenCastor Software Attestation
+Before=castor-gateway.service opencastor.service
+After=network.target
+
+[Service]
+Type=oneshot
+User={user}
+WorkingDirectory={working_dir}
+ExecStartPre=/bin/mkdir -p /run/opencastor
+ExecStart={python_bin} -m castor.attestation_generator --config {config_abs} --out /run/opencastor/attestation.json
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier={ATTESTATION_SERVICE_NAME}
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+
+def enable_attestation_service(
+    config_path: str,
+    user: Optional[str] = None,
+    python_path: Optional[str] = None,
+    working_dir: Optional[str] = None,
+) -> dict:
+    """Install, enable, and start the attestation service.
+
+    Returns a status dict with ``ok``, ``message``, and ``service_path``.
+    """
+    service_content = generate_attestation_service_file(config_path, user, python_path, working_dir)
+
+    try:
+        ATTESTATION_SERVICE_PATH.write_text(service_content)
+    except PermissionError:
+        proc = subprocess.run(
+            ["sudo", "tee", str(ATTESTATION_SERVICE_PATH)],
+            input=service_content.encode(),
+            capture_output=True,
+        )
+        if proc.returncode != 0:
+            return {
+                "ok": False,
+                "message": f"Could not write attestation service file: {proc.stderr.decode()}",
+            }
+
+    _run(["sudo", "systemctl", "daemon-reload"])
+    _run(["sudo", "systemctl", "enable", ATTESTATION_SERVICE_NAME])
+    result = _run(["sudo", "systemctl", "start", ATTESTATION_SERVICE_NAME])
+
+    return {
+        "ok": result.returncode == 0,
+        "message": "Attestation service enabled and started"
+        if result.returncode == 0
+        else result.stderr.decode(),
+        "service_path": str(ATTESTATION_SERVICE_PATH),
+    }
+
+
+def status_attestation_service() -> dict:
+    """Return status of the attestation service."""
+    if not shutil.which("systemctl"):
+        return {"available": False, "message": "systemctl not found"}
+
+    installed = ATTESTATION_SERVICE_PATH.exists()
+
+    result = _run(
+        [
+            "systemctl",
+            "show",
+            ATTESTATION_SERVICE_NAME,
+            "--no-pager",
+            "--property=ActiveState,SubState,Result",
+        ],
+        check=False,
+    )
+
+    props: dict[str, str] = {}
+    for line in result.stdout.decode().splitlines():
+        if "=" in line:
+            k, _, v = line.partition("=")
+            props[k.strip()] = v.strip()
+
+    return {
+        "available": True,
+        "installed": installed,
+        "active_state": props.get("ActiveState", "unknown"),
+        "result": props.get("Result", "unknown"),
+        "service_path": str(ATTESTATION_SERVICE_PATH) if installed else None,
+    }
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
