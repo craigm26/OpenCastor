@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-02-23T07:24:10.431476",
+  "config_path": "bob.rcan.yaml",
+  "error": "Traceback (most recent call last):\n  File \"/home/craigm26/opencastor/castor/main.py\", line 1323, in main\n    speaker.say(thought.raw_text[:120])\n    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/craigm26/opencastor/castor/main.py\", line 465, in say\n    threading.Thread(target=self._speak, args=(text,), daemon=True).start()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/usr/lib/python3.13/threading.py\", line 975, in start\n    _start_joinable_thread(self._bootstrap, handle=self._handle,\n    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                           daemon=self.daemon)\n                           ^^^^^^^^^^^^^^^^^^^\nRuntimeError: can't start new thread\n",
+  "last_thought": null,
+  "last_action": null,
+  "loop_count": 0,
+  "uptime_seconds": 0.01,
+  "python_version": "3.13.5 (main, Jun 25 2025, 18:55:22) [GCC 14.2.0]"
+}

@@ -83,6 +83,26 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           </div>
         </div>
 
+        <!-- v2026.3.26.0 -->
+        <div class="changelog-release reveal" id="v2026.3.26.0">
+          <div class="release-header">
+            <span class="release-version">v2026.3.26.0</span>
+            <span class="release-badge badge-feature">RCAN v1.10</span>
+            <span class="release-date">March 26, 2026</span>
+          </div>
+          <div class="release-body">
+            <h3>RCAN v1.10 — Competition Protocol (types 37–40)</h3>
+            <ul>
+              <li><strong>RCAN v1.10 canonical MessageType table</strong> — 40 message types. Added COMPETITION_ENTER (37), COMPETITION_SCORE (38), SEASON_STANDING (39), PERSONAL_RESEARCH_RESULT (40).</li>
+              <li><strong>Competition protocol</strong> — robots can announce competition entry, publish verified scores, receive fleet-broadcast season standings, and log private personal research results.</li>
+              <li><strong>rcan-py v0.9.0</strong> — <code>rcan/competition.py</code>, 32 new tests, 663 total. SPEC_VERSION 1.10.0.</li>
+              <li><strong>rcan-ts v0.9.0</strong> — <code>src/competition.ts</code>, 28 new tests, 499 total. SPEC_VERSION 1.10.0.</li>
+              <li><strong>rcan-spec</strong> — <code>competitions.astro</code> spec page with full protocol, payload schemas, and wire examples.</li>
+              <li>OpenCastor runtime accepts <code>rcan_version: "1.10" / "1.10.0"</code> in robot configs.</li>
+            </ul>
+          </div>
+        </div>
+
         <!-- v2026.3.20.4 -->
         <div class="changelog-release reveal" id="v2026.3.20.4">
           <div class="release-header">
