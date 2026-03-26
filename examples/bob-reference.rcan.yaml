@@ -1,0 +1,60 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# OpenCastor v2026.3.26.1 — Reference robot config (RCAN v2.1)
+# Copy this file and customize for your robot.
+#
+# Registration: Bob (RRN-000000000001) — fully registered, L5 compliant
+# Generated:    2026-03-26
+# ─────────────────────────────────────────────────────────────────────────────
+
+rcan_version: '2.1'
+
+# EU AI Act compliance — required for RCAN v2.1 L5
+authority_handler_enabled: true       # AUTHORITY_ACCESS (41) handler
+audit_retention_days: 3650            # 10yr — EU AI Act Art. 12
+
+metadata:
+  robot_name: bob
+  manufacturer: craigm26
+  model: opencastor-rpi5-hailo
+  version: '2026.3.26.1'
+  rrn: RRN-000000000001
+  rrn_uri: rrn://craigm26/robot/opencastor-rpi5-hailo/bob-001
+
+port: 8000
+host: 0.0.0.0
+
+safety:
+  local_safety_wins: true
+  min_obstacle_m: 0.3
+  latency_budget_ms: 3000
+  watchdog:
+    timeout_s: 10
+
+hitl_gates:
+  - scope: destructive
+    action_types: [delete, irreversible]
+    require_auth: true
+    on_fail: block
+
+capabilities:
+  - status
+  - nav
+  - teleop
+  - vision
+  - chat
+
+brain:
+  provider: google
+  model: gemini-2.5-flash
+  confidence_gates:
+    - scope: control
+      min_confidence: 0.75
+      on_fail: block
+
+hardware_safety:
+  hardware_estop: false
+  hardware_watchdog: false
+
+physics:
+  type: ackermann
+  dof: 2
