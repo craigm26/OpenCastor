@@ -177,7 +177,7 @@ class TestMessageTypes:
         # RCAN v1.3 §19 adds INVOKE (11), INVOKE_RESULT (12), INVOKE_CANCEL (15)
         # RCAN v1.3 §21 adds REGISTRY_REGISTER (13), REGISTRY_RESOLVE (14)
         # RCAN v1.3 §21 adds REGISTRY_REGISTER_RESULT (16), REGISTRY_RESOLVE_RESULT (17)
-        assert len(MessageType) == 22  # v1.5 adds TRANSPARENCY(18), HANDOFF(19), CONSENT_*(20-22)
+        assert len(MessageType) == 44  # RCAN v2.1: types 1-44 (41-44 added in v2.1)
         assert MessageType.DISCOVER == 1
         assert MessageType.ERROR == 8
         assert MessageType.AUTHORIZE == 9
