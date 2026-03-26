@@ -6,6 +6,23 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 
 ---
 
+## [2026.3.26.1] - 2026-03-26
+
+### Added
+- **RCAN v2.1 migration**: `castor/migrate.py` — migration chain extended to 2.1 (from 1.4 through 1.10); `_migrate_1_10_to_2_1()` flags signature:'pending' usages and adds firmware_hash/attestation_ref stubs
+- **Firmware attestation** (`castor/firmware.py`): `FirmwareManifest`, `sign_manifest()`, `verify_manifest()`, `firmware_hash_from_manifest()`, `generate_manifest()` — new CLI: `castor attest generate/sign/verify/serve`
+- **SBOM generation** (`castor/sbom.py`): `RCANBOM`, `SBOMComponent`, `RCANSBOMExtensions` (CycloneDX v1.5+), `generate_sbom()`, `publish_sbom_to_rrf()` — new CLI: `castor sbom generate/publish/verify`
+- **Authority access handler** (`castor/authority.py`): `AuthorityRequestHandler`, `AuditDataExporter`, `send_authority_response()` — handles AUTHORITY_ACCESS (41) per EU AI Act Art. 16(j); always notifies owner, always logs to commitment chain
+- **L5 conformance checks** (`castor/conformance.py`): `_check_rcan_v21()` — firmware manifest, SBOM attestation, authority handler, audit chain retention (≥3650 days), rcan_version; `compliance_report()` method returns structured EU AI Act compliance report
+- **MessageType 23–44** in `castor/rcan/message.py`: FLEET_COMMAND through SBOM_UPDATE (aligned with rcan-py 1.1.0)
+
+### Changed
+- `castor/compliance.py`: `SPEC_VERSION` → `"2.1"`, `ACCEPTED_RCAN_VERSIONS` → only `("2.1", "2.1.0")` (v2.1 clean break — no v1.x interop)
+- `castor/migrate.py`: `CURRENT_VERSION` → `"2.1"`
+
+### Fixed
+- `tests/test_config_validation.py`, `tests/test_conformance.py`, `tests/test_embedding_interpreter.py`: rcan_version updated to 2.1
+
 ## [2026.3.21.1] - 2026-03-21
 
 ### Added

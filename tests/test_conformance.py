@@ -20,7 +20,7 @@ VALID_UUID4 = "550e8400-e29b-41d4-a716-446655440000"
 def make_valid_config() -> dict:
     """Return a complete, conformant RCAN config dict."""
     return {
-        "rcan_version": "1.0.0-alpha",
+        "rcan_version": "2.1",
         "metadata": {
             "robot_name": "TestBot",
             "robot_uuid": VALID_UUID4,
@@ -969,6 +969,9 @@ class TestCmdValidate:
         # Ensure v1.5 RRN check passes (needs metadata.rrn in canonical format)
         cfg.setdefault("metadata", {})["rrn"] = "RRN-000000000001"
         cfg.setdefault("metadata", {})["rrn_uri"] = "rrn://test/robot/testbot/001"
+        # v2.1: mark authority handler as enabled and set retention so L5 checks produce warns, not fails
+        cfg["authority_handler_enabled"] = True
+        cfg["audit_retention_days"] = 3650
         # Remove geofence and tiered_brain to force warns (not fails)
         cfg.pop("geofence", None)
         cfg.pop("tiered_brain", None)

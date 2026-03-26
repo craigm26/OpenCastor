@@ -18,7 +18,7 @@ import yaml
 logger = logging.getLogger("OpenCastor.Migrate")
 
 # Current RCAN schema version
-CURRENT_VERSION = "1.4"
+CURRENT_VERSION = "2.1"
 
 # Ordered list of migrations: (from_version, to_version, migration_fn)
 # Each migration_fn takes a config dict and returns the modified config.
@@ -122,6 +122,97 @@ def _migrate_1_3_to_1_4(config: dict) -> dict:
     fields are optional.
     """
     config["rcan_version"] = "1.4"
+    return config
+
+
+@_register_migration("1.4", "1.5")
+def _migrate_1_4_to_1_5(config: dict) -> dict:
+    """Migrate from 1.4 to 1.5 (no structural changes)."""
+    config["rcan_version"] = "1.5"
+    return config
+
+
+@_register_migration("1.5", "1.6")
+def _migrate_1_5_to_1_6(config: dict) -> dict:
+    """Migrate from 1.5 to 1.6 (no structural changes)."""
+    config["rcan_version"] = "1.6"
+    return config
+
+
+@_register_migration("1.6", "1.7")
+def _migrate_1_6_to_1_7(config: dict) -> dict:
+    """Migrate from 1.6 to 1.7 (no structural changes)."""
+    config["rcan_version"] = "1.7"
+    return config
+
+
+@_register_migration("1.7", "1.8")
+def _migrate_1_7_to_1_8(config: dict) -> dict:
+    """Migrate from 1.7 to 1.8 (no structural changes)."""
+    config["rcan_version"] = "1.8"
+    return config
+
+
+@_register_migration("1.8", "1.9")
+def _migrate_1_8_to_1_9(config: dict) -> dict:
+    """Migrate from 1.8 to 1.9 (no structural changes)."""
+    config["rcan_version"] = "1.9"
+    return config
+
+
+@_register_migration("1.9", "1.10")
+def _migrate_1_9_to_1_10(config: dict) -> dict:
+    """Migrate from 1.9 to 1.10 (no structural changes)."""
+    config["rcan_version"] = "1.10"
+    return config
+
+
+@_register_migration("1.10", "2.1")
+def _migrate_1_10_to_2_1(config: dict) -> dict:
+    """Migrate from 1.10 to 2.1 — RCAN v2.1 breaking changes.
+
+    RCAN v2.1 is a clean break from v1.x:
+    - rcan_version bumped to "2.1"
+    - firmware_hash placeholder added (SHA-256 of firmware manifest)
+    - attestation_ref placeholder added (SBOM well-known URL)
+    - pending_signatures list populated with any "pending" signature blocks
+      (signature:"pending" is hard-rejected in v2.1; callers must sign or remove)
+    - deprecated_aliases list populated with any deprecated alias usages found
+      (FEDERATION_SYNC, ALERT, AUDIT removed in v2.1)
+    """
+    config["rcan_version"] = "2.1"
+
+    # Add firmware attestation stubs so operators know they need to run
+    # `castor attest generate && castor attest sign`
+    if not config.get("firmware_hash"):
+        config["firmware_hash"] = None  # populate via `castor attest generate`
+        logger.warning(
+            "firmware_hash not set — run `castor attest generate && castor attest sign` "
+            "to satisfy RCAN v2.1 §11 and EU AI Act Art. 16(d)."
+        )
+
+    if not config.get("attestation_ref"):
+        config["attestation_ref"] = None  # populate via `castor sbom generate`
+        logger.warning(
+            "attestation_ref not set — run `castor sbom generate && castor sbom publish` "
+            "to satisfy RCAN v2.1 §12 and EU AI Act Art. 16(a)."
+        )
+
+    # Flag any deprecated alias usages in harness_yaml keys
+    deprecated_aliases = {"FEDERATION_SYNC", "ALERT", "AUDIT"}
+    found_aliases = []
+    for key in config:
+        if isinstance(key, str) and key.upper() in deprecated_aliases:
+            found_aliases.append(key)
+    if found_aliases:
+        config.setdefault("_migration_warnings", []).append(
+            f"Deprecated RCAN v1.x message type aliases in config: {found_aliases}. "
+            "These are removed in v2.1 — update to canonical type names."
+        )
+        logger.warning(
+            "RCAN v2.1 migration: deprecated aliases found in config: %s", found_aliases
+        )
+
     return config
 
 

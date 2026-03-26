@@ -72,6 +72,28 @@ class MessageType(IntEnum):
     CONSENT_REQUEST = 20  # R2RAM §5: request cross-owner robot-to-robot authorization
     CONSENT_GRANT = 21  # R2RAM §5: grant cross-owner authorization with scopes
     CONSENT_DENY = 22  # R2RAM §5: deny cross-owner authorization request
+    FLEET_COMMAND = 23  # Fleet-level command from orchestrator (v2.1)
+    SUBSCRIBE = 24  # Subscribe to a robot event stream
+    UNSUBSCRIBE = 25  # Unsubscribe from a robot event stream
+    FAULT_REPORT = 26  # Fault report from robot to registry
+    KEY_ROTATION = 27  # Ed25519 key rotation notification
+    COMMAND_COMMIT = 28  # Commit a pending command (HiTL confirmation)
+    SENSOR_DATA = 29  # Sensor data push from robot
+    TRAINING_CONSENT_REQUEST = 30  # Request consent for training data collection
+    TRAINING_CONSENT_GRANT = 31  # Grant training data consent
+    TRAINING_CONSENT_DENY = 32  # Deny training data consent
+    CONTRIBUTE_REQUEST = 33  # Idle compute contribution offer (v1.7)
+    CONTRIBUTE_RESULT = 34  # Contribution task result
+    CONTRIBUTE_CANCEL = 35  # Cancel an active contribution
+    TRAINING_DATA = 36  # Training data payload
+    COMPETITION_ENTER = 37  # Competition protocol — enter event (v1.10)
+    COMPETITION_SCORE = 38  # Competition protocol — score report (v1.10)
+    SEASON_STANDING = 39  # Competition protocol — season standings (v1.10)
+    PERSONAL_RESEARCH_RESULT = 40  # Research result from personal compute (v1.10)
+    AUTHORITY_ACCESS = 41  # EU AI Act §16(j) authority audit request (v2.1)
+    AUTHORITY_RESPONSE = 42  # Response to authority audit request (v2.1)
+    FIRMWARE_ATTESTATION = 43  # Firmware manifest attestation broadcast (v2.1)
+    SBOM_UPDATE = 44  # SBOM update notification (v2.1)
 
 
 class Priority(IntEnum):
