@@ -1,0 +1,190 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="RCAN v2.1 and OpenCastor v2026.3.26.1 — Released Today"
+  description="RCAN v2.1 ships today with signed firmware manifests, CycloneDX SBOM, M2M_TRUSTED fleet orchestration, EU AI Act authority access, and L5 conformance. OpenCastor, rcan-py, and rcan-ts all updated."
+  ogUrl="https://opencastor.com/blog/rcan-v21-release"
+>
+
+<main>
+  <!-- HERO -->
+  <section class="page-hero" style="padding-bottom:24px">
+    <p class="section-label reveal">Release</p>
+    <h1 class="reveal reveal-d1" style="max-width:760px;margin:0 auto">RCAN v2.1 is Here:<br><span class="gradient-text">Firmware Attestation, EU AI Act Compliance, and Fleet Orchestration</span></h1>
+    <p class="reveal reveal-d2" style="font-size:0.9rem;color:var(--text-muted);margin-top:16px">March 26, 2026 &middot; Craig Merry &middot; ContinuonAI</p>
+  </section>
+
+  <section class="section" style="padding-top:0">
+  <div class="container" style="max-width:780px">
+
+  <p style="font-size:1.1rem;color:var(--text-muted);margin-bottom:2rem">
+    Today we're shipping RCAN v2.1 — the first major version of the Robot Communication and Autonomy Network protocol — alongside rcan-py 1.1.0, rcan-ts 1.1.0, OpenCastor v2026.3.26.1, and the RRF v2.1 API backend. This is a clean break from v1.x, with no version negotiation and no backward compat. Here's what changed, why it matters, and what you need to do.
+  </p>
+
+  <hr style="border-color:rgba(255,255,255,0.08);margin:2rem 0" />
+
+  <h2>What's in RCAN v2.1</h2>
+
+  <h3>1. Signed Firmware Manifests (§11)</h3>
+  <p>
+    Every RCAN v2.1 robot must be able to prove what software is running on it. The firmware manifest is a signed JSON document listing every installed component and its SHA-256 hash. It's published at <code>/.well-known/rcan-firmware-manifest.json</code> and its hash travels in every message envelope as field 13 (<code>firmware_hash</code>).
+  </p>
+  <pre style="background:var(--bg-alt);border-radius:8px;padding:1rem;font-size:0.8rem;overflow-x:auto"><code>castor attest generate   # scans installed packages
+castor attest sign --key robot-private.pem
+castor attest verify --key robot-public.pem</code></pre>
+  <p>This isn't just cryptographic ceremony. It answers the question: <em>is this robot running what it claims to be running?</em> When a fleet orchestrator commands 50 robots, it can verify each one before the first packet is sent.</p>
+
+  <h3>2. CycloneDX SBOM + RRF Countersigning (§12)</h3>
+  <p>
+    The Software Bill of Materials tells you where every dependency came from. We generate CycloneDX v1.5 SBOMs with RCAN extensions (<code>x-rcan.rrn</code>, <code>x-rcan.spec_version</code>) and push them to the Robot Registry Foundation for countersigning. The RRF countersig is the chain-of-custody receipt.
+  </p>
+  <pre style="background:var(--bg-alt);border-radius:8px;padding:1rem;font-size:0.8rem;overflow-x:auto"><code>castor sbom generate
+castor sbom publish --token &lt;rrf-token&gt;</code></pre>
+  <p>The SBOM lives at <code>/.well-known/rcan-sbom.json</code> and the URL travels in envelope field 14 (<code>attestation_ref</code>). Any party — regulators, partners, auditors — can independently verify the supply chain at any time.</p>
+
+  <h3>3. M2M_TRUSTED Fleet Orchestration (§2.9)</h3>
+  <p>
+    Multi-robot scenarios need a way for an orchestrator to command multiple robots simultaneously. The old approach — giving the orchestrator a CREATOR-level token for each robot — doesn't scale and has no revocation path.
+  </p>
+  <p>
+    M2M_TRUSTED (role level 6) solves this: the Robot Registry Foundation issues short-lived JWTs that name an explicit <code>fleet_rrns</code> list. Each token requires <strong>multi-owner consent</strong> — every robot's CREATOR must agree before a token is issued. Any CREATOR can revoke at any time. Robots poll the RRF revocation list every ≤ 60 seconds; revoked sessions are terminated within that window.
+  </p>
+  <pre style="background:var(--bg-alt);border-radius:8px;padding:1rem;font-size:0.8rem;overflow-x:auto"><code>// M2M_TRUSTED JWT claims
+{
+  "sub":         "orchestrator:my-fleet-brain",
+  "iss":         "rrf.rcan.dev",
+  "rcan_role":   "m2m_trusted",
+  "rcan_scopes": ["fleet.trusted"],
+  "fleet_rrns":  ["RRN-000000000001", "RRN-000000000005"],
+  "exp":         86400,
+  "rrf_sig":     "&lt;Ed25519 base64url&gt;"
+}</code></pre>
+
+  <h3>4. Authority Access — EU AI Act Art. 16(j) (§13)</h3>
+  <p>
+    The EU AI Act requires high-risk AI systems to cooperate with national competent authorities on demand. RCAN v2.1 implements this at the protocol level with two new message types: <code>AUTHORITY_ACCESS (41)</code> and <code>AUTHORITY_RESPONSE (42)</code>.
+  </p>
+  <p>
+    When an authority sends an AUTHORITY_ACCESS request, the robot immediately notifies the owner (regardless of validity), logs the interaction to the commitment chain, validates the authority's RRF-registered token, and responds with the requested audit data — commitment chain, transparency records, SBOM URL, firmware manifest URL. The entire flow is verifiable and auditable after the fact.
+  </p>
+  <p>The EU AI Act's August 2, 2026 deadline for high-risk AI systems means this isn't optional. Robots running OpenCastor v2026.3.26.1 satisfy the protocol-level requirements now.</p>
+
+  <h3>5. L5 Conformance — Supply Chain (§L5)</h3>
+  <p>RCAN now has five conformance levels. L5 is new:</p>
+  <ul>
+    <li><strong>L1</strong> — Basic RCAN messaging</li>
+    <li><strong>L2</strong> — Signed RURI, RBAC, replay protection</li>
+    <li><strong>L3</strong> — ESTOP QoS2, federation, multi-modal</li>
+    <li><strong>L4</strong> — Commitment chain, transparency, HiTL</li>
+    <li><strong>L5 (new)</strong> — Firmware attestation, SBOM, authority access, 10yr audit retention</li>
+  </ul>
+  <pre style="background:var(--bg-alt);border-radius:8px;padding:1rem;font-size:0.8rem;overflow-x:auto"><code>castor doctor        # includes L5 checks
+castor conformance   # structured JSON with EU AI Act article mapping</code></pre>
+
+  <h3>6. Role Rename and Clean Break</h3>
+  <p>
+    The old <code>LevelOfAssurance</code> enum (ANONYMOUS/EMAIL_VERIFIED/HARDWARE_TOKEN) is replaced by <code>Role</code> (GUEST/OPERATOR/CONTRIBUTOR/ADMIN/M2M_PEER/CREATOR/M2M_TRUSTED). <code>LevelOfAssurance</code> is kept as a backward-compat alias in both SDKs so existing code continues to import without changes, but the values are different — map your callsites before upgrading.
+  </p>
+  <p>
+    The deprecated message type aliases <code>FEDERATION_SYNC</code>, <code>ALERT</code>, and <code>AUDIT</code> are removed in rcan-ts. Update to the canonical names before upgrading.
+  </p>
+
+  <hr style="border-color:rgba(255,255,255,0.08);margin:2rem 0" />
+
+  <h2>What's Shipping Today</h2>
+  <div style="overflow-x:auto">
+  <table style="width:100%;font-size:0.85rem;border-collapse:collapse">
+    <thead>
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.1)">
+        <th style="text-align:left;padding:8px 12px;color:var(--text-muted)">Package</th>
+        <th style="text-align:left;padding:8px 12px;color:var(--text-muted)">Version</th>
+        <th style="text-align:left;padding:8px 12px;color:var(--text-muted)">Tests</th>
+        <th style="text-align:left;padding:8px 12px;color:var(--text-muted)">Install</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+        <td style="padding:8px 12px;font-weight:600">rcan-py</td>
+        <td style="padding:8px 12px;font-family:monospace">1.1.0</td>
+        <td style="padding:8px 12px;color:var(--accent)">666 ✓</td>
+        <td style="padding:8px 12px;font-family:monospace;font-size:0.75rem">pip install rcan==1.1.0</td>
+      </tr>
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+        <td style="padding:8px 12px;font-weight:600">rcan-ts</td>
+        <td style="padding:8px 12px;font-family:monospace">1.1.0</td>
+        <td style="padding:8px 12px;color:var(--accent)">531 ✓</td>
+        <td style="padding:8px 12px;font-family:monospace;font-size:0.75rem">npm i @continuonai/rcan-ts@1.1.0</td>
+      </tr>
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+        <td style="padding:8px 12px;font-weight:600">OpenCastor</td>
+        <td style="padding:8px 12px;font-family:monospace">v2026.3.26.1</td>
+        <td style="padding:8px 12px;color:var(--accent)">2600 ✓</td>
+        <td style="padding:8px 12px;font-family:monospace;font-size:0.75rem">git pull + pip install -e .</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px;font-weight:600">RRF API</td>
+        <td style="padding:8px 12px;font-family:monospace">v2.1.0</td>
+        <td style="padding:8px 12px;color:var(--accent)">—</td>
+        <td style="padding:8px 12px;font-family:monospace;font-size:0.75rem">wrangler pages deploy</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <hr style="border-color:rgba(255,255,255,0.08);margin:2rem 0" />
+
+  <h2>Migration Guide</h2>
+
+  <h3>1. Update your config</h3>
+  <pre style="background:var(--bg-alt);border-radius:8px;padding:1rem;font-size:0.8rem;overflow-x:auto"><code>castor migrate --config robot.rcan.yaml
+# or edit manually: rcan_version: "2.1"</code></pre>
+
+  <h3>2. Generate and sign your firmware manifest</h3>
+  <pre style="background:var(--bg-alt);border-radius:8px;padding:1rem;font-size:0.8rem;overflow-x:auto"><code>castor attest generate
+castor attest sign --key /path/to/robot-private.pem</code></pre>
+
+  <h3>3. Generate and publish your SBOM</h3>
+  <pre style="background:var(--bg-alt);border-radius:8px;padding:1rem;font-size:0.8rem;overflow-x:auto"><code>castor sbom generate
+castor sbom publish --token &lt;your-rrf-token&gt;</code></pre>
+
+  <h3>4. Enable the authority handler</h3>
+  <pre style="background:var(--bg-alt);border-radius:8px;padding:1rem;font-size:0.8rem;overflow-x:auto"><code># robot.rcan.yaml
+authority_handler_enabled: true
+audit_retention_days: 3650</code></pre>
+
+  <h3>5. Check your L5 status</h3>
+  <pre style="background:var(--bg-alt);border-radius:8px;padding:1rem;font-size:0.8rem;overflow-x:auto"><code>castor doctor --json | jq '.rcan_v21'</code></pre>
+
+  <h3>SDK: update Role references</h3>
+  <pre style="background:var(--bg-alt);border-radius:8px;padding:1rem;font-size:0.8rem;overflow-x:auto"><code># Python — LevelOfAssurance is kept as an alias, but values changed
+# Old: LevelOfAssurance.HARDWARE_TOKEN → New: Role.ADMIN or Role.CREATOR
+from rcan.identity import Role
+print(Role.ADMIN)   # 3
+
+# TypeScript — FEDERATION_SYNC/ALERT/AUDIT removed
+# Replace with canonical names: FLEET_COMMAND, FAULT_REPORT, TRANSPARENCY</code></pre>
+
+  <hr style="border-color:rgba(255,255,255,0.08);margin:2rem 0" />
+
+  <h2>What's Next</h2>
+  <ul>
+    <li><strong>RRF production deploy</strong> — KV namespace + signing key provisioning</li>
+    <li><strong>RCAN Foundation</strong> — California 501(c)(3) formation (opencastor-ops #9)</li>
+    <li><strong>Certification program</strong> — Tier 1 self-attestation ($99/device) launching once foundation is formed</li>
+    <li><strong>opencastor-client</strong> — Attestation card and compliance report screen live in the web app</li>
+    <li><strong>ISO/TC 299 liaison</strong> — Formal liaison application to TC 299 (rcan-spec #177 documented the normative references)</li>
+  </ul>
+
+  <div style="margin-top:3rem;padding:1.5rem;background:var(--bg-alt);border-radius:12px;border:1px solid rgba(255,255,255,0.08)">
+    <p style="margin:0;font-size:0.9rem;color:var(--text-muted)">
+      <strong style="color:var(--text)">Questions?</strong> Open an issue on <a href="https://github.com/craigm26/OpenCastor" style="color:var(--accent)">GitHub</a>, join the <a href="https://discord.com/invite/clawd" style="color:var(--accent)">Discord</a>, or find the spec at <a href="https://rcan.dev/spec" style="color:var(--accent)">rcan.dev/spec</a>.
+    </p>
+  </div>
+
+  </div>
+  </section>
+</main>
+
+</BaseLayout>
