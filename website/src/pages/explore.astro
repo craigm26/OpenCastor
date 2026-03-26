@@ -9,6 +9,7 @@ import yaml from 'js-yaml';
 
 const communityDir = resolve(process.cwd(), '../config/community');
 const presetsDir = resolve(process.cwd(), '../config/presets');
+const officialDir = resolve(process.cwd(), '../config/official');
 
 function loadConfigs(dir: string, limit = 20) {
   try {
@@ -36,14 +37,45 @@ function loadConfigs(dir: string, limit = 20) {
           content: content.slice(0, 500),
           type: 'preset',
           source: 'community',
+          official: false,
         };
       });
   } catch { return []; }
 }
 
+function loadOfficialConfigs(dir: string) {
+  try {
+    return readdirSync(dir)
+      .filter(f => f.endsWith('.rcan.yaml'))
+      .map(filename => {
+        const content = readFileSync(`${dir}/${filename}`, 'utf8');
+        let parsed: any = {};
+        try { parsed = yaml.load(content) as any; } catch {}
+        const id = filename.replace('.rcan.yaml', '');
+        const isHarness = id === 'default-harness';
+        return {
+          id,
+          filename,
+          title: isHarness ? '⭐ Default Agent Harness' : `⭐ ${parsed?.metadata?.robot_name || id}`.replace(/-/g, ' '),
+          description: parsed?.metadata?.description || '',
+          rcan_version: parsed?.rcan_version || '1.6',
+          provider: parsed?.agent?.provider || 'google',
+          tags: [...(parsed?.metadata?.tags || []), 'official'],
+          hardware: 'any',
+          content: content.slice(0, 500),
+          type: isHarness ? 'harness' : 'skill',
+          source: 'official',
+          official: true,
+        };
+      });
+  } catch { return []; }
+}
+
+const officialConfigs = loadOfficialConfigs(officialDir);
 const communityConfigs = loadConfigs(communityDir);
 const presetConfigs = loadConfigs(presetsDir, 12);
-const allConfigs = [...communityConfigs, ...presetConfigs];
+// Official configs always first
+const allConfigs = [...officialConfigs, ...communityConfigs, ...presetConfigs];
 ---
 
 <BaseLayout
@@ -64,14 +96,15 @@ const allConfigs = [...communityConfigs, ...presetConfigs];
   </section>
 
   <!-- Filter bar -->
-  <section style="padding:0 0 16px;max-width:900px;margin:0 auto;padding-left:24px;padding-right:24px">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <span style="font-size:.85rem;color:var(--text-muted)">Filter:</span>
+  <section style="max-width:900px;margin:0 auto 32px;padding:0 24px">
+    <div class="explore-filter-bar reveal">
+      <span style="font-size:0.85rem;color:var(--text-muted);font-weight:600;letter-spacing:0.05em;text-transform:uppercase;">Filter:</span>
       <button class="explore-filter active" onclick="filterExplore('all')" data-filter="all">All</button>
-      <button class="explore-filter" onclick="filterExplore('preset')" data-filter="preset">Presets</button>
-      <button class="explore-filter" onclick="filterExplore('skill')" data-filter="skill">Skills</button>
+      <button class="explore-filter" onclick="filterExplore('official')" data-filter="official">⭐ Official</button>
       <button class="explore-filter" onclick="filterExplore('harness')" data-filter="harness">Harnesses</button>
-      <span style="margin-left:auto;font-size:.85rem;color:var(--text-muted)" id="config-count">{allConfigs.length} configs</span>
+      <button class="explore-filter" onclick="filterExplore('skill')" data-filter="skill">Skills</button>
+      <button class="explore-filter" onclick="filterExplore('preset')" data-filter="preset">Community</button>
+      <span style="margin-left:auto;font-size:0.85rem;color:var(--text-muted);background:rgba(255,255,255,0.05);padding:4px 10px;border-radius:20px;" id="config-count">{allConfigs.length} configs</span>
     </div>
   </section>
 
@@ -79,7 +112,7 @@ const allConfigs = [...communityConfigs, ...presetConfigs];
   <section style="max-width:900px;margin:0 auto;padding:0 24px 80px">
     <div class="explore-grid" id="explore-grid">
       {allConfigs.map(cfg => (
-        <div class="explore-card" data-type={cfg.type}>
+        <div class="explore-card" data-type={cfg.type} data-source={cfg.source} data-official={cfg.official ? 'true' : 'false'}>
           <div class="explore-card-header">
             <span class="explore-badge">{cfg.type}</span>
             <span class="explore-rcan">RCAN {cfg.rcan_version}</span>
@@ -106,7 +139,7 @@ const allConfigs = [...communityConfigs, ...presetConfigs];
     <div id="firebase-configs" style="margin-top:32px"></div>
 
     <!-- Upload CTA -->
-    <div class="explore-upload-cta" style="margin-top:48px;text-align:center;padding:32px;background:var(--surface-2);border-radius:12px;border:1px solid var(--border-color)">
+    <div class="explore-upload-cta" style="margin-top:48px;text-align:center;padding:32px;background:var(--bg-card);border-radius:12px;border:1px solid var(--border)">
       <h3 style="margin:0 0 8px">Share your robot config</h3>
       <p style="color:var(--text-muted);margin:0 0 16px;font-size:.95rem">
         Phase 2: instant upload via <code>castor share</code> coming soon.<br>
@@ -126,21 +159,25 @@ const allConfigs = [...communityConfigs, ...presetConfigs];
   gap: 20px;
 }
 .explore-card {
-  background: var(--surface-2, #1a1a2e);
-  border: 1px solid var(--border-color, rgba(255,255,255,.1));
+  background: var(--glass-bg, rgba(255,255,255,0.03));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 20px;
-  transition: border-color .2s, transform .2s;
+  padding: 24px;
+  transition: all 0.25s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 .explore-card:hover {
-  border-color: var(--accent, #0ea5e9);
-  transform: translateY(-2px);
+  border-color: rgba(14, 165, 233, 0.4);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 .explore-card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 .explore-badge {
   background: var(--accent, #0ea5e9);
@@ -182,7 +219,7 @@ const allConfigs = [...communityConfigs, ...presetConfigs];
 .explore-install {
   display: block;
   font-size: .72rem;
-  background: var(--surface-3, rgba(0,0,0,.3));
+  background: var(--surface);
   padding: 6px 8px;
   border-radius: 6px;
   overflow: hidden;
@@ -193,8 +230,8 @@ const allConfigs = [...communityConfigs, ...presetConfigs];
 .explore-card-footer { margin-top: 12px; }
 .explore-filter {
   background: transparent;
-  border: 1px solid var(--border-color, rgba(255,255,255,.15));
-  color: var(--text-muted, #aaa);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
   padding: 4px 12px;
   border-radius: 20px;
   font-size: .8rem;
@@ -220,7 +257,9 @@ function filterExplore(type) {
   const cards = document.querySelectorAll('.explore-card');
   let visible = 0;
   cards.forEach(card => {
-    const show = type === 'all' || card.dataset.type === type;
+    const show = type === 'all'
+      || card.dataset.type === type
+      || (type === 'official' && card.dataset.official === 'true');
     card.style.display = show ? '' : 'none';
     if (show) visible++;
   });

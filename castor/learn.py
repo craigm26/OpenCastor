@@ -107,7 +107,7 @@ def _lesson_rcan_config(has_rich, console):
         "    model: custom_rover         # Hardware model\n\n"
         "  agent:\n"
         "    provider: google            # AI brain (google/openai/anthropic)\n"
-        "    model: gemini-2.0-flash     # Specific model\n\n"
+        "    model: gemini-2.5-flash     # Specific model\n\n"
         "  drivers:\n"
         "    - protocol: pca9685_rc      # Motor controller type\n"
         "      i2c_address: 0x40         # Hardware address\n\n"

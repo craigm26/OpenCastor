@@ -1,0 +1,566 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="Contribute: Idle Compute for Science — OpenCastor"
+  description="Technical documentation for castor contribute — donate idle robot compute to climate modeling, biodiversity monitoring, protein folding, and humanitarian AI."
+  ogUrl="https://opencastor.com/docs/contribute"
+>
+
+<main>
+  <!-- HERO -->
+  <section class="page-hero" style="padding-bottom:32px">
+    <p class="section-label reveal">Features</p>
+    <h1 class="reveal reveal-d1">Contribute: Idle Compute<br><span class="gradient-text">for Science</span></h1>
+    <p class="reveal reveal-d2" style="font-size:1.1rem;max-width:560px;margin:0 auto 24px">
+      Donate your robot's idle AI cycles to distributed science &mdash; climate, biodiversity, protein folding, humanitarian AI.
+    </p>
+    <div class="hero-actions reveal reveal-d3">
+      <a href="#quickstart" class="btn btn-primary">Quick Start</a>
+      <a href="#how-it-works" class="btn btn-secondary">How It Works</a>
+      <a href="#projects" class="btn btn-secondary">Supported Projects</a>
+    </div>
+    <p class="reveal reveal-d4" style="font-size:0.8rem;color:var(--text-muted);margin-top:16px">v2026.3.20+ &middot; Opt-in &middot; P66 safe</p>
+  </section>
+
+  <!-- OVERVIEW -->
+  <section class="section" id="overview" style="padding-top:0;padding-bottom:24px">
+    <div class="container">
+      <div class="section-header reveal">
+        <p class="section-label">Section 1</p>
+        <h2 class="section-title">Overview</h2>
+        <p class="section-desc">What contribute does and why it matters.</p>
+      </div>
+
+      <div class="reveal" style="max-width:760px;margin:0 auto">
+        <p style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+          <strong>OpenCastor is an open-source runtime layer that sits between a robot's hardware and its AI.</strong>
+          It runs on any compute board &mdash; a Raspberry Pi with a Hailo NPU, a Jetson Orin, a Coral TPU, or a plain
+          ARM/x86 CPU. Every OpenCastor robot has compute that sits idle between tasks. <code>castor contribute</code>
+          puts that idle compute to work on distributed science &mdash; climate modeling, biodiversity monitoring,
+          protein folding, humanitarian AI.
+        </p>
+        <p style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+          The runtime detects whatever hardware is present and profiles it automatically. Coordinators match work
+          units to capability: NPU-equipped robots get inference tasks, GPU robots get batch compute, CPU-only robots
+          get lightweight processing. All robots contribute what they can.
+        </p>
+        <p style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+          Contribute is <strong>opt-in only</strong>. It never activates unless explicitly enabled in the
+          <a href="https://rcan.dev" style="color:var(--accent)">RCAN</a> config or started via CLI. When active,
+          it runs at the lowest priority &mdash; any incoming command immediately preempts the current work unit.
+          OpenCastor implements the RCAN specification (Robot Communication &amp; Authentication Network), which
+          defines robot identity, scopes, message types, and safety invariants as an open protocol.
+        </p>
+
+        <div class="wizard-tip" style="margin-top:24px">
+          <strong>P66 Safety Guarantee:</strong> Contribute work is governed by Protocol 66. Any incoming command &mdash;
+          regardless of scope &mdash; immediately preempts the current work unit. The robot signals <code>ContributeCancel</code>
+          to the coordinator and becomes available within 100ms. This guarantee is enforced at the kernel level and cannot
+          be disabled by configuration.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- QUICK START -->
+  <section class="section alt-section" id="quickstart">
+    <div class="container">
+      <div class="section-header reveal">
+        <p class="section-label">Section 2</p>
+        <h2 class="section-title">Quick Start</h2>
+        <p class="section-desc">Enable contribute in your RCAN config or via CLI.</p>
+      </div>
+
+      <div class="code-block reveal" style="max-width:760px;margin:0 auto 24px">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">robot.rcan.yaml</span>
+        </div>
+        <div class="code-body">
+<span class="k">agent</span>:
+  <span class="k">contribute</span>:
+    <span class="k">enabled</span>: <span class="s">true</span>
+    <span class="k">idle_after_minutes</span>: <span class="s">15</span>               <span class="cm"># wait 15m of idle before starting</span>
+    <span class="k">projects</span>:
+      - <span class="s">climate</span>
+      - <span class="s">biodiversity</span>
+      - <span class="s">science</span>
+    <span class="k">coordinator</span>: <span class="s">boinc</span>                  <span class="cm"># boinc | folding_at_home | opencastor</span>
+    <span class="k">boinc_url</span>: <span class="s">https://boinc.bakerlab.org/rosetta/</span>
+    <span class="k">max_power_w</span>: <span class="s">4.0</span>                    <span class="cm"># hard cap on contribute power draw</span>
+    <span class="k">max_cpu_pct</span>: <span class="s">50</span>                     <span class="cm"># CPU% cap for non-NPU work</span>
+    <span class="k">use_npu</span>: <span class="s">true</span>                       <span class="cm"># run HEF models on Hailo NPU</span>
+    <span class="k">use_camera</span>: <span class="s">false</span>                   <span class="cm"># opt-in to camera-based projects</span>
+    <span class="k">use_microphone</span>: <span class="s">false</span>               <span class="cm"># opt-in to audio-based projects</span>
+    <span class="k">coordinator_allowlist</span>:              <span class="cm"># trusted coordinator URLs</span>
+      - <span class="s">https://boinc.bakerlab.org/</span>
+      - <span class="s">https://apps.foldingathome.org/</span>
+      - <span class="s">https://contribute.opencastor.com/</span>
+        </div>
+      </div>
+
+      <div class="code-block reveal" style="max-width:760px;margin:0 auto">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">CLI commands</span>
+        </div>
+        <div class="code-body">
+<span class="cm"># Enable now (skips idle timer)</span>
+<span class="k">castor contribute start</span>
+
+<span class="cm"># Check current status</span>
+<span class="k">castor contribute status</span>
+
+<span class="cm"># Stop contributing</span>
+<span class="k">castor contribute stop</span>
+
+<span class="cm"># List available projects for your hardware</span>
+<span class="k">castor contribute projects</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="section" id="how-it-works">
+    <div class="container">
+      <div class="section-header reveal">
+        <p class="section-label">Section 3</p>
+        <h2 class="section-title">How It Works</h2>
+        <p class="section-desc">The contribute lifecycle &mdash; from idle detection to result submission.</p>
+      </div>
+
+      <div class="mermaid-card reveal">
+        <div class="mermaid-header">
+          <span class="mermaid-label">castor/contribute.py &middot; contribute scheduler</span>
+          <span class="mermaid-version">v2026.3.20+</span>
+        </div>
+        <div class="mermaid">
+flowchart TD
+    IDLE["Robot idle > threshold"] --> CHECK&#123;"Active command?"&#125;
+    CHECK -->|YES| WAIT["Wait &mdash; robot busy"]
+    CHECK -->|NO| FETCH["Fetch work unit\nfrom coordinator"]
+    FETCH --> RUN["Run inference\non Hailo NPU / CPU"]
+    RUN --> PREEMPT&#123;"Command received?"&#125;
+    PREEMPT -->|"YES &mdash; P66"| CANCEL["Cancel immediately\nReturn partial result"]
+    PREEMPT -->|NO| SUBMIT["Submit result\nto coordinator"]
+    SUBMIT --> LOG["Log to telemetry\nupdate fleet dashboard"]
+    LOG --> FETCH
+    CANCEL --> WAIT
+
+    style CANCEL fill:#ef4444,color:#fff,stroke:#dc2626
+    style WAIT fill:#f97316,color:#fff,stroke:#ea580c
+    style RUN fill:#22c55e,color:#fff,stroke:#16a34a
+    style SUBMIT fill:#22c55e,color:#fff,stroke:#16a34a
+        </div>
+      </div>
+
+      <div class="reveal" style="max-width:760px;margin:32px auto 0">
+        <div class="wizard-tip">
+          <strong>Key design decisions:</strong>
+          <ul style="margin:8px 0 0 0;padding-left:20px;line-height:1.8">
+            <li><strong>Idle detection is cooperative</strong> &mdash; the contribute scheduler checks <code>AppState.last_command_ts</code> before every work unit fetch</li>
+            <li><strong>Preemption is instant</strong> &mdash; work units run in a cancellable thread; P66 <code>ContributeCancel</code> fires within 100ms</li>
+            <li><strong>Partial results are returned</strong> &mdash; coordinators get whatever progress was made, avoiding wasted compute</li>
+            <li><strong>Power-capped</strong> &mdash; <code>max_power_w</code> ensures contribute never exceeds your thermal/battery budget</li>
+            <li><strong>No new dependencies</strong> &mdash; uses stdlib + existing castor deps (asyncio, threading, httpx)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SUPPORTED PROJECTS -->
+  <section class="section alt-section" id="projects">
+    <div class="container">
+      <div class="section-header reveal">
+        <p class="section-label">Section 4</p>
+        <h2 class="section-title">Supported Projects</h2>
+        <p class="section-desc">Projects available for contribution, with more coming.</p>
+      </div>
+
+      <div class="reveal" style="max-width:900px;margin:0 auto">
+        <table class="arch-table">
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>Domain</th>
+              <th>Coordinator</th>
+              <th>Work Unit Type</th>
+              <th>NPU Optimized</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Rosetta@home</strong></td>
+              <td>Protein folding</td>
+              <td>BOINC / Baker Lab</td>
+              <td>Protein structure inference</td>
+              <td style="color:var(--green)">Hailo HEF</td>
+            </tr>
+            <tr>
+              <td><strong>Folding@home</strong></td>
+              <td>Disease research</td>
+              <td>F@H native</td>
+              <td>Molecular dynamics</td>
+              <td style="color:var(--orange)">CPU</td>
+            </tr>
+            <tr>
+              <td><strong>BirdNET</strong></td>
+              <td>Biodiversity</td>
+              <td>OpenCastor</td>
+              <td>Audio classification</td>
+              <td style="color:var(--green)">Hailo HEF</td>
+            </tr>
+            <tr>
+              <td><strong>Climate</strong> <span style="font-size:0.75rem;color:var(--text-muted)">(planned)</span></td>
+              <td>Climate modeling</td>
+              <td>BOINC / Climate@Home</td>
+              <td>Satellite imagery</td>
+              <td style="color:var(--green)">Hailo HEF</td>
+            </tr>
+            <tr>
+              <td><strong>WHO-TB</strong> <span style="font-size:0.75rem;color:var(--text-muted)">(planned)</span></td>
+              <td>Humanitarian</td>
+              <td>OpenCastor</td>
+              <td>Chest X-ray screening</td>
+              <td style="color:var(--green)">Hailo HEF</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- HARDWARE PROFILE -->
+  <section class="section" id="hardware">
+    <div class="container">
+      <div class="section-header reveal">
+        <p class="section-label">Section 5</p>
+        <h2 class="section-title">Hardware Profile</h2>
+        <p class="section-desc">What each robot reports to the coordinator for work unit matching.</p>
+      </div>
+
+      <div class="reveal" style="max-width:760px;margin:0 auto">
+        <p style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary);margin-bottom:16px">
+          The runtime automatically detects available hardware and reports a profile to the coordinator.
+          Work units are matched to capability &mdash; no manual configuration needed.
+        </p>
+      </div>
+
+      <div class="bento reveal" style="max-width:760px;margin:0 auto;grid-template-columns:1fr 1fr">
+        <div class="card">
+          <h3>NPU Accelerators</h3>
+          <p>Hailo-8L (26 TOPS), Coral TPU (4 TOPS), or any edge AI accelerator. Get inference-optimized work units &mdash; model scoring, classification, object detection. Power draw: 1&ndash;4W.</p>
+        </div>
+        <div class="card">
+          <h3>GPU Compute</h3>
+          <p>Jetson Orin (40+ TOPS), CUDA GPUs, or integrated graphics. Get batch inference or training work units that leverage parallel compute.</p>
+        </div>
+        <div class="card">
+          <h3>CPU (any architecture)</h3>
+          <p>ARM, x86, RISC-V &mdash; any board with 1+ cores. Gets CPU-appropriate tasks: data preprocessing, lightweight inference, aggregation. Every robot can contribute.</p>
+        </div>
+        <div class="card">
+          <h3>Sensors (opt-in)</h3>
+          <p>Cameras, microphones, depth sensors. When enabled (<code>use_camera</code> / <code>use_microphone</code>), contribute situated science &mdash; BirdNET bioacoustics, species identification, environmental monitoring.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONFIGURATION REFERENCE -->
+  <section class="section alt-section" id="config">
+    <div class="container">
+      <div class="section-header reveal">
+        <p class="section-label">Section 6</p>
+        <h2 class="section-title">Configuration Reference</h2>
+        <p class="section-desc">All fields under <code>agent.contribute</code> in your RCAN config.</p>
+      </div>
+
+      <div class="reveal" style="max-width:900px;margin:0 auto">
+        <table class="arch-table">
+          <thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>enabled</code></td><td>bool</td><td><code>false</code></td><td>Master switch. Must be <code>true</code> to activate contribute.</td></tr>
+            <tr><td><code>idle_after_minutes</code></td><td>int</td><td><code>15</code></td><td>Minutes of idle time before contribute starts fetching work units.</td></tr>
+            <tr><td><code>projects</code></td><td>list[str]</td><td><code>[]</code></td><td>Project domains to contribute to: <code>climate</code>, <code>biodiversity</code>, <code>science</code>, <code>humanitarian</code>.</td></tr>
+            <tr><td><code>coordinator</code></td><td>str</td><td><code>boinc</code></td><td>Work coordinator: <code>boinc</code>, <code>folding_at_home</code>, or <code>opencastor</code>.</td></tr>
+            <tr><td><code>boinc_url</code></td><td>str</td><td>&mdash;</td><td>BOINC project URL. Required when <code>coordinator: boinc</code>.</td></tr>
+            <tr><td><code>max_power_w</code></td><td>float</td><td><code>4.0</code></td><td>Hard cap on power draw (watts) for contribute workloads.</td></tr>
+            <tr><td><code>max_cpu_pct</code></td><td>int</td><td><code>50</code></td><td>Maximum CPU utilization percentage for non-NPU work.</td></tr>
+            <tr><td><code>use_npu</code></td><td>bool</td><td><code>true</code></td><td>Allow contribute to use the Hailo NPU for HEF model inference.</td></tr>
+            <tr><td><code>use_camera</code></td><td>bool</td><td><code>false</code></td><td>Opt-in to camera-based projects (species ID, satellite ground-truth).</td></tr>
+            <tr><td><code>use_microphone</code></td><td>bool</td><td><code>false</code></td><td>Opt-in to audio-based projects (BirdNET bioacoustics).</td></tr>
+            <tr><td><code>coordinator_allowlist</code></td><td>list[str]</td><td>&mdash;</td><td>Trusted coordinator URLs. If set, only these coordinators are contacted.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- API REFERENCE -->
+  <section class="section" id="api">
+    <div class="container">
+      <div class="section-header reveal">
+        <p class="section-label">Section 7</p>
+        <h2 class="section-title">API Reference</h2>
+        <p class="section-desc">REST endpoint and chat slash command.</p>
+      </div>
+
+      <div style="max-width:760px;margin:0 auto">
+        <h3 class="reveal" style="font-size:1.25rem;margin-bottom:12px"><code>GET /api/contribute</code></h3>
+        <div class="code-block reveal" style="margin-bottom:32px">
+          <div class="code-header">
+            <div class="code-dots"><span></span><span></span><span></span></div>
+            <span class="code-filename">Response</span>
+          </div>
+          <div class="code-body">
+&#123;
+  <span class="k">"enabled"</span>: <span class="s">true</span>,
+  <span class="k">"active"</span>: <span class="s">true</span>,
+  <span class="k">"state"</span>: <span class="s">"running"</span>,            <span class="cm">// idle | fetching | running | submitting</span>
+  <span class="k">"current_project"</span>: <span class="s">"rosetta"</span>,
+  <span class="k">"coordinator"</span>: <span class="s">"boinc"</span>,
+  <span class="k">"work_unit_id"</span>: <span class="s">"wu-482991"</span>,
+  <span class="k">"progress_pct"</span>: <span class="s">67.3</span>,
+  <span class="k">"elapsed_s"</span>: <span class="s">142</span>,
+  <span class="k">"stats"</span>: &#123;
+    <span class="k">"units_completed_today"</span>: <span class="s">14</span>,
+    <span class="k">"units_completed_lifetime"</span>: <span class="s">2847</span>,
+    <span class="k">"minutes_contributed_today"</span>: <span class="s">287</span>,
+    <span class="k">"minutes_contributed_lifetime"</span>: <span class="s">48210</span>,
+    <span class="k">"preemptions_today"</span>: <span class="s">3</span>
+  &#125;,
+  <span class="k">"hardware"</span>: &#123;
+    <span class="k">"npu"</span>: <span class="s">"hailo-8l"</span>,
+    <span class="k">"npu_tops"</span>: <span class="s">26</span>,
+    <span class="k">"cpu"</span>: <span class="s">"cortex-a76"</span>,
+    <span class="k">"camera"</span>: <span class="s">false</span>,
+    <span class="k">"microphone"</span>: <span class="s">false</span>
+  &#125;
+&#125;
+          </div>
+        </div>
+
+        <h3 class="reveal" style="font-size:1.25rem;margin-bottom:12px"><code>/contribute</code> slash command</h3>
+        <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+          In any connected channel (WhatsApp, Telegram, Discord), send <code>/contribute</code> to get a
+          summary of your robot's contribution status, including active project, units completed, and
+          time contributed today.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FLEET DASHBOARD -->
+  <section class="section alt-section" id="dashboard">
+    <div class="container">
+      <div class="section-header reveal">
+        <p class="section-label">Section 8</p>
+        <h2 class="section-title">Fleet Dashboard</h2>
+        <p class="section-desc">Contribution stats visible in the OpenCastor dashboard and fleet app.</p>
+      </div>
+
+      <div class="reveal" style="max-width:760px;margin:0 auto">
+        <div class="bento" style="grid-template-columns:1fr 1fr;gap:16px">
+          <div class="card" style="padding:20px">
+            <h3 style="font-size:1rem;margin:0 0 8px">Per-Robot Stats</h3>
+            <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">Work units completed, minutes contributed today and lifetime, current project and progress indicator.</p>
+          </div>
+          <div class="card" style="padding:20px">
+            <h3 style="font-size:1rem;margin:0 0 8px">Active Project Indicator</h3>
+            <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">Live badge showing which project the robot is currently contributing to, or "idle" if waiting.</p>
+          </div>
+          <div class="card" style="padding:20px">
+            <h3 style="font-size:1rem;margin:0 0 8px">Fleet Aggregation</h3>
+            <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">Total fleet TOPS-hours contributed, cross-robot project breakdown, leaderboard by contribution volume.</p>
+          </div>
+          <div class="card" style="padding:20px">
+            <h3 style="font-size:1rem;margin:0 0 8px">Enable/Disable Toggle</h3>
+            <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">One-click enable or disable contribute per robot or fleet-wide via the dashboard UI.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- P66 SAFETY -->
+  <section class="section" id="safety">
+    <div class="container">
+      <div class="section-header reveal">
+        <p class="section-label">Section 9</p>
+        <h2 class="section-title">P66 Safety Guarantee</h2>
+        <p class="section-desc">Contribute work is always subordinate to robot commands.</p>
+      </div>
+
+      <div class="reveal" style="max-width:760px;margin:0 auto">
+        <div class="wizard-tip" style="border-left:4px solid var(--red);margin-bottom:24px">
+          <strong>Non-negotiable:</strong> Contribute work is governed by Protocol 66. Any incoming command &mdash;
+          regardless of scope &mdash; immediately preempts the current work unit. The robot signals
+          <code>ContributeCancel</code> to the coordinator and becomes available within <strong>100ms</strong>.
+          This guarantee is enforced at the kernel level and cannot be disabled by configuration.
+        </div>
+
+        <p style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+          The contribute scheduler runs a preemption check on a 50ms tick. When a command arrives:
+        </p>
+        <ol style="padding-left:20px;line-height:2;color:var(--text-secondary)">
+          <li>The work unit thread receives a cancellation signal</li>
+          <li><code>ContributeCancel</code> is sent to the coordinator with partial progress</li>
+          <li>The Hailo NPU inference pipeline is drained (max 50ms)</li>
+          <li>The robot is available for the incoming command</li>
+        </ol>
+        <p style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+          ESTOP bypasses even the graceful cancel path &mdash; it kills the contribute thread immediately
+          with no coordinator notification. This matches the P66 ESTOP invariant: no hooks, no context, just stop.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRIVACY & DATA -->
+  <section class="section alt-section" id="privacy">
+    <div class="container">
+      <div class="section-header reveal">
+        <p class="section-label">Section 10</p>
+        <h2 class="section-title">Privacy &amp; Data</h2>
+        <p class="section-desc">What data flows where.</p>
+      </div>
+
+      <div class="reveal" style="max-width:760px;margin:0 auto">
+        <ul style="padding-left:20px;line-height:2;color:var(--text-secondary)">
+          <li><strong>Work units contain no personal data.</strong> Input data comes from the coordinator, not the robot's environment.</li>
+          <li><strong>Sensor-based projects are opt-in.</strong> Camera and microphone data is only used when explicitly enabled (<code>use_camera: true</code>, <code>use_microphone: true</code>).</li>
+          <li><strong>Coordinator allowlist.</strong> The <code>coordinator_allowlist</code> config restricts which URLs the robot contacts. Only listed coordinators receive work results.</li>
+          <li><strong>All submissions are audited.</strong> Every result submission is logged in the RCAN audit trail with coordinator URL, work unit ID, and timestamp.</li>
+          <li><strong>Privacy mode respected.</strong> When <code>castor privacy on</code> is active, contribute is automatically paused &mdash; no outbound network connections.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- IMPACT -->
+  <section class="section" id="impact">
+    <div class="container">
+      <div class="section-header reveal">
+        <p class="section-label">Section 11</p>
+        <h2 class="section-title">Impact</h2>
+        <p class="section-desc">What a fleet of contributing robots adds up to.</p>
+      </div>
+
+      <div class="reveal" style="max-width:760px;margin:0 auto">
+        <p style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary);margin-bottom:16px">
+          Impact scales with fleet size and hardware diversity. A fleet of NPU-equipped robots contributes
+          more raw inference TOPS; CPU-only robots contribute less per-unit but still add up. The key insight
+          is that <em>every</em> robot has idle compute, and the aggregate across a heterogeneous fleet is significant.
+        </p>
+
+        <table class="arch-table">
+          <thead><tr><th>Fleet Size</th><th>Daily Idle Hours</th><th>Aggregate Impact</th></tr></thead>
+          <tbody>
+            <tr><td>10 robots</td><td>8h</td><td>Continuous background processing; equivalent to a dedicated edge node</td></tr>
+            <tr><td>100 robots</td><td>8h</td><td>Small compute cluster &mdash; meaningful throughput for BOINC projects</td></tr>
+            <tr><td>1,000 robots</td><td>8h</td><td>Substantial distributed compute with geographic diversity</td></tr>
+            <tr><td>10,000+ robots</td><td>8h</td><td>Research-grade infrastructure with situated sensor data</td></tr>
+          </tbody>
+        </table>
+
+        <p style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary);margin-top:24px">
+          The value isn't just raw TOPS &mdash; it's <em>situated compute</em>. AI nodes with physical sensors
+          deployed in real environments. A traditional GPU cluster can fold proteins. A fleet of OpenCastor robots
+          can fold proteins <em>and</em> monitor bird populations <em>and</em> classify local weather &mdash;
+          from the places where the data lives. The hardware varies; the infrastructure is the same.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <h2 class="reveal">Put your robot's idle cycles to work</h2>
+    <p class="reveal reveal-d1">Enable contribute and join the distributed science network.</p>
+    <div class="hero-actions reveal reveal-d2">
+      <a href="/blog/contribute-to-science" class="btn btn-primary btn-lg">Read the blog post</a>
+      <a href="https://docs.opencastor.com" class="btn btn-secondary btn-lg">&larr; Back to Docs</a>
+    </div>
+  </section>
+
+</main>
+
+<!-- Mermaid.js (CDN, no build dep) -->
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default',
+    themeVariables: {
+      fontFamily: 'inherit',
+      fontSize: '14px',
+    },
+    flowchart: { curve: 'basis', padding: 20 },
+  });
+
+  // Re-render on theme toggle
+  const observer = new MutationObserver(() => {
+    const theme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default';
+    mermaid.initialize({ startOnLoad: false, theme });
+    mermaid.run();
+  });
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+</script>
+
+<style>
+  .mermaid-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .mermaid-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--alt-bg);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8rem;
+  }
+  .mermaid-label { color: var(--text-muted); font-family: monospace; }
+  .mermaid-version {
+    background: var(--accent-light);
+    color: var(--accent);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .mermaid { padding: 24px; overflow-x: auto; }
+  .arch-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+  .arch-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: var(--alt-bg);
+    border-bottom: 2px solid var(--border);
+    font-weight: 600;
+  }
+  .arch-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .arch-table tr:last-child td { border-bottom: none; }
+
+  /* Make mermaid diagrams respect dark theme */
+  :root[data-theme="dark"] .mermaid svg { filter: invert(0.05) hue-rotate(180deg) brightness(0.95); }
+</style>
+
+</BaseLayout>

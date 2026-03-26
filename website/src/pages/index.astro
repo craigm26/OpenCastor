@@ -12,49 +12,62 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
 <!-- ======== HERO ======== -->
 <section class="hero">
-  <div class="badge reveal">
-    <span class="dot"></span>
-    v2026.3.17.3 Released
-  </div>
+  <div class="hero-card reveal">
+    <div class="hero-status-bar">
+      <div class="badge status-live">
+        <span class="dot"></span>
+        Runtime: Active
+      </div>
+      <div class="badge status-version">
+        v2026.3.21.1
+      </div>
+    </div>
 
-  <h1 class="hero-title reveal reveal-d1">
-    The Universal Runtime for<br><span class="gradient-text">Embodied AI.</span>
-  </h1>
+    <!-- Phase 8: Prominent Brand Identifier -->
+    <div class="hero-brand-logo reveal">
+      <img src="/assets/icon-128.png" alt="OpenCastor Icon" width="64" height="64" />
+      <span class="brand-text">OpenCastor</span>
+    </div>
 
-  <p class="hero-sub reveal reveal-d2">
-    Give any robot a brain. Semantic perception with local embeddings, 13+ AI providers,<br>
-    HLabs ACB · LiDAR · IMU · depth cameras · reactive obstacle avoidance. One config file. Zero lock-in.
-  </p>
+    <h1 class="hero-title reveal-d1">
+      The Universal Runtime for<br><span class="gradient-text">Embodied AI.</span>
+    </h1>
 
-  <div class="hero-actions reveal reveal-d3">
-    <a href="#quickstart" class="btn btn-primary btn-lg">
-      Get Started
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-    </a>
-    <a href="https://github.com/craigm26/OpenCastor" class="btn btn-secondary btn-lg">
-      <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.09.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
-      Star on GitHub
-    </a>
-  </div>
+    <p class="hero-sub reveal-d2">
+      Give any robot a brain. Semantic perception with local embeddings, 13+ AI providers,<br>
+      HLabs ACB · LiDAR · IMU · depth cameras · reactive obstacle avoidance. One config file. Zero lock-in.
+    </p>
 
-  <div class="install-block reveal reveal-d4">
-    <code id="install-cmd">curl -sL opencastor.com/install | bash</code>
-    <button onclick="copyInstall()">Copy</button>
-  </div>
+    <div class="hero-actions reveal-d3">
+      <a href="https://docs.opencastor.com" class="btn btn-primary btn-lg pulse-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-7-7 7 7-7 7"></path></svg>
+        Connect to Robot
+      </a>
+      <a href="https://github.com/craigm26/OpenCastor" class="btn btn-secondary btn-lg">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.09.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+        Star on GitHub
+      </a>
+    </div>
 
-  <div class="hero-links reveal reveal-d5">
-    <a href="https://pypi.org/project/opencastor/">
-      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.585 11.692h4.328s2.432.039 2.432-2.35V5.391S16.714 3 11.936 3C7.362 3 7.647 4.983 7.647 4.983l.006 2.055h4.363v.617H5.92S3 7.28 3 11.874s2.547 4.456 2.547 4.456h1.521v-2.143s-.083-2.547 2.508-2.547l-.001.052zm-.282-4.444a.812.812 0 110-1.624.812.812 0 010 1.624z"/><path d="M14.415 12.308h-4.328s-2.432-.039-2.432 2.35v3.951S7.286 21 12.064 21c4.574 0 4.289-1.983 4.289-1.983l-.006-2.055h-4.363v-.617h6.096S21 16.72 21 12.126s-2.547-4.456-2.547-4.456h-1.521v2.143s.083 2.547-2.508 2.547l.001-.052zm.282 4.444a.812.812 0 110 1.624.812.812 0 010-1.624z"/></svg>
-      PyPI
-    </a>
-    <a href="https://github.com/craigm26/OpenCastor">
-      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.09.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
-      GitHub
-    </a>
-    <a href="/docs">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-      Docs
-    </a>
+    <div class="install-block reveal-d4">
+      <code id="install-cmd">curl -sL opencastor.com/install | bash</code>
+      <button onclick="copyInstall()">Copy</button>
+    </div>
+
+    <div class="hero-links reveal-d5">
+      <a href="https://pypi.org/project/opencastor/">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.585 11.692h4.328s2.432.039 2.432-2.35V5.391S16.714 3 11.936 3C7.362 3 7.647 4.983 7.647 4.983l.006 2.055h4.363v.617H5.92S3 7.28 3 11.874s2.547 4.456 2.547 4.456h1.521v-2.143s-.083-2.547 2.508-2.547l-.001.052zm-.282-4.444a.812.812 0 110-1.624.812.812 0 010 1.624z"/><path d="M14.415 12.308h-4.328s-2.432-.039-2.432 2.35v3.951S7.286 21 12.064 21c4.574 0 4.289-1.983 4.289-1.983l-.006-2.055h-4.363v-.617h6.096S21 16.72 21 12.126s-2.547-4.456-2.547-4.456h-1.521v2.143s.083 2.547-2.508 2.547l.001-.052zm.282 4.444a.812.812 0 110 1.624.812.812 0 010-1.624z"/></svg>
+        PyPI
+      </a>
+      <a href="https://github.com/craigm26/OpenCastor">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.09.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+        GitHub
+      </a>
+      <a href="https://docs.opencastor.com">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        Docs
+      </a>
+    </div>
   </div>
 </section>
 
@@ -361,21 +374,21 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 <section class="section" id="release">
   <div class="container">
     <div class="section-header center reveal">
-      <p class="section-label">v2026.3.17.3 — March 17, 2026</p>
+      <p class="section-label">v2026.3.21.1 — March 21, 2026</p>
       <h2 class="section-title">What's New</h2>
     </div>
     <div class="feature-grid">
       <div class="card reveal">
-        <div class="card-icon" style="background: var(--green-light);">🌐</div>
-        <h3>v2026.3.17.3 — RCAN v1.6: Federation &amp; Constrained Transports</h3>
-        <p>Registry Federation Protocol (GAP-16), RCAN-Minimal 32-byte ESTOP for LoRa/BLE (GAP-17), multi-modal payloads with SHA-256 audit trail (GAP-18), and Human identity LoA 1/2/3 via FIDO2 (GAP-14). All 22 security/safety audit gaps addressed. rcan-py v0.6.0 (587 tests), rcan-ts v0.6.0 (405 tests).</p>
-        <a href="/changelog#v2026.3.17.3">Release notes →</a>
+        <div class="card-icon" style="background: var(--green-light);">🧬</div>
+        <h3>v2026.3.21.1 — Competition Engine &amp; Gemini 2.5</h3>
+        <p>Sprint, Threshold Race, and Model×Hardware Bracket Season competition formats. All Gemini 2.0/1.5 model strings updated to Gemini 2.5 ahead of June 2026 deprecation. Contribute throughput 10x via Firestore caching (4.6s → 14ms).</p>
+        <a href="/changelog#v2026.3.21.1">Release notes →</a>
       </div>
       <div class="card reveal reveal-d1">
-        <div class="card-icon" style="background: var(--purple-light);">🛡️</div>
-        <h3>v2026.3.17.0 — RCAN v1.5: Production Safety Hardening</h3>
-        <p>Replay attack prevention (GAP-03), robot identity revocation (GAP-02), ESTOP QoS exactly-once delivery (GAP-11), consent wire protocol (GAP-05), offline operation mode (GAP-06). Protocol 66 conformance: 87% → 94%.</p>
-        <a href="/changelog#v2026.3.17.0">Release notes →</a>
+        <div class="card-icon" style="background: var(--purple-light);">🌐</div>
+        <h3>v2026.3.17.1 — RCAN v1.6: Federation &amp; Constrained Transports</h3>
+        <p>Registry Federation Protocol, RCAN-Minimal 32-byte ESTOP for LoRa/BLE, multi-modal payloads with SHA-256 audit trail, Human identity LoA 1/2/3 via FIDO2. All 22 security/safety audit gaps addressed.</p>
+        <a href="/changelog#v2026.3.17.1">Release notes →</a>
       </div>
       <div class="card reveal reveal-d2">
         <div class="card-icon" style="background: var(--cyan-light);">🔧</div>
@@ -423,10 +436,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 <section class="cta-section">
   <h2 class="reveal">Start building today.</h2>
   <p class="reveal reveal-d1">Open source. Apache 2.0. Free forever.</p>
-  <div class="hero-actions reveal reveal-d2">
-    <a href="#quickstart" class="btn btn-primary btn-lg">
-      Get Started
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+  <div style="display:flex;gap:12px;justify-content:center;margin-bottom:12px">
+    <a href="https://docs.opencastor.com" class="btn btn-primary btn-lg">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-7-7 7 7-7 7"></path></svg>
+      Quick Start
     </a>
     <a href="https://github.com/craigm26/OpenCastor" class="btn btn-secondary btn-lg">
       View on GitHub
@@ -449,7 +462,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       </div>
       <div class="footer-col">
         <h4>Product</h4>
-        <a href="/docs">Documentation</a>
+        <a href="https://docs.opencastor.com">Documentation</a>
         <a href="/hardware">Hardware</a>
         <a href="/changelog">Changelog</a>
         <a href="https://rcan.dev/spec/">RCAN Spec</a>
@@ -457,7 +470,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       </div>
       <div class="footer-col">
         <h4>Resources</h4>
-        <a href="/docs">Getting Started</a>
+        <a href="https://docs.opencastor.com">Getting Started</a>
         <a href="https://github.com/craigm26/OpenCastor">GitHub</a>
         <a href="https://github.com/craigm26/OpenCastor/issues">Issues</a>
         <a href="https://discord.gg/jMjA8B26Bq">Discord Community</a>

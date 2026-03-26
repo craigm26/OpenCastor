@@ -1,0 +1,53 @@
+rcan_version: "1.6"
+
+metadata:
+  robot_name: opencastor-web-demo
+  robot_uuid: "00000000-0000-4000-8000-000000000004"
+  author: OpenCastor Team
+  license: Apache-2.0
+  description: >
+    Minimal demo for the web-lookup builtin skill. Enables the robot agent
+    to search the web, fetch URLs, and retrieve real-time information to
+    answer questions or complete tasks that require external knowledge.
+    Great for informational assistants and research robots.
+  tags:
+    - official
+    - skill
+    - web
+    - web-lookup
+    - search
+  builtin_skills:
+    - web-lookup
+
+_note: >
+  Official demo for the web-lookup builtin skill. Enables real-time web
+  search and URL fetching. No hardware required — runs on any machine.
+
+agent:
+  provider: google
+  model: gemini-2.5-flash
+  safety_stop: false
+  system_prompt: >
+    You are a research-focused OpenCastor agent. Use the web-lookup skill
+    to find accurate, up-to-date information when answering questions.
+    Always cite your sources and verify information before acting on it.
+
+physics:
+  type: custom
+  dof: 1  # minimal dof for software-only agent
+
+drivers:
+  - id: virtual
+    protocol: none
+
+network:
+  allow_remote_override: false
+
+rcan_protocol:
+  enable_mdns: true
+
+loa:
+  min_loa_for_control: 1
+
+safety:
+  p66_enabled: true

@@ -13,6 +13,7 @@ from collections.abc import Callable
 from typing import Optional
 
 from castor.channels.base import BaseChannel
+from castor.channels.scope_resolver import resolve_sender_scope
 
 logger = logging.getLogger("OpenCastor.Channel.Telegram")
 
@@ -93,8 +94,11 @@ class TelegramChannel(BaseChannel):
         chat_id = str(update.effective_chat.id)
         text = update.message.text
 
+        # Resolve RCAN scope at the channel boundary
+        _scope, _loa = resolve_sender_scope(chat_id, self.config)
+
         try:
-            reply = await self.handle_message(chat_id, text)
+            reply = await self.handle_message(chat_id, text, sender_scope=_scope, sender_loa=_loa)
             if reply:
                 await update.message.reply_text(reply[:4096])
         except Exception as exc:
@@ -109,6 +113,9 @@ class TelegramChannel(BaseChannel):
         audio_obj = msg.voice or msg.audio
         if audio_obj is None:
             return
+
+        # Resolve RCAN scope at the channel boundary
+        _scope, _loa = resolve_sender_scope(chat_id, self.config)
 
         try:
             from castor import voice as voice_mod
@@ -131,7 +138,7 @@ class TelegramChannel(BaseChannel):
                 return
 
             self.logger.info("Telegram voice → text: %r", text[:80])
-            reply = await self.handle_message(chat_id, text)
+            reply = await self.handle_message(chat_id, text, sender_scope=_scope, sender_loa=_loa)
             if reply:
                 await msg.reply_text(reply[:4096])
         except ImportError:

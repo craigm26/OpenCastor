@@ -31,10 +31,10 @@ class VertexAIProvider(BaseProvider):
                                           falls back to ADC if not set)
 
     Model names on Vertex AI use the ``-001`` (or similar) versioned suffix, e.g.
-    ``gemini-2.0-flash-001``.
+    ``gemini-2.5-flash``.
     """
 
-    DEFAULT_MODEL = "gemini-2.0-flash-001"
+    DEFAULT_MODEL = "gemini-2.5-flash"
     DEFAULT_LOCATION = "us-central1"
 
     def __init__(self, config: dict):

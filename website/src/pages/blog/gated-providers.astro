@@ -1,0 +1,147 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+const title = 'Gated Model Providers: Connecting Robots to Frontier AI';
+const description = 'OpenCastor v2026.3.20.3 adds first-class support for authenticated access to closed AI models — Physical Intelligence π0, HuggingFace gated models, enterprise APIs, and more.';
+---
+<BaseLayout title={title}>
+  <main class="max-w-4xl mx-auto px-4 py-16">
+    <article class="prose prose-lg prose-invert max-w-none">
+      <p class="text-sm text-gray-400 mb-2">March 20, 2026</p>
+      <h1 class="text-4xl font-bold mb-8">{title}</h1>
+
+      <p class="lead text-xl text-gray-300">
+        The most capable AI models for robotics aren't open source. Physical Intelligence's π0 can fold laundry.
+        Google DeepMind's RT-2-X generalizes across robot morphologies. These models are gated behind authentication
+        — and until now, connecting a robot to them required custom integration work for every provider.
+      </p>
+
+      <h2>The Problem: Model Fragmentation</h2>
+      <p>
+        A modern robot needs multiple AI models working together. Your reasoning layer might use Claude or GPT-4.
+        Your manipulation layer needs a specialized action model like π0. Your perception layer uses a fine-tuned
+        vision model from HuggingFace. Each has different authentication:
+      </p>
+      <ul>
+        <li><strong>Physical Intelligence (π)</strong> — OAuth2 client credentials with scoped model access</li>
+        <li><strong>HuggingFace gated models</strong> — Hub token with per-model approval gates</li>
+        <li><strong>Enterprise APIs</strong> — mutual TLS certificates, OIDC federation</li>
+        <li><strong>Cloud providers</strong> — API keys, workload identity, IAM roles</li>
+      </ul>
+      <p>
+        Without a unified auth layer, every robot deployment becomes a bespoke integration project.
+        That's the opposite of what a runtime should do.
+      </p>
+
+      <h2>The Solution: Six Auth Methods, One Interface</h2>
+      <p>
+        OpenCastor v2026.3.20.3 introduces <code>castor.auth.provider_auth</code> — a unified authentication
+        layer for gated model providers. Configure any provider in your robot's config and the runtime handles
+        the rest:
+      </p>
+
+      <pre><code>&#123;# config.yaml example #&#125;
+providers:
+  pi-foundation:
+    type: gated
+    base_url: https://api.physicalintelligence.company/v1
+    auth:
+      method: oauth2
+      client_id: $&#123;PI_CLIENT_ID&#125;
+      client_secret: $&#123;PI_CLIENT_SECRET&#125;
+      token_url: https://auth.physicalintelligence.company/oauth/token
+      scopes: [model:inference, model:pi0]
+    models: [pi0, pi0.5-grasp, pi0.5-bimanual]
+    fallback_provider: ollama
+    fallback_model: rt2-x</code></pre>
+
+      <h3>Supported Authentication Methods</h3>
+      <table>
+        <thead>
+          <tr><th>Method</th><th>Use Case</th><th>Token Management</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>api_key</code></td><td>OpenAI, Anthropic, Cohere</td><td>Static, from env/config</td></tr>
+          <tr><td><code>bearer</code></td><td>Pre-issued JWT tokens</td><td>Static or refreshable</td></tr>
+          <tr><td><code>oauth2</code></td><td>π, enterprise APIs</td><td>Auto-refresh with client credentials</td></tr>
+          <tr><td><code>huggingface</code></td><td>HF gated models</td><td>Token + model gate validation</td></tr>
+          <tr><td><code>mutual_tls</code></td><td>Enterprise/gov deployments</td><td>Certificate-based</td></tr>
+          <tr><td><code>oidc</code></td><td>GCP, Azure workload identity</td><td>Federated identity</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Security by Design</h2>
+      <p>
+        Credentials are the most sensitive data a robot handles. Our design principles:
+      </p>
+      <ul>
+        <li><strong>Never logged</strong> — tokens never appear in log files, even at debug level</li>
+        <li><strong>Never in telemetry</strong> — the <code>telemetry()</code> method reports provider status without credentials</li>
+        <li><strong>Never sent to registry</strong> — robot registration in the RCAN Robot Registry never includes auth tokens</li>
+        <li><strong>Environment variable resolution</strong> — secrets use <code>$&#123;ENV_VAR&#125;</code> syntax, never hardcoded</li>
+        <li><strong>Thread-safe refresh</strong> — background token refresh with locking, no inference latency hit</li>
+      </ul>
+
+      <h2>What is OpenCastor?</h2>
+      <p>
+        OpenCastor is an open-source robot runtime — the operating layer that turns any computer into a robot brain.
+        It handles AI model orchestration, safety enforcement (the P66 invariant), sensor fusion, and communication.
+        "OpenCastor Robot" doesn't mean a specific hardware kit — it means <em>any robot running the OpenCastor runtime</em>,
+        from a Raspberry Pi with a camera to an industrial arm with LiDAR.
+      </p>
+
+      <h2>What is RCAN?</h2>
+      <p>
+        The <strong>Robot Communication and Autonomy Network (RCAN)</strong> is the protocol that OpenCastor robots
+        speak. Think of it as HTTP for robots — a standardized way to send commands, report status, stream sensor
+        data, and coordinate across fleets. Key concepts:
+      </p>
+      <ul>
+        <li><strong>RURI</strong> — Robot Unique Resource Identifier (like a URL for a robot's capabilities)</li>
+        <li><strong>Scopes</strong> — Permission levels from <code>chat</code> (conversation only) to <code>control</code> (motor commands)</li>
+        <li><strong>36 Message Types</strong> — Standardized in RCAN v1.8 with fixed integer assignments across all SDKs</li>
+        <li><strong>Robot Registry</strong> — Firebase Firestore-backed registry for discovering and managing robot fleets</li>
+      </ul>
+
+      <h2>Graceful Fallback</h2>
+      <p>
+        Robots can't stop working because a cloud API is down. Every gated provider supports configuring a local
+        fallback model:
+      </p>
+      <ul>
+        <li>OAuth2 token expired? Auto-refresh in background, use cached token meanwhile</li>
+        <li>API rate limited? Track <code>X-RateLimit-Remaining</code> headers, switch to fallback before hitting zero</li>
+        <li>Provider unreachable? After 3 consecutive failures, mark unavailable and use local model</li>
+        <li>All transparent to the harness — your robot keeps working</li>
+      </ul>
+
+      <h2>The Bigger Picture: Any Model, Any Robot</h2>
+      <p>
+        The robotics AI landscape is exploding. In the last year we've seen foundation models for manipulation (π0),
+        navigation (RT-2-X), grasping (GraspNet), and whole-body control. Most are gated behind APIs —
+        and that's fine. What matters is that robots can access them seamlessly.
+      </p>
+      <p>
+        With this release, an OpenCastor robot can use Claude for reasoning, π0 for manipulation, a custom
+        HuggingFace model for perception, and an enterprise vision model behind mTLS — all configured in YAML,
+        all with automatic credential management, all with local fallbacks.
+      </p>
+      <p>
+        That's what a runtime should do: make the hard parts invisible.
+      </p>
+
+      <h2>What's Next</h2>
+      <ul>
+        <li><strong>Per-layer provider routing</strong> — different harness layers use different providers with fallback chains</li>
+        <li><strong>RCAN v1.9</strong> — provider auth methods in robot identity for fleet-level credential management</li>
+        <li><strong>Fleet credential broker</strong> — hub robot manages tokens for spoke robots</li>
+        <li><strong><code>castor provider auth</code> CLI</strong> — test and verify credentials from the command line</li>
+      </ul>
+
+      <p class="text-gray-400 mt-12">
+        <a href="https://github.com/craigm26/OpenCastor/releases/tag/v2026.3.20.3" class="text-blue-400 hover:underline">
+          View the full release on GitHub →
+        </a>
+      </p>
+    </article>
+  </main>
+</BaseLayout>

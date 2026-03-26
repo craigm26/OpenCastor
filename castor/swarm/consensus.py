@@ -11,6 +11,18 @@ from dataclasses import dataclass, field
 from castor.swarm.peer import SwarmPeer
 from castor.swarm.shared_memory import SharedMemory
 
+# RCAN v1.6 §4.2 scope levels — used for scope non-escalation enforcement.
+# Mirrors CastorBridge.SCOPE_LEVELS.
+SCOPE_LEVELS: dict[str, int] = {
+    "discover": 0,
+    "transparency": 0,
+    "status": 1,
+    "chat": 2,
+    "control": 3,
+    "system": 3,
+    "safety": 99,
+}
+
 _CLAIM_PREFIX = "consensus:"
 _INTENT_PREFIX = "intent:"
 _HANDOFF_PREFIX = "handoff:"
@@ -233,7 +245,40 @@ class SwarmConsensus:
         claim = self._get_claim(task_id)
         return claim.robot_id if claim else None
 
-    def record_delegated_intent(self, intent: DelegatedIntent) -> DelegatedIntent:
+    def record_delegated_intent(
+        self,
+        intent: DelegatedIntent,
+        *,
+        originating_scope: str | None = None,
+    ) -> DelegatedIntent:
+        """Record a delegated intent, enforcing scope non-escalation.
+
+        Args:
+            intent: The intent to record.
+            originating_scope: The scope of the originating command.  When
+                provided, ``intent.policy_constraints["scope"]`` must not
+                exceed the originating scope's level (RCAN v1.6 §4.2).
+                Defaults to None (no enforcement — fail-open for backward
+                compatibility).
+
+        Raises:
+            ValueError: When the delegated scope exceeds the originating scope.
+        """
+        # Scope non-escalation: delegated_scope ≤ originating_scope
+        if originating_scope is not None:
+            delegated_scope: str = intent.policy_constraints.get("scope", "")
+            if delegated_scope:
+                orig_level = SCOPE_LEVELS.get(originating_scope, 0)
+                deleg_level = SCOPE_LEVELS.get(delegated_scope, 0)
+                # safety (99) is always allowed to delegate to anything ≤ safety
+                if deleg_level > orig_level:
+                    raise ValueError(
+                        f"Scope escalation rejected: cannot delegate scope "
+                        f"'{delegated_scope}' (level {deleg_level}) from originating "
+                        f"scope '{originating_scope}' (level {orig_level}). "
+                        f"Delegated scope must be ≤ originating scope."
+                    )
+
         if not intent.provenance:
             intent.provenance = [intent.origin_robot_id]
         payload = intent.canonical_payload()

@@ -186,20 +186,10 @@ def cmd_wizard(args) -> None:
 
 
 def cmd_init(args) -> None:
-    """Scaffold a minimal starter robot.rcan.yaml without an interactive TTY."""
-    from castor.init_config import generate_config, write_config
+    """Interactive setup wizard — generates a .rcan.yaml config (castor init)."""
+    from castor.init_wizard import cmd_init as _wizard_init
 
-    if getattr(args, "print", False):
-        print(generate_config(robot_name=args.name))
-        return
-
-    try:
-        path = write_config(args.output, robot_name=args.name, overwrite=args.overwrite)
-        print(f"✓ Config written to: {path}")
-        print(f"\nNext: edit {path}, then run: castor run --config {path}")
-    except FileExistsError as e:
-        print(f"✗ {e}", file=sys.stderr)
-        raise SystemExit(1) from e
+    _wizard_init(args)
 
 
 def _auto_detect_config(specified: str = "robot.rcan.yaml") -> str:
@@ -308,6 +298,327 @@ def cmd_token(args) -> None:
     except KeyError as exc:
         print(f"Error: Invalid role '{args.role}'. Valid: GUEST, USER, LEASEE, OWNER, CREATOR")
         raise SystemExit(1) from exc
+
+
+def cmd_peer_test(args) -> None:
+    """Test non-HTTP RCAN transport to discovered peers."""
+    import json as _json
+    import time as _time
+
+    peer_host = getattr(args, "peer", None)
+    transport = getattr(args, "transport", "all")
+    dry_run = getattr(args, "dry_run", True)
+
+    print("\n  OpenCastor Peer Transport Test")
+    print("  " + "═" * 43)
+
+    # Discover peers
+    peers: list[dict] = []
+    try:
+        import httpx
+
+        token = os.getenv("OPENCASTOR_API_TOKEN", "")
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        r = httpx.get("http://127.0.0.1:8001/api/peers", headers=headers, timeout=3)
+        if r.status_code == 200:
+            peers = r.json().get("peers", [])
+    except Exception:
+        pass
+
+    if peer_host:
+        peers = [{"name": peer_host, "host": peer_host, "rrn": peer_host}]
+
+    if not peers:
+        print("  No peers discovered.")
+        print("  Specify a peer: castor peer-test <hostname>")
+        return
+
+    print(f"\n  Discovered: {', '.join(p.get('name', p.get('host', '?')) for p in peers)}\n")
+
+    for peer in peers:
+        name = peer.get("name", peer.get("host", "unknown"))
+        host = peer.get("host", name)
+        rrn = peer.get("rrn", name)
+
+        print(f"  Testing {name} ({rrn})")
+        print("  " + "─" * 43)
+
+        test_msg = {
+            "msg_id": f"peer-test-{int(_time.time())}",
+            "cmd": "PING",
+            "target": f"rcan://{rrn}",
+        }
+        json_size = len(_json.dumps(test_msg))
+
+        # HTTP test
+        if transport in ("all", "http"):
+            try:
+                import httpx
+
+                t0 = _time.monotonic()
+                r = httpx.get(f"http://{host}:8001/api/status", timeout=3)
+                ms = int((_time.monotonic() - t0) * 1000)
+                status = "✅" if r.status_code == 200 else "⚠️"
+                print(f"    HTTP (JSON)       {status}  {ms}ms   {json_size} bytes")
+            except Exception as e:
+                print(f"    HTTP (JSON)       ❌  {str(e)[:30]}")
+
+        # Compact encoding test
+        if transport in ("all", "mqtt", "compact"):
+            try:
+                from rcan import RCANMessage
+                from rcan.transport import encode_compact
+
+                msg = RCANMessage(cmd="PING", target=f"rcan://opencastor.com/acme/bot/v1/{rrn}")
+                payload = encode_compact(msg)
+                savings = int((1 - len(payload) / json_size) * 100)
+                print(f"    Compact           ✅  —     {len(payload)} bytes  (-{savings}%)")
+            except Exception as e:
+                print(f"    Compact           ❌  {str(e)[:30]}")
+
+        # Minimal ESTOP test
+        if transport in ("all", "mqtt", "minimal"):
+            try:
+                from rcan import RCANMessage
+                from rcan.transport import encode_minimal
+
+                msg = RCANMessage(cmd="ESTOP", target=f"rcan://opencastor.com/acme/bot/v1/{rrn}")
+                raw = encode_minimal(msg)
+                label = "✅" if not dry_run else "✅ (dry-run)"
+                print(f"    Minimal (ESTOP)   {label}  —     {len(raw)} bytes")
+            except Exception as e:
+                print(f"    Minimal (ESTOP)   ❌  {str(e)[:30]}")
+
+        print()
+
+    if dry_run:
+        print("  Dry-run: encoding tested, no messages sent to peers")
+        print("  Live test: castor peer-test --no-dry-run\n")
+
+
+def cmd_contribute_cli(args) -> None:
+    """Manage idle compute contribution."""
+    action = getattr(args, "contribute_action", "status")
+
+    try:
+        import httpx
+
+        token = os.getenv("OPENCASTOR_API_TOKEN", "")
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        base = "http://127.0.0.1:8001"
+
+        if action == "start":
+            r = httpx.post(f"{base}/api/contribute/start", headers=headers, timeout=5)
+            data = r.json()
+            print(f"\n  Contribute: {'started' if data.get('active') else 'failed to start'}")
+
+        elif action == "stop":
+            r = httpx.post(f"{base}/api/contribute/stop", headers=headers, timeout=5)
+            print("\n  Contribute: stopped")
+
+        elif action == "history":
+            r = httpx.get(f"{base}/api/contribute/history", headers=headers, timeout=5)
+            history = r.json().get("history", [])
+            if not history:
+                print("\n  No contribution history yet.")
+                return
+            print("\n  Contribution History (last 90 days)")
+            print("  " + "─" * 40)
+            for entry in history[-14:]:  # Show last 2 weeks
+                print(
+                    f"    {entry['date']}  {entry['minutes']:>4} min  "
+                    f"{entry['work_units']:>3} units"
+                )
+            print()
+
+        else:  # status
+            r = httpx.get(f"{base}/api/contribute", headers=headers, timeout=5)
+            data = r.json()
+            enabled = data.get("enabled", False)
+            active = data.get("active", False)
+            print("\n  Idle Compute Contribution")
+            print("  " + "─" * 30)
+            print(
+                f"    Status:    {'🟢 Active' if active else '🟡 Enabled (idle)' if enabled else '⚫ Disabled'}"
+            )
+            print(f"    Project:   {data.get('project', '—')}")
+            print(
+                f"    Today:     {data.get('contribute_minutes_today', 0)} min / {data.get('work_units_today', 0)} units"
+            )
+            print(
+                f"    Lifetime:  {data.get('contribute_minutes_lifetime', 0)} min / {data.get('work_units_total', 0)} units"
+            )
+            print()
+
+    except Exception as exc:
+        print(f"\n  Error: {exc}\n  Is the gateway running? (castor run)")
+
+
+def cmd_leaderboard(args) -> None:
+    """Print fleet leaderboard table."""
+    from castor.commands.leaderboard import cmd_leaderboard as _cmd
+
+    _cmd(args)
+
+
+def cmd_compete(args) -> None:
+    """Manage competition entry and status."""
+    from castor.commands.compete import cmd_compete as _cmd
+
+    _cmd(args)
+
+
+def cmd_season(args) -> None:
+    """Display season overview and class standings."""
+    from castor.commands.season import cmd_season as _cmd
+
+    _cmd(args)
+
+
+def cmd_research(args) -> None:
+    """Manage the harness research pipeline."""
+    from castor.commands.research import cmd_research as _cmd
+
+    _cmd(args)
+
+
+def cmd_provider(args) -> None:
+    """Manage gated model providers — test auth, list models, show status."""
+    provider_action = getattr(args, "provider_action", "list")
+
+    if provider_action == "auth":
+        provider_name = getattr(args, "provider_name", "")
+        config_path = getattr(args, "config", "robot.rcan.yaml")
+
+        if not provider_name:
+            print("\n  Usage: castor provider auth <provider-name>")
+            print("  Test authentication for a gated model provider.\n")
+            return
+
+        try:
+            import yaml
+
+            with open(config_path) as f:
+                cfg = yaml.safe_load(f) or {}
+
+            providers = cfg.get("providers", {})
+            if provider_name not in providers:
+                print(f"\n  Provider '{provider_name}' not found in config.")
+                print(f"  Available: {', '.join(providers.keys()) or '(none)'}\n")
+                return
+
+            pcfg = providers[provider_name]
+            auth_config = pcfg.get("auth", {})
+            if not auth_config:
+                print(f"\n  Provider '{provider_name}' has no auth configuration.\n")
+                return
+
+            from castor.auth.provider_auth import create_provider_auth
+
+            print(f"\n  Testing auth for '{provider_name}'...")
+            print(f"  Method: {auth_config.get('method', 'unknown')}")
+
+            handler = create_provider_auth(auth_config)
+            creds = handler.get_credentials()
+
+            if creds.expired:
+                print("  Status: ⚠️  EXPIRED")
+            else:
+                print("  Status: ✅ Valid")
+
+            if creds.headers:
+                # Show header names without values for security
+                header_names = list(creds.headers.keys())
+                print(f"  Headers: {', '.join(header_names)}")
+
+            if creds.client_cert:
+                print(f"  Client cert: {creds.client_cert[0]}")
+
+            if creds.expires_at > 0:
+                import time
+
+                remaining = creds.expires_at - time.time()
+                if remaining > 0:
+                    mins = int(remaining / 60)
+                    print(f"  Expires in: {mins} minutes")
+
+            models = pcfg.get("models", [])
+            if models:
+                print(f"  Models: {', '.join(models)}")
+
+            fallback = pcfg.get("fallback_model")
+            if fallback:
+                provider = pcfg.get("fallback_provider", "local")
+                print(f"  Fallback: {provider}/{fallback}")
+
+            print()
+
+        except FileNotFoundError:
+            print(f"\n  Config file not found: {config_path}\n")
+        except Exception as exc:
+            print(f"\n  Auth failed: {exc}\n")
+
+    elif provider_action == "list":
+        config_path = getattr(args, "config", "robot.rcan.yaml")
+        try:
+            import yaml
+
+            with open(config_path) as f:
+                cfg = yaml.safe_load(f) or {}
+
+            providers = cfg.get("providers", {})
+            if not providers:
+                print("\n  No gated providers configured.")
+                print("  Add providers to your config.yaml under 'providers:'\n")
+                return
+
+            print("\n  Gated Model Providers")
+            print("  " + "─" * 50)
+            for name, pcfg in providers.items():
+                auth = pcfg.get("auth", {})
+                method = auth.get("method", "none")
+                models = pcfg.get("models", [])
+                fallback = pcfg.get("fallback_model", "none")
+                print(f"    {name}")
+                print(f"      Auth: {method}  |  Models: {len(models)}  |  Fallback: {fallback}")
+            print()
+
+        except FileNotFoundError:
+            print(f"\n  Config file not found: {config_path}\n")
+        except Exception as exc:
+            print(f"\n  Error: {exc}\n")
+
+    elif provider_action == "status":
+        try:
+            import httpx
+
+            token = os.getenv("OPENCASTOR_API_TOKEN", "")
+            headers = {"Authorization": f"Bearer {token}"} if token else {}
+            base = "http://127.0.0.1:8001"
+
+            r = httpx.get(f"{base}/api/status", headers=headers, timeout=5)
+            data = r.json()
+            providers = data.get("gated_providers", [])
+
+            if not providers:
+                print("\n  No gated providers active on the running gateway.\n")
+                return
+
+            print("\n  Active Gated Providers")
+            print("  " + "─" * 50)
+            for p in providers:
+                name = p.get("provider", "unknown")
+                available = "✅" if p.get("available") else "❌"
+                auth_valid = "✅" if p.get("auth_valid") else "❌"
+                method = p.get("auth_method", "unknown")
+                models = p.get("models", [])
+                print(f"    {available} {name} (auth: {auth_valid}, method: {method})")
+                if models:
+                    print(f"        Models: {', '.join(models)}")
+            print()
+
+        except Exception as exc:
+            print(f"\n  Error: {exc}\n  Is the gateway running?\n")
 
 
 def cmd_discover(args) -> None:
@@ -1182,20 +1493,10 @@ def cmd_profile(args) -> None:
 
 
 def cmd_quickstart(args) -> None:
-    """castor quickstart — guided zero-to-running setup in two steps."""
-    import subprocess
-    import sys
+    """castor quickstart — init wizard + start gateway in one command."""
+    from castor.init_wizard import cmd_quickstart as _wizard_quickstart
 
-    print("\n  🚀 OpenCastor QuickStart\n")
-    print("  Step 1: Running setup wizard...")
-    result = subprocess.run([sys.executable, "-m", "castor", "wizard"])
-    if result.returncode != 0:
-        print("\n  Wizard failed. Fix the issues above and re-run `castor quickstart`.")
-        return
-
-    print("\n  Step 2: Launching demo...")
-    subprocess.run([sys.executable, "-m", "castor", "demo"])
-    print("\n  QuickStart complete. Run `castor gateway` to start the full runtime.\n")
+    _wizard_quickstart(args)
 
 
 def cmd_record(args) -> None:
@@ -1642,6 +1943,33 @@ def cmd_status(args) -> None:
     print()
 
 
+def cmd_attestation(args) -> None:
+    """castor attestation — show or regenerate software attestation status."""
+    import json
+    from pathlib import Path
+
+    from castor.attestation_generator import generate_attestation
+
+    config_path = Path(args.config) if getattr(args, "config", None) else None
+    out_path = Path(args.out) if getattr(args, "out", None) else None
+    result = generate_attestation(config_path=config_path, out_path=out_path)
+
+    if getattr(args, "output_json", False):
+        print(json.dumps(result, indent=2))
+    else:
+        status = "VERIFIED" if result["verified"] else "DEGRADED"
+        print(f"\n  OpenCastor Software Attestation: {status}\n")
+        print(f"  secure_boot   (code integrity):    {result['secure_boot']}")
+        print(f"    {result['claims_detail']['secure_boot']}")
+        print(f"  measured_boot (config integrity):   {result['measured_boot']}")
+        print(f"    {result['claims_detail']['measured_boot']}")
+        print(f"  signed_updates (update chain):      {result['signed_updates']}")
+        print(f"    {result['claims_detail']['signed_updates']}")
+        print(f"\n  Profile: {result['profile']}")
+        print(f"  Token:   {result['token'][:16]}...")
+        print()
+
+
 def cmd_swarm(args) -> None:
     """castor swarm — placeholder."""
     print("castor swarm: coming soon.")
@@ -1839,7 +2167,7 @@ def cmd_setup(args) -> None:
 
     provider_map = {"1": "google", "2": "anthropic", "3": "openai", "4": "none"}
     model_map = {
-        "google": "gemini-2.0-flash",
+        "google": "gemini-2.5-flash",
         "anthropic": "claude-3-5-haiku-20241022",
         "openai": "gpt-4o-mini",
         "none": "",
@@ -2061,9 +2389,64 @@ def _cmd_bridge(args) -> None:
         cmd_bridge_setup(args)
         return
 
+    # Handle 'castor bridge discover' — RCAN peer discovery
+    if bridge_subcmd == "discover":
+        _cmd_bridge_discover(args)
+        return
+
     from castor.cloud.bridge import run_bridge
 
     run_bridge(args)
+
+
+def _cmd_bridge_discover(args) -> None:
+    """castor bridge discover — probe RCAN peers and print bridge status."""
+    import os
+
+    from castor.rcan.http_transport import discover_robot
+
+    # Load config
+    config_path = getattr(args, "config", None)
+    if not config_path:
+        # Auto-detect
+        for candidate in ["bob.rcan.yaml", "opencastor.rcan.yaml", "castor.yaml"]:
+            if os.path.exists(candidate):
+                config_path = candidate
+                break
+        if not config_path:
+            import glob
+
+            found = glob.glob("*.rcan.yaml") + glob.glob("config/*.rcan.yaml")
+            config_path = found[0] if found else None
+
+    config = {}
+    if config_path and os.path.exists(config_path):
+        try:
+            import yaml  # type: ignore[import]
+
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+        except Exception as e:
+            print(f"  ⚠ Could not load config: {e}")
+
+    peers = config.get("rcan_protocol", {}).get("peers", [])
+    if not peers:
+        print("  No RCAN peers configured in rcan_protocol.peers")
+        return
+
+    print(f"  Probing {len(peers)} RCAN peer(s)...")
+    for peer in peers:
+        host = peer.get("host")
+        if not host:
+            continue
+        port = peer.get("port", 8000)
+        result = discover_robot(host, port=port)
+        if result:
+            robot_name = result.get("robot_name") or result.get("ruri") or "?"
+            ruri = result.get("ruri") or "?"
+            print(f"  ✓ {host}:{port}: {robot_name} ({ruri})")
+        else:
+            print(f"  ✗ {host}:{port}: unreachable")
 
 
 def _cmd_arm(args) -> None:
@@ -2197,6 +2580,15 @@ def cmd_upgrade(args) -> None:
         ["systemctl", "--user", "restart", "castor-dashboard.service"],
         capture_output=True,
     )
+
+    # Re-run attestation after upgrade to refresh measurements
+    try:
+        from castor.attestation_generator import generate_attestation
+
+        generate_attestation()
+        print("  Security attestation refreshed.")
+    except Exception:
+        pass
 
     # Reload to get new version string
     import importlib
@@ -3176,10 +3568,12 @@ def cmd_install_service(args) -> None:
     import os
 
     from castor.daemon import (
+        ATTESTATION_SERVICE_NAME,
         DASHBOARD_SERVICE_NAME,
         DASHBOARD_SERVICE_PATH,
         SERVICE_NAME,
         SERVICE_PATH,
+        enable_attestation_service,
         enable_daemon,
         enable_dashboard,
     )
@@ -3194,12 +3588,19 @@ def cmd_install_service(args) -> None:
         return
 
     if dry_run:
-        from castor.daemon import generate_dashboard_service_file, generate_service_file
+        from castor.daemon import (
+            ATTESTATION_SERVICE_PATH,
+            generate_attestation_service_file,
+            generate_dashboard_service_file,
+            generate_service_file,
+        )
 
         print(f"  [dry-run] Gateway service → {SERVICE_PATH}")
         print(generate_service_file(abs_config))
         print(f"  [dry-run] Dashboard service → {DASHBOARD_SERVICE_PATH}")
         print(generate_dashboard_service_file(port=dashboard_port))
+        print(f"  [dry-run] Attestation service → {ATTESTATION_SERVICE_PATH}")
+        print(generate_attestation_service_file(abs_config))
         return
 
     print("  Installing gateway service...")
@@ -3217,11 +3618,21 @@ def cmd_install_service(args) -> None:
     else:
         print(f"  Dashboard service failed: {dash['message']}")
 
+    print("  Installing attestation service...")
+    att = enable_attestation_service(abs_config)
+    if att["ok"]:
+        print(f"  Attestation service installed: {att['service_path']}")
+        print("  Security posture will be verified on every boot.")
+    else:
+        print(f"  Attestation service failed: {att['message']}")
+        print("  Security posture will show 'degraded' until attestation runs.")
+
     if gw["ok"] and dash["ok"]:
-        print("\n  Both services are enabled and will start automatically on boot.")
+        print("\n  All services are enabled and will start automatically on boot.")
         print("  Manage with:")
         print(f"    sudo systemctl status {SERVICE_NAME}")
         print(f"    sudo systemctl status {DASHBOARD_SERVICE_NAME}")
+        print(f"    sudo systemctl status {ATTESTATION_SERVICE_NAME}")
 
 
 def cmd_learn(args) -> None:
@@ -3726,20 +4137,81 @@ def _cmd_install(args) -> None:
         print("  For now: https://github.com/craigm26/OpenCastor/tree/main/config/community")
         return
 
-    # Generic ID or opencastor.com/config/<id> URL — Phase 2: fetch from Firebase
+    # Generic ID or opencastor.com/config/<id>[@hash] URL — Phase 2: fetch from Firebase
     config_id = target
-    if "opencastor.com/config/" in target or "opencastor.com/explore/" in target:
-        config_id = target.rstrip("/").split("/")[-1]
+    pin_hash = None
+
+    # Parse @hash suffix (e.g., bob-pi4-oakd@sha256:abc123)
+    if "@" in config_id.split("/")[-1]:
+        base, pin_hash = config_id.rsplit("@", 1)
+        config_id = base
+
+    if "opencastor.com/config/" in config_id or "opencastor.com/explore/" in config_id:
+        config_id = config_id.rstrip("/").split("/")[-1]
 
     print(f"  Fetching '{config_id}' from opencastor.com hub...")
-    _install_from_hub(config_id, dest_dir, dry_run)
+    _install_from_hub(config_id, dest_dir, dry_run, pin_hash=pin_hash)
 
 
-def _install_from_hub(config_id: str, dest_dir, dry_run: bool) -> None:
-    """Fetch and install a config from the OpenCastor Hub (Phase 2 Firebase)."""
+_LOCK_FILE_NAME = "castor.lock.yaml"
+
+
+def _load_lock_file(dest_dir) -> dict:
+    """Load castor.lock.yaml, returning dict with 'locked' list."""
+    from pathlib import Path
+
+    lock_path = Path(dest_dir) / _LOCK_FILE_NAME
+    if not lock_path.exists():
+        return {"locked": []}
+    try:
+        import yaml as _yaml
+
+        data = _yaml.safe_load(lock_path.read_text()) or {}
+        return data if isinstance(data, dict) else {"locked": []}
+    except Exception:
+        return {"locked": []}
+
+
+def _save_lock_file(dest_dir, lock_data: dict) -> None:
+    from pathlib import Path
+
+    lock_path = Path(dest_dir) / _LOCK_FILE_NAME
+    lines = ["# castor.lock.yaml — generated by castor install\n", "locked:\n"]
+    for entry in lock_data.get("locked", []):
+        lines.append(f"  - id: {entry['id']}\n")
+        lines.append(f"    url: {entry['url']}\n")
+        lines.append(f"    hash: {entry['hash']}\n")
+        lines.append(f"    installed_at: {entry['installed_at']}\n")
+        lines.append(f"    filename: {entry['filename']}\n")
+    lock_path.write_text("".join(lines))
+
+
+def _content_hash(content: str) -> str:
+    import hashlib
+
+    return "sha256:" + hashlib.sha256(content.encode()).hexdigest()[:16]
+
+
+def _install_from_hub(
+    config_id: str,
+    dest_dir,
+    dry_run: bool,
+    pin_hash: str | None = None,
+    update_lock: bool = True,
+) -> None:
+    """Fetch and install a config from the OpenCastor Hub.
+
+    Args:
+        config_id: Hub config ID.
+        dest_dir: Directory to write the config file.
+        dry_run: Preview without writing.
+        pin_hash: If set, verify content hash matches before installing.
+        update_lock: If True, write/update castor.lock.yaml after installing.
+    """
     import json as _json
     import urllib.error
     import urllib.request
+    from datetime import datetime, timezone
     from pathlib import Path
 
     url = "https://us-central1-opencastor.cloudfunctions.net/getConfig"
@@ -3763,15 +4235,40 @@ def _install_from_hub(config_id: str, dest_dir, dry_run: bool) -> None:
                 print(f"  ✗ No content in response for '{config_id}'")
                 return
 
+            actual_hash = _content_hash(content)
+            if pin_hash and actual_hash != pin_hash:
+                print(f"  ✗ Hash mismatch for '{config_id}'")
+                print(f"    Expected: {pin_hash}")
+                print(f"    Got:      {actual_hash}")
+                print("  Run: castor update  to fetch latest and re-pin.")
+                return
+
             dest = Path(dest_dir) / filename
             if dry_run:
                 print(f"  [dry-run] Would install '{title}' → {dest}")
+                print(f"  Hash: {actual_hash}")
                 return
 
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(content)
             print(f"  ✓ Installed '{title}' → {dest}")
+            print(f"  Hash: {actual_hash}")
             print(f"  Start with: castor run --config {dest}")
+
+            if update_lock:
+                lock = _load_lock_file(dest_dir)
+                lock["locked"] = [e for e in lock["locked"] if e.get("id") != config_id]
+                lock["locked"].append(
+                    {
+                        "id": config_id,
+                        "url": f"opencastor.com/config/{config_id}",
+                        "hash": actual_hash,
+                        "installed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        "filename": filename,
+                    }
+                )
+                _save_lock_file(dest_dir, lock)
+                print(f"  Lock file updated: {dest_dir}/{_LOCK_FILE_NAME}")
 
     except urllib.error.HTTPError as e:
         if e.code == 404:
@@ -3782,6 +4279,95 @@ def _install_from_hub(config_id: str, dest_dir, dry_run: bool) -> None:
     except Exception as exc:
         print(f"  ✗ Could not reach hub: {exc}")
         print(f"  Try browsing manually: https://opencastor.com/config/{config_id}")
+
+
+def _cmd_hub_update(args) -> None:
+    """castor update — re-fetch all hub-pinned configs and update if changed."""
+    update_dir = getattr(args, "update_dir", ".") or "."
+    dry_run = getattr(args, "dry_run", False)
+
+    lock = _load_lock_file(update_dir)
+    entries = lock.get("locked", [])
+    if not entries:
+        print("  No pinned configs in castor.lock.yaml")
+        print("  Install configs first: castor install opencastor.com/config/<id>")
+        return
+
+    print(f"  Checking {len(entries)} pinned config(s)...")
+    updated = 0
+    for entry in entries:
+        config_id = entry.get("id", "?")
+        old_hash = entry.get("hash", "")
+        print(f"\n  [{config_id}]")
+        _install_from_hub(config_id, update_dir, dry_run=dry_run, pin_hash=None, update_lock=True)
+        # Reload to check if hash changed
+        new_lock = _load_lock_file(update_dir)
+        new_entry = next((e for e in new_lock.get("locked", []) if e.get("id") == config_id), None)
+        if new_entry and new_entry.get("hash") != old_hash:
+            print(f"  ↑ Updated ({old_hash} → {new_entry['hash']})")
+            updated += 1
+        elif not dry_run:
+            print("  ✓ Already up to date")
+
+    if not dry_run:
+        print(f"\n  {updated}/{len(entries)} config(s) updated")
+
+
+def _cmd_lock(args) -> None:
+    """castor lock — show, verify, or clear the castor.lock.yaml."""
+    lock_cmd = getattr(args, "lock_cmd", None)
+    lock_dir = getattr(args, "lock_dir", ".") or "."
+
+    lock = _load_lock_file(lock_dir)
+    entries = lock.get("locked", [])
+
+    if lock_cmd == "show" or lock_cmd is None:
+        if not entries:
+            print(f"  castor.lock.yaml is empty or not found in {lock_dir}")
+            return
+        print(f"\n  Pinned configs ({len(entries)}):\n")
+        for entry in entries:
+            print(f"  {entry.get('id', '?')}")
+            print(f"    url:          {entry.get('url', '?')}")
+            print(f"    hash:         {entry.get('hash', '?')}")
+            print(f"    installed_at: {entry.get('installed_at', '?')}")
+            print(f"    filename:     {entry.get('filename', '?')}")
+            print()
+
+    elif lock_cmd == "verify":
+        if not entries:
+            print("  Nothing to verify.")
+            return
+        import json as _json
+        import urllib.error
+        import urllib.request
+
+        print(f"\n  Verifying {len(entries)} pinned config(s)...\n")
+        for entry in entries:
+            config_id = entry.get("id", "?")
+            expected = entry.get("hash", "")
+            url = "https://us-central1-opencastor.cloudfunctions.net/getConfig"
+            try:
+                payload = _json.dumps({"data": {"id": config_id}}).encode()
+                req = urllib.request.Request(
+                    url, data=payload, headers={"Content-Type": "application/json"}, method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    data = _json.loads(resp.read()).get("result", {})
+                    actual = _content_hash(data.get("content", ""))
+                    if actual == expected:
+                        print(f"  ✓ {config_id} — hash matches")
+                    else:
+                        print(
+                            f"  ✗ {config_id} — HASH MISMATCH (expected {expected}, got {actual})"
+                        )
+                        print("    Run: castor update to refresh")
+            except Exception as exc:
+                print(f"  ? {config_id} — could not verify: {exc}")
+
+    elif lock_cmd == "clear":
+        _save_lock_file(lock_dir, {"locked": []})
+        print(f"  ✓ Cleared castor.lock.yaml in {lock_dir}")
 
 
 def _cmd_optimize(args) -> None:
@@ -4159,6 +4745,52 @@ def main() -> None:
         nargs="*",
         help="Extra arguments (e.g. limit N for history)",
     )
+
+    p_peer_test = sub.add_parser(
+        "peer-test",
+        help="Test direct RCAN communication with discovered peers",
+    )
+    p_peer_test.add_argument("peer", nargs="?", help="Peer hostname or address")
+    p_peer_test.add_argument(
+        "--transport",
+        choices=["all", "http", "mqtt", "compact", "minimal"],
+        default="all",
+    )
+    p_peer_test.add_argument(
+        "--no-dry-run",
+        dest="dry_run",
+        action="store_false",
+        default=True,
+    )
+
+    p_contribute = sub.add_parser(
+        "contribute",
+        help="Manage idle compute contribution",
+    )
+    p_contribute.add_argument(
+        "contribute_action",
+        nargs="?",
+        choices=["status", "start", "stop", "history"],
+        default="status",
+        help="Contribute sub-command (default: status)",
+    )
+
+    # castor provider — gated model provider management
+    p_provider = sub.add_parser(
+        "provider",
+        help="Manage gated model providers (auth, list, status)",
+        epilog="Example: castor provider auth pi-foundation --config robot.rcan.yaml",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_provider_sub = p_provider.add_subparsers(dest="provider_action")
+    p_prov_auth = p_provider_sub.add_parser("auth", help="Test provider authentication")
+    p_prov_auth.add_argument(
+        "provider_name", nargs="?", default="", help="Provider name from config"
+    )
+    p_prov_auth.add_argument("--config", default="robot.rcan.yaml", help="RCAN config file")
+    p_prov_list = p_provider_sub.add_parser("list", help="List configured providers")
+    p_prov_list.add_argument("--config", default="robot.rcan.yaml", help="RCAN config file")
+    p_provider_sub.add_parser("status", help="Show status of active providers on running gateway")
 
     p_doctor = sub.add_parser(
         "doctor",
@@ -5011,12 +5643,40 @@ def main() -> None:
     p_diff.add_argument("--baseline", required=True, help="Baseline config to compare against")
 
     # castor quickstart
-    sub.add_parser(
+    p_qs = sub.add_parser(
         "quickstart",
-        help="One-command setup: wizard + demo",
-        epilog="Example: castor quickstart",
+        help="Zero-to-fleet in one command: init wizard + start gateway",
+        description="Runs `castor init` then immediately starts the gateway.",
+        epilog=(
+            "Examples:\n"
+            "  castor quickstart\n"
+            "  castor quickstart --name Bob --provider google --no-interactive\n"
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    p_qs.add_argument("--name", "-n", default=None, help="Robot name")
+    p_qs.add_argument(
+        "--provider",
+        default=None,
+        choices=["google", "anthropic", "openai", "local"],
+        help="AI provider (default: google)",
+    )
+    p_qs.add_argument("--port", type=int, default=None, help="Gateway port (default: 8080)")
+    p_qs.add_argument("--api-key", default=None, dest="api_key", help="AI provider API key")
+    p_qs.add_argument(
+        "--firebase-project",
+        default=None,
+        dest="firebase_project",
+        help="Firebase project ID",
+    )
+    p_qs.add_argument("--output", "-o", default=None, help="Output config path")
+    p_qs.add_argument(
+        "--no-interactive",
+        action="store_true",
+        dest="no_interactive",
+        help="Skip prompts — use flags/defaults",
+    )
+    p_qs.add_argument("--overwrite", action="store_true", help="Overwrite existing config")
 
     # castor plugins [install <source>]
     p_plugins = sub.add_parser(
@@ -5271,6 +5931,22 @@ def main() -> None:
     )
     p_conformance.add_argument("--json", action="store_true", help="Output raw JSON manifest")
 
+    p_attest = sub.add_parser(
+        "attestation",
+        help="Show or regenerate software attestation status",
+        epilog=(
+            "Examples:\n"
+            "  castor attestation\n"
+            "  castor attestation --config bob.rcan.yaml\n"
+            "  castor attestation --json\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_attest.add_argument("--config", default=None, help="Path to RCAN config file")
+    p_attest.add_argument("--out", default=None, help="Output path for attestation JSON")
+    p_attest.add_argument("--json", action="store_true", dest="output_json", help="Output JSON")
+    p_attest.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
+
     p_audit = sub.add_parser(
         "audit",
         help="View the append-only audit log",
@@ -5332,16 +6008,47 @@ def main() -> None:
         help="Model task filter for --list-models (default: text-generation)",
     )
 
-    # castor init — generate starter config (non-interactive)
+    # castor init — interactive setup wizard (zero-to-fleet onboarding)
     p_init = sub.add_parser(
         "init",
-        help="Generate a minimal starter robot.rcan.yaml config",
-        description="Scaffold a minimal valid robot.rcan.yaml without the interactive wizard.",
+        help="Interactive setup wizard — zero-to-fleet onboarding in under 5 minutes",
+        description=(
+            "Interactive wizard that generates a complete .rcan.yaml config.\n"
+            "Run without arguments for guided prompts.\n"
+            "Use --no-interactive for CI/scripted use."
+        ),
+        epilog=(
+            "Examples:\n"
+            "  castor init\n"
+            "  castor init --name Bob --provider google --port 8080 --no-interactive\n"
+            "  castor init --output my-robot.rcan.yaml --overwrite\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_init.add_argument(
-        "--output", "-o", default="robot.rcan.yaml", help="Output path (default: robot.rcan.yaml)"
+        "--output", "-o", default=None, help="Output path (default: <robot-name>.rcan.yaml)"
     )
-    p_init.add_argument("--name", "-n", default=None, help="Robot name (default: hostname)")
+    p_init.add_argument("--name", "-n", default=None, help="Robot name (default: my-robot)")
+    p_init.add_argument(
+        "--provider",
+        default=None,
+        choices=["google", "anthropic", "openai", "local"],
+        help="AI provider (default: google)",
+    )
+    p_init.add_argument("--port", type=int, default=None, help="Gateway port (default: 8080)")
+    p_init.add_argument("--api-key", default=None, dest="api_key", help="AI provider API key")
+    p_init.add_argument(
+        "--firebase-project",
+        default=None,
+        dest="firebase_project",
+        help="Firebase project ID (default: opencastor)",
+    )
+    p_init.add_argument(
+        "--no-interactive",
+        action="store_true",
+        dest="no_interactive",
+        help="Skip all prompts — use defaults/flags (required for CI)",
+    )
     p_init.add_argument("--overwrite", action="store_true", help="Overwrite existing config file")
     p_init.add_argument(
         "--print", action="store_true", help="Print config to stdout instead of writing to file"
@@ -5432,6 +6139,16 @@ def main() -> None:
         metavar="PATH",
         help="Path to RCAN config (default: auto-detect)",
     )
+    p_bridge_discover = p_bridge_sub.add_parser(
+        "discover",
+        help="Probe RCAN peers configured in rcan_protocol.peers and print status",
+    )
+    p_bridge_discover.add_argument(
+        "--config",
+        default=None,
+        metavar="PATH",
+        help="Path to RCAN config (default: auto-detect)",
+    )
 
     # castor setup — interactive Fleet UI onboarding wizard
     p_setup = sub.add_parser(
@@ -5504,6 +6221,28 @@ def main() -> None:
     )
     p_install2.add_argument("--dry-run", action="store_true", help="Preview without applying")
 
+    # castor hub-update (hub configs — not self-update)
+    p_hub_update = sub.add_parser(
+        "hub-update",
+        help="Update hub-installed configs to latest versions (reads castor.lock.yaml)",
+    )
+    p_hub_update.add_argument(
+        "--dir", dest="update_dir", default=".", help="Directory containing castor.lock.yaml"
+    )
+    p_hub_update.add_argument("--dry-run", action="store_true", help="Preview without applying")
+    p_hub_update.set_defaults(func=_cmd_hub_update)
+
+    # castor lock
+    p_lock = sub.add_parser("lock", help="Manage castor.lock.yaml (show, verify, clear)")
+    p_lock_sub = p_lock.add_subparsers(dest="lock_cmd")
+    p_lock_show = p_lock_sub.add_parser("show", help="Show pinned configs")
+    p_lock_show.add_argument("--dir", dest="lock_dir", default=".", help="Directory to check")
+    p_lock_verify = p_lock_sub.add_parser("verify", help="Verify hashes of pinned configs")
+    p_lock_verify.add_argument("--dir", dest="lock_dir", default=".", help="Directory to check")
+    p_lock_clear = p_lock_sub.add_parser("clear", help="Remove all pinned configs from lock file")
+    p_lock_clear.add_argument("--dir", dest="lock_dir", default=".", help="Directory to check")
+    p_lock.set_defaults(func=_cmd_lock)
+
     # castor explore
     p_explore = sub.add_parser("explore", help="Browse available presets, skills, and harnesses")
     p_explore.add_argument(
@@ -5534,6 +6273,130 @@ def main() -> None:
     )
     p_optimize.add_argument(
         "--unschedule", action="store_true", help="Remove the optimizer cron job"
+    )
+
+    # castor leaderboard
+    p_leaderboard = sub.add_parser(
+        "leaderboard",
+        help="Print fleet leaderboard",
+        epilog=(
+            "Examples:\n"
+            "  castor leaderboard\n"
+            "  castor leaderboard --tier medium --top 20\n"
+            "  castor leaderboard --season 2026-spring --json\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_leaderboard.add_argument(
+        "--tier", default=None, help="Hardware tier filter (default: auto-detect from config)"
+    )
+    p_leaderboard.add_argument("--season", default=None, help="Season ID to filter by")
+    p_leaderboard.add_argument(
+        "--top", type=int, default=10, metavar="N", help="Number of entries to show (default: 10)"
+    )
+    p_leaderboard.add_argument(
+        "--json", action="store_true", dest="output_json", help="Output raw JSON"
+    )
+    p_leaderboard.add_argument("--config", default=None, help="RCAN config for tier auto-detect")
+
+    # castor compete
+    p_compete = sub.add_parser(
+        "compete",
+        help="Manage competition entry and status",
+        epilog=(
+            "Examples:\n"
+            "  castor compete list\n"
+            "  castor compete enter sprint-2026-q1\n"
+            "  castor compete status sprint-2026-q1\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_compete.add_argument(
+        "compete_action",
+        nargs="?",
+        choices=["list", "enter", "status"],
+        default="list",
+        help="Compete sub-command (default: list)",
+    )
+    p_compete.add_argument(
+        "competition_id",
+        nargs="?",
+        default=None,
+        help="Competition ID (required for enter/status)",
+    )
+
+    # castor season
+    p_season = sub.add_parser(
+        "season",
+        help="Show current season overview and class standings",
+        epilog=(
+            "Examples:\n  castor season\n  castor season --list\n  castor season --class medium\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_season.add_argument(
+        "--list",
+        action="store_true",
+        dest="list_seasons",
+        help="List all seasons with status",
+    )
+    p_season.add_argument(
+        "--class",
+        dest="class_id",
+        default=None,
+        metavar="CLASS_ID",
+        help="Filter to one class and show its full leaderboard",
+    )
+
+    # castor research
+    p_research = sub.add_parser(
+        "research",
+        help="Manage the harness research pipeline",
+        epilog=(
+            "Examples:\n"
+            "  castor research\n"
+            "  castor research history\n"
+            "  castor research champion\n"
+            "  castor research queue\n"
+            "  castor research dashboard\n"
+            "  castor research recommend\n"
+            "  castor research recommend --hardware pi5_4gb --domain home --explain\n"
+            "  castor research recommend --list-findings\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_research.add_argument(
+        "research_action",
+        nargs="?",
+        choices=["status", "history", "champion", "queue", "dashboard", "recommend"],
+        default="status",
+        help="Research sub-command (default: status)",
+    )
+    p_research.add_argument(
+        "--hardware",
+        dest="hardware",
+        metavar="HW",
+        help="Hardware tier (pi5_4gb, pi5_8gb, pi5_hailo, jetson, server, waveshare)",
+    )
+    p_research.add_argument(
+        "--domain",
+        dest="domain",
+        metavar="DOMAIN",
+        help="Task domain (home, industrial, general)",
+    )
+    p_research.add_argument(
+        "--explain",
+        dest="explain",
+        action="store_true",
+        default=False,
+        help="Show synthesis findings that back the recommendation",
+    )
+    p_research.add_argument(
+        "--list-findings",
+        dest="list_findings",
+        action="store_true",
+        default=False,
+        help="List all synthesis signals from the autoresearch fleet",
     )
 
     args = parser.parse_args()
@@ -5603,12 +6466,15 @@ def main() -> None:
         "monitor": _cmd_monitor,
         "safety": cmd_safety,
         "conformance": cmd_conformance,
+        "attestation": cmd_attestation,
         "login": cmd_login,
         "flash": cmd_flash,
         "hub": cmd_hub,
         "scan": cmd_scan,
         "stop": cmd_stop,
         "daemon": cmd_daemon,
+        "peer-test": cmd_peer_test,
+        "contribute": cmd_contribute_cli,
         "deploy": cmd_deploy,
         # Issue #348
         "snapshot": cmd_snapshot,
@@ -5629,12 +6495,20 @@ def main() -> None:
         "eval": _cmd_eval,
         # Trajectory log management
         "trajectory": _cmd_trajectory,
-        # Config sharing hub (issue #700)
+        # Config sharing hub (issue #700 + #701)
         "share": _cmd_share,
         "install": _cmd_install,
+        "hub-update": _cmd_hub_update,
+        "lock": _cmd_lock,
         "explore": _cmd_explore,
         "skills": _cmd_skills,
         "optimize": _cmd_optimize,
+        "provider": cmd_provider,
+        # Issue #740 — leaderboard/compete/season/research
+        "leaderboard": cmd_leaderboard,
+        "compete": cmd_compete,
+        "season": cmd_season,
+        "research": cmd_research,
     }
 
     # castor eval — skill evaluation harness

@@ -42,7 +42,7 @@ _BLANK_FRAME: bytes = b"\x00" * 4
 # ── Per-provider default model map ────────────────────────────────────────────
 
 _DEFAULT_MODELS: dict[str, str] = {
-    "google": "gemini-2.0-flash",
+    "google": "gemini-2.5-flash",
     "openai": "gpt-4.1-mini",
     "anthropic": "claude-haiku-4-5",
     "huggingface": "meta-llama/Llama-3.3-70B-Instruct",
@@ -50,7 +50,7 @@ _DEFAULT_MODELS: dict[str, str] = {
     "llamacpp": "default-model",
     "mlx": "default-model",
     "apple": "apple-balanced",
-    "vertex_ai": "gemini-2.0-flash",
+    "vertex_ai": "gemini-2.5-flash",
 }
 
 # ── Cost estimate helper (per-1k tokens, mirroring castor/usage.py) ───────────

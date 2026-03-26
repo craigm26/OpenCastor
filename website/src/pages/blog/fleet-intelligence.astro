@@ -1,0 +1,206 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="Fleet Intelligence — Two Robots, One Leaderboard — OpenCastor Blog"
+  description="Bob and Alex are now both running harness eval contribute in parallel, competing on a public leaderboard. This is what the Karpathy loop looks like in practice."
+  ogUrl="https://opencastor.com/blog/fleet-intelligence"
+>
+
+<main>
+  <!-- HERO -->
+  <section class="page-hero" style="padding-bottom:24px">
+    <p class="section-label reveal">Blog</p>
+    <h1 class="reveal reveal-d1" style="max-width:720px;margin:0 auto">Fleet Intelligence:<br><span class="gradient-text">Two Robots, One Leaderboard</span></h1>
+    <p class="reveal reveal-d2" style="font-size:0.9rem;color:var(--text-muted);margin-top:16px">March 20, 2026 &middot; Craig Merry</p>
+  </section>
+
+  <!-- ARTICLE -->
+  <section class="section" style="padding-top:0">
+    <div class="container" style="max-width:720px">
+
+      <!-- Opening hook -->
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        Bob — a Raspberry Pi 5 with a Hailo-8L NPU — and Alex, a second Pi 5 across the network, are both
+        running <code>harness_eval</code> contribute right now. A fleet of two robots is evaluating harness
+        candidates in parallel, pushing scores to a shared leaderboard, competing on which config produces
+        the best real-world task success rates for their hardware tier. Neither robot is doing anything
+        else useful at this hour. This is exactly what the Karpathy loop looks like in practice:
+        collect data on real hardware, score it, propagate the best config, repeat.
+      </p>
+
+      <!-- The architecture -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">The architecture</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        Each robot in the fleet pulls harness candidates from a tiered Firestore queue at
+        <code>harness_eval_queue/&#123;tier&#125;/candidates</code>. Tier is matched to hardware — Bob pulls from
+        <code>pi5-hailo8l</code>, Alex from <code>pi5-8gb</code>. No robot evaluates a config that wasn't
+        designed for its hardware profile.
+      </p>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        Each candidate is evaluated across 10 scenarios covering the five core task classes:
+        <code>obstacle_avoidance</code>, <code>pick_and_place</code>, <code>navigation</code>,
+        <code>manipulation</code>, and <code>inspection</code>. Two scenarios per task class, randomized
+        parameters per run to prevent overfitting to a fixed sequence.
+      </p>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        The composite score is:
+      </p>
+
+      <div class="code-block reveal" style="margin-bottom:24px">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">scoring formula</span>
+        </div>
+        <div class="code-body">
+<span class="k">score</span> = (<span class="s">success_rate</span> × <span class="s">0.50</span>)
+       + (<span class="s">p66_rate</span>      × <span class="s">0.25</span>)
+       + (<span class="s">token_efficiency</span> × <span class="s">0.15</span>)
+       + (<span class="s">latency_score</span>  × <span class="s">0.10</span>)
+        </div>
+      </div>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        Results are written to <code>contribute_results/&#123;rrn&#125;/harness_eval/</code> and aggregated into
+        <code>harness_leaderboard/&#123;tier&#125;/</code>, so every robot's contribution is visible fleet-wide and
+        separated by hardware tier. A nightly CI job at 1&nbsp;AM Pacific generates new candidates from
+        Gemini and pushes them to the queue, so the robots always have fresh configs to evaluate in the morning.
+      </p>
+
+      <div class="reveal" style="margin:32px 0;overflow-x:auto">
+        <table class="arch-table">
+          <thead>
+            <tr>
+              <th>Hardware tier</th>
+              <th>Example hardware</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>pi5-hailo8l</code></td><td>Raspberry Pi 5 + Hailo-8L NPU (Bob)</td></tr>
+            <tr><td><code>pi5-8gb</code></td><td>Raspberry Pi 5 · 8 GB (Alex)</td></tr>
+            <tr><td><code>pi4-8gb</code></td><td>Raspberry Pi 4 · 8 GB</td></tr>
+            <tr><td><code>server</code></td><td>Jetson Orin, x86 server-class</td></tr>
+            <tr><td><code>waveshare-alpha</code></td><td>Waveshare ALPHA arm platform</td></tr>
+            <tr><td><code>unitree-go2</code></td><td>Unitree Go2 quadruped</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- The optimization problem -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">The optimization problem</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        Every harness candidate is a point in a four-dimensional search space: <code>max_iterations</code>,
+        <code>thinking_budget</code>, <code>cost_gate_usd</code>, and <code>context_budget</code>. The
+        nightly generator samples that space using the previous leaderboard as a prior — exploring near the
+        current champion and occasionally injecting random candidates to avoid local optima.
+      </p>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        There is one hard constraint that no score weighting can override: <strong>P66 preemption always
+        wins.</strong> Any candidate that lets a lower-priority task block a safety command is disqualified
+        immediately, regardless of its success rate. The <code>p66_rate</code> term in the score formula
+        rewards configs that preempt cleanly — but a zero <code>p66_rate</code> eliminates the candidate
+        before aggregation. The leaderboard only shows configs that are actually safe to run.
+      </p>
+
+      <!-- What we fixed today -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">What we fixed today</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        The contribute loop had a 4.6-second overhead per iteration from Firestore re-initialization.
+        Every iteration was creating a new Firestore client, re-fetching queue state, and recomputing the
+        champion score from scratch. Three caching fixes collapsed that to 14ms on first call and 0ms
+        on subsequent calls — roughly a 330x improvement.
+      </p>
+
+      <div class="bento reveal" style="grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:32px">
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:0.9rem;margin:0 0 8px">Firestore client</h3>
+          <p style="font-size:0.8rem;color:var(--text-secondary);margin:0">Module-level singleton. Initialized once per process, reused across all iterations.</p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:0.9rem;margin:0 0 8px">Queue state</h3>
+          <p style="font-size:0.8rem;color:var(--text-secondary);margin:0">Cached with a 30-second TTL. Refreshed only when stale, not on every loop tick.</p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:0.9rem;margin:0 0 8px">Champion score</h3>
+          <p style="font-size:0.8rem;color:var(--text-secondary);margin:0">Computed once per candidate batch. No repeated leaderboard reads mid-evaluation.</p>
+        </div>
+      </div>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        With the overhead gone, the Pi 5 can evaluate hundreds of candidates per hour when the queue is
+        full. We also killed a 3-day-old stale Chromium GPU process that had been burning 99% CPU in the
+        background — not glamorous work, but it freed the hardware headroom that made the throughput
+        improvement meaningful in practice.
+      </p>
+
+      <!-- What's next -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">What's next</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        Three things on the near-term roadmap. First, a real BOINC coordinator so external contributors
+        can join the fleet without running their own Firestore backend. Second, an NPU-optimized runner
+        for the Hailo-8L — right now Bob evaluates harness candidates using the same CPU path as Alex;
+        the NPU offload path will let it run inference-heavy scenarios significantly faster. Third, a
+        fleet coordination protocol so robots can divide the candidate queue by tier without polling the
+        same documents simultaneously. View the live leaderboard at
+        <a href="https://app.opencastor.com" style="color:var(--accent)">app.opencastor.com</a>.
+      </p>
+
+      <!-- CTA -->
+      <div class="reveal" style="margin-top:48px;padding:32px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;text-align:center">
+        <h3 style="font-size:1.25rem;margin-bottom:12px">Join the fleet</h3>
+        <p style="font-size:0.9375rem;color:var(--text-secondary);margin:0 0 20px">
+          Any robot running OpenCastor can contribute harness evaluations with one config line.
+        </p>
+        <div class="code-block" style="max-width:420px;margin:0 auto 20px">
+          <div class="code-header">
+            <div class="code-dots"><span></span><span></span><span></span></div>
+            <span class="code-filename">your-robot.rcan.yaml</span>
+          </div>
+          <div class="code-body">
+<span class="k">agent</span>:
+  <span class="k">contribute</span>:
+    <span class="k">enabled</span>: <span class="s">true</span>
+    <span class="k">projects</span>:
+      - <span class="s">harness_eval</span>
+          </div>
+        </div>
+        <div class="hero-actions" style="justify-content:center">
+          <a href="https://docs.opencastor.com/runtime/contribute/" class="btn btn-primary">Read the docs</a>
+          <a href="https://github.com/craigm26/OpenCastor" class="btn btn-secondary" target="_blank" rel="noopener">View on GitHub</a>
+        </div>
+      </div>
+
+    </div>
+  </section>
+</main>
+
+<style>
+  .arch-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+  .arch-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: var(--alt-bg);
+    border-bottom: 2px solid var(--border);
+    font-weight: 600;
+  }
+  .arch-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .arch-table tr:last-child td { border-bottom: none; }
+</style>
+
+</BaseLayout>

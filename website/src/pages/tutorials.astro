@@ -11,7 +11,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 <main>
     <section class="page-hero">
       <p class="section-label reveal">Tutorials</p>
-      <h1 class="reveal reveal-d1">Build your first integrations.</h1>
+      <h1 class="reveal reveal-d1"><span class="gradient-text">Build your first integrations.</span></h1>
       <p class="reveal reveal-d2">Step-by-step walkthroughs for Reachy Mini, HLabs ACB v2.0, DIY robots with Pi 5 or Jetson, ESP32, and LEGO Mindstorms.</p>
     </section>
 
@@ -69,7 +69,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <div class="tutorial-step reveal">
             <h3>Step 1 — Install OpenCastor with the Reachy extra</h3>
             <p style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:12px;">The <code>[reachy]</code> extra installs <code>reachy2-sdk</code> and <code>zeroconf</code> for mDNS discovery.</p>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code># In a virtual environment (required on Pi OS / Debian)
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code># In a virtual environment (required on Pi OS / Debian)
 python3 -m venv ~/opencastor-venv --system-site-packages
 source ~/opencastor-venv/bin/activate
 
@@ -83,7 +83,7 @@ castor scan --preset-only</code></pre>
           <div class="tutorial-step reveal">
             <h3>Step 2 — Power on Reachy Mini and verify mDNS</h3>
             <p style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:12px;">Reachy Mini advertises itself on your local network as <code>reachy-mini.local</code> using mDNS.</p>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code># Test connectivity from your computer
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code># Test connectivity from your computer
 ping reachy-mini.local
 
 # Or use the OpenCastor hardware scanner
@@ -95,9 +95,9 @@ castor scan
           <div class="tutorial-step reveal">
             <h3>Step 3 — Generate an RCAN config for Reachy Mini</h3>
             <p style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:12px;">OpenCastor's wizard auto-populates a config based on detected hardware.</p>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>castor wizard --preset reachy_mini --output ~/reachy-mini.rcan.yaml</code></pre>
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>castor wizard --preset reachy_mini --output ~/reachy-mini.rcan.yaml</code></pre>
             <p style="color:var(--text-secondary);font-size:0.88rem;margin-top:10px;">The generated config will look like:</p>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>robot_uuid: "your-uuid-here"
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>robot_uuid: "your-uuid-here"
 robot_name: "reachy-mini"
 
 hardware:
@@ -117,7 +117,7 @@ interpreter:
 
           <div class="tutorial-step reveal">
             <h3>Step 4 — Start the gateway and dashboard</h3>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>castor gateway --config ~/reachy-mini.rcan.yaml &amp;
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>castor gateway --config ~/reachy-mini.rcan.yaml &amp;
 castor dashboard &amp;
 
 # Check the API
@@ -128,7 +128,7 @@ curl http://localhost:8000/api/status
           <div class="tutorial-step reveal">
             <h3>Step 5 — Control head movement</h3>
             <p style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:12px;">Send movement commands via the REST API or Python SDK:</p>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>import requests
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>import requests
 
 # Nod the head
 requests.post("http://localhost:8000/api/move", json={'{'}
@@ -149,7 +149,7 @@ for joint in ["l_antenna", "r_antenna"]:
           <div class="tutorial-step reveal">
             <h3>Step 6 — Behavior scripting with RCAN behaviors</h3>
             <p style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:12px;">Add named behaviors to your config to make Reachy Mini react to events:</p>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>behaviors:
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>behaviors:
   - name: greet
     trigger: on_event("hello")
     actions:
@@ -173,7 +173,7 @@ for joint in ["l_antenna", "r_antenna"]:
           <div class="tutorial-step reveal">
             <h3>Step 7 — (Optional) Scene embeddings for reactive behaviors</h3>
             <p style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:12px;">If you attach a USB camera, OpenCastor can generate CLIP embeddings and trigger behaviors based on what the robot sees:</p>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>interpreter:
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>interpreter:
   backend: auto
   camera: /dev/video0     # USB camera attached to your compute node
   similarity_threshold: 0.78
@@ -220,7 +220,7 @@ behaviors:
 
           <div class="tutorial-step reveal">
             <h3>Step 1 — Install OpenCastor with HLabs support</h3>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>pip install opencastor[hlabs]
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>pip install opencastor[hlabs]
 
 # Verify detection (with ACB plugged in via USB-C)
 castor scan
@@ -230,7 +230,7 @@ castor scan
           <div class="tutorial-step reveal">
             <h3>Step 2 — Flash firmware via DFU</h3>
             <p style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:12px;">Hold the BOOT button on the ACB, plug in USB-C, then release. The board enumerates as DFU device <code>0483:df11</code>.</p>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code># Flash via OpenCastor (fetches latest release from GitHub)
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code># Flash via OpenCastor (fetches latest release from GitHub)
 castor hlabs flash --device /dev/ttyACM0
 
 # Or manually with dfu-util
@@ -241,7 +241,7 @@ dfu-util -a 0 -s 0x08000000 -D acb-firmware-v2.bin</code></pre>
           <div class="tutorial-step reveal">
             <h3>Step 3 — Wire the CAN Bus</h3>
             <p style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:12px;">Each ACB has a CAN-H and CAN-L connector. Wire all boards in a daisy chain. Terminate both ends of the bus with 120Ω resistors.</p>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>Pi/Jetson USB-CAN adapter
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>Pi/Jetson USB-CAN adapter
         │
     [120Ω]
         │
@@ -263,7 +263,7 @@ dfu-util -a 0 -s 0x08000000 -D acb-firmware-v2.bin</code></pre>
 
           <div class="tutorial-step reveal">
             <h3>Step 4 — Create the RCAN config</h3>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>robot_uuid: "arm-uuid-here"
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>robot_uuid: "arm-uuid-here"
 robot_name: "hlabs-arm"
 
 hardware:
@@ -293,7 +293,7 @@ telemetry:
           <div class="tutorial-step reveal">
             <h3>Step 5 — Run calibration</h3>
             <p style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:12px;">Before moving the arm, calibrate encoder zero positions:</p>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>castor gateway --config ~/hlabs-arm.rcan.yaml &amp;
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>castor gateway --config ~/hlabs-arm.rcan.yaml &amp;
 
 # Run interactive calibration wizard
 castor hlabs calibrate --joint shoulder_pan
@@ -306,7 +306,7 @@ castor hlabs calibrate --all</code></pre>
 
           <div class="tutorial-step reveal">
             <h3>Step 6 — Send your first motion command</h3>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>import requests
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>import requests
 
 BASE = "http://localhost:8000/api"
 
@@ -327,7 +327,7 @@ print(r.json())
           <div class="tutorial-step reveal">
             <h3>Step 7 — Monitor with Prometheus + Grafana</h3>
             <p style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:12px;">OpenCastor exposes standard Prometheus metrics at <code>:9090/metrics</code>:</p>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>opencastor_acb_position_rad{'{'}joint="shoulder_pan"{'}'} 0.785
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>opencastor_acb_position_rad{'{'}joint="shoulder_pan"{'}'} 0.785
 opencastor_acb_velocity_rad_s{'{'}joint="shoulder_pan"{'}'} 0.002
 opencastor_acb_current_a{'{'}joint="shoulder_pan"{'}'} 0.41
 opencastor_acb_error_flags{'{'}joint="shoulder_pan"{'}'} 0
@@ -398,14 +398,14 @@ opencastor_acb_error_flags{'{'}joint="shoulder_pan"{'}'} 0
           <div class="tutorial-step reveal">
             <h3>Step 1 — OS setup</h3>
             <p style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:8px;"><strong>Raspberry Pi 5:</strong></p>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:14px;overflow-x:auto;font-size:0.85rem;margin-bottom:16px;"><code># Flash Pi OS (64-bit) via Raspberry Pi Imager
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:14px;overflow-x:auto;font-size:0.85rem;margin-bottom:16px;"><code># Flash Pi OS (64-bit) via Raspberry Pi Imager
 # Enable SSH, set hostname, configure Wi-Fi during flash
 
 # After first boot, update
 sudo apt update &amp;&amp; sudo apt upgrade -y
 sudo apt install -y python3-venv python3-pip can-utils git</code></pre>
             <p style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:8px;"><strong>Nvidia Jetson Orin:</strong></p>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:14px;overflow-x:auto;font-size:0.85rem;"><code># Flash JetPack 6 via SDK Manager on a host Ubuntu machine
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:14px;overflow-x:auto;font-size:0.85rem;"><code># Flash JetPack 6 via SDK Manager on a host Ubuntu machine
 # Then on Jetson:
 sudo apt update &amp;&amp; sudo apt upgrade -y
 sudo apt install -y python3-venv python3-pip can-utils git
@@ -418,7 +418,7 @@ nvcc --version
           <div class="tutorial-step reveal">
             <h3>Step 2 — Enable CAN Bus interface</h3>
             <p style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:8px;"><strong>With USB-CAN adapter (works on both Pi 5 and Jetson):</strong></p>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:14px;overflow-x:auto;font-size:0.85rem;margin-bottom:16px;"><code># Bring up CAN interface
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:14px;overflow-x:auto;font-size:0.85rem;margin-bottom:16px;"><code># Bring up CAN interface
 sudo ip link set can0 up type can bitrate 1000000
 sudo ip link set can0 txqueuelen 1000
 
@@ -431,7 +431,7 @@ iface can0 inet manual
 # Test — plug in ACB and check
 candump can0</code></pre>
             <p style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:8px;"><strong>With Pi 5 CAN HAT (MCP2515-based):</strong></p>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:14px;overflow-x:auto;font-size:0.85rem;"><code># Add to /boot/config.txt:
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:14px;overflow-x:auto;font-size:0.85rem;"><code># Add to /boot/config.txt:
 dtparam=spi=on
 dtoverlay=mcp2515-can0,oscillator=12000000,interrupt=25
 dtoverlay=spi-bcm2835-overlay
@@ -442,7 +442,7 @@ sudo ip link set can0 up type can bitrate 1000000</code></pre>
 
           <div class="tutorial-step reveal">
             <h3>Step 3 — Install OpenCastor</h3>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code># Create venv (required on Pi OS/Ubuntu — PEP 668)
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code># Create venv (required on Pi OS/Ubuntu — PEP 668)
 python3 -m venv ~/opencastor-venv --system-site-packages
 source ~/opencastor-venv/bin/activate
 
@@ -460,7 +460,7 @@ castor scan
 
           <div class="tutorial-step reveal">
             <h3>Step 4 — Full RCAN config for your robot</h3>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>robot_uuid: "diy-robot-uuid"
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>robot_uuid: "diy-robot-uuid"
 robot_name: "my-diy-robot"
 
 hardware:
@@ -492,7 +492,7 @@ telemetry:
           <div class="tutorial-step reveal">
             <h3>Step 5 — Jetson: enable GPU-accelerated inference (optional)</h3>
             <p style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:12px;">On Jetson, the <code>auto</code> backend will detect CUDA and use the local_extended tier (ImageBind) for richer multimodal embeddings:</p>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code># Install CUDA-compatible torch (Jetson ships its own torch wheel)
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code># Install CUDA-compatible torch (Jetson ships its own torch wheel)
 pip install torch torchvision --index-url https://developer.download.nvidia.com/compute/redist/jp/v60/pytorch/
 
 # Verify GPU is visible to OpenCastor
@@ -506,7 +506,7 @@ castor doctor
 
           <div class="tutorial-step reveal">
             <h3>Step 6 — Run as a systemd service (auto-start on boot)</h3>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code># Generate and install systemd service files
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code># Generate and install systemd service files
 castor service install --config ~/my-diy-robot.rcan.yaml
 
 # Enable on boot
@@ -524,7 +524,7 @@ castor doctor   # verify everything is healthy</code></pre>
           <div class="tutorial-step reveal">
             <h3>Step 7 — (Optional) Add OAK-D SR for stereo depth</h3>
             <p style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:12px;">Plug in a Luxonis OAK-D SR (USB 3) for stereo RGB+Depth capture:</p>
-            <pre style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>pip install depthai
+            <pre style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:0.85rem;"><code>pip install depthai
 
 # OAK-D is auto-detected by castor scan
 castor scan
@@ -543,8 +543,8 @@ hardware:
             <p style="color:var(--text-secondary);font-size:0.95rem;">Your DIY robot is running with HLabs ACB motor control, on-device ML inference, and full OpenCastor observability. Dashboard at <code>http://&lt;your-robot-ip&gt;:8501</code>. Next steps:</p>
             <ul style="color:var(--text-secondary);font-size:0.92rem;margin-top:10px;padding-left:1.2rem;line-height:2;">
               <li>Add a <a href="#reachy-mini" style="color:var(--accent)">Reachy Mini head</a> for a full humanoid upper body</li>
-              <li>Enable <a href="/docs.html#behaviors" style="color:var(--accent)">behavior scripting</a> for autonomous task execution</li>
-              <li>Explore <a href="/hub.html" style="color:var(--accent)">community presets</a> for your robot type</li>
+              <li>Enable <a href="https://docs.opencastor.com/runtime/harness/" style="color:var(--accent)">behavior scripting</a> for autonomous task execution</li>
+              <li>Explore <a href="/hub" style="color:var(--accent)">community presets</a> for your robot type</li>
             </ul>
           </div>
 
@@ -662,7 +662,7 @@ castor run --config config/presets/lego_spike_prime.rcan.yaml</div>
         <span>OpenCastor</span>
       </div>
       <div class="footer-links">
-        <a href="/docs">Docs</a>
+        <a href="https://docs.opencastor.com">Docs</a>
         <a href="/hardware">Hardware</a>
         <a href="/tutorials">Tutorials</a>
         <a href="https://github.com/craigm26/OpenCastor">GitHub</a>

@@ -6,6 +6,86 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 
 ---
 
+## [2026.3.21.1] - 2026-03-21
+
+### Added
+- Competition engine: Sprint format — time-boxed competitions with announced prize pools, tiered payout (50/30/20), anti-snipe 1h lock (`castor/competitions/sprint.py`)
+- Competition engine: Threshold Race — jackpot mechanic, first robot to hit target score wins, 3x independent verification re-run with 2% tolerance (`castor/competitions/threshold_race.py`)
+- Competition engine: Model×Hardware Bracket Seasons — monthly seasons, 5 hardware×model classes, class champions (2000/1000 credits), grand champion bonus 5000 credits (`castor/competitions/bracket_season.py`)
+- Competition API endpoints: GET/POST /api/competitions, /api/competitions/races, /api/seasons/current
+
+### Changed
+- All Gemini 2.0/1.5 model strings updated to Gemini 2.5 (gemini-2.0-flash → gemini-2.5-flash, gemini-1.5-pro → gemini-2.5-pro) ahead of June 2026 deprecation
+- Firestore client and queue state now cached — contribute throughput improved 10x (fetch latency 4.6s → 14ms)
+- Auto-start contribute on gateway startup via agent.contribute config
+
+### Fixed
+- FieldFilter import moved to module level (ruff I001)
+
+---
+
+## [2026.3.20.4] — 2026-03-20
+
+### Added
+- `castor provider auth/list/status` CLI — test and inspect gated model provider credentials (#723)
+- Harness per-layer provider routing — `model: provider/name` per layer, `get_provider_for_layer()` with fallback (#724)
+- Autoresearch pipeline live — nightly Gemini 2.0 Flash harness optimization, direct push to main (no PRs); first champion: `lower_cost` (cost_gate_usd 0.01, score 0.9101)
+- Hardware-profile harness optimization roadmap — per-tier champions fed by `castor contribute` fleet evals
+
+### Fixed
+- RCAN JSON schema `additionalProperties` relaxed — 40/40 configs pass validation (arm.rcan.yaml blocked by harness plugin keys)
+- Gemini trailing-comma JSON parse error in autoresearch generator
+- `my-robot.rcan.yaml` metadata.author field added (was failing schema required check)
+
+### Changed
+- `castor/harness/default_harness.yaml` — champion config applied (cost_gate_usd 0.05→0.01)
+- Harness automerge workflow removed — pipeline pushes directly to main
+
+## [2026.3.20.3] — 2026-03-20
+
+### Added — RCAN v1.8: Canonical MessageType & Idle Compute Contribution
+
+- **RCAN v1.8 canonical MessageType table**: 36 message types with fixed integer assignments — single source of truth across spec, rcan-py, and rcan-ts. Eliminates all numbering drift (#165).
+- **`castor contribute`**: Idle compute donation skill — robots donate unused NPU/GPU/CPU cycles to distributed science (climate modeling, biodiversity, protein folding, humanitarian AI).
+  - `castor/contribute/coordinator.py`: BOINC XML-RPC scheduler request/reply parsing (#714)
+  - `castor/contribute/runner.py`: NPU inference path (Hailo-8L), thermal throttling, CPU fallback (#715)
+  - `castor/contribute/fleet.py`: Fleet-level coordination with capacity tracking and optimal assignment (#716)
+  - `castor/skills/contribute.py`: Daily stats reset, 90-day rolling history archive (#719)
+- **CLI**: `castor contribute start/stop/status/history` (#720), `castor peer-test` with transport comparison table (#717)
+- **API**: `POST /api/contribute/start`, `POST /api/contribute/stop`, `GET /api/contribute/history`
+- **RCAN-MQTT transport**: Wired into runtime startup/shutdown lifecycle (#718) — `rcan/{rrn}/in`, `rcan/{rrn}/out`, `rcan/estop` topics
+- **RCAN v1.7 contribute scope** (level 2.5): `CONTRIBUTE_REQUEST` (33), `CONTRIBUTE_RESULT` (34), `CONTRIBUTE_CANCEL` (35) message types
+- **v1.8 TRAINING_DATA** moved from 34 to 36 (collision fix), cross-SDK canonical tests in CI
+- **Software attestation**: `castor/attestation_generator.py` — pip RECORD hash check, config baseline SHA256, git cleanliness; systemd service template
+- **Bridge telemetry**: `rcan_capabilities`, `rcan_max_payload_bytes`, `rcan_transport_supported`, contribute stats published to Firestore
+- **Security fixes**: RCAN-Signature bypass, None-principal scope skip, /setup token leak, unauthed sensors, WebSocket JWT bypass, SSRF, LoA default hardening
+
+### Changed
+- `RCAN_SPEC_VERSION`: `"1.5"` → `"1.8"` in `castor/rcan/message.py`
+- `rcan_spec_version` in P66 manifest: `"1.6"` → `"1.8"`
+- `castor/compliance.py`: `SPEC_VERSION` `"1.6"` → `"1.8"`
+- Bridge `_dispatch_to_gateway`: explicit handlers for PAUSE, RESUME, SHUTDOWN, OPTIMIZE, SHARE_CONFIG, INSTALL, SNAPSHOT
+- Offline allow-list: OPTIMIZE/SHARE_CONFIG/INSTALL blocked offline; PAUSE/RESUME/SHUTDOWN/REBOOT/SNAPSHOT safe offline
+- Attestation generator no longer mutates `os.environ` (prevents test contamination)
+
+### Fixed
+- `log` → `logger` in RCAN-MQTT shutdown handler (F821 lint)
+- `TRAINING_DATA = 34` collision with `CONTRIBUTE_RESULT` — moved to 36
+- Test assertions updated for v1.8 SPEC_VERSION and 2026.3.20.x version format
+- Website: removed stale `/docs/getting-started` → `/docs.html` redirect
+- Website: escaped `{`/`}` in Astro HTML for harness.astro and contribute.astro
+
+### Ecosystem
+- **rcan-spec**: v1.8.0 — canonical MessageType table, v1.7 contribute scope, credit/reputation tiers, fleet coordination protocol, NPU identity
+- **rcan-py**: v0.7.0 — 609 tests, SPEC_VERSION 1.8.0, canonical type tests, contribute message types + scope validation
+- **rcan-ts**: v0.7.0 — 447 tests, SPEC_VERSION 1.8.0, canonical type tests, deprecated aliases (FEDERATION_SYNC→FLEET_COMMAND, ALERT→FAULT_REPORT, AUDIT→TRANSPARENCY)
+- **opencastor-client**: Fleet contribution dashboard, history timeline, project selection UI, enable/disable toggle, RCAN v1.8 labels
+- **opencastor-ops**: Ecosystem metrics collector, monitoring dashboard (CLI + HTML), harness-research CI dry-run fix, all actions SHA-pinned
+- **opencastor-autoresearch**: Contribute impact evaluation module (5 P66 preemption scenarios)
+- **Blog**: "What If Every Idle Robot Ran Science?" — reframed OpenCastor as runtime layer for any robot, RCAN/registry explainers
+
+---
+
 ## [2026.4.1.0] — 2026-04-01
 
 ### Added — RCAN v1.6 Support (4 gaps closed)
@@ -21,6 +101,22 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 - `pyproject.toml`: `version = "2026.4.1.0"`
 - Default RCAN config templates emit `rcan_version: "1.6"`
 - P66 manifest gains `min_loa_for_control` field (default: 1)
+
+---
+
+## [2026.3.17.13] — 2026-03-17
+
+### Added
+- **`castor/optimizer.py` v1**: per-robot runtime optimizer — episodic memory consolidation, idle detection, and adaptive task scheduling (#697, #698, #699).
+- **RCAN v1.5+v1.6 conformance checks**: 100/100 conformance score across all spec sections; `castor conformance` command reports compliance gaps (#696).
+- **Phase 2 Community Hub**: `/explore` browse page and `/config/:id` detail view for shared configs; Firebase Cloud Functions backend for config publishing and retrieval.
+- **Robot profiles + version pinning**: social layer — robot identity cards, pinned software versions, and `CONFIG_SHARE` protocol (OpenCastor#701).
+- **`code-reviewer` built-in skill v1.0**: code review skill available in the skill registry; integrates with `castor eval` pipeline.
+- **Documentation website**: initial site launched at `opencastor.com/docs/` with core pages, layouts, and navigation.
+
+### Fixed
+- **CI**: switched website deploy job from npm to pnpm; added `js-yaml` dependency via pnpm.
+- **Website**: removed Windows-only rollup binary; regenerated pnpm lockfile for cross-platform compatibility.
 
 ---
 

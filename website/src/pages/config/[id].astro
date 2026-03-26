@@ -9,6 +9,7 @@ export async function getStaticPaths() {
   const dirs = [
     resolve(process.cwd(), '../config/community'),
     resolve(process.cwd(), '../config/presets'),
+    resolve(process.cwd(), '../config/official'),
   ];
 
   const paths = [];
@@ -22,7 +23,7 @@ export async function getStaticPaths() {
       try { parsed = yaml.load(content) as any; } catch {}
       paths.push({
         params: { id },
-        props: { filename, content, parsed, dir: dir.includes('community') ? 'community' : 'presets' }
+        props: { filename, content, parsed, dir: dir.includes('community') ? 'community' : dir.includes('official') ? 'official' : 'presets' }
       });
     }
   }
@@ -114,7 +115,7 @@ const installCmd = `castor install opencastor.com/config/${id}`;
         <h3 style="margin:0;font-size:1rem">Config ({filename})</h3>
         <button class="btn btn-sm btn-secondary" onclick="copyYaml()">Copy YAML</button>
       </div>
-      <pre id="yaml-content" style="background:var(--surface-2,#1a1a2e);border:1px solid var(--border-color,rgba(255,255,255,.08));border-radius:10px;padding:20px;overflow-x:auto;font-size:.8rem;line-height:1.6;max-height:500px;overflow-y:auto"><code id="yaml-code">{content}</code></pre>
+      <pre id="yaml-content" style="background:var(--code-bg);color:var(--code-text);border:1px solid var(--border-color,rgba(255,255,255,.08));border-radius:10px;padding:20px;overflow-x:auto;font-size:.8rem;line-height:1.6;max-height:500px;overflow-y:auto"><code id="yaml-code">{content}</code></pre>
     </div>
 
     <!-- Actions -->

@@ -22,6 +22,29 @@ import subprocess
 import sys
 import time
 
+# ---------------------------------------------------------------------------
+# Auth helpers — mirrors the pattern in castor/dashboard.py
+# ---------------------------------------------------------------------------
+
+_API_TOKEN: str = os.environ.get("OPENCASTOR_API_TOKEN", "")
+
+
+def _hdr() -> dict:
+    """Return Authorization header dict when a token is configured, else {}."""
+    return {"Authorization": f"Bearer {_API_TOKEN}"} if _API_TOKEN else {}
+
+
+def _warn_no_token() -> None:
+    """Print a warning to stderr if no API token is configured (non-fatal)."""
+    if not _API_TOKEN:
+        print(
+            "WARNING: No API token configured. "
+            "Set the OPENCASTOR_API_TOKEN environment variable or use --token. "
+            "Unauthenticated requests may be rejected (401).",
+            file=sys.stderr,
+        )
+
+
 SESSION_NAME = "opencastor"
 
 # Log filter patterns for each pane
@@ -425,15 +448,18 @@ def _run_embedding_loop() -> None:
         _time.sleep(999999)
         return
 
-    import os as _os
-
     BASE = "http://localhost:18789"
-    _token = _os.getenv("OPENCASTOR_API_TOKEN", "")
-    _headers = {"Authorization": f"Bearer {_token}"} if _token else {}
     while True:
         try:
-            r = requests.get(f"{BASE}/api/interpreter/status", headers=_headers, timeout=2)
-            d = r.json()
+            r = requests.get(f"{BASE}/api/interpreter/status", headers=_hdr(), timeout=2)
+            if r.status_code == 401:
+                print(
+                    "ERROR: 401 Unauthorized — Set OPENCASTOR_API_TOKEN env var",
+                    file=sys.stderr,
+                )
+                d = {"enabled": False}
+            else:
+                d = r.json()
         except Exception:
             d = {"enabled": False}
 
@@ -637,7 +663,20 @@ def main():
         action="store_true",
         help="Kill existing dashboard session and exit",
     )
+    parser.add_argument(
+        "--token",
+        default="",
+        help="Bearer token for API authentication (overrides OPENCASTOR_API_TOKEN env var)",
+    )
     args = parser.parse_args()
+
+    # Apply --token override before any requests are made
+    if args.token:
+        global _API_TOKEN
+        _API_TOKEN = args.token
+
+    # Warn (non-fatal) if no token is configured
+    _warn_no_token()
 
     if args.kill:
         kill_existing_session()

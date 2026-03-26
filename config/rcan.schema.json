@@ -7,13 +7,9 @@
   "required": [
     "rcan_version",
     "metadata",
-    "agent",
-    "physics",
-    "drivers",
-    "network",
-    "rcan_protocol"
+    "agent"
   ],
-  "additionalProperties": false,
+  "additionalProperties": true,
   "properties": {
     "rcan_version": {
       "type": "string",
@@ -26,8 +22,7 @@
       "required": [
         "robot_name",
         "robot_uuid",
-        "author",
-        "license"
+        "author"
       ],
       "additionalProperties": true,
       "properties": {
@@ -81,12 +76,12 @@
     },
     "agent": {
       "type": "object",
-      "description": "AI provider and model configuration.",
+      "description": "Agent/LLM configuration. Core fields are validated; additional harness/plugin keys (circuit_breaker, working_memory, etc.) are allowed.",
       "required": [
         "provider",
         "model"
       ],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "provider": {
           "type": "string",
@@ -172,13 +167,99 @@
           "maximum": 1,
           "default": 0.5,
           "description": "Alert when prompt cache hit rate falls below this fraction (0.5 = 50%). Set to 0 to disable alerts."
+        },
+        "fast_provider": {
+          "type": "string",
+          "description": "Provider for the fast (reactive) tier in two-tier mode."
+        },
+        "fast_model": {
+          "type": "string",
+          "description": "Model for the fast (reactive) tier in two-tier mode."
+        },
+        "slow_provider": {
+          "type": "string",
+          "description": "Provider for the slow (planner) tier in two-tier mode."
+        },
+        "slow_model": {
+          "type": "string",
+          "description": "Model for the slow (planner) tier in two-tier mode."
+        },
+        "provider_fallback": {
+          "type": "object",
+          "description": "Fallback provider/model when primary is unreachable.",
+          "additionalProperties": true
+        },
+        "_note": {
+          "type": "string",
+          "description": "Human-readable note about this agent configuration."
+        },
+        "nexa_enabled": {
+          "type": "boolean",
+          "description": "Enable Nexa NPU on-device inference."
+        },
+        "nexa_model": {
+          "type": "string",
+          "description": "Nexa model path or identifier."
+        },
+        "whisper_model": {
+          "type": "string",
+          "description": "Whisper ASR model for voice input."
+        },
+        "system_prompt": {
+          "type": "string",
+          "description": "Custom system prompt override."
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Sampling temperature for the LLM."
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum tokens per LLM response."
+        },
+        "confidence_gates": {
+          "type": "array",
+          "description": "Per-scope confidence gating rules.",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "offline_provider": {
+          "description": "Offline fallback provider \u2014 provider name string or full config object.",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "additionalProperties": true
+            }
+          ]
+        },
+        "max_context_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "streaming": {
+          "type": "boolean"
+        },
+        "json_mode": {
+          "type": "boolean"
+        },
+        "use_oauth": {
+          "type": "boolean",
+          "description": "Use OAuth (claude_oauth) for Anthropic authentication."
         }
       }
     },
     "tiered_brain": {
       "type": "object",
       "description": "Tiered brain architecture \u2014 reactive (<1ms), fast (~500ms), planner (~12s).",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "planner_interval": {
           "type": "integer",
@@ -190,13 +271,50 @@
           "minimum": 0,
           "maximum": 1,
           "description": "Confidence threshold below which the planner is invoked."
+        },
+        "fast_provider": {
+          "type": "string",
+          "description": "AI provider for fast reactive tier."
+        },
+        "fast_model": {
+          "type": "string",
+          "description": "Model for fast reactive tier."
+        },
+        "slow_provider": {
+          "type": "string",
+          "description": "AI provider for slow planner tier."
+        },
+        "slow_model": {
+          "type": "string",
+          "description": "Model for slow planner tier."
+        },
+        "_note": {
+          "type": "string",
+          "description": "Human-readable note about tiered brain config."
+        },
+        "fast_api_key": {
+          "type": "string",
+          "description": "API key for fast tier provider."
+        },
+        "slow_api_key": {
+          "type": "string",
+          "description": "API key for slow tier provider."
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable tiered brain mode."
+        },
+        "task_router": {
+          "type": "object",
+          "description": "Task routing rules.",
+          "additionalProperties": true
         }
       }
     },
     "reactive": {
       "type": "object",
       "description": "Reactive layer configuration (Layer 0) \u2014 rule-based safety and hardware-accelerated vision.",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "hailo_vision": {
           "type": "boolean",
@@ -234,24 +352,23 @@
           "description": "Minimum obstacle distance in meters before emergency stop."
         },
         "fallback_provider": {
-          "type": "object",
-          "description": "Fallback AI provider when primary is unavailable.",
-          "properties": {
-            "provider": {
+          "description": "Fallback AI provider when primary is unavailable \u2014 name string or full config object.",
+          "oneOf": [
+            {
               "type": "string"
             },
-            "model": {
-              "type": "string"
+            {
+              "type": "object",
+              "additionalProperties": true
             }
-          },
-          "additionalProperties": false
+          ]
         }
       }
     },
     "learner": {
       "type": "object",
       "description": "Self-improving loop (Sisyphus pattern). Disabled by default \u2014 enable via wizard or `castor improve --enable`.",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -304,7 +421,7 @@
         "type",
         "dof"
       ],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "type": {
           "type": "string",
@@ -318,7 +435,15 @@
             "mecanum",
             "four_wheel_drive",
             "self_balancing",
-            "omni"
+            "omni",
+            "diff_drive",
+            "differential",
+            "arm",
+            "wheeled",
+            "legged",
+            "quadruped",
+            "biped",
+            "hexapod"
           ]
         },
         "dof": {
@@ -344,9 +469,35 @@
             "wheel_radius_mm": {
               "type": "number",
               "minimum": 0
+            },
+            "wheel_circumference_m": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Wheel circumference in metres."
+            },
+            "turn_time_per_deg_s": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Seconds per degree of turn (empirical calibration constant)."
+            },
+            "length_mm": {
+              "type": "number",
+              "minimum": 0
+            },
+            "width_mm": {
+              "type": "number",
+              "minimum": 0
+            },
+            "height_mm": {
+              "type": "number",
+              "minimum": 0
+            },
+            "weight_kg": {
+              "type": "number",
+              "minimum": 0
             }
           },
-          "additionalProperties": false
+          "additionalProperties": true
         },
         "kinematics": {
           "type": "array",
@@ -387,7 +538,7 @@
                 "maxItems": 2
               }
             },
-            "additionalProperties": false
+            "additionalProperties": true
           }
         }
       }
@@ -524,7 +675,7 @@
           "description": "Enable on-board IMU (OAK-4 Pro and similar)."
         }
       },
-      "additionalProperties": false
+      "additionalProperties": true
     },
     "audio": {
       "type": "object",
@@ -541,9 +692,48 @@
         },
         "output_device": {
           "type": "string"
+        },
+        "stt_enabled": {
+          "type": "boolean",
+          "description": "Enable speech-to-text input."
+        },
+        "stt_engine": {
+          "type": "string",
+          "description": "STT engine (e.g. whisper, google, sphinx)."
+        },
+        "energy_threshold": {
+          "type": "number",
+          "description": "Microphone energy threshold for VAD."
+        },
+        "input_device": {
+          "description": "Microphone input device name or index.",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer",
+              "minimum": 0
+            }
+          ]
+        },
+        "pause_threshold": {
+          "type": "number",
+          "description": "Seconds of silence before end-of-utterance."
+        },
+        "phrase_threshold": {
+          "type": "number"
+        },
+        "sample_rate": {
+          "type": "integer",
+          "minimum": 8000
+        },
+        "whisper_model": {
+          "type": "string",
+          "description": "Whisper model size (tiny, base, small, medium, large)."
         }
       },
-      "additionalProperties": false
+      "additionalProperties": true
     },
     "channels": {
       "type": "object",
@@ -586,15 +776,13 @@
           "additionalProperties": true
         }
       },
-      "additionalProperties": false
+      "additionalProperties": true
     },
     "network": {
       "type": "object",
       "description": "Network and telemetry settings.",
-      "required": [
-        "telemetry_stream"
-      ],
-      "additionalProperties": false,
+      "required": [],
+      "additionalProperties": true,
       "properties": {
         "telemetry_stream": {
           "type": "boolean"
@@ -610,7 +798,7 @@
     "rcan_protocol": {
       "type": "object",
       "description": "RCAN protocol settings. Required for safety invariants, RURI identity, RBAC, and capability declaration.",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "port": {
           "type": "integer",
@@ -647,29 +835,62 @@
       "description": "Agents to spawn at startup (Phase 2-3).",
       "items": {
         "type": "object",
-        "required": [
-          "name",
-          "enabled"
-        ],
         "properties": {
+          "id": {
+            "type": "string",
+            "description": "Agent identifier."
+          },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "Agent display name."
           },
           "enabled": {
             "type": "boolean"
           },
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "scope": {
+            "description": "Agent scope \u2014 string or array of strings.",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "role": {
+            "type": "string"
+          },
           "config": {
             "type": "object",
             "additionalProperties": true
+          },
+          "api_key": {
+            "type": "string"
+          },
+          "base_url": {
+            "type": "string"
+          },
+          "system_prompt": {
+            "type": "string"
           }
         },
-        "additionalProperties": false
+        "additionalProperties": true
       }
     },
     "swarm": {
       "type": "object",
       "description": "Multi-robot swarm coordination (Phase 4).",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -743,6 +964,164 @@
           "minimum": 0
         }
       },
+      "additionalProperties": true
+    },
+    "p66": {
+      "type": "object",
+      "description": "Protocol 66 \u2014 safety manifest for physical actuator control.",
+      "additionalProperties": true
+    },
+    "consent": {
+      "type": "object",
+      "description": "R2RAM consent configuration \u2014 robot-to-robot authorization manifest.",
+      "additionalProperties": true
+    },
+    "loa": {
+      "type": "object",
+      "description": "Level of Assurance configuration for identity and trust.",
+      "additionalProperties": true
+    },
+    "r2ram": {
+      "type": "object",
+      "description": "Robot-to-Robot Authorization Manifest (RCAN v1.5+).",
+      "additionalProperties": true
+    },
+    "security": {
+      "type": "object",
+      "description": "Security configuration \u2014 TLS, JWT, key management.",
+      "additionalProperties": true
+    },
+    "transport": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ],
+      "description": "Transport layer configuration (RCAN v1.6 constrained transports)."
+    },
+    "cameras": {
+      "description": "Camera configuration \u2014 dict of named cameras or array (RCAN v1.6).",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": true
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      ]
+    },
+    "hardware_safety": {
+      "type": "object",
+      "description": "Hardware-level safety limits and watchdog configuration.",
+      "additionalProperties": true
+    },
+    "geofence": {
+      "type": "object",
+      "description": "Geofencing constraints for mobile robots.",
+      "additionalProperties": true
+    },
+    "federation": {
+      "type": "object",
+      "description": "Federated registry and cross-domain trust configuration (RCAN v1.6).",
+      "additionalProperties": true
+    },
+    "multimodal": {
+      "type": "object",
+      "description": "Multi-modal payload configuration (RCAN v1.6 GAP-18).",
+      "additionalProperties": true
+    },
+    "offline": {
+      "type": "object",
+      "description": "Offline / constrained-transport fallback configuration.",
+      "additionalProperties": true
+    },
+    "human_identity": {
+      "type": "object",
+      "description": "Human operator identity binding and LoA requirements.",
+      "additionalProperties": true
+    },
+    "owner": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ],
+      "description": "Robot owner RRN or identity descriptor."
+    },
+    "firebase_uid": {
+      "type": "string",
+      "description": "Firebase UID of the robot owner (for Community Hub pairing)."
+    },
+    "cloud": {
+      "type": "object",
+      "description": "Cloud integration settings (Firebase, telemetry endpoints).",
+      "additionalProperties": true
+    },
+    "_note": {
+      "type": "string",
+      "description": "Top-level human-readable note."
+    },
+    "provider_fallback": {
+      "type": "object",
+      "description": "Fallback AI provider/model when primary is unreachable (legacy top-level placement).",
+      "additionalProperties": true
+    },
+    "circuit_breaker": {
+      "type": "object",
+      "description": "Harness plugin configuration: circuit_breaker",
+      "additionalProperties": true
+    },
+    "context_compressor": {
+      "type": "object",
+      "description": "Harness plugin configuration: context_compressor",
+      "additionalProperties": true
+    },
+    "cost_meter": {
+      "type": "object",
+      "description": "Harness plugin configuration: cost_meter",
+      "additionalProperties": true
+    },
+    "dlq": {
+      "type": "object",
+      "description": "Harness plugin configuration: dlq",
+      "additionalProperties": true
+    },
+    "prompt_guard": {
+      "type": "object",
+      "description": "Harness plugin configuration: prompt_guard",
+      "additionalProperties": true
+    },
+    "rollback": {
+      "type": "object",
+      "description": "Harness plugin configuration: rollback",
+      "additionalProperties": true
+    },
+    "span_tracer": {
+      "type": "object",
+      "description": "Harness plugin configuration: span_tracer",
+      "additionalProperties": true
+    },
+    "working_memory": {
+      "type": "object",
+      "description": "Harness plugin configuration: working_memory",
+      "additionalProperties": true
+    },
+    "jwt_auth": {
+      "type": "object",
+      "description": "JWT authentication configuration",
       "additionalProperties": true
     }
   }

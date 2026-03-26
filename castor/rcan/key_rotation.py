@@ -47,6 +47,7 @@ def derive_key_id(rrn: str, config_created_at: Optional[str] = None) -> str:
         8-character hex key_id (deterministic for same inputs).
     """
     # TODO (v2026.4.x): derive from actual Ed25519 public key bytes
+    # SAFETY: do not auto-implement — requires access to key material and JWKS spec
     raw = f"{rrn}:{config_created_at or 'default'}"
     return hashlib.sha256(raw.encode()).hexdigest()[:8]
 
@@ -93,12 +94,23 @@ def get_accepted_key_ids(config: dict[str, Any]) -> list[str]:
     current = get_current_key_id(config)
     accepted: list[str] = [current]
 
-    # Rotation window: also accept the previous key_id if still in window
-    # TODO (v2026.4.x): implement proper rotation window with expiry
+    # Rotation window: also accept the previous key_id if still in window.
+    # The rotation_window_s value (default 300 s) defines how long the old key
+    # is accepted after a rotation.  If rotated_at is absent we stay permissive
+    # (backward-compatible with configs written before rotate_key() existed).
     previous = security.get("previous_key_id")
     if previous and previous not in accepted:
-        log.debug("key_rotation: also accepting previous key_id=%s (rotation window)", previous)
-        accepted.append(previous)
+        rotated_at = security.get("rotated_at")
+        rotation_window_s = int(security.get("rotation_window_s", 300))
+        if rotated_at is None or (int(time.time()) - int(rotated_at) <= rotation_window_s):
+            log.debug("key_rotation: also accepting previous key_id=%s (rotation window)", previous)
+            accepted.append(previous)
+        else:
+            log.debug(
+                "key_rotation: previous key_id=%s rotation window expired (%ds ago)",
+                previous,
+                int(time.time()) - int(rotated_at),
+            )
 
     return accepted
 
@@ -121,6 +133,7 @@ def validate_incoming_key_id(
     if incoming_key_id is None:
         # Pre-v1.5 message with no key_id — accept in permissive mode
         # TODO (v2026.4.x): strict mode should reject messages without key_id
+        # SAFETY: do not auto-implement — changes message acceptance policy; requires config flag
         log.debug("key_rotation: incoming message has no key_id — accepted (permissive mode)")
         return True
 
@@ -140,6 +153,7 @@ def validate_incoming_key_id(
         accepted,
     )
     # TODO (v2026.4.x): return False here to enforce strict key validation
+    # SAFETY: do not auto-implement — rejection of unknown keys is a security policy change
     return True
 
 
@@ -181,6 +195,7 @@ def rotate_key(config: dict[str, Any], new_key_id: str) -> dict[str, Any]:
         broadcasting KEY_ROTATION message) is deferred to v2026.4.x.
     """
     # TODO (v2026.4.x): full key rotation ceremony
+    # SAFETY: do not auto-implement — requires JWKS endpoint, Ed25519 keypair gen, and peer broadcast
     security = config.setdefault("security", {})
     old_key_id = security.get("key_id")
     if old_key_id:

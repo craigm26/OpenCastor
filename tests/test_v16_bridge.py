@@ -23,10 +23,7 @@ import pytest
 
 from castor.cloud.bridge import (
     CastorBridge,
-    _TrustAnchorCacheCls,
-    _validate_cross_registry_stub,
 )
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers / fixtures

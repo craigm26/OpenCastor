@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
-import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
-from castor.dual_model import DualModelHarness, SafetyVerdict, build_dual_harness
-from castor.harness import HarnessContext, PHYSICAL_TOOLS, ESTOP_TOOLS
+import pytest
+
+from castor.dual_model import DualModelHarness, build_dual_harness
+from castor.harness import HarnessContext
 from castor.providers.base import Thought
 from castor.tools import ToolRegistry
 
@@ -103,7 +103,7 @@ class TestSafetyOracle:
     async def test_oracle_disabled_no_veto(self):
         """p66_veto=false: secondary opinion not sought for physical tools."""
         sec = _secondary("UNSAFE - always unsafe")
-        tool_calls = [{"name": "move", "args": {"linear": 0.3}}]
+        _ = [{"name": "move", "args": {"linear": 0.3}}]  # unused, kept for clarity
         prov = _provider()
         prov.think_with_tools.return_value = Thought(raw_text="moved", tool_calls=[])
         h = _dual_harness(primary=prov, secondary=sec, p66_veto=False)
@@ -174,7 +174,7 @@ class TestDriftDetectionHook:
     @pytest.mark.asyncio
     async def test_drift_score_set_after_3_iterations(self):
         """DriftDetectionHook should set drift_score on result after 3+ iterations."""
-        from castor.harness import AgentHarness, DriftDetectionHook, HarnessContext
+        from castor.harness import AgentHarness, HarnessContext
         from castor.tools import ToolRegistry
 
         call_count = [0]

@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import json
-import tempfile
-from pathlib import Path
 
 import pytest
 
-from castor.skills.loader import SkillLoader, SkillSelector, _split_frontmatter, _parse_yaml_simple
-
+from castor.skills.loader import SkillLoader, SkillSelector, _parse_yaml_simple, _split_frontmatter
 
 SAMPLE_SKILL_MD = """\
 ---

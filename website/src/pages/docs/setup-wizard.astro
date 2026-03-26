@@ -1,0 +1,112 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout
+  title="Setup Wizard — OpenCastor Docs"
+  description="What to expect when you run castor wizard for stack selection and project configuration."
+  ogUrl="https://opencastor.com/docs/setup-wizard"
+>
+  <section class="page-hero">
+    <p class="section-label reveal">Setup Wizard</p>
+    <h1 class="reveal reveal-d1">Running <code>castor wizard</code></h1>
+    <p class="reveal reveal-d2">CLI and web now use the same setup-v2 flow: device-aware stack selection, profile presets, preflight checks, and guided fallbacks.</p>
+  </section>
+
+  <section class="section" id="wizard">
+    <div class="wizard-step reveal">
+      <div class="wizard-step-header">
+        <div class="wizard-step-num">1</div>
+        <div>
+          <h3>Name your project + review device probe</h3>
+          <p>Setup detects your OS/architecture first so only compatible stacks are offered.</p>
+        </div>
+      </div>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">Terminal</span>
+        </div>
+        <div class="code-body"><span class="cm">--- PROJECT ---</span>
+          <br><span class="cm">Project Name [MyRobot]:</span> <span class="s">Explorer</span>
+          <br><span class="v">[OK]</span> <span class="cm">Detected platform: macOS arm64</span>
+          <br><span class="v">[OK]</span> <span class="cm">Apple Intelligence eligibility check enabled</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="wizard-step reveal" style="margin-top:32px;">
+      <div class="wizard-step-header">
+        <div class="wizard-step-num">2</div>
+        <div>
+          <h3>Choose a stack profile</h3>
+          <p>Pick a curated stack first; setup maps it to provider + model defaults.</p>
+        </div>
+      </div>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">Terminal</span>
+        </div>
+        <div class="code-body"><span class="cm">--- STACK PROFILE ---</span>
+          <br><span class="cm">Select a software stack for this device:</span>
+          <br><span class="k">[1]</span> <span class="s">apple_native</span> <span class="cm">-- Apple Foundation Models on eligible Macs</span>
+          <br><span class="k">[2]</span> <span class="s">mlx_local_vision</span> <span class="cm">-- Apple Silicon local fallback</span>
+          <br><span class="k">[3]</span> <span class="s">ollama_universal_local</span> <span class="cm">-- cross-platform local default</span>
+          <br><span class="cm">Selection [1]:</span> <span class="s">1</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="wizard-step reveal" style="margin-top:32px;">
+      <div class="wizard-step-header">
+        <div class="wizard-step-num">3</div>
+        <div>
+          <h3>Select a model profile</h3>
+          <p>Apple profiles are preset-based so users do not need to tune raw guardrail enums.</p>
+        </div>
+      </div>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">Terminal</span>
+        </div>
+        <div class="code-body"><span class="cm">--- MODEL PROFILE ---</span>
+          <br><span class="k">[1]</span> <span class="s">apple-balanced</span> <span class="v">(Recommended)</span>
+          <br><span class="k">[2]</span> <span class="s">apple-creative</span>
+          <br><span class="k">[3]</span> <span class="s">apple-tagging</span>
+          <br><span class="cm">Selection [1]:</span> <span class="s">1</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="wizard-step reveal" style="margin-top:32px;">
+      <div class="wizard-step-header">
+        <div class="wizard-step-num">4</div>
+        <div>
+          <h3>Run preflight + remediation</h3>
+          <p>Setup validates SDK/runtime prerequisites and can auto-install Apple SDK with explicit consent.</p>
+        </div>
+      </div>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">Terminal</span>
+        </div>
+        <div class="code-body"><span class="cm">--- PREFLIGHT ---</span>
+          <br><span class="v">[WARN]</span> <span class="cm">apple_fm_sdk_import: missing</span>
+          <br><span class="cm">Install Apple SDK now? [Y/n]:</span> <span class="s">Y</span>
+          <br><span class="v">[OK]</span> <span class="cm">Re-running preflight...</span>
+          <br><span class="v">[OK]</span> <span class="cm">Apple provider ready</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="wizard-step reveal" style="margin-top:32px;">
+      <div class="wizard-step-header">
+        <div class="wizard-step-num" style="background:var(--green-light);color:var(--green)">&#10003;</div>
+        <div>
+          <h3>Config generated</h3>
+          <p>The wizard outputs a validated <code style="padding:2px 6px;font-size:0.8125rem">.rcan.yaml</code> config file ready to run.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</DocsLayout>

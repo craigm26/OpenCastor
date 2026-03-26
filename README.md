@@ -15,11 +15,12 @@
   <a href="https://github.com/craigm26/OpenCastor/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-green" alt="License"></a>
   <a href="https://github.com/craigm26/OpenCastor/actions"><img src="https://img.shields.io/github/actions/workflow/status/craigm26/OpenCastor/ci.yml?label=CI" alt="CI"></a>
   <a href="https://app.opencastor.com"><img src="https://img.shields.io/badge/Fleet%20UI-app.opencastor.com-orange" alt="Fleet UI"></a>
+  <a href="https://docs.opencastor.com"><img src="https://img.shields.io/badge/Docs-docs.opencastor.com-00bcd4" alt="Docs"></a>
   <a href="https://discord.gg/jMjA8B26Bq"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
 <p align="center">
-  <b>94,438 lines of Python · 6,459 tests · Python 3.10–3.13</b>
+  <b>94,438 lines of Python · 7,334 tests · Python 3.10–3.13</b>
 </p>
 
 ---
@@ -158,7 +159,7 @@ docker run -it \
 | `castor fleet` | Discover and monitor all robots on the local network |
 | `castor upgrade` | Pull latest version + pip install + service restart |
 
-Full reference: [`docs/claude/cli-reference.md`](docs/claude/cli-reference.md)
+Full reference: [docs.opencastor.com/runtime/cli](https://docs.opencastor.com/runtime/cli/)
 
 ## Configuration
 
@@ -229,7 +230,7 @@ castor gateway --config so_arm101.rcan.yaml
 
 | Project | Version | Purpose |
 |---|---|---|
-| **OpenCastor** (this) | v2026.4.1.0 | Robot runtime, RCAN reference implementation |
+| **OpenCastor** (this) | v2026.3.17.13 | Robot runtime, RCAN reference implementation |
 | [Fleet UI](https://app.opencastor.com) | live | Web fleet dashboard |
 | [RCAN Protocol](https://rcan.dev/spec/) | v1.6.0 | Open robot communication standard |
 | [rcan-py](https://github.com/continuonai/rcan-py) | v0.6.0 | Python RCAN SDK |

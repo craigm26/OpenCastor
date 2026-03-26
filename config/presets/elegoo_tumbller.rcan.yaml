@@ -1,116 +1,194 @@
-rcan_version: "1.3"
-
+rcan_version: '1.6'
 metadata:
-  robot_name: "Elegoo_Tumbller_Smart_Car"
-  robot_uuid: "00000000-0000-0000-0000-000000000017"
-  author: "OpenCastor Default"
-  license: "Apache-2.0"
+  robot_name: Elegoo_Tumbller_Smart_Car
+  robot_uuid: 582f6e7c-d220-4cb2-94b6-15826a56dac8
+  author: OpenCastor Default
+  license: Apache-2.0
   tags:
-    - mobile
-    - self-balancing
-    - arduino
-    - elegoo
-    - stem
-    - amazon
-    - second-hand
-  description: >
-    Elegoo Tumbller / Elegoo Smart Robot Car — among the most popular sub-$40
-    Arduino-based kits on Amazon. The Tumbller is a self-balancing two-wheel robot
-    (MPU6050 IMU + TB6612FNG motors). The Smart Car kit is a 4-wheel line-follower/
+  - mobile
+  - self-balancing
+  - arduino
+  - elegoo
+  - stem
+  - amazon
+  - second-hand
+  description: 'Elegoo Tumbller / Elegoo Smart Robot Car — among the most popular
+    sub-$40 Arduino-based kits on Amazon. The Tumbller is a self-balancing two-wheel
+    robot (MPU6050 IMU + TB6612FNG motors). The Smart Car kit is a 4-wheel line-follower/
     obstacle-avoidance car. Both use Arduino Uno/Nano + USB serial.
 
+    '
+  rrn: RRN-221530923640
+  rrn_uri: rrn://community/robot/opencastor/elegoo-tumbller-smart-car/elegoo_tumbller
 agent:
-  provider: "anthropic"
-  model: "claude-sonnet-4-5"
+  provider: anthropic
+  model: claude-sonnet-4-5
   vision_enabled: false
   latency_budget_ms: 150
   safety_stop: true
-
+  offline_provider: ollama
+  confidence_gates:
+  - scope: control
+    min_confidence: 0.75
+    on_fail: block
+  - scope: safety
+    min_confidence: 0.9
+    on_fail: block
 physics:
-  type: "self_balancing"    # Change to "differential_drive" for Smart Car version
+  type: differential
   dof: 2
   chassis:
     wheel_base_mm: 95
     wheel_radius_mm: 34
-
 drivers:
-  - id: "motor_driver"
-    protocol: "arduino_serial_json"
-    # Flash firmware/elegoo_tumbller_bridge.ino to the Arduino Nano on the bot
-    port: "/dev/ttyUSB0"    # CH340 USB-serial; may be ttyACM0 on genuine Nano
-    baud: 9600
-    channels:
-      left_motor: "M1"
-      right_motor: "M2"
-    motor_driver_ic: "TB6612FNG"
-    # TB6612FNG pins (wired on Elegoo PCB):
-    #   PWMA → D5,  AIN1 → D7,  AIN2 → D8
-    #   PWMB → D6,  BIN1 → D9,  BIN2 → D11
-    left_pwm_pin: 5
-    left_in1: 7
-    left_in2: 8
-    right_pwm_pin: 6
-    right_in1: 9
-    right_in2: 11
-
-  - id: "imu_mpu6050"
-    protocol: "arduino_serial_json"
-    port: "/dev/ttyUSB0"
-    baud: 9600
-    sensor_type: "mpu6050"
-    i2c_address: "0x68"
-    # The MPU6050 is used for self-balancing PID control
-
-  - id: "ultrasonic_sensor"
-    protocol: "arduino_serial_json"
-    port: "/dev/ttyUSB0"
-    baud: 9600
-    sensor_type: "hcsr04"
-    trigger_pin: 12
-    echo_pin: 13
-
-  - id: "ir_line_sensors"
-    # 2x IR sensors on bottom for line following
-    protocol: "arduino_serial_json"
-    port: "/dev/ttyUSB0"
-    baud: 9600
-    sensor_type: "ir_array"
-    pins: [A0, A1]
-
-  - id: "rgb_leds"
-    protocol: "arduino_serial_json"
-    port: "/dev/ttyUSB0"
-    baud: 9600
-    sensor_type: "ws2812"
-    data_pin: 4
-    led_count: 2
-
-connection:
-  type: "serial"
-  port: "/dev/ttyUSB0"
+- id: motor_driver
+  protocol: arduino_serial_json
+  port: /dev/ttyUSB0
   baud: 9600
-
+  channels:
+    left_motor: M1
+    right_motor: M2
+  motor_driver_ic: TB6612FNG
+  left_pwm_pin: 5
+  left_in1: 7
+  left_in2: 8
+  right_pwm_pin: 6
+  right_in1: 9
+  right_in2: 11
+- id: imu_mpu6050
+  protocol: arduino_serial_json
+  port: /dev/ttyUSB0
+  baud: 9600
+  sensor_type: mpu6050
+  i2c_address: '0x68'
+- id: ultrasonic_sensor
+  protocol: arduino_serial_json
+  port: /dev/ttyUSB0
+  baud: 9600
+  sensor_type: hcsr04
+  trigger_pin: 12
+  echo_pin: 13
+- id: ir_line_sensors
+  protocol: arduino_serial_json
+  port: /dev/ttyUSB0
+  baud: 9600
+  sensor_type: ir_array
+  pins:
+  - A0
+  - A1
+- id: rgb_leds
+  protocol: arduino_serial_json
+  port: /dev/ttyUSB0
+  baud: 9600
+  sensor_type: ws2812
+  data_pin: 4
+  led_count: 2
+connection:
+  type: serial
+  port: /dev/ttyUSB0
+  baud: 9600
 network:
   telemetry_stream: false
   sim_to_real_sync: false
   allow_remote_override: false
-
 rcan_protocol:
   port: 8000
-  capabilities: [status, nav, teleop]
+  capabilities:
+  - status
+  - nav
+  - teleop
   enable_mdns: false
   enable_jwt: false
-
 notes:
-  setup: >
-    1. Open firmware/elegoo_tumbller_bridge.ino in Arduino IDE.
-    2. Install libraries: MPU6050, Adafruit NeoPixel (via Library Manager).
-    3. Select "Arduino Nano" + "ATmega328P (Old Bootloader)" if upload fails.
-    4. Upload via USB, then: castor run --config elegoo_tumbller.rcan.yaml
+  setup: '1. Open firmware/elegoo_tumbller_bridge.ino in Arduino IDE. 2. Install libraries:
+    MPU6050, Adafruit NeoPixel (via Library Manager). 3. Select "Arduino Nano" + "ATmega328P
+    (Old Bootloader)" if upload fails. 4. Upload via USB, then: castor run --config
+    elegoo_tumbller.rcan.yaml
+
+    '
   variants:
-    tumbller: "2-wheel self-balancing. Uses MPU6050 PID. Requires balancing firmware."
-    smart_car_v4: "4-wheel differential drive. Set physics.type to differential_drive."
-  second_hand_tips: >
-    Extremely common on Amazon Warehouse, eBay (~$15-25 used), and school donations.
-    The CH340 USB chip may need a driver on Windows: install CH341SER.exe.
+    tumbller: 2-wheel self-balancing. Uses MPU6050 PID. Requires balancing firmware.
+    smart_car_v4: 4-wheel differential drive. Set physics.type to differential_drive.
+  second_hand_tips: 'Extremely common on Amazon Warehouse, eBay (~$15-25 used), and
+    school donations. The CH340 USB chip may need a driver on Windows: install CH341SER.exe.
     Check all header pins are soldered — the Elegoo PCBs are sometimes poorly soldered.
+
+    '
+tiered_brain:
+  fast_provider: ollama
+  fast_model: gemma3:1b
+  slow_provider: anthropic
+  slow_model: claude-sonnet-4-5
+  planner_interval: 10
+agent_roster:
+- id: nav_specialist
+  provider: ollama
+  model: gemma3:4b
+  scope: nav
+- id: chat_specialist
+  provider: anthropic
+  model: claude-sonnet-4-5
+  scope: chat
+geofence:
+  enabled: false
+  boundary:
+    type: none
+reactive:
+  min_obstacle_m: 0.3
+  fallback_provider: ollama
+cameras:
+  main:
+    type: http
+    url: http://127.0.0.1:8765/snapshot
+safety:
+  local_safety_wins: true
+  emergency_stop_distance: 0.4
+  estop_bypass_rate_limit: true
+  watchdog:
+    timeout_s: 10
+hardware_safety:
+  physical_estop: false
+  hardware_watchdog_mcu: false
+p66:
+  enabled: true
+  loa_enforcement: true
+  consent_required: true
+  manifest:
+    estop_qos_bypass: true
+consent:
+  required: true
+  mode: explicit
+  scope_threshold: control
+security:
+  replay_protection:
+    enabled: true
+    window_s: 30
+  signing:
+    enabled: false
+    algorithm: Ed25519
+loa:
+  enforcement: true
+  min_loa_for_control: 1
+human_identity:
+  loa_required: 1
+transport:
+  supported:
+  - http
+  - mqtt
+  constrained_enabled: false
+multimodal:
+  enabled: true
+  max_chunk_bytes: 1048576
+offline:
+  enabled: true
+  fallback_provider: ollama
+r2ram:
+  scopes:
+  - discover
+  - status
+  - chat
+  - control
+  - safety
+federation:
+  enabled: true
+  consent_bridge: false

@@ -1,44 +1,16 @@
 ---
-import BaseLayout from '../../layouts/BaseLayout.astro';
+import DocsLayout from '../../layouts/DocsLayout.astro';
 ---
 
-<BaseLayout
+<DocsLayout
   title="Getting Started — OpenCastor"
   description="Get up and running with OpenCastor in minutes. Install, configure, and connect your first AI-powered robot."
   ogUrl="https://opencastor.com/docs/getting-started"
->
-
-<main>
-
   <!-- Page Hero -->
   <section class="page-hero">
     <p class="section-label reveal">Getting Started</p>
     <h1 class="reveal reveal-d1">Up and running<br>in minutes.</h1>
     <p class="reveal reveal-d2">Install OpenCastor, init your robot, and start issuing commands — all from a single config file.</p>
-  </section>
-
-  <!-- Table of Contents -->
-  <section class="section" style="padding-top:0;padding-bottom:20px">
-    <div class="container">
-      <div class="toc reveal">
-        <h3>📖 On this page</h3>
-        <div class="toc-cols">
-          <div>
-            <a href="#what-is">What is OpenCastor?</a>
-            <a href="#prerequisites">Prerequisites</a>
-            <a href="#install">Install</a>
-            <a href="#first-run">First Run</a>
-          </div>
-          <div>
-            <a href="#config">Config Basics (RCAN)</a>
-            <a href="#connect">Connect a Robot</a>
-            <a href="#safety">Safety First</a>
-            <a href="#cli">CLI Reference</a>
-            <a href="#next-steps">Next Steps</a>
-          </div>
-        </div>
-      </div>
-    </div>
   </section>
 
   <!-- What is OpenCastor -->
@@ -111,7 +83,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             <div class="code-dots"><span></span><span></span><span></span></div>
             <span class="code-filename">All platforms</span>
           </div>
-          <div class="code-body"><span class="k">pip install opencastor==2026.3.17.1</span></div>
+          <div class="code-body"><span class="k">pip install opencastor==2026.3.21.1</span></div>
         </div>
         <p>Or use the one-liner installer (Linux / macOS) for a full environment setup including hardware drivers:</p>
         <div class="code-block" style="margin:16px 0;max-width:640px">
@@ -172,7 +144,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
               <div class="code-body"><span class="k">castor doctor</span>
 <span class="cm"># Example output:</span>
 <span class="v">[OK]</span>  python 3.12.2
-<span class="v">[OK]</span>  opencastor 2026.3.17.1
+<span class="v">[OK]</span>  opencastor 2026.3.20.3
 <span class="v">[OK]</span>  anthropic SDK installed
 <span class="v">[OK]</span>  ANTHROPIC_API_KEY set
 <span class="v">[OK]</span>  safety: local_safety_wins = true
@@ -195,7 +167,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 <span class="cm"># or: castor run --config my-robot.rcan.yaml</span>
 
 <span class="cm"># You should see:</span>
-<span class="v">[OK]</span>  RCAN runtime v1.6 started
+<span class="v">[OK]</span>  RCAN runtime v1.8 started
 <span class="v">[OK]</span>  API: http://localhost:8000
 <span class="v">[OK]</span>  Safety kernel: P66 conformant
 <span class="v">[OK]</span>  Agent: anthropic/claude-sonnet-4-5 ready</div>
@@ -241,8 +213,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           <li><strong>reactive</strong> — Hardware-level safety: e-stop, collision avoidance, velocity limits.</li>
           <li><strong>safety</strong> — Protocol 66 configuration: local_safety_wins, estop distance, confidence gates.</li>
         </ul>
-
-        <p>See the full <a href="/docs#configuration" style="color:var(--accent)">RCAN config reference →</a></p>
+        <p>A barebones config connecting to Anthropic using an OAK-D camera will be generated. You can change this manually later.</p>
+        <p>See the full <a href="https://docs.opencastor.com/getting-started/configuration/" style="color:var(--accent)">RCAN config reference →</a></p>
       </div>
     </div>
   </section>
@@ -278,7 +250,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           <div class="guide-card reveal reveal-d1">
             <h3>🦾 SO-ARM101</h3>
             <p>6-DOF desktop arm with Feetech STS3215 servos. Leader-follower teleoperation.</p>
-            <div class="hw-card-meta" style="margin-top:10px"><a href="/docs/hardware/so-arm101" style="color:var(--accent)">SO-ARM101 guide →</a></div>
+            <div class="hw-card-meta" style="margin-top:10px"><a href="https://docs.opencastor.com/getting-started/hardware-profiles/" style="color:var(--accent)">SO-ARM101 guide →</a></div>
           </div>
           <div class="guide-card reveal reveal-d2">
             <h3>⚡ Arduino / ESP32</h3>
@@ -407,7 +379,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         <h2 class="section-title">Keep going</h2>
       </div>
       <div class="guide-grid reveal">
-        <a href="/docs/hardware/so-arm101" class="guide-card" style="text-decoration:none">
+        <a href="https://docs.opencastor.com/getting-started/hardware-profiles/" class="guide-card" style="text-decoration:none">
           <h3>🦾 SO-ARM101 Hardware Guide</h3>
           <p>Motor IDs, wiring, calibration, Docker setup, and LeRobot integration for the SO-ARM101 desktop arm.</p>
           <div class="hw-card-meta" style="margin-top:10px;color:var(--accent)">Hardware guide →</div>
@@ -417,10 +389,12 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           <p>Hardware presets for TurtleBot3, Arduino, ESP32, OAK-D, LiDAR, and all supported peripheral categories.</p>
           <div class="hw-card-meta" style="margin-top:10px;color:var(--accent)">Hardware →</div>
         </a>
-        <a href="/docs#safety" class="guide-card" style="text-decoration:none">
-          <h3>🛡️ Protocol 66 Safety</h3>
-          <p>Deep dive into the five P66 invariants, confidence gates, and the live conformance manifest endpoint.</p>
-          <div class="hw-card-meta" style="margin-top:10px;color:var(--accent)">Safety docs →</div>
+        <a href="https://docs.opencastor.com/runtime/safety/" class="guide-card" style="text-decoration:none">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            Safety & Protocol 66
+          </h3>
+          <p>Learn how to safely run AI agents on physical hardware without endangering people.</p>
         </a>
         <a href="https://rcan.dev" target="_blank" rel="noopener" class="guide-card" style="text-decoration:none">
           <h3>📡 RCAN Spec</h3>
@@ -447,52 +421,13 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   </section>
 
   <!-- CTA -->
-  <section class="cta-section">
+  <section class="doc-section" style="margin-top: 60px;">
     <h2 class="reveal">Something not working?</h2>
     <p class="reveal reveal-d1">Run <code>castor doctor</code> first. Still stuck? Open an issue on GitHub.</p>
-    <div class="hero-actions reveal reveal-d2">
-      <a href="https://github.com/craigm26/OpenCastor/issues" class="btn btn-primary btn-lg" target="_blank" rel="noopener">Open an Issue</a>
-      <a href="https://discord.gg/jMjA8B26Bq" class="btn btn-secondary btn-lg" target="_blank" rel="noopener">Join Discord</a>
+    <div class="hero-actions reveal reveal-d2" style="justify-content: flex-start;">
+      <a href="https://github.com/craigm26/OpenCastor/issues" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Open an Issue</a>
+      <a href="https://discord.gg/jMjA8B26Bq" class="btn btn-secondary btn-sm" target="_blank" rel="noopener">Join Discord</a>
     </div>
   </section>
 
-</main>
-
-<footer class="site-footer">
-  <div class="footer-inner">
-    <div class="footer-grid">
-      <div class="footer-brand">
-        <a href="/" class="nav-logo">
-          <div class="nav-logo-img"></div>
-          <span>OpenCastor</span>
-        </a>
-        <p>The universal runtime for embodied AI.</p>
-      </div>
-      <div class="footer-col">
-        <h4>Docs</h4>
-        <a href="/docs/getting-started">Getting Started</a>
-        <a href="/docs/hardware/so-arm101">SO-ARM101</a>
-        <a href="/docs">Full Docs</a>
-        <a href="https://rcan.dev/spec/">RCAN Spec</a>
-      </div>
-      <div class="footer-col">
-        <h4>Resources</h4>
-        <a href="/hardware">Hardware</a>
-        <a href="https://github.com/craigm26/OpenCastor">GitHub</a>
-        <a href="https://github.com/craigm26/OpenCastor/issues">Issues</a>
-        <a href="https://discord.gg/jMjA8B26Bq">Discord</a>
-      </div>
-      <div class="footer-col">
-        <h4>Company</h4>
-        <a href="/hub">Hub</a>
-        <a href="/about">About</a>
-        <a href="mailto:hello@opencastor.com">Contact</a>
-      </div>
-    </div>
-    <div class="footer-bottom">
-      <p>&copy; 2025-2026 Craig Merry. Apache 2.0 License.</p>
-    </div>
-  </div>
-</footer>
-
-</BaseLayout>
+</DocsLayout>

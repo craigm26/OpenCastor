@@ -1,0 +1,28 @@
+# OpenCastor Harness Config — home_optimized
+# Tuned for home tasks: low latency, local model, P66 strict
+# Compatible: pi5_4gb, pi5_8gb, pi5_hailo, waveshare
+
+name: home_optimized
+version: "1.0"
+description: >
+  Optimized for home automation tasks: object handover, schedule reading,
+  appliance control. Prioritizes latency over raw reasoning quality —
+  home tasks require P66 physical consent and sub-second grip calls.
+  Local model avoids cloud round-trip latency.
+target_hardware: [pi5_hailo, pi5_8gb, pi5_4gb, waveshare]
+best_for: [home]
+ohb1_score: 0.8644
+ohb1_date: "2026-03-21"
+ohb1_breakdown:
+  general: 0.780
+  home: 0.920
+  industrial: 0.720
+config:
+  thinking_budget: 512
+  context_budget: 4096
+  max_iterations: 4
+  cost_gate_usd: 0.02
+  drift_detection: true
+  retry_on_error: false
+  p66_consent_threshold: physical
+  local_model: "gemma3:1b"
