@@ -10,10 +10,10 @@ RCAN config example::
       provider: consensus
       # Primary is queried first and breaks ties
       primary_provider: google
-      primary_model: gemini-2.0-flash
+      primary_model: gemini-2.5-flash
       consensus_providers:
         - provider: google
-          model: gemini-2.0-flash
+          model: gemini-2.5-flash
         - provider: anthropic
           model: claude-haiku-4-5-20251001
         - provider: ollama

@@ -1,0 +1,37 @@
+# OpenCastor Harness Research — Champion Config
+# Source: opencastor-autoresearch harness_research pipeline
+# Benchmark: OHB-1 (OpenCastor Harness Benchmark v1)
+# Model: gemma3:1b via Ollama (local, reproducible)
+# Date: 2026-03-21
+#
+# Download and apply: castor harness apply-champion
+# Docs: https://docs.opencastor.com/runtime/harness/
+# NOTE: Champion config is NEVER auto-applied. Always opt-in via the app or CLI.
+
+candidate_id: lower_cost
+config:
+  context_budget: 8192
+  cost_gate_usd: 0.01
+  drift_detection: true
+  enabled: true
+  max_iterations: 6
+  p66_consent_threshold: physical
+  retry_on_error: true
+  thinking_budget: 1024
+
+score: 0.6541
+ohb1_score: 0.6541
+ohb1_tasks_passed: 21
+ohb1_tasks_total: 30
+ohb1_model: gemma3:1b
+ohb1_date: "2026-03-21"
+ohb1_breakdown:
+  general:  0.546
+  home:     0.760
+  industrial: 0.656
+
+description: >
+  Lower cost gate restricts spending aggressively.
+  thinking_budget=1024 balances quality vs cost on Pi-class hardware.
+  drift_detection=true catches model drift in long sessions.
+  retry_on_error=true recovers from transient tool-call failures.

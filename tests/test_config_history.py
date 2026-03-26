@@ -19,7 +19,7 @@ import yaml
 _SAMPLE_CONFIG_A = {
     "rcan_version": "1.1.0",
     "metadata": {"robot_name": "bot-a"},
-    "agent": {"provider": "google", "model": "gemini-1.5-flash"},
+    "agent": {"provider": "google", "model": "gemini-2.5-flash"},
     "drivers": [{"id": "wheels", "protocol": "pca9685"}],
 }
 

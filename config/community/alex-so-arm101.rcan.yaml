@@ -1,148 +1,124 @@
-# Alex — Raspberry Pi 5 + SO-ARM101 Leader Arm + OAK-D, RCAN v1.6
-# Hardware: Pi 5 8GB, SO-ARM101 6-DOF arm (Feetech STS3215 servos), OAK-D camera
-# Use case: Precision manipulation, pick-and-place, Lego assembly
-# NOTE: This is the reference config used by opencastor-ops fleet monitor
 rcan_version: '1.6'
-
 metadata:
   robot_name: Alex
   robot_uuid: 00000005-0000-4000-8000-000000000005
   description: Pi5 + SO-ARM101 leader arm + OAK-D, manipulation specialist
   author: craigm26
   rrn: RRN-000000000005
-  rrn_uri: rrn://craigm26/robot/opencastor-pi5-arm/alex-001
-
+  rrn_uri: rrn://community/robot/opencastor/alex/alex-so-arm101
+  license: Apache-2.0
 agent:
   provider: google
-  model: gemini-2.0-flash
+  model: gemini-2.5-flash
   use_oauth: true
   vision_enabled: true
   safety_stop: true
   latency_budget_ms: 3000
   offline_provider: ollama
   confidence_gates:
-    - scope: control
-      min_confidence: 0.75
-      on_fail: block
-    - scope: safety
-      min_confidence: 0.90
-      on_fail: block
-
+  - scope: control
+    min_confidence: 0.75
+    on_fail: block
+  - scope: safety
+    min_confidence: 0.9
+    on_fail: block
 tiered_brain:
   fast_provider: ollama
   fast_model: gemma3:1b
   slow_provider: google
-  slow_model: gemini-2.0-flash
+  slow_model: gemini-2.5-flash
   planner_interval: 10
-
 agent_roster:
-  - id: arm_specialist
-    provider: google
-    model: gemini-2.0-flash
-    scope: control
-  - id: nav_specialist
-    provider: ollama
-    model: gemma3:4b
-    scope: nav
-
+- id: arm_specialist
+  provider: google
+  model: gemini-2.5-flash
+  scope: control
+- id: nav_specialist
+  provider: ollama
+  model: gemma3:4b
+  scope: nav
 geofence:
   enabled: false
-
 physics:
   type: ackermann
   dof: 2
-
 drivers:
-  - id: main_drive
-    protocol: gpio
-  - id: arm_controller
-    protocol: feetech_sts3215
-
+- id: main_drive
+  protocol: gpio
+- id: arm_controller
+  protocol: feetech_sts3215
 reactive:
   min_obstacle_m: 0.3
   fallback_provider: ollama
-
 safety:
   local_safety_wins: true
   emergency_stop_distance: 0.4
   estop_bypass_rate_limit: true
   watchdog:
     timeout_s: 10
-
 hardware_safety:
   physical_estop: false
   hardware_watchdog_mcu: false
-
 p66:
   enabled: true
   loa_enforcement: true
   consent_required: true
   manifest:
     estop_qos_bypass: true
-
 consent:
   required: true
   mode: explicit
   scope_threshold: control
-
 security:
   replay_protection:
     enabled: true
     window_s: 30
   signing:
     enabled: false
-
+    algorithm: Ed25519
 loa:
   enforcement: true
   min_loa_for_control: 1
-
 human_identity:
   loa_required: 1
-
 federation:
   enabled: true
   consent_bridge: false
   peer_rrns:
-    - RRN-000000000001
-
+  - RRN-000000000001
 transport:
   supported:
-    - http
-    - mqtt
-
+  - http
+  - mqtt
+  constrained_enabled: false
 multimodal:
   enabled: true
   max_chunk_bytes: 1048576
-
 offline:
   enabled: true
   fallback_provider: ollama
-
 cameras:
   oak_d:
     type: http
     url: http://127.0.0.1:8765/snapshot
-
 r2ram:
   scopes:
-    - discover
-    - status
-    - chat
-    - control
-    - safety
-
+  - discover
+  - status
+  - chat
+  - control
+  - safety
 network:
   allow_remote_override: false
-
 rcan_protocol:
   port: 8000
   capabilities:
-    - status
-    - nav
-    - teleop
-    - vision
-    - chat
-    - arm
-    - gripper
+  - status
+  - nav
+  - teleop
+  - vision
+  - chat
+  - arm
+  - gripper
   enable_mdns: true
   enable_jwt: false

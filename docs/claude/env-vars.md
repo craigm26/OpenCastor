@@ -21,7 +21,7 @@ Copy `.env.example` to `.env` and fill in what you need.
 | `HF_AUTH_MODE=cli` | HuggingFace | CLI auth (`huggingface-cli login`) |
 | `VERTEX_PROJECT` | Vertex AI | GCP project ID |
 | `VERTEX_LOCATION` | Vertex AI | Default: `us-central1` |
-| `VERTEX_MODEL` | Vertex AI | Default: `gemini-1.5-pro-002` |
+| `VERTEX_MODEL` | Vertex AI | Default: `gemini-2.5-pro` |
 
 ## Messaging Channels
 

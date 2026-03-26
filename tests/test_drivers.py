@@ -776,7 +776,7 @@ class TestWireDriversToSafety:
         mock_layer = MagicMock()
 
         class _D(DriverBase):
-            def _move(self, l=0.0, a=0.0):
+            def _move(self, l=0.0, a=0.0):  # noqa: E741
                 pass
 
             def stop(self):

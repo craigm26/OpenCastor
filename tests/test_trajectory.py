@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
-import tempfile
-from pathlib import Path
 
 import pytest
 
 from castor.harness import HarnessContext, HarnessResult
 from castor.providers.base import Thought
-from castor.trajectory import TrajectoryLogger, TrajectoryRecord
+from castor.trajectory import TrajectoryLogger
 
 
 @pytest.fixture(autouse=True)
@@ -79,7 +76,7 @@ class TestTrajectoryLogger:
         for i in range(3):
             await TrajectoryLogger.log_async(_ctx(), _result(f"r{i}", run_id=f"e{i}"))
         export = TrajectoryLogger.export_jsonl()
-        lines = [l for l in export.strip().split("\n") if l]
+        lines = [ln for ln in export.strip().split("\n") if ln]
         assert len(lines) == 3
         for line in lines:
             parsed = json.loads(line)

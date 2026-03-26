@@ -1,0 +1,87 @@
+rcan_version: "1.6"
+
+metadata:
+  robot_name: opencastor-default
+  robot_uuid: "00000000-0000-4000-8000-000000000000"
+  author: OpenCastor Team
+  license: Apache-2.0
+  description: >
+    The default OpenCastor agent harness. Shows the full two-tier brain
+    (TieredBrain: fast local + slow cloud), all 6 builtin skills, memory
+    consolidation, and RCAN v1.6 safety invariants. Fork this as your
+    starting point.
+  tags:
+    - official
+    - harness
+    - starter
+    - two-tier-brain
+  builtin_skills:
+    - navigate-to
+    - camera-describe
+    - arm-manipulate
+    - web-lookup
+    - peer-coordinate
+    - code-reviewer
+  public_profile: true
+
+_note: >
+  Official OpenCastor default harness. Demonstrates TieredBrain (fast local
+  + slow cloud), all 6 builtin skills, memory consolidation, and P66 safety.
+  Fork this config as your starting point.
+
+agent:
+  provider: google
+  model: gemini-2.5-flash
+  temperature: 0.7
+  system_prompt: >
+    You are an OpenCastor robot agent. You are helpful, safety-conscious,
+    and follow RCAN protocol scope constraints. Use your skills when
+    relevant. Always respect the P66 safety invariants.
+  vision_enabled: false
+  safety_stop: true
+
+tiered_brain:
+  fast_provider: ollama
+  fast_model: gemma3:1b
+  slow_provider: google
+  slow_model: gemini-2.5-flash
+
+cloud:
+  skills_enabled: true
+  memory:
+    enabled: true
+    consolidation:
+      enabled: true
+      interval_hours: 24
+
+physics:
+  type: differential
+  dof: 2
+
+drivers:
+  - id: main_drive
+    protocol: gpio
+
+network:
+  allow_remote_override: false
+
+rcan_protocol:
+  enable_mdns: true
+
+loa:
+  enforcement: true
+  min_loa_for_control: 1
+
+federation:
+  enabled: false
+  require_federation_trust: false
+
+safety:
+  p66_enabled: true
+  local_safety_wins: true
+  emergency_stop_distance: 0.4
+
+p66:
+  enabled: true
+  loa_enforcement: true
+  consent_required: true

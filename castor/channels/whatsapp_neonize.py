@@ -32,6 +32,7 @@ from collections.abc import Callable
 from typing import Optional
 
 from castor.channels.base import BaseChannel
+from castor.channels.scope_resolver import resolve_sender_scope
 
 logger = logging.getLogger("OpenCastor.Channel.WhatsApp")
 
@@ -333,9 +334,22 @@ class WhatsAppChannel(BaseChannel):
                 except Exception:
                     pass
 
+            # ── Resolve RCAN scope at channel boundary ────────────────────
+            # Use the sender's phone number for scope resolution (not the full JID)
+            _scope_sender_id = _normalize_number(chat_user) if not is_group else chat_user
+            _sender_scope, _sender_loa = resolve_sender_scope(_scope_sender_id, self.config)
+            self.logger.debug(
+                "WhatsApp scope: sender=%s scope=%s loa=%d",
+                _scope_sender_id,
+                _sender_scope,
+                _sender_loa,
+            )
+
             # ── Build chat_id and dispatch ────────────────────────────────
             chat_id = f"{chat_user}@{chat_server}"
-            self._dispatch(self._process_and_reply, client, chat, chat_id, text)
+            self._dispatch(
+                self._process_and_reply, client, chat, chat_id, text, _sender_scope, _sender_loa
+            )
 
         except Exception as e:
             self.logger.error(f"Error handling incoming message: {e}")
@@ -447,9 +461,19 @@ class WhatsAppChannel(BaseChannel):
 
     # ── Async reply path ──────────────────────────────────────────────────
 
-    async def _process_and_reply(self, client, chat_jid, chat_id: str, text: str):
+    async def _process_and_reply(
+        self,
+        client,
+        chat_jid,
+        chat_id: str,
+        text: str,
+        sender_scope: str = "discover",
+        sender_loa: int = 0,
+    ):
         """Call the AI brain and send the reply."""
-        reply = await self.handle_message(chat_id, text)
+        reply = await self.handle_message(
+            chat_id, text, sender_scope=sender_scope, sender_loa=sender_loa
+        )
         if reply:
             await self._loop.run_in_executor(
                 None, lambda: client.send_message(chat_jid, reply[:4096])

@@ -27,6 +27,8 @@ class Intent:
         deadline_ts: Optional unix timestamp deadline/SLA target.
         safety_class: Safety class (normal, elevated, emergency, etc.).
         owner: Issuer/owner of the intent.
+        scope: RCAN scope of the originating command.  Sub-agents must not
+            exceed this scope.  Defaults to ``"chat"`` (conservative).
     """
 
     goal: str
@@ -34,6 +36,7 @@ class Intent:
     deadline_ts: Optional[float] = None
     safety_class: str = "normal"
     owner: str = "system"
+    scope: str = "chat"  # RCAN scope of originating command; agents must not exceed this
     intent_id: str = field(default_factory=lambda: f"intent-{uuid.uuid4().hex[:12]}")
     state: str = "queued"
     created_at: float = field(default_factory=time.time)
@@ -44,6 +47,7 @@ class Intent:
         payload["created_at_iso"] = datetime.fromtimestamp(self.created_at).isoformat()
         if self.deadline_ts is not None:
             payload["deadline_iso"] = datetime.fromtimestamp(self.deadline_ts).isoformat()
+        payload.setdefault("scope", self.scope)
         return payload
 
 

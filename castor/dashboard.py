@@ -184,6 +184,21 @@ def _hdr() -> dict:
     return {"Authorization": f"Bearer {tok}"} if tok else {}
 
 
+def _warn_no_token() -> bool:
+    """Show a visible warning if no API token is configured.
+
+    Returns True if the token is missing (caller should abort the action).
+    """
+    if not st.session_state.api_token:
+        st.warning(
+            "⚠️ No API token configured. Set **OPENCASTOR_API_TOKEN** or enter a token in "
+            "⚙️ Settings → API Token. Unauthenticated requests will be rejected (401).",
+            icon="🔒",
+        )
+        return True
+    return False
+
+
 # ── API helpers ────────────────────────────────────────────────────────────────
 def _get(path: str, timeout: float = 2.0) -> dict:
     try:
@@ -352,11 +367,19 @@ with _tab_ctrl:
     _estop_c, _clr_c = st.columns(2)
     with _estop_c:
         if st.button("⏹ E-STOP", type="primary", use_container_width=True, key="ctrl_estop"):
-            try:
-                _req.post(f"{GW}/api/stop", headers=_hdr(), timeout=3)
-                st.toast("Motors stopped!", icon="⏹")
-            except Exception as _e:
-                st.error(str(_e))
+            if _warn_no_token():
+                st.error("Cannot send ESTOP — no API token. Configure a token in ⚙️ Settings.")
+            else:
+                try:
+                    _r = _req.post(f"{GW}/api/stop", headers=_hdr(), timeout=3)
+                    if _r.status_code == 401:
+                        st.error(
+                            "ESTOP rejected (401 Unauthorized) — check API token in ⚙️ Settings."
+                        )
+                    else:
+                        st.toast("Motors stopped!", icon="⏹")
+                except Exception as _e:
+                    st.error(str(_e))
     with _clr_c:
         if st.button("▶ Clear", use_container_width=True, key="ctrl_clear"):
             try:
@@ -1419,6 +1442,73 @@ with _tab_builder:
                     st.warning("Shutting down…")
                 except Exception as _sde:
                     st.error(str(_sde))
+
+        st.divider()
+        _ra1, _ra2 = st.columns(2)
+        with _ra1:
+            st.markdown("**Diagnostics**")
+            if st.button("📸 Snapshot", key="rt_snapshot", use_container_width=True):
+                try:
+                    _snap_r = _req.post(f"{GW}/api/snapshot/take", headers=_hdr(), timeout=10)
+                    if _snap_r.status_code == 200:
+                        st.toast("Snapshot saved", icon="📸")
+                    else:
+                        st.toast(f"Snapshot failed: {_snap_r.status_code}", icon="❌")
+                except Exception as _sne:
+                    st.toast(str(_sne), icon="❌")
+            if st.button("⚙️ Run Optimizer", key="rt_optimize", use_container_width=True):
+                try:
+                    _opt_r = _req.post(
+                        f"{GW}/api/command",
+                        json={"instruction": "OPTIMIZE", "scope": "system"},
+                        headers=_hdr(),
+                        timeout=60,
+                    )
+                    if _opt_r.status_code == 200:
+                        st.toast("Optimizer pass complete", icon="⚙️")
+                    else:
+                        st.toast(f"Optimizer failed: {_opt_r.status_code}", icon="❌")
+                except Exception as _oe:
+                    st.toast(str(_oe), icon="❌")
+        with _ra2:
+            st.markdown("**Hub**")
+            if st.button("📤 Share to Hub", key="hub_share", use_container_width=True):
+                try:
+                    _sh_r = _req.post(
+                        f"{GW}/api/command",
+                        json={"instruction": "SHARE_CONFIG", "scope": "system"},
+                        headers=_hdr(),
+                        timeout=30,
+                    )
+                    if _sh_r.status_code == 200:
+                        _sh_d = _sh_r.json()
+                        st.toast(_sh_d.get("result", "Shared"), icon="📤")
+                    else:
+                        st.toast(f"Share failed: {_sh_r.status_code}", icon="❌")
+                except Exception as _she:
+                    st.toast(str(_she), icon="❌")
+            _hub_id = st.text_input(
+                "Hub config ID", key="hub_install_id", placeholder="e.g. abc123"
+            )
+            if st.button(
+                "📥 Install from Hub",
+                key="hub_install",
+                use_container_width=True,
+                disabled=not _hub_id,
+            ):
+                try:
+                    _inst_r = _req.post(
+                        f"{GW}/api/command",
+                        json={"instruction": f"INSTALL: {_hub_id}", "scope": "system"},
+                        headers=_hdr(),
+                        timeout=30,
+                    )
+                    if _inst_r.status_code == 200:
+                        st.toast(f"Installed {_hub_id}", icon="📥")
+                    else:
+                        st.toast(f"Install failed: {_inst_r.status_code}", icon="❌")
+                except Exception as _ie:
+                    st.toast(str(_ie), icon="❌")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 🧠 EMBEDDING TAB

@@ -1,0 +1,28 @@
+# OpenCastor Harness Config — lower_cost
+# OHB-1 champion as of 2026-03-21
+# Compatible: all hardware tiers
+# Download and apply: castor harness apply --config lower_cost
+# Or: Settings → Harness → Config Library → lower_cost → Apply
+
+name: lower_cost
+version: "1.0"
+description: >
+  Restricts spending aggressively via cost_gate_usd=0.01.
+  Best overall balance of quality vs. cost on Pi-class hardware.
+  The current OHB-1 benchmark champion.
+target_hardware: [pi5_hailo, pi5_8gb, pi5_4gb, jetson, server, waveshare]
+best_for: [general, home, industrial]
+ohb1_score: 0.6541
+ohb1_date: "2026-03-21"
+ohb1_breakdown:
+  general: 0.546
+  home: 0.760
+  industrial: 0.656
+config:
+  thinking_budget: 1024
+  context_budget: 8192
+  max_iterations: 6
+  cost_gate_usd: 0.01
+  drift_detection: true
+  retry_on_error: true
+  p66_consent_threshold: physical

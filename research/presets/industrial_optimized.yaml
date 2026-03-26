@@ -1,0 +1,27 @@
+# OpenCastor Harness Config — industrial_optimized
+# Tuned for industrial tasks: retry-heavy, alert-aware, high context
+# Compatible: server, pi5_hailo, pi5_8gb
+
+name: industrial_optimized
+version: "1.0"
+description: >
+  Optimized for industrial tasks: anomaly detection, multi-robot coordination,
+  and sensor alert response. retry_on_error=true is the single flag most
+  correlated with industrial score improvement (+12% median across tiers).
+  High context_budget maintains task state across long sequences.
+target_hardware: [server, pi5_hailo, pi5_8gb]
+best_for: [industrial]
+ohb1_score: 0.8812
+ohb1_date: "2026-03-21"
+ohb1_breakdown:
+  general: 0.860
+  home: 0.810
+  industrial: 0.970
+config:
+  thinking_budget: 2048
+  context_budget: 16384
+  max_iterations: 8
+  cost_gate_usd: 0.10
+  drift_detection: true
+  retry_on_error: true
+  p66_consent_threshold: physical

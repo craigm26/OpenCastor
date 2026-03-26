@@ -10,6 +10,7 @@ import logging
 import os
 import threading
 import time
+from pathlib import Path
 from typing import Optional
 
 import yaml
@@ -814,6 +815,15 @@ def main():
     logger.info("Virtual Filesystem Online")
 
     # 1d. SECURITY POSTURE CHECK (attestation / measured boot)
+    # Generate fresh attestation if missing or stale
+    try:
+        from castor.attestation_generator import generate_attestation
+
+        _config_path = Path(args.config) if hasattr(args, "config") and args.config else None
+        generate_attestation(config_path=_config_path)
+    except Exception as _att_exc:
+        logger.debug("Attestation generation skipped: %s", _att_exc)
+
     try:
         from castor.security_posture import publish_attestation
 

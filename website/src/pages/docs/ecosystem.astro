@@ -1,0 +1,51 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout
+  title="Ecosystem Reference — OpenCastor Docs"
+  description="Navigate the full open-source ecosystem, including OpenCastor, Fleet UI, RCAN Protocol, and SDKs."
+  ogUrl="https://opencastor.com/docs/ecosystem"
+>
+  <section class="page-hero">
+    <p class="section-label reveal">Ecosystem</p>
+    <h1 class="reveal reveal-d1">The OpenCastor Universe</h1>
+    <p class="reveal reveal-d2">Bringing together AI runtimes, open communication protocols, and cloud fleet management.</p>
+  </section>
+
+  <section class="section" id="ecosystem">
+    <div class="guide-grid" style="margin-bottom: 40px">
+      
+      <div class="guide-card reveal">
+        <h3 style="margin-top:0; color:var(--accent);">🤖 OpenCastor Runtime</h3>
+        <p>The core python project (this documentation). A reference implementation of RCAN that acts as the universal embodied AI brain, directly connecting to LLMs, visual models, and hardware drivers.<br><br><em>GitHub: <a href="https://github.com/craigm26/OpenCastor">craigm26/OpenCastor</a></em></p>
+      </div>
+
+      <div class="guide-card reveal">
+        <h3 style="margin-top:0; color:var(--purple);">🌐 Fleet UI</h3>
+        <p>A globally accessible web dashboard to monitor and manage your robots in real-time. Features live telemetry, ESTOP controls, and LoA display.<br><br><em>Access: <a href="https://app.opencastor.com">app.opencastor.com</a></em></p>
+      </div>
+      
+      <div class="guide-card reveal">
+        <h3 style="margin-top:0; color:var(--green);">📡 RCAN Protocol</h3>
+        <p>The independent open standard for robot identity, safety, and messaging. Like DNS, but for robotics. Includes specifications for Federation, Constrained Transports (LoRa/BLE), and Protocol 66.<br><br><em>Spec: <a href="https://rcan.dev/spec/">rcan.dev</a></em></p>
+      </div>
+      
+      <div class="guide-card reveal">
+        <h3 style="margin-top:0; color:var(--orange);">💻 rcan-py & rcan-ts</h3>
+        <p>Official client SDKs in Python and TypeScript to build RCAN-compliant applications, interact with robots, and receive telemetry seamlessly.<br><br><em>GitHub: <a href="https://github.com/continuonai/rcan-py">rcan-py</a> | <a href="https://github.com/continuonai/rcan-ts">rcan-ts</a></em></p>
+      </div>
+
+      <div class="guide-card reveal" style="grid-column: 1 / -1;">
+        <h3 style="margin-top:0; color:var(--text);">🏛️ Robot Registry Foundation</h3>
+        <p>The global registry to submit your robot. Any robot, any runtime, any manufacturer can implement RCAN and register their endpoints for verifiable identity and addressing.<br><br><em>Web: <a href="https://robotregistryfoundation.org">robotregistryfoundation.org</a></em></p>
+      </div>
+
+    </div>
+
+    <div class="wizard-tip reveal" style="margin-top: 40px;">
+      <strong>Note on Coupling:</strong> OpenCastor implements RCAN, but RCAN doesn't belong to OpenCastor. You don't need OpenCastor to use RCAN, and you don't need RCAN to experiment with OpenCastor locally. Using both gives you the full stack: a robot that is controllable, auditable, and globally addressable.
+    </div>
+  </section>
+
+</DocsLayout>

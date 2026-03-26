@@ -307,7 +307,7 @@ function stepProvider() { return `
 
 function providerModelHint(p) {
   return { ollama:"qwen2.5:7b", anthropic:"claude-haiku-3-5", openai:"gpt-4o-mini",
-           google:"gemini-2-flash", huggingface:"Qwen/Qwen2.5-7B-Instruct" }[p] || "model-name";
+           google:"gemini-2.5-flash", huggingface:"Qwen/Qwen2.5-7B-Instruct" }[p] || "model-name";
 }
 function providerModelDesc(p) {
   return { ollama:"Run locally via Ollama. Install: brew install ollama",

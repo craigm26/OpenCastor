@@ -225,7 +225,7 @@ class TestTieredBrainNoRegression:
 _BASE_CONFIG = {
     "rcan_version": "1.1.0",
     "metadata": {"robot_name": "test"},
-    "agent": {"model": "gemini-1.5-flash"},
+    "agent": {"model": "gemini-2.5-flash"},
     "physics": {"wheel_circumference_m": 0.22},
     "drivers": [{"id": "wheels", "protocol": "mock"}],
     "network": {},

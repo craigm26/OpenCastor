@@ -51,6 +51,8 @@ class SessionMessage:
     channel: str  # originating channel name
     chat_id: str  # channel-specific chat/sender ID
     timestamp: float = field(default_factory=time.time)
+    sender_scope: str = "chat"  # RCAN scope granted to this sender
+    sender_loa: int = 0  # Level of Assurance for this sender
 
 
 class UserSession:

@@ -1,0 +1,58 @@
+rcan_version: "1.6"
+
+metadata:
+  robot_name: opencastor-peer-demo
+  robot_uuid: "00000000-0000-4000-8000-000000000005"
+  author: OpenCastor Team
+  license: Apache-2.0
+  description: >
+    Minimal demo for the peer-coordinate builtin skill. Enables robots to
+    discover each other via mDNS, share status, delegate tasks, and
+    coordinate actions across a local fleet. A great starting point for
+    swarm experiments and multi-robot collaboration scenarios.
+  tags:
+    - official
+    - skill
+    - swarm
+    - peer-coordinate
+    - multi-robot
+  builtin_skills:
+    - peer-coordinate
+
+_note: >
+  Official demo for the peer-coordinate builtin skill. Enables mDNS-based
+  peer discovery and multi-robot task delegation. Fork to configure your
+  peer RRNs and federation trust settings.
+
+agent:
+  provider: google
+  model: gemini-2.5-flash
+  safety_stop: true
+  system_prompt: >
+    You are a coordination-focused OpenCastor agent. Use the peer-coordinate
+    skill to discover nearby robots, share tasks, and collaborate on goals.
+    Always confirm peer identity and trust level before delegating control tasks.
+
+federation:
+  enabled: true
+  consent_bridge: false
+
+physics:
+  type: differential
+  dof: 2
+
+drivers:
+  - id: main_drive
+    protocol: gpio
+
+network:
+  allow_remote_override: false
+
+rcan_protocol:
+  enable_mdns: true
+
+loa:
+  min_loa_for_control: 1
+
+safety:
+  p66_enabled: true

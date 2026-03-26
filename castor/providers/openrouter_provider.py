@@ -12,7 +12,7 @@ Install: pip install openai
 Supported model families (examples):
   anthropic/claude-3.5-haiku, anthropic/claude-3.5-sonnet
   openai/gpt-4o, openai/gpt-4o-mini
-  google/gemini-2.0-flash-001, google/gemini-flash-1.5
+  google/gemini-2.5-flash, google/gemini-flash-1.5
   meta-llama/llama-3.3-70b-instruct, meta-llama/llama-3.1-8b-instruct
   mistralai/mistral-7b-instruct, mistralai/mixtral-8x7b-instruct
   deepseek/deepseek-r1, deepseek/deepseek-chat

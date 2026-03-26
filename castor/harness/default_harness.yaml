@@ -1,0 +1,171 @@
+# castor/harness/default_harness.yaml
+# Canonical default agent harness for OpenCastor.
+# Auto-updated by harness-research — champion: lower_cost (score=0.9101, 2026-03-20)
+# Keep in sync with: opencastor-client HarnessConfig.defaults() and website/src/pages/docs/harness.astro
+
+harness:
+  context_budget: 8192
+  cost_gate_usd: 0.01
+  drift_detection: true
+  enabled: true
+  layers:
+  - can_disable: false
+    can_reorder: false
+    config:
+      p66_audit: true
+    description: "ESTOP bypass \xB7 Scope enforcement \xB7 Physical consent"
+    enabled: true
+    id: hook-p66
+    label: P66 Safety
+    type: hook
+  - config:
+      block_injection: true
+      block_jailbreak: true
+      block_role_switch: true
+      risk_threshold: 0.6
+    description: Blocks jailbreak, injection, and role-switch attempts
+    enabled: true
+    id: prompt-guard
+    label: Prompt Guard
+    type: guard
+  - can_disable: false
+    can_reorder: false
+    config:
+      memory: true
+      rcan_identity: true
+      skills_context: true
+      system_prompt: true
+      telemetry: true
+    description: "Memory \xB7 Telemetry \xB7 Skills \xB7 System prompt"
+    enabled: true
+    id: context-builder
+    label: Context Builder
+    type: context
+  - config:
+      max_entries: 50
+      persist: false
+      ttl_s: 1800
+    description: Per-session scratchpad for multi-step reasoning
+    enabled: true
+    id: working-memory
+    label: Working Memory
+    type: memory
+  - config:
+      order: 0
+    description: Autonomous waypoint navigation
+    enabled: true
+    id: skill-navigate-to
+    label: navigate-to
+    type: skill
+  - config:
+      order: 1
+    description: Describe scene from camera feed
+    enabled: true
+    id: skill-camera-describe
+    label: camera-describe
+    type: skill
+  - config:
+      order: 2
+    description: Web search and knowledge retrieval
+    enabled: true
+    id: skill-web-lookup
+    label: web-lookup
+    type: skill
+  - config:
+      order: 3
+    description: Arm/gripper manipulation primitives
+    enabled: false
+    id: skill-arm-manipulate
+    label: arm-manipulate
+    type: skill
+  - config:
+      order: 4
+    description: Multi-robot coordination via RCAN
+    enabled: false
+    id: skill-peer-coordinate
+    label: peer-coordinate
+    type: skill
+  - config:
+      cooldown_s: 30
+      failure_threshold: 3
+      half_open_probe: true
+    description: Disables skills after 3 failures; resets after 30s
+    enabled: true
+    id: circuit-breaker
+    label: Circuit Breaker
+    type: circuit_breaker
+  - config:
+      action_types:
+      - move
+      - actuate
+      - grip
+      - rotate
+      - extend
+      - retract
+      on_timeout: block
+      require_auth: true
+      timeout_s: 30
+    description: Operator approval required for physical actions
+    enabled: true
+    id: hitl-physical
+    label: Physical HITL Gate
+    type: hitl
+  - can_disable: false
+    can_reorder: false
+    config:
+      confidence_threshold: 0.72
+      fast_model: gemma3:1b
+      fast_provider: ollama
+      slow_model: gemini-2.5-flash
+      slow_provider: google
+    description: "Fast local (Gemma 3) \xB7 Slow cloud (Gemini 2.5) by confidence"
+    enabled: true
+    id: model-dual
+    label: Dual Model
+    type: model
+  - config:
+      alert_at_pct: 80
+      budget_usd: 0.1
+      on_exceed: block
+    description: 'Halts if LLM spend exceeds $0.10/session (cost_gate_usd: 0.01)'
+    enabled: true
+    id: cost-gate
+    label: Cost Gate
+    type: cost_gate
+  - config:
+      drift_threshold: 0.15
+    description: Detects model off-task drift after 3+ iterations
+    enabled: true
+    id: hook-drift
+    label: Drift Detection
+    type: hook
+  - config:
+      db_path: traces.db
+      export: sqlite
+    description: "OpenTelemetry-style execution traces \u2192 SQLite"
+    enabled: true
+    id: span-tracer
+    label: Span Tracer
+    type: tracer
+  - config:
+      db_path: dlq.db
+      max_size: 500
+    description: Failed commands queued for human review
+    enabled: true
+    id: dlq
+    label: Dead Letter Queue
+    type: dlq
+  - can_disable: false
+    can_reorder: false
+    config:
+      sqlite_path: trajectory.db
+    description: "Always-on audit trail \u2014 every run logged to SQLite. Required\
+      \ for autoresearch and RCAN compliance.\n"
+    enabled: true
+    id: trajectory-logger
+    label: Trajectory Logger
+    type: trajectory
+  max_iterations: 6
+  p66_consent_threshold: physical
+  retry_on_error: true
+  thinking_budget: 1024
