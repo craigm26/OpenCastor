@@ -16,12 +16,10 @@ Spec: §13 — Authority Access (EU AI Act Art. 16(j))
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
 logger = logging.getLogger("OpenCastor.Authority")
 
@@ -38,7 +36,7 @@ class AuthorityAccessPayload:
     expires_at: int             # Unix timestamp
 
     @classmethod
-    def from_dict(cls, d: dict) -> "AuthorityAccessPayload":
+    def from_dict(cls, d: dict) -> AuthorityAccessPayload:
         return cls(
             request_id=d.get("request_id", ""),
             authority_id=d.get("authority_id", ""),
@@ -334,8 +332,9 @@ def send_authority_response(
     Raises:
         AuthorityError on validation failure.
     """
-    from castor.rcan.message import MessageType
     import uuid
+
+    from castor.rcan.message import MessageType
 
     handler = AuthorityRequestHandler(
         rrn=rrn,

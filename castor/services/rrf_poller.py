@@ -20,7 +20,7 @@ import logging
 import time
 from typing import Optional
 from urllib.error import URLError
-from urllib.request import urlopen, Request
+from urllib.request import Request, urlopen
 
 logger = logging.getLogger("OpenCastor.Services.RRFPoller")
 
@@ -71,10 +71,10 @@ class RRFRevocationPoller:
 
     async def _poll_loop(self) -> None:
         from castor.auth.m2m_trusted import (
-            has_active_m2m_trusted_sessions,
             get_active_sessions,
-            terminate_session,
+            has_active_m2m_trusted_sessions,
             revocation_cache,
+            terminate_session,
         )
 
         while self._running:
@@ -93,7 +93,7 @@ class RRFRevocationPoller:
 
                 # Check active sessions against new revocation list
                 sessions = dict(get_active_sessions())
-                for orch_id, session in sessions.items():
+                for orch_id, _session in sessions.items():
                     if orch_id in revoked_orchestrators:
                         logger.warning(
                             "M2M_TRUSTED orchestrator '%s' is now revoked — terminating session",
@@ -120,7 +120,7 @@ class RRFRevocationPoller:
             with urlopen(req, timeout=10) as resp:
                 return json.loads(resp.read())
         except URLError as e:
-            raise RuntimeError(f"RRF revocation fetch failed: {e}")
+            raise RuntimeError(f"RRF revocation fetch failed: {e}") from e
 
     def _log_revocation_event(self, orchestrator_id: str) -> None:
         """Log revocation to commitment chain as TRANSPARENCY (16)."""

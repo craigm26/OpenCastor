@@ -20,12 +20,12 @@ import importlib.metadata as importlib_metadata
 import json
 import logging
 import sys
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from urllib.error import URLError
-from urllib.request import urlopen, Request
+from urllib.request import Request, urlopen
 
 logger = logging.getLogger("OpenCastor.SBOM")
 
@@ -33,7 +33,7 @@ SBOM_WELL_KNOWN_PATH = "/.well-known/rcan-sbom.json"
 _DEFAULT_SBOM_FILE = Path("/run/opencastor/rcan-sbom.json")
 _FALLBACK_SBOM_FILE = Path("/tmp/opencastor-rcan-sbom.json")
 
-RRF_SBOM_PUBLISH_URL = "https://api.rrf.rcan.dev/v2/sbom/publish"
+RRF_SBOM_PUBLISH_URL = "https://robot-registry-foundation.pages.dev/v2/robots/{rrn}/sbom"
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +99,7 @@ class RCANBOM:
         return d
 
     @classmethod
-    def from_dict(cls, d: dict) -> "RCANBOM":
+    def from_dict(cls, d: dict) -> RCANBOM:
         components = []
         for c in d.get("components", []):
             components.append(SBOMComponent(
@@ -248,13 +248,15 @@ def publish_sbom_to_rrf(sbom: RCANBOM, rrf_token: str) -> dict:
     Returns the JSON response (including rrf_countersig if provided).
     Raises RuntimeError on failure.
     """
+    publish_url = RRF_SBOM_PUBLISH_URL.format(rrn=(sbom.rcan.rrn if sbom.rcan else "unknown")) if "{rrn}" in RRF_SBOM_PUBLISH_URL else RRF_SBOM_PUBLISH_URL
     payload = json.dumps(sbom.to_dict()).encode()
     req = Request(
-        RRF_SBOM_PUBLISH_URL,
+        publish_url,
         data=payload,
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {rrf_token}",
+            "User-Agent": "OpenCastor/2026.3.26.1",
         },
         method="POST",
     )
@@ -262,7 +264,7 @@ def publish_sbom_to_rrf(sbom: RCANBOM, rrf_token: str) -> dict:
         with urlopen(req, timeout=15) as resp:
             return json.loads(resp.read())
     except URLError as e:
-        raise RuntimeError(f"Failed to publish SBOM to RRF: {e}")
+        raise RuntimeError(f"Failed to publish SBOM to RRF: {e}") from e
 
 
 # ---------------------------------------------------------------------------
@@ -275,13 +277,13 @@ def cmd_sbom_generate(args) -> None:
     _cp = getattr(args, "config", None)
     config = (_yaml.safe_load(open(_cp)) if _cp else {}) if _cp else {}
     # also check metadata subkey
-    meta = config.get("metadata", config)
+    config.get("metadata", config)
     rrn = config.get("rrn") or config.get("metadata", {}).get("rrn") or config.get("robot_rrn") or "RRN-UNKNOWN"
 
     # Derive SBOM URL from robot's RURI or a configured base URL
-    ruri = config.get("ruri", "")
+    config.get("ruri", "")
     sbom_url = getattr(args, "sbom_url", None) or (
-        f"https://rrf.rcan.dev/robots/{rrn}/sbom" if rrn != "RRN-UNKNOWN" else ""
+        f"https://robot-registry-foundation.pages.dev/v2/robots/{rrn}/sbom" if rrn != "RRN-UNKNOWN" else ""
     )
 
     sbom = generate_sbom(rrn=rrn, sbom_url=sbom_url)
@@ -310,7 +312,7 @@ def cmd_sbom_publish(args) -> None:
         if countersig and sbom.rcan:
             sbom.rcan.rrf_countersig = countersig
             save_sbom(sbom)
-            print(f"✓ SBOM published and countersigned by RRF")
+            print("✓ SBOM published and countersigned by RRF")
             print(f"  rrf_countersig: {countersig[:32]}...")
         else:
             print("✓ SBOM published to RRF (no countersig in response)")

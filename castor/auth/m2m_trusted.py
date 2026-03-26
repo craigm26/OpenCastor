@@ -11,7 +11,6 @@ RRF: https://api.rrf.rcan.dev/.well-known/rrf-root-pubkey.pem
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
@@ -75,7 +74,7 @@ def _token_hash(token: str) -> str:
 def validate_m2m_trusted_message(
     token: str,
     target_rrn: str,
-    revocation_cache: Optional["RevocationCache"] = None,
+    revocation_cache: Optional[RevocationCache] = None,
 ) -> M2MTrustedSession:
     """Validate an M2M_TRUSTED JWT for a message targeting this robot.
 
@@ -89,11 +88,11 @@ def validate_m2m_trusted_message(
     Raises:
         M2MTrustedAuthError on any validation failure.
     """
-    import hashlib
 
     # Decode claims (no signature verification — that requires RRF pubkey fetch)
     try:
-        import base64, json as _json
+        import base64
+        import json as _json
         parts = token.split('.')
         if len(parts) < 2:
             raise M2MTrustedAuthError("Invalid JWT structure", "M2M_INVALID_TOKEN")
@@ -102,7 +101,7 @@ def validate_m2m_trusted_message(
     except M2MTrustedAuthError:
         raise
     except Exception as e:
-        raise M2MTrustedAuthError(f"JWT decode failed: {e}", "M2M_INVALID_TOKEN")
+        raise M2MTrustedAuthError(f"JWT decode failed: {e}", "M2M_INVALID_TOKEN") from e
 
     # Validate issuer
     iss = payload.get("iss", "")

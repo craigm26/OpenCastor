@@ -16,8 +16,6 @@ import hashlib
 import importlib.metadata as importlib_metadata
 import json
 import logging
-import platform
-import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -64,7 +62,7 @@ class FirmwareManifest:
         return d
 
     @classmethod
-    def from_dict(cls, d: dict) -> "FirmwareManifest":
+    def from_dict(cls, d: dict) -> FirmwareManifest:
         components = [
             FirmwareComponent(**c) for c in d.get("components", [])
         ]
@@ -212,7 +210,7 @@ def sign_manifest(m: FirmwareManifest, private_key_pem: str) -> FirmwareManifest
     except ImportError:
         raise FirmwareIntegrityError(
             "cryptography package required for firmware signing: pip install cryptography"
-        )
+        ) from None
 
     canonical = canonical_manifest_json(m)
     key = load_pem_private_key(private_key_pem.encode(), password=None)
@@ -239,13 +237,13 @@ def verify_manifest(m: FirmwareManifest, public_key_pem: str) -> None:
         raise FirmwareIntegrityError("Manifest has no signature")
 
     try:
+        from cryptography.exceptions import InvalidSignature
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
         from cryptography.hazmat.primitives.serialization import load_pem_public_key
-        from cryptography.exceptions import InvalidSignature
     except ImportError:
         raise FirmwareIntegrityError(
             "cryptography package required: pip install cryptography"
-        )
+        ) from None
 
     # Re-pad base64url
     sig_b64 = m.signature + "=" * (4 - len(m.signature) % 4)
@@ -259,7 +257,7 @@ def verify_manifest(m: FirmwareManifest, public_key_pem: str) -> None:
     try:
         key.verify(sig_bytes, canonical)
     except InvalidSignature:
-        raise FirmwareIntegrityError("Firmware manifest signature verification failed")
+        raise FirmwareIntegrityError("Firmware manifest signature verification failed") from None
 
 
 def firmware_hash_from_manifest(m: FirmwareManifest) -> str:

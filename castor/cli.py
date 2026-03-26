@@ -1947,9 +1947,9 @@ def _cmd_attest_dispatch(args) -> None:
     """castor attest — RCAN v2.1 §11 firmware manifest (closes #760)."""
     from castor.firmware import (
         cmd_attest_generate,
+        cmd_attest_serve,
         cmd_attest_sign,
         cmd_attest_verify,
-        cmd_attest_serve,
     )
     subcmd = getattr(args, "attest_cmd", None)
     if subcmd == "generate":
