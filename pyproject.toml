@@ -63,7 +63,7 @@ dependencies = [
     "rich>=13.0.0",
     "argcomplete>=3.0.0",
     # RCAN Python SDK — official protocol implementation
-    "rcan>=0.6.0,<1.0",
+    "rcan>=1.2.0",
 ]
 
 [project.optional-dependencies]
@@ -92,7 +92,7 @@ channels = [
 ]
 rcan = [
     "zeroconf>=0.131.0",
-    "rcan>=0.6.0,<1.0",
+    "rcan>=1.2.0",
 ]
 dynamixel = ["dynamixel-sdk>=3.7.31"]
 hlabs = ["python-can>=4.0"]  # HLaboratories ACB v2.0 CAN Bus support (pyserial is a core dep)
