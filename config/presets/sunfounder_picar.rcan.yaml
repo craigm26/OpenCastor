@@ -1,49 +1,136 @@
-rcan_version: "1.3"
-
+rcan_version: '1.6'
 metadata:
-  robot_name: "SunFounder_PiCar_X"
-  robot_uuid: "00000000-0000-0000-0000-000000000004"
-  author: "OpenCastor Default"
-  license: "Apache-2.0"
+  robot_name: SunFounder_PiCar_X
+  robot_uuid: 44657594-4057-4f7d-9872-08f8c0ca48b3
+  author: OpenCastor Default
+  license: Apache-2.0
   tags:
-    - mobile
-    - rover
-    - sunfounder
-    - picar
-
+  - mobile
+  - rover
+  - sunfounder
+  - picar
+  description: RCAN v1.6 config for SunFounder_PiCar_X
+  rrn: RRN-221602902157
+  rrn_uri: rrn://community/robot/opencastor/sunfounder-picar-x/sunfounder_picar
 agent:
-  provider: "anthropic"
-  model: "claude-opus-4-6"
+  provider: anthropic
+  model: claude-opus-4-6
   vision_enabled: true
   latency_budget_ms: 200
   safety_stop: true
-
+  offline_provider: ollama
+  confidence_gates:
+  - scope: control
+    min_confidence: 0.75
+    on_fail: block
+  - scope: safety
+    min_confidence: 0.9
+    on_fail: block
 physics:
-  type: "differential_drive"
+  type: differential
   dof: 2
   chassis:
     wheel_base_mm: 140
     wheel_radius_mm: 33
-
 drivers:
-  - id: "motor_driver"
-    protocol: "pca9685_i2c"
-    port: "/dev/i2c-1"
-    address: "0x40"
-    frequency: 50
-    channels:
-      left_front: 0
-      left_rear: 1
-      right_front: 2
-      right_rear: 3
-
+- id: motor_driver
+  protocol: pca9685_i2c
+  port: /dev/i2c-1
+  address: '0x40'
+  frequency: 50
+  channels:
+    left_front: 0
+    left_rear: 1
+    right_front: 2
+    right_rear: 3
 network:
   telemetry_stream: true
   sim_to_real_sync: false
-  allow_remote_override: true
-
+  allow_remote_override: false
 rcan_protocol:
   port: 8000
-  capabilities: [status, nav, teleop, chat]
+  capabilities:
+  - status
+  - nav
+  - teleop
+  - chat
   enable_mdns: false
   enable_jwt: false
+tiered_brain:
+  fast_provider: ollama
+  fast_model: gemma3:1b
+  slow_provider: anthropic
+  slow_model: claude-opus-4-6
+  planner_interval: 10
+agent_roster:
+- id: nav_specialist
+  provider: ollama
+  model: gemma3:4b
+  scope: nav
+- id: chat_specialist
+  provider: anthropic
+  model: claude-opus-4-6
+  scope: chat
+geofence:
+  enabled: false
+  boundary:
+    type: none
+reactive:
+  min_obstacle_m: 0.3
+  fallback_provider: ollama
+cameras:
+  main:
+    type: http
+    url: http://127.0.0.1:8765/snapshot
+safety:
+  local_safety_wins: true
+  emergency_stop_distance: 0.4
+  estop_bypass_rate_limit: true
+  watchdog:
+    timeout_s: 10
+hardware_safety:
+  physical_estop: false
+  hardware_watchdog_mcu: false
+p66:
+  enabled: true
+  loa_enforcement: true
+  consent_required: true
+  manifest:
+    estop_qos_bypass: true
+consent:
+  required: true
+  mode: explicit
+  scope_threshold: control
+security:
+  replay_protection:
+    enabled: true
+    window_s: 30
+  signing:
+    enabled: false
+    algorithm: Ed25519
+loa:
+  enforcement: true
+  min_loa_for_control: 1
+human_identity:
+  loa_required: 1
+transport:
+  supported:
+  - http
+  - mqtt
+  constrained_enabled: false
+multimodal:
+  enabled: true
+  max_chunk_bytes: 1048576
+offline:
+  enabled: true
+  fallback_provider: ollama
+r2ram:
+  scopes:
+  - discover
+  - status
+  - chat
+  - control
+  - safety
+federation:
+  enabled: true
+  consent_bridge: false

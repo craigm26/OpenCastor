@@ -4,20 +4,18 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from castor.optimizer import (
+    _FORBIDDEN_KEYS,
     OptimizationChange,
     OptimizationReport,
     RobotOptimizer,
-    _FORBIDDEN_KEYS,
     run_optimizer,
 )
 from castor.trajectory import TrajectoryLogger
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -270,7 +268,6 @@ class TestDryRun:
 
     def test_report_persisted(self, dummy_config: Path, dummy_trajectory_db: Path, tmp_path: Path):
         import asyncio
-        from castor.optimizer import _HISTORY_PATH
 
         # Temporarily monkeypatch history path to tmp
         import castor.optimizer as opt_mod

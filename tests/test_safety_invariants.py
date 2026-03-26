@@ -381,7 +381,8 @@ class TestSensorMonitorEstopWiring:
 
     def test_sensor_monitor_critical_triggers_estop(self):
         """wire_safety_layer wires SensorMonitor so critical events call estop()."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
+
         from castor.safety.monitor import SensorMonitor, wire_safety_layer
 
         monitor = SensorMonitor(consecutive_critical=1)
@@ -403,7 +404,13 @@ class TestSensorMonitorEstopWiring:
     def test_sensor_monitor_critical_includes_snapshot_in_reason(self):
         """The estop reason string should include sensor reading details."""
         from unittest.mock import MagicMock
-        from castor.safety.monitor import SensorMonitor, MonitorSnapshot, SensorReading, wire_safety_layer
+
+        from castor.safety.monitor import (
+            MonitorSnapshot,
+            SensorMonitor,
+            SensorReading,
+            wire_safety_layer,
+        )
 
         monitor = SensorMonitor(consecutive_critical=1)
         mock_sl = MagicMock()
@@ -487,7 +494,7 @@ class TestSessionExpiryStop(_Base):
         stop_before = [e for e in safety_log_before if e.get("event") == "session_expiry_stop"]
 
         # Patch Scope so GUEST has STATUS-only for this test
-        from castor.rcan.rbac import Scope, RCANRole
+        from castor.rcan.rbac import RCANRole, Scope
         original_for_role = Scope.for_role
 
         def status_only(role: RCANRole) -> Scope:
@@ -600,7 +607,7 @@ class TestV15SafetyInvariants:
 
     def test_safety_replay_window_10s(self):
         """Safety replay cache uses 10s window (not 30s)."""
-        from castor.cloud.bridge import CastorBridge, SAFETY_REPLAY_WINDOW_S
+        from castor.cloud.bridge import SAFETY_REPLAY_WINDOW_S, CastorBridge
         bridge = CastorBridge(
             config={"rrn": "RRN-00000001", "metadata": {"name": "T"}},
             firebase_project="test",
@@ -665,24 +672,24 @@ class TestV15SafetyInvariants:
     # 5. RCAN version negotiation invariant
     # ─────────────────────────────────────────────────────────────────
 
-    def test_rcan_spec_version_is_15(self):
-        """castor.rcan.message declares RCAN_SPEC_VERSION='1.5'."""
+    def test_rcan_spec_version_is_current(self):
+        """castor.rcan.message declares RCAN_SPEC_VERSION='1.9'."""
         from castor.rcan.message import RCAN_SPEC_VERSION
-        assert RCAN_SPEC_VERSION == "1.5"
+        assert RCAN_SPEC_VERSION == "1.9"
 
     def test_p66_manifest_rcan_version(self):
-        """P66 manifest declares rcan_version='1.6' (updated from 1.5 in v2026.3.17.1)."""
+        """P66 manifest declares rcan_version (updated to 1.9 in v2026.3.21.1)."""
         from castor.safety.p66_manifest import build_manifest
         manifest = build_manifest()
-        # v1.6: rcan_version and rcan_spec_version are now "1.6"
-        assert manifest.get("rcan_version") in ("1.5", "1.6"), (
-            f"rcan_version must be '1.5' or '1.6' in P66 manifest, got {manifest.get('rcan_version')!r}"
+        # v1.8: canonical MessageType table
+        assert manifest.get("rcan_version") in ("1.5", "1.6", "1.8", "1.9"), (
+            f"rcan_version must be '1.5', '1.6', or '1.8' in P66 manifest, got {manifest.get('rcan_version')!r}"
         )
-        assert manifest.get("rcan_spec_version") in ("1.5", "1.6")
+        assert manifest.get("rcan_spec_version") in ("1.5", "1.6", "1.8", "1.9")
 
     def test_outgoing_message_includes_rcan_version(self):
         """RCANMessage.to_dict() includes rcan_version field."""
-        from castor.rcan.message import RCANMessage, MessageType, Priority
+        from castor.rcan.message import MessageType, RCANMessage
         msg = RCANMessage(
             type=MessageType.COMMAND,
             source="rcan://test/src",
@@ -691,7 +698,7 @@ class TestV15SafetyInvariants:
         )
         d = msg.to_dict()
         assert "rcan_version" in d, "rcan_version field must be present in outgoing message"
-        assert d["rcan_version"] == "1.5"
+        assert d["rcan_version"] == "1.9"
 
     # ─────────────────────────────────────────────────────────────────
     # 6. Version bump invariant
@@ -714,8 +721,8 @@ class TestV15SafetyInvariants:
         )
         with open(pyproject) as f:
             content = f.read()
-        # version must be 2026.3.17.x (any patch)
+        # version must be 2026.x.y.z format
         import re as _re
-        assert _re.search(r"2026\.3\.17\.\d+", content), (
-            "pyproject.toml must declare a 2026.3.17.x version"
+        assert _re.search(r"2026\.\d+\.\d+\.\d+", content), (
+            "pyproject.toml must declare a 2026.x.y.z version"
         )

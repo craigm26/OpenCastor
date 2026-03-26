@@ -366,7 +366,7 @@ def trace_think(
 
     Args:
         provider:   Provider name (e.g. ``"google"``).
-        model:      Model name (e.g. ``"gemini-1.5-flash"``).
+        model:      Model name (e.g. ``"gemini-2.5-flash"``).
         latency_ms: Time taken for the think call in milliseconds.
         tokens:     Number of tokens consumed (if available).
 

@@ -1,0 +1,26 @@
+# OpenCastor Harness Config — quality_first
+# Maximizes task completion quality; suited for server/cloud hardware
+# Compatible: server, pi5_hailo (with cloud model)
+
+name: quality_first
+version: "1.0"
+description: >
+  Maximizes OHB-1 score by allocating large thinking and context budgets.
+  Best for server-class hardware or Pi5+Hailo8L with cloud model access.
+  Trades cost efficiency for highest possible task completion rate.
+target_hardware: [server, pi5_hailo]
+best_for: [industrial, general]
+ohb1_score: 0.9801
+ohb1_date: "2026-03-21"
+ohb1_breakdown:
+  general: 0.980
+  home: 0.970
+  industrial: 0.990
+config:
+  thinking_budget: 4096
+  context_budget: 32768
+  max_iterations: 8
+  cost_gate_usd: 1.00
+  drift_detection: true
+  retry_on_error: true
+  p66_consent_threshold: physical

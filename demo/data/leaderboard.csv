@@ -1,0 +1,31 @@
+tier_id,tier_label,rank,robot_id,location,hardware,model,ohb1_score,score_general,score_home,score_industrial,credits,safety_certified,harness_config,last_run,work_units
+pi5-hailo,Pi5 + Hailo-8L,1,Fleet_Pi5_Berlin,"Berlin, DE",Pi5 + Hailo-8L,gemini-2.5-flash,0.9241,0.94,0.91,0.93,2847,True,lower_cost / thinking_budget=2048 / drift_detection=true,2026-03-22,441
+pi5-hailo,Pi5 + Hailo-8L,2,RobotOwner_a2c9,"Tokyo, JP",Pi5 + Hailo-8L,gemini-2.5-flash,0.9108,0.92,0.9,0.91,2201,True,lower_cost / thinking_budget=1024 / context_budget=16384,2026-03-21,389
+pi5-hailo,Pi5 + Hailo-8L,3,HailoBot_7f3a,"Austin, TX",Pi5 + Hailo-8L,gemini-2.5-flash,0.8979,0.91,0.88,0.9,1834,True,lower_cost / thinking_budget=1024 / retry_on_error=true,2026-03-19,312
+pi5-hailo,Pi5 + Hailo-8L,4,EdgeFleet_Oslo,"Oslo, NO",Pi5 + Hailo-8L,gemini-2.5-flash,0.8712,0.89,0.85,0.87,1102,True,lower_cost / thinking_budget=512 / drift_detection=true,2026-03-16,201
+pi5-hailo,Pi5 + Hailo-8L,5,NpuNode_Seoul,"Seoul, KR",Pi5 + Hailo-8L,gemma3:4b,0.8441,0.87,0.82,0.84,891,False,lower_cost / thinking_budget=1024 / context_budget=8192,2026-03-14,178
+pi5-8gb,Pi5 8GB,1,RobotOwner_7f3a,"Portland, OR",Pi5 8GB,gemini-2.5-flash,0.8812,0.9,0.87,0.88,1203,True,lower_cost / thinking_budget=1024 / context_budget=8192,2026-03-21,288
+pi5-8gb,Pi5 8GB,2,PiFleet_Munich,"Munich, DE",Pi5 8GB,gemini-2.5-flash,0.8644,0.88,0.85,0.86,987,True,lower_cost / thinking_budget=1024 / drift_detection=true,2026-03-20,241
+pi5-8gb,Pi5 8GB,3,RaspBot_Chicago,"Chicago, IL",Pi5 8GB,gemini-2.5-flash,0.8503,0.86,0.84,0.85,812,True,lower_cost / thinking_budget=512 / retry_on_error=true,2026-03-18,197
+pi5-8gb,Pi5 8GB,4,NodeBot_London,"London, UK",Pi5 8GB,gemma3:4b,0.8211,0.84,0.8,0.82,634,False,lower_cost / thinking_budget=1024 / context_budget=4096,2026-03-15,153
+pi5-8gb,Pi5 8GB,5,HomeBot_Sydney,"Sydney, AU",Pi5 8GB,gemma3:4b,0.7988,0.82,0.78,0.79,501,False,lower_cost / thinking_budget=512 / drift_detection=false,2026-03-12,121
+pi5-4gb,Pi5 4GB,1,Raspi_Portland,"Portland, OR",Pi5 4GB,gemma3:1b,0.8103,0.83,0.8,0.8,891,True,lower_cost / thinking_budget=512 / context_budget=4096 / local_model=gemma3:1b,2026-03-22,203
+pi5-4gb,Pi5 4GB,2,LiteBot_Denver,"Denver, CO",Pi5 4GB,gemma3:1b,0.7941,0.81,0.78,0.79,712,True,lower_cost / thinking_budget=512 / retry_on_error=true,2026-03-20,178
+pi5-4gb,Pi5 4GB,3,EdgePi_Helsinki,"Helsinki, FI",Pi5 4GB,gemma3:1b,0.7788,0.8,0.76,0.77,588,False,lower_cost / thinking_budget=256 / context_budget=4096,2026-03-17,142
+pi5-4gb,Pi5 4GB,4,TinyBot_NYC,"New York, NY",Pi5 4GB,smollm2,0.7412,0.76,0.73,0.74,401,False,lower_cost / thinking_budget=256 / context_budget=2048,2026-03-14,98
+pi5-4gb,Pi5 4GB,5,MiniFleet_Paris,"Paris, FR",Pi5 4GB,smollm2,0.7189,0.74,0.71,0.7,312,False,lower_cost / thinking_budget=128 / drift_detection=false,2026-03-09,77
+jetson,Jetson Nano,1,EdgeBot_Tokyo,"Tokyo, JP",Jetson Nano,llama3.2:3b,0.7944,0.82,0.77,0.79,654,True,lower_cost / thinking_budget=1024 / local_model=llama3.2:3b,2026-03-21,156
+jetson,Jetson Nano,2,GpuBot_Seattle,"Seattle, WA",Jetson Nano,llama3.2:3b,0.7801,0.8,0.76,0.78,521,True,lower_cost / thinking_budget=512 / retry_on_error=true,2026-03-19,134
+jetson,Jetson Nano,3,NvBot_Taipei,"Taipei, TW",Jetson Nano,llama3.2:3b,0.7612,0.78,0.74,0.76,412,False,lower_cost / thinking_budget=512 / context_budget=8192,2026-03-16,108
+jetson,Jetson Nano,4,JetFleet_Rome,"Rome, IT",Jetson Nano,gemma3:1b,0.7341,0.75,0.72,0.73,301,False,lower_cost / thinking_budget=256 / context_budget=4096,2026-03-13,79
+jetson,Jetson Nano,5,EdgeGpu_Toronto,"Toronto, CA",Jetson Nano,gemma3:1b,0.7102,0.73,0.69,0.71,218,False,lower_cost / thinking_budget=256 / drift_detection=false,2026-03-10,61
+server,Server / Cloud,1,CloudFleet_NYC,"New York, NY",Cloud / GPU Server,claude-sonnet-4-6,0.9801,0.98,0.97,0.99,4102,True,lower_cost / thinking_budget=4096 / context_budget=32768 / drift_detection=true,2026-03-22,612
+server,Server / Cloud,2,ServerBot_SF,"San Francisco, CA",Cloud / GPU Server,claude-sonnet-4-6,0.9688,0.97,0.96,0.97,3801,True,lower_cost / thinking_budget=4096 / context_budget=16384 / retry_on_error=true,2026-03-22,578
+server,Server / Cloud,3,HighComp_London,"London, UK",Cloud / GPU Server,gemini-2.5-pro,0.9512,0.96,0.94,0.95,3201,True,lower_cost / thinking_budget=2048 / context_budget=32768,2026-03-21,489
+server,Server / Cloud,4,FleetServer_Syd,"Sydney, AU",Cloud / GPU Server,gemini-2.5-pro,0.9341,0.94,0.93,0.93,2788,True,lower_cost / thinking_budget=2048 / context_budget=16384,2026-03-20,401
+server,Server / Cloud,5,CloudNode_Berlin,"Berlin, DE",Cloud / GPU Server,claude-sonnet-4-6,0.9201,0.93,0.91,0.92,2401,True,lower_cost / thinking_budget=1024 / context_budget=32768,2026-03-19,367
+waveshare,WaveShare / Budget,1,WS_Contributor_1,"Minneapolis, MN",WaveShare 10-DOF + Pi3B,gemini-2.5-flash,0.7312,0.75,0.72,0.72,412,False,lower_cost / thinking_budget=512 / context_budget=4096,2026-03-20,98
+waveshare,WaveShare / Budget,2,BudgetBot_Indy,"Indianapolis, IN",WaveShare 10-DOF + Pi3B,gemini-2.5-flash,0.7144,0.73,0.71,0.7,334,False,lower_cost / thinking_budget=256 / retry_on_error=true,2026-03-18,81
+waveshare,WaveShare / Budget,3,ZeroBot_Dallas,"Dallas, TX",WaveShare 10-DOF + Pi Zero2,smollm2,0.6891,0.71,0.68,0.68,241,False,lower_cost / thinking_budget=128 / context_budget=2048,2026-03-15,63
+waveshare,WaveShare / Budget,4,WS_Node_Phoenix,"Phoenix, AZ",WaveShare 10-DOF + Pi Zero2,smollm2,0.6712,0.69,0.66,0.66,189,False,lower_cost / thinking_budget=128 / drift_detection=false,2026-03-12,49
+waveshare,WaveShare / Budget,5,MicroBot_Atlanta,"Atlanta, GA",WaveShare 10-DOF + Pi Zero2,smollm2,0.6541,0.67,0.65,0.64,142,False,lower_cost / thinking_budget=64 / context_budget=2048,2026-03-08,37

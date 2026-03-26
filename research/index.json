@@ -1,0 +1,63 @@
+{
+  "_schema": "opencastor.harness_config_index.v1",
+  "_updated": "2026-03-23",
+  "_source": "https://github.com/craigm26/OpenCastor/tree/main/research",
+  "_docs": "https://docs.opencastor.com/runtime/harness/",
+  "configs": [
+    {
+      "id": "lower_cost",
+      "name": "Lower Cost",
+      "description": "Best overall balance of quality vs. cost. OHB-1 champion.",
+      "yaml_url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/research/presets/lower_cost.yaml",
+      "target_hardware": ["pi5_hailo", "pi5_8gb", "pi5_4gb", "jetson", "server", "waveshare"],
+      "best_for": ["general", "home", "industrial"],
+      "ohb1_score": 0.6541,
+      "is_champion": true,
+      "tags": ["recommended", "all-hardware", "cost-efficient"]
+    },
+    {
+      "id": "quality_first",
+      "name": "Quality First",
+      "description": "Maximizes OHB-1 score. Best for server or Pi5+Hailo8L.",
+      "yaml_url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/research/presets/quality_first.yaml",
+      "target_hardware": ["server", "pi5_hailo"],
+      "best_for": ["industrial", "general"],
+      "ohb1_score": 0.9801,
+      "is_champion": false,
+      "tags": ["high-performance", "cloud", "server"]
+    },
+    {
+      "id": "local_only",
+      "name": "Local Only",
+      "description": "Fully offline. Zero cloud calls. gemma3:1b via Ollama.",
+      "yaml_url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/research/presets/local_only.yaml",
+      "target_hardware": ["pi5_4gb", "pi5_8gb", "jetson", "waveshare"],
+      "best_for": ["home"],
+      "ohb1_score": 0.8103,
+      "is_champion": false,
+      "tags": ["offline", "privacy", "no-api-key"]
+    },
+    {
+      "id": "industrial_optimized",
+      "name": "Industrial Optimized",
+      "description": "Retry-heavy, alert-aware. Best for industrial tasks (+12% median).",
+      "yaml_url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/research/presets/industrial_optimized.yaml",
+      "target_hardware": ["server", "pi5_hailo", "pi5_8gb"],
+      "best_for": ["industrial"],
+      "ohb1_score": 0.8812,
+      "is_champion": false,
+      "tags": ["industrial", "retry", "high-context"]
+    },
+    {
+      "id": "home_optimized",
+      "name": "Home Optimized",
+      "description": "Low-latency, local model, strict P66. Best for home automation.",
+      "yaml_url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/research/presets/home_optimized.yaml",
+      "target_hardware": ["pi5_hailo", "pi5_8gb", "pi5_4gb", "waveshare"],
+      "best_for": ["home"],
+      "ohb1_score": 0.8644,
+      "is_champion": false,
+      "tags": ["home", "low-latency", "local"]
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+rcan_version: "1.6"
+
+metadata:
+  robot_name: opencastor-camera-demo
+  robot_uuid: "00000000-0000-4000-8000-000000000002"
+  author: OpenCastor Team
+  license: Apache-2.0
+  description: >
+    Minimal demo for the camera-describe builtin skill. Captures frames
+    from a connected camera and uses a vision model to describe the scene,
+    detect objects, or answer visual questions. Works with Pi Camera,
+    OAK-D, USB webcam, or any HTTP snapshot endpoint.
+  tags:
+    - official
+    - skill
+    - vision
+    - camera-describe
+  builtin_skills:
+    - camera-describe
+
+_note: >
+  Official demo for the camera-describe builtin skill. Requires a camera
+  endpoint (Pi Camera, OAK-D, USB webcam). Fork to set your snapshot URL.
+
+agent:
+  provider: google
+  model: gemini-2.5-flash
+  vision_enabled: true
+  safety_stop: true
+  system_prompt: >
+    You are a vision-focused OpenCastor agent. Use the camera-describe
+    skill to observe and describe the robot's environment. Report what
+    you see accurately and concisely.
+
+cameras:
+  main:
+    type: http
+    url: http://127.0.0.1:8765/snapshot
+
+physics:
+  type: differential
+  dof: 2
+
+drivers:
+  - id: main_drive
+    protocol: gpio
+
+network:
+  allow_remote_override: false
+
+rcan_protocol:
+  enable_mdns: true
+
+loa:
+  min_loa_for_control: 1
+
+safety:
+  p66_enabled: true

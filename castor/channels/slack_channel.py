@@ -14,6 +14,7 @@ from collections.abc import Callable
 from typing import Optional
 
 from castor.channels.base import BaseChannel
+from castor.channels.scope_resolver import resolve_sender_scope
 
 logger = logging.getLogger("OpenCastor.Channel.Slack")
 
@@ -128,8 +129,14 @@ class SlackChannel(BaseChannel):
             if not text:
                 return
 
+            # Resolve RCAN scope — use the Slack user ID if available
+            _sender_id = event.get("user") or chat_id
+            _scope, _loa = resolve_sender_scope(_sender_id, self.config)
+
             try:
-                reply = await self.handle_message(chat_id, text)
+                reply = await self.handle_message(
+                    chat_id, text, sender_scope=_scope, sender_loa=_loa
+                )
                 if reply:
                     await say(reply[:4000])
             except Exception as exc:
@@ -147,13 +154,19 @@ class SlackChannel(BaseChannel):
 
             chat_id = event.get("channel", "")
 
+            # Resolve RCAN scope — use the Slack user ID if available
+            _sender_id = event.get("user") or chat_id
+            _scope, _loa = resolve_sender_scope(_sender_id, self.config)
+
             # Handle audio file uploads
             files = event.get("files", [])
             audio_file = _find_slack_audio_file(files)
             if audio_file is not None:
                 text = await _download_and_transcribe_slack(self, audio_file, self.bot_token)
                 if text:
-                    reply = await self.handle_message(chat_id, text)
+                    reply = await self.handle_message(
+                        chat_id, text, sender_scope=_scope, sender_loa=_loa
+                    )
                     if reply:
                         await say(reply[:4000])
                 else:
@@ -165,7 +178,9 @@ class SlackChannel(BaseChannel):
                 return
 
             try:
-                reply = await self.handle_message(chat_id, text)
+                reply = await self.handle_message(
+                    chat_id, text, sender_scope=_scope, sender_loa=_loa
+                )
                 if reply:
                     await say(reply[:4000])
             except Exception as exc:

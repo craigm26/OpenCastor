@@ -1,0 +1,430 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="RCAN v2.0 Specification Proposal — OpenCastor Blog"
+  description="The first major version bump of the RCAN protocol: signed firmware manifests, supply chain attestation, ISO/TC 299 alignment, and EU AI Act Article 16 compliance."
+  ogUrl="https://opencastor.com/blog/rcan-v2-proposal"
+>
+
+<main>
+  <!-- HERO -->
+  <section class="page-hero" style="padding-bottom:24px">
+    <p class="section-label reveal">Blog</p>
+    <h1 class="reveal reveal-d1" style="max-width:720px;margin:0 auto">RCAN v2.0:<br><span class="gradient-text">The Next Major Protocol Version</span></h1>
+    <p class="reveal reveal-d2" style="font-size:0.9rem;color:var(--text-muted);margin-top:16px">March 24, 2026 &middot; ContinuonAI</p>
+  </section>
+
+  <!-- ARTICLE -->
+  <section class="section" style="padding-top:0">
+    <div class="container" style="max-width:720px">
+
+      <!-- Status badge -->
+      <div class="wizard-tip reveal" style="margin-bottom:32px">
+        <p style="margin:0;font-size:0.95rem;line-height:1.7">
+          <strong>Status:</strong> Proposal (Draft) &nbsp;&middot;&nbsp; <strong>Target:</strong> Q1 2027 &nbsp;&middot;&nbsp; <strong>Depends on:</strong> RCAN v1.10, RCAN Foundation formation (Q3&ndash;Q4 2026)
+        </p>
+      </div>
+
+      <!-- Executive Summary -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">Why a major version?</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        RCAN v2.0 is the first major version bump of the protocol. It introduces <strong>breaking wire-format changes</strong>
+        that cannot be made under the v1.x backwards-compatibility guarantee. The release consolidates lessons learned
+        from v1.0&ndash;v1.10 and addresses four strategic areas:
+      </p>
+
+      <div class="bento reveal" style="grid-template-columns:1fr 1fr;gap:16px;margin-bottom:32px">
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">Signed Firmware Manifests</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">Cryptographic proof of robot software provenance. Every v2.0 robot publishes an Ed25519-signed firmware manifest at a well-known endpoint.</p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">Supply Chain Attestation</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">Hardware and software bill-of-materials on the wire. CycloneDX-based SBOM publication with RCAN extensions.</p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">ISO/TC 299 Alignment</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">Formal mapping to ISO 13482, ISO 10218-2, and ISO/IEC 42001. RCAN safety invariants aligned with international standards.</p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">EU AI Act Article 16</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">Production-ready compliance for high-risk AI systems. New message types for regulatory authority access and audit data export.</p>
+        </div>
+      </div>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        The RCAN versioning policy guarantees that all v1.x implementations can interoperate. Several changes in v2.0
+        violate this guarantee &mdash; new required envelope fields, removal of deprecated aliases, RURI format
+        extensions, and role level restructuring &mdash; and therefore require a MAJOR version bump.
+      </p>
+
+      <!-- External Drivers -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">External drivers</h2>
+
+      <div class="reveal" style="margin-bottom:32px">
+        <table class="arch-table">
+          <thead><tr><th>Driver</th><th>Deadline</th><th>Impact</th></tr></thead>
+          <tbody>
+            <tr><td>EU AI Act (2024/1689) Art. 16</td><td>August 2026</td><td>High-risk AI systems must maintain traceability and post-market monitoring. v2.0 provides wire-level compliance.</td></tr>
+            <tr><td>ISO/TC 299 (Robotics)</td><td>Ongoing</td><td>International safety standards for service and industrial robots. v2.0 aligns RCAN safety invariants with ISO normative requirements.</td></tr>
+            <tr><td>NIST AI RMF</td><td>2026 updates</td><td>Risk management framework for AI systems. v2.0 audit trail maps directly to NIST RMF functions.</td></tr>
+            <tr><td>Supply chain attacks</td><td>Ongoing</td><td>Firmware integrity attacks on IoT/robotics. v2.0 makes firmware provenance verifiable at the protocol level.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Breaking Changes -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">Breaking changes</h2>
+
+      <h3 class="reveal" style="font-size:1.25rem;margin-top:32px;margin-bottom:12px">Deprecated alias removal</h3>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        The following rcan-ts aliases, deprecated in v1.8, are <strong>removed</strong> in v2.0:
+      </p>
+
+      <div class="reveal" style="margin-bottom:24px">
+        <table class="arch-table">
+          <thead><tr><th>Deprecated Alias</th><th>Canonical Name</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td><code>FEDERATION_SYNC</code></td><td><code>FLEET_COMMAND</code></td><td>23</td></tr>
+            <tr><td><code>ALERT</code></td><td><code>FAULT_REPORT</code></td><td>26</td></tr>
+            <tr><td><code>AUDIT</code></td><td><code>TRANSPARENCY</code></td><td>16</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="reveal" style="font-size:1.25rem;margin-top:32px;margin-bottom:12px">Message envelope changes</h3>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        New <strong>required</strong> fields in the v2.0 message envelope:
+      </p>
+
+      <div class="code-block reveal" style="margin-bottom:24px">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">v2.0 envelope additions (protobuf)</span>
+        </div>
+        <div class="code-body">
+<span class="cm">// NEW in v2.0 — required for all messages</span>
+<span class="k">string</span> firmware_hash    = <span class="n">13</span>;  <span class="cm">// SHA-256 of sender's firmware manifest</span>
+<span class="k">string</span> attestation_ref  = <span class="n">14</span>;  <span class="cm">// URI to SBOM/attestation document</span>
+
+<span class="cm">// NEW in v2.0 — required for COMMAND and INVOKE</span>
+<span class="k">string</span> delegation_chain = <span class="n">15</span>;  <span class="cm">// Serialized delegation chain (now required)</span>
+        </div>
+      </div>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        A v1.x receiver encountering these fields will ignore them (unknown field handling). A v2.0 receiver
+        will <strong>reject</strong> messages missing <code>firmware_hash</code>.
+      </p>
+
+      <h3 class="reveal" style="font-size:1.25rem;margin-top:32px;margin-bottom:12px">RURI format extension</h3>
+
+      <div class="code-block reveal" style="margin-bottom:24px">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">RURI format</span>
+        </div>
+        <div class="code-body">
+<span class="cm"># v1.x format (still valid)</span>
+<span class="s">rcan://registry.rcan.dev/manufacturer/model/version/device-id</span>
+
+<span class="cm"># v2.0 extended format</span>
+<span class="s">rcan://registry.rcan.dev/manufacturer/model/version/device-id?sig=&lt;base64url&gt;</span>
+        </div>
+      </div>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        The <code>sig</code> query parameter carries a detached Ed25519 signature over the RURI path, created by
+        the robot's registered key. This allows offline identity verification without a registry roundtrip.
+      </p>
+
+      <h3 class="reveal" style="font-size:1.25rem;margin-top:32px;margin-bottom:12px">Role level restructuring</h3>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        v2.0 introduces machine-to-machine (M2M) authorization tiers alongside human roles:
+      </p>
+
+      <div class="reveal" style="margin-bottom:24px">
+        <table class="arch-table">
+          <thead><tr><th>Level</th><th>v1.x Name</th><th>v2.0 Name</th><th>Change</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>GUEST</td><td>GUEST</td><td>No change</td></tr>
+            <tr><td>2</td><td>OPERATOR</td><td>OPERATOR</td><td>No change</td></tr>
+            <tr><td>2.5</td><td><em>(contribute scope)</em></td><td>CONTRIBUTOR</td><td>Formalized as a proper level</td></tr>
+            <tr><td>3</td><td>ADMIN</td><td>ADMIN</td><td>No change</td></tr>
+            <tr><td>4</td><td><em>(new)</em></td><td>M2M_PEER</td><td>Robot-to-robot peer authorization</td></tr>
+            <tr><td>5</td><td>CREATOR</td><td>CREATOR</td><td>No change</td></tr>
+            <tr><td>6</td><td><em>(new)</em></td><td>M2M_TRUSTED</td><td>Pre-authorized fleet peer</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- New Features -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">New features</h2>
+
+      <!-- Firmware Manifests -->
+      <h3 class="reveal" style="font-size:1.25rem;margin-top:32px;margin-bottom:12px">Signed firmware manifests</h3>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        Every RCAN v2.0 robot MUST publish a firmware manifest at
+        <code>{'{'}ruri{'}'}/.well-known/rcan-firmware-manifest.json</code>.
+        The manifest is Ed25519-signed by the manufacturer's key registered in the RRF:
+      </p>
+
+      <div class="code-block reveal" style="margin-bottom:24px">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">rcan-firmware-manifest.json</span>
+        </div>
+        <div class="code-body">
+{'{'}
+  <span class="k">"rrn"</span>: <span class="s">"RRN-000000000001"</span>,
+  <span class="k">"firmware_version"</span>: <span class="s">"v2026.4.1.0"</span>,
+  <span class="k">"build_hash"</span>: <span class="s">"sha256:a1b2c3d4..."</span>,
+  <span class="k">"components"</span>: [
+    {'{'}
+      <span class="k">"name"</span>: <span class="s">"brain-runtime"</span>,
+      <span class="k">"version"</span>: <span class="s">"3.2.0"</span>,
+      <span class="k">"hash"</span>: <span class="s">"sha256:e5f6a7b8..."</span>
+    {'}'}
+  ],
+  <span class="k">"signed_at"</span>: <span class="s">"2026-04-01T00:00:00Z"</span>,
+  <span class="k">"signature"</span>: <span class="s">"base64url..."</span>
+{'}'}
+        </div>
+      </div>
+
+      <div class="wizard-tip reveal" style="margin-bottom:24px">
+        <strong>Conformance requirement:</strong> A v2.0 L2+ implementation MUST verify the firmware manifest signature
+        on first connection and on every firmware update. A failed signature check MUST trigger a
+        <code>FAULT_REPORT</code> (26) with <code>fault_code: "FIRMWARE_INTEGRITY_FAILURE"</code>.
+      </div>
+
+      <!-- SBOM -->
+      <h3 class="reveal" style="font-size:1.25rem;margin-top:32px;margin-bottom:12px">Supply chain attestation (SBOM)</h3>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        v2.0 defines a standard for robots to advertise their software bill of materials at
+        <code>{'{'}ruri{'}'}/.well-known/rcan-sbom.json</code>, following the
+        <a href="https://cyclonedx.org/" style="color:var(--accent)">CycloneDX</a> v1.5+ format with RCAN extensions.
+        The <code>attestation_ref</code> field in the v2.0 message envelope points to this SBOM endpoint,
+        enabling any message recipient to verify the sender's software supply chain.
+      </p>
+
+      <!-- ISO Alignment -->
+      <h3 class="reveal" style="font-size:1.25rem;margin-top:32px;margin-bottom:12px">ISO/TC 299 alignment</h3>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        v2.0 introduces normative references to ISO safety standards and maps RCAN provisions to ISO requirements:
+      </p>
+
+      <div class="reveal" style="margin-bottom:24px">
+        <table class="arch-table">
+          <thead><tr><th>RCAN Provision</th><th>ISO Standard</th><th>Mapping</th></tr></thead>
+          <tbody>
+            <tr><td>&sect;6 Safety invariants</td><td>ISO 13482:2014</td><td>RCAN ESTOP maps to ISO 13482 protective stop</td></tr>
+            <tr><td>&sect;2 RBAC</td><td>ISO 10218-2:2011</td><td>RCAN role levels satisfy ISO access control</td></tr>
+            <tr><td>&sect;16 Transparency</td><td>ISO/IEC 42001:2023</td><td>RCAN audit chain provides ISO AI management evidence</td></tr>
+            <tr><td>&sect;7 ConfidenceGate</td><td>ISO 13482:2014</td><td>Confidence thresholds map to ISO risk-based decision gates</td></tr>
+            <tr><td>&sect;9 Ed25519 signing</td><td>ISO/IEC 27001:2022</td><td>Ed25519 satisfies ISO cryptographic control requirements</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        A new <code>iso_conformance</code> block in the DISCOVER payload lets robots declare which ISO standards they conform to:
+      </p>
+
+      <div class="code-block reveal" style="margin-bottom:24px">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">DISCOVER payload (v2.0)</span>
+        </div>
+        <div class="code-body">
+{'{'}
+  <span class="k">"capabilities"</span>: [<span class="s">"..."</span>],
+  <span class="k">"iso_conformance"</span>: {'{'}
+    <span class="k">"iso_13482"</span>: <span class="s">true</span>,
+    <span class="k">"iso_10218_2"</span>: <span class="s">false</span>,
+    <span class="k">"iso_42001"</span>: <span class="s">true</span>
+  {'}'}
+{'}'}
+        </div>
+      </div>
+
+      <!-- EU AI Act -->
+      <h3 class="reveal" style="font-size:1.25rem;margin-top:32px;margin-bottom:12px">EU AI Act Article 16</h3>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        Article 16 of the EU AI Act requires providers of high-risk AI systems to maintain quality management,
+        technical documentation, logging, corrective action capability, and authority cooperation. v2.0 maps
+        these requirements directly to protocol features:
+      </p>
+
+      <div class="bento reveal" style="grid-template-columns:1fr 1fr;gap:16px;margin-bottom:32px">
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">Quality Management</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">v2.0 audit chain + SBOM provide continuous quality evidence for the entire robot lifecycle.</p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">Technical Documentation</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">Firmware manifests + transparency records keep documentation up to date automatically.</p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">Logging (Art. 12)</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">RCAN commitment chain (&sect;16) satisfies the logging capabilities requirement.</p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">Authority Cooperation</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">New <code>AUTHORITY_ACCESS</code> message type (41) lets regulators request audit data per Art. 16(j).</p>
+        </div>
+      </div>
+
+      <h3 class="reveal" style="font-size:1.25rem;margin-top:24px;margin-bottom:12px">New message types</h3>
+
+      <div class="reveal" style="margin-bottom:24px">
+        <table class="arch-table">
+          <thead><tr><th>Value</th><th>Name</th><th>Direction</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>41</td><td><code>AUTHORITY_ACCESS</code></td><td>authority &rarr; robot</td><td>Regulator requests audit data access per EU AI Act Art. 16(j)</td></tr>
+            <tr><td>42</td><td><code>AUTHORITY_RESPONSE</code></td><td>robot &rarr; authority</td><td>Robot provides requested audit data</td></tr>
+            <tr><td>43</td><td><code>FIRMWARE_ATTESTATION</code></td><td>robot &rarr; registry</td><td>Robot publishes signed firmware manifest to registry</td></tr>
+            <tr><td>44</td><td><code>SBOM_UPDATE</code></td><td>robot &rarr; registry</td><td>Robot publishes updated SBOM</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Conformance -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">Conformance levels</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        v2.0 introduces <strong>L5: Supply Chain</strong> on top of the existing L1&ndash;L4 hierarchy:
+      </p>
+
+      <div class="reveal" style="margin-bottom:24px">
+        <table class="arch-table">
+          <thead><tr><th>Level</th><th>Label</th><th>Key Requirement</th></tr></thead>
+          <tbody>
+            <tr><td>L1</td><td>Core</td><td>DISCOVER, STATUS, COMMAND, RURI addressing, JWT auth</td></tr>
+            <tr><td>L2</td><td>Secure</td><td>L1 + HiTL gates, Ed25519 signing, AuditChain</td></tr>
+            <tr><td>L3</td><td>Federated</td><td>L2 + commitment chain, cross-registry discovery</td></tr>
+            <tr><td>L4</td><td>Registry</td><td>L3 + REGISTRY_REGISTER/RESOLVE roundtrip, RRN validation</td></tr>
+            <tr><td style="color:var(--accent);font-weight:600">L5</td><td style="color:var(--accent);font-weight:600">Supply Chain</td><td>L4 + firmware manifest verification, SBOM publication, EU AI Act Art. 16 compliance</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Migration -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">Migration path</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        v2.0 implementations MUST support downward negotiation to v1.x via the <code>rcan_version</code> field
+        in the DISCOVER handshake. When communicating with a v1.x receiver, a v2.0 sender omits v2.0-only
+        envelope fields, uses only v1.x message types, and falls back to unsigned RURI format.
+      </p>
+
+      <div class="code-block reveal" style="margin-bottom:24px">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">Version negotiation (DISCOVER payload)</span>
+        </div>
+        <div class="code-body">
+{'{'}
+  <span class="k">"type"</span>: <span class="n">9</span>,
+  <span class="k">"payload"</span>: {'{'}
+    <span class="k">"rcan_version"</span>: <span class="s">"2.0.0"</span>,
+    <span class="k">"supported_versions"</span>: [<span class="s">"2.0"</span>, <span class="s">"1.10"</span>, <span class="s">"1.6"</span>],
+    <span class="k">"min_version"</span>: <span class="s">"1.6"</span>
+  {'}'}
+{'}'}
+        </div>
+      </div>
+
+      <h3 class="reveal" style="font-size:1.25rem;margin-top:32px;margin-bottom:12px">Deprecation timeline</h3>
+
+      <div class="reveal" style="margin-bottom:24px">
+        <table class="arch-table">
+          <thead><tr><th>Item</th><th>Deprecated In</th><th>Removed In</th><th>Notice</th></tr></thead>
+          <tbody>
+            <tr><td>rcan-ts <code>FEDERATION_SYNC</code></td><td>v1.8 (Mar 2026)</td><td>v2.0 (Q1 2027)</td><td>10+ months</td></tr>
+            <tr><td>rcan-ts <code>ALERT</code></td><td>v1.8 (Mar 2026)</td><td>v2.0 (Q1 2027)</td><td>10+ months</td></tr>
+            <tr><td>rcan-ts <code>AUDIT</code></td><td>v1.8 (Mar 2026)</td><td>v2.0 (Q1 2027)</td><td>10+ months</td></tr>
+            <tr><td><code>signature: "pending"</code></td><td>v1.0 (Jan 2026)</td><td>v2.0 (Q1 2027)</td><td>12+ months</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Timeline -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">Timeline</h2>
+
+      <div class="reveal" style="margin-bottom:32px">
+        <table class="arch-table">
+          <thead><tr><th>Milestone</th><th>Target</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>v2.0 RFC published</td><td>May 2026</td><td>Proposal finalized, open for community comment</td></tr>
+            <tr><td>RCAN Foundation formed</td><td>Q3 2026</td><td>Foundation board reviews and ratifies v2.0 scope</td></tr>
+            <tr><td>EU AI Act enforcement</td><td>August 2026</td><td>Art. 16 obligations enforceable; v1.x provides interim compliance</td></tr>
+            <tr><td>v2.0 Draft spec</td><td>October 2026</td><td>Complete wire-format specification with examples</td></tr>
+            <tr><td>v2.0 SDK alphas</td><td>November 2026</td><td>rcan-py 1.0.0a1, rcan-ts 1.0.0a1</td></tr>
+            <tr><td>v2.0 RC</td><td>December 2026</td><td>Release candidate; conformance suite L5 finalized</td></tr>
+            <tr><td style="color:var(--accent);font-weight:600">v2.0 Release</td><td style="color:var(--accent);font-weight:600">Q1 2027</td><td>Spec, SDKs, and conformance suite published</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Open Questions -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">Open questions &mdash; we want your feedback</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        This proposal is a draft. We're actively seeking community input on these design decisions:
+      </p>
+
+      <div class="reveal" style="margin-bottom:32px">
+        <ol style="font-size:1.0625rem;line-height:2.2;color:var(--text-secondary);padding-left:20px">
+          <li><strong>RURI signing</strong> &mdash; Should <code>?sig=</code> be mandatory for all v2.0 messages, or only for cross-registry communication?</li>
+          <li><strong>SBOM format</strong> &mdash; CycloneDX vs SPDX &mdash; which should be normative? Should we support both?</li>
+          <li><strong>M2M authorization</strong> &mdash; Should M2M_PEER (level 4) require mutual TLS in addition to JWT?</li>
+          <li><strong>Firmware attestation frequency</strong> &mdash; Re-attest on every boot, or only on firmware change?</li>
+          <li><strong>ISO liaison</strong> &mdash; Should TC 299 membership be a Foundation or ContinuonAI responsibility?</li>
+          <li><strong>MessageType range</strong> &mdash; Reserve 41&ndash;50 for regulatory types and 51&ndash;99 for extensions, or allow flexible allocation?</li>
+          <li><strong>v1.x LTS duration</strong> &mdash; Current policy guarantees 3 years (until Jan 2029). Should v2.0 extend v1.x LTS given the installed base?</li>
+        </ol>
+      </div>
+
+      <div class="wizard-tip reveal" style="margin-bottom:32px">
+        <strong>Join the discussion:</strong> File feedback on the
+        <a href="https://github.com/craigm26/OpenCastor" style="color:var(--accent)">OpenCastor GitHub</a>,
+        or reach out to the team at <a href="https://rcan.dev" style="color:var(--accent)">rcan.dev</a>.
+        The RFC comment period opens May 2026.
+      </div>
+
+      <!-- References -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">References</h2>
+
+      <ul class="reveal" style="font-size:0.95rem;line-height:2;color:var(--text-secondary);padding-left:20px">
+        <li><a href="https://rcan.dev/spec/" style="color:var(--accent)">RCAN Specification</a> (current: v1.9.0)</li>
+        <li><a href="https://eur-lex.europa.eu/eli/reg/2024/1689" style="color:var(--accent)">EU AI Act (2024/1689)</a></li>
+        <li><a href="https://www.iso.org/standard/53820.html" style="color:var(--accent)">ISO 13482:2014</a> &mdash; Safety requirements for personal care robots</li>
+        <li><a href="https://www.iso.org/standard/81230.html" style="color:var(--accent)">ISO/IEC 42001:2023</a> &mdash; AI management system</li>
+        <li><a href="https://cyclonedx.org/" style="color:var(--accent)">CycloneDX SBOM Standard</a></li>
+        <li><a href="https://www.nist.gov/artificial-intelligence/risk-management-framework" style="color:var(--accent)">NIST AI Risk Management Framework</a></li>
+        <li><a href="https://github.com/continuonai/rcan-py" style="color:var(--accent)">rcan-py SDK</a></li>
+        <li><a href="https://github.com/continuonai/rcan-ts" style="color:var(--accent)">rcan-ts SDK</a></li>
+        <li><a href="https://robotregistryfoundation.org" style="color:var(--accent)">Robot Registry Foundation</a></li>
+      </ul>
+
+      <!-- Back link -->
+      <div style="margin-top:48px;padding-top:24px;border-top:1px solid var(--border)">
+        <a href="/blog" style="color:var(--accent);font-size:0.9375rem">&larr; Back to Blog</a>
+      </div>
+
+    </div>
+  </section>
+</main>
+
+</BaseLayout>

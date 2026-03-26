@@ -38,8 +38,9 @@ _CHARS_PER_TOKEN = 4
 
 # Default model context limits (tokens) — used for compaction threshold
 _DEFAULT_CONTEXT_LIMITS: dict[str, int] = {
-    "gemini-2.0-flash": 1_000_000,
-    "gemini-1.5-pro": 1_000_000,
+    "gemini-2.5-flash": 1_000_000,
+    "gemini-2.5-pro": 1_000_000,
+    "gemini-2.5-flash-lite": 1_000_000,
     "claude-sonnet": 200_000,
     "claude-haiku": 200_000,
     "gpt-4o": 128_000,

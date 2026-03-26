@@ -1,0 +1,431 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="From Robot Runtime to Research Node — OpenCastor Blog"
+  description="How the OpenCastor runtime layer turns any idle robot into a harness research node — running real benchmarks, finding champion configs, and letting you choose when to deploy them."
+  ogUrl="https://opencastor.com/blog/contribute-to-science"
+>
+
+<main>
+  <!-- HERO -->
+  <section class="page-hero" style="padding-bottom:24px">
+    <p class="section-label reveal">Blog</p>
+    <h1 class="reveal reveal-d1" style="max-width:720px;margin:0 auto">From Robot Runtime to Research Node:<br><span class="gradient-text">How OpenCastor Turns Idle Robots Into a Harness Optimizer</span></h1>
+    <p class="reveal reveal-d2" style="font-size:0.9rem;color:var(--text-muted);margin-top:16px">March 19, 2026 &middot; Updated March 21, 2026 &middot; Craig Merry</p>
+  </section>
+
+  <!-- ARTICLE -->
+  <section class="section" style="padding-top:0">
+    <div class="container" style="max-width:720px">
+
+      <!-- The spark -->
+      <div class="wizard-tip reveal" style="margin-bottom:32px">
+        <p style="font-style:italic;font-size:1.05rem;line-height:1.7;margin:0">"How long before someone launches SETI@Home but the AGI era?"</p>
+        <p style="margin:8px 0 0;font-size:0.875rem;color:var(--text-secondary)">
+          &mdash; Chris Albon (<a href="https://x.com/chrisalbon" style="color:var(--accent)">@chrisalbon</a>), Director of ML at Wikimedia Foundation<br>
+          <a href="https://x.com/chrisalbon/status/2034653589755559997" style="color:var(--text-muted);font-size:0.8rem">March 19, 2026</a>
+        </p>
+      </div>
+
+      <!-- What is OpenCastor -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">What is OpenCastor?</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        Before the feature, some context. <strong>OpenCastor is an open-source runtime layer that sits between
+        a robot's hardware and its AI.</strong> It doesn't prescribe what your robot looks like. A Raspberry Pi on a desk.
+        A ROS2 rover with a Jetson. A warehouse AGV running Ubuntu. An educational arm in a classroom. If it has
+        a compute board and can run Python, OpenCastor can be its runtime.
+      </p>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        It handles what every robot needs but nobody wants to build from scratch: authentication and access control,
+        safety invariants, telemetry streaming, agent harness management, skill execution, and a standardized API.
+        You bring the hardware and the AI model. OpenCastor connects them safely.
+      </p>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        The entire project is <a href="https://github.com/craigm26/OpenCastor" style="color:var(--accent)">open source on GitHub</a>.
+      </p>
+
+      <!-- RCAN -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">RCAN: The protocol robots speak</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        OpenCastor implements the <a href="https://rcan.dev" style="color:var(--accent)">RCAN specification</a> &mdash;
+        the Robot Communication &amp; Authentication Network. RCAN is an open protocol that defines:
+      </p>
+
+      <div class="bento reveal" style="grid-template-columns:1fr 1fr;gap:16px;margin-bottom:32px">
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">Robot URI (RURI)</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">A canonical identifier for every robot &mdash; like a URL for physical machines. <code>rcan://registry/manufacturer/model/version/serial</code></p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">Scopes &amp; Permissions</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">A hierarchy of access levels: <code>discover</code>, <code>status</code>, <code>chat</code>, <code>contribute</code>, <code>control</code>, <code>safety</code>. A guest can check status but can't drive motors.</p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">Message Types</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">Standardized commands, responses, telemetry, and safety signals &mdash; 35+ message types that work across any RCAN-compatible robot.</p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">Safety Invariants</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">Protocol-level guarantees like P66 (priority preemption) enforced in code, not prompts. Lower-priority work always yields to commands.</p>
+        </div>
+      </div>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        RCAN is maintained by <a href="https://github.com/continuonai" style="color:var(--accent)">ContinuonAI</a>
+        with reference SDKs in <a href="https://github.com/continuonai/rcan-py" style="color:var(--accent)">Python</a>
+        and <a href="https://github.com/continuonai/rcan-ts" style="color:var(--accent)">TypeScript</a>.
+      </p>
+
+      <!-- Robot Registry -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">The Robot Registry</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        Every OpenCastor robot registers with a canonical identity. Each gets a unique RRN (Robot Resource Name),
+        live telemetry streaming, and fleet-level visibility through the
+        <a href="https://app.opencastor.com" style="color:var(--accent)">OpenCastor client app</a>. The registry
+        is an abstraction &mdash; our reference uses Firebase Firestore, but you can back it with any database.
+      </p>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        This registry is what makes fleet coordination possible. You can't coordinate idle compute across robots
+        if you don't know what robots exist, what hardware they have, and whether they're busy.
+      </p>
+
+      <!-- SETI@Home parallel -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">The SETI@Home parallel</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        SETI@Home ran from 1999 to 2020. At its peak, 5.2 million volunteers donated their home PCs. Folding@home
+        proved it could do real science during COVID-19. But both relied on humans installing software on personal
+        computers. Robots are different.
+      </p>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        An OpenCastor robot &mdash; <em>any</em> OpenCastor robot &mdash; is already networked, already authenticated,
+        already reporting telemetry. It might have a Hailo-8L doing 26 TOPS, or a Coral TPU doing 4, or a Jetson
+        Orin doing 40, or just a 4-core ARM CPU. The runtime detects whatever hardware is present and profiles it
+        automatically. The coordinator matches work to capability.
+      </p>
+
+      <!-- The idle compute problem -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">The idle compute problem</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        Robots idle. A lot. Our reference robot "Bob" idles about 20 hours a day, but that's true of most robots &mdash;
+        they spend the majority of their time waiting for commands, charging, or standing by. Whatever compute
+        they have goes to waste.
+      </p>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        The raw numbers depend on fleet composition. A fleet of NPU-equipped robots contributes more raw TOPS.
+        A fleet of CPU-only robots contributes less per-unit but still adds up. The point isn't any single robot's
+        specs &mdash; it's that the aggregate waste across a fleet of heterogeneous robots is significant, and the
+        infrastructure to coordinate it (RCAN, registry, telemetry) already exists.
+      </p>
+
+      <!-- What castor contribute does -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">What <code>castor contribute</code> does</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        Enable it in your robot's config:
+      </p>
+
+      <div class="code-block reveal" style="margin-bottom:24px">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">config.yaml</span>
+        </div>
+        <div class="code-body">
+<span class="k">agent</span>:
+  <span class="k">contribute</span>:
+    <span class="k">enabled</span>: <span class="s">true</span>
+    <span class="k">idle_after_minutes</span>: <span class="s">15</span>
+    <span class="k">projects</span>:
+      - <span class="s">harness_research</span>
+        </div>
+      </div>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        After the idle threshold, the runtime fetches a candidate harness configuration from the research queue,
+        evaluates it against real robotics benchmark tasks (see <a href="#ohb1" style="color:var(--accent)">OHB-1</a> below),
+        and submits the score. The moment a real command arrives, the work unit is cancelled within 100ms and the robot returns to full duty.
+      </p>
+
+      <!-- Hardware agnostic -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">Hardware-agnostic by design</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        The hardware profiler detects what's available and reports it to the coordinator:
+      </p>
+
+      <div class="bento reveal" style="grid-template-columns:1fr 1fr;gap:16px;margin-bottom:32px">
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">NPU-equipped robots</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">Hailo-8L (26 TOPS), Coral TPU (4 TOPS), etc. Get NPU-optimized inference work units &mdash; model scoring, classification, object detection.</p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">GPU-equipped robots</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">Jetson Orin, CUDA GPUs. Get batch inference or training work units that leverage GPU compute.</p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">CPU-only robots</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">Any ARM or x86 board. Get CPU-appropriate tasks &mdash; data preprocessing, lightweight inference, aggregation.</p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">Sensor-equipped robots</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">Cameras, microphones, depth sensors. Could contribute situated data &mdash; BirdNET bioacoustics, species identification, environmental monitoring.</p>
+        </div>
+      </div>
+
+      <!-- Use cases -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">What your robot is actually doing</h2>
+
+      <div class="reveal" style="margin-bottom:32px">
+        <h3 style="font-size:1.25rem;margin-bottom:8px">🤖 Harness Design Research <span style="font-size:0.75rem;background:var(--accent);color:#000;padding:2px 8px;border-radius:4px;margin-left:8px;vertical-align:middle;font-weight:700">LIVE</span></h3>
+        <p style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+          The only active project today. Every OpenCastor robot is searching a space of
+          <strong>263,424 possible harness configurations</strong> to find the optimal AI agent setup for robotics tasks.
+          Each work unit evaluates one candidate config against 30 real scenarios using
+          <a href="#ohb1" style="color:var(--accent)">OHB-1</a>, our open benchmark.
+          As of March 2026, contributors have explored 435 configurations (0.17% of the space)
+          and the current champion scores <strong>0.6541</strong> on the benchmark &mdash; a real number, on a real model.
+        </p>
+
+        <h3 style="font-size:1.25rem;margin-top:32px;margin-bottom:8px">🌍 Climate Modeling <span style="font-size:0.75rem;background:var(--alt-bg);color:var(--text-muted);border:1px solid var(--border);padding:2px 8px;border-radius:4px;margin-left:8px;vertical-align:middle">Planned Q3 2026</span></h3>
+        <p style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+          climateprediction.net runs ensemble climate simulations &mdash; thousands of independent models,
+          embarrassingly parallel, ~15 minutes each. We're building a real BOINC client integration,
+          not a placeholder. Target: Q3 2026.
+        </p>
+
+        <h3 style="font-size:1.25rem;margin-top:24px;margin-bottom:8px">🧬 Protein Folding <span style="font-size:0.75rem;background:var(--alt-bg);color:var(--text-muted);border:1px solid var(--border);padding:2px 8px;border-radius:4px;margin-left:8px;vertical-align:middle">Planned Q3 2026</span></h3>
+        <p style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+          Rosetta@home work units involve scoring protein conformations &mdash; pure matrix math that NPUs
+          and GPUs excel at. Edge inference at a fraction of the power cost of data center GPUs.
+          BOINC integration planned alongside climate modeling.
+        </p>
+      </div>
+
+      <!-- P66 safety -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">Safety: P66 preemption</h2>
+
+      <div class="wizard-tip reveal" style="margin-bottom:24px">
+        <strong>Protocol 66 guarantee:</strong> Contribute work is immediately preempted by any incoming command.
+        The P66 safety invariant takes absolute precedence &mdash; the robot signals <code>CONTRIBUTE_CANCEL</code>
+        to the coordinator and returns to full duty within 100ms. This is enforced at the runtime level and
+        cannot be disabled by configuration.
+      </div>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        The <code>contribute</code> scope sits at level 2.5 in the RCAN hierarchy &mdash; above <code>chat</code> (2)
+        so conversation doesn't interrupt computation, but below <code>control</code> (3) so any real command
+        takes immediate priority. Science gets the leftovers. In a fleet of idle robots, the leftovers add up.
+      </p>
+
+      <!-- Ecosystem -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">The full ecosystem</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        What makes this different from "just run BOINC on a computer" is the integration across an open-source
+        robotics stack &mdash; protocol, runtime, SDKs, client app, and registry working together:
+      </p>
+
+      <div class="reveal" style="margin-bottom:32px">
+        <table class="arch-table">
+          <thead><tr><th>Layer</th><th>Component</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Protocol</td><td><a href="https://rcan.dev" style="color:var(--accent)">RCAN v1.9</a></td><td><code>contribute</code> scope, Castor Credits protocol, telemetry schema</td></tr>
+            <tr><td>SDKs</td><td><a href="https://github.com/continuonai/rcan-py" style="color:var(--accent)">rcan-py</a> / <a href="https://github.com/continuonai/rcan-ts" style="color:var(--accent)">rcan-ts</a></td><td>Message types, scope validation in Python &amp; TypeScript</td></tr>
+            <tr><td>Runtime</td><td><code>castor/contribute/</code></td><td>Coordinator, runner, hardware profiling, fleet coordination</td></tr>
+            <tr><td>API</td><td>REST endpoints</td><td><code>/api/contribute</code>, <code>/start</code>, <code>/stop</code>, <code>/history</code></td></tr>
+            <tr><td>CLI</td><td><code>castor contribute</code></td><td>Status, start, stop, history from terminal</td></tr>
+            <tr><td>Client</td><td><a href="https://app.opencastor.com" style="color:var(--accent)">Flutter app</a></td><td>Real-time stats, enable/disable toggle, project selection</td></tr>
+            <tr><td>Registry</td><td>Firestore telemetry</td><td>Live contribution stats visible across the fleet</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- OHB-1 Benchmark -->
+      <h2 id="ohb1" class="reveal" style="font-size:1.75rem;margin-top:64px;margin-bottom:16px">OHB-1: The benchmark that makes it real</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        We didn't want to optimize against a simulated score. So we built <strong>OHB-1</strong> (OpenCastor Harness Benchmark v1) &mdash;
+        a real, reproducible benchmark that runs on-device using a local language model (gemma3:1b via Ollama).
+        No API cost. No cloud dependency. Same model on every robot.
+      </p>
+
+      <div class="bento reveal" style="grid-template-columns:1fr 1fr;gap:16px;margin:24px 0 32px">
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">30 real tasks</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">10 home scenarios (navigation, manipulation, safety), 10 industrial (inspection, emergency response, coordination), 10 general (planning, error recovery, reasoning).</p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">4 scoring dimensions</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">Task success (40%), P66 safety compliance (30%), cost efficiency within the harness <code>cost_gate_usd</code> (20%), latency vs. deadline (10%).</p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">Reproducible</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">Same config + same task → deterministic enough for comparison. Low temperature (0.1) keeps variance minimal across runs on the same hardware.</p>
+        </div>
+        <div class="card" style="padding:20px">
+          <h3 style="font-size:1rem;margin:0 0 8px">Current baseline</h3>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin:0">Champion <code>lower_cost</code> scores <strong>0.6541</strong>. 21/30 tasks passed. Three tasks time out — complex multi-step planning hits the 30s wall. That's the target for the next champion.</p>
+        </div>
+      </div>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        The benchmark spec is <a href="https://github.com/craigm26/opencastor-autoresearch/blob/master/harness_research/environments/OHB1_SPEC.md" style="color:var(--accent)">published in opencastor-autoresearch</a>.
+        You can run it yourself: <code>python -m harness_research.run --benchmark</code>.
+        The current champion config and score are always at
+        <a href="https://github.com/craigm26/opencastor-ops/blob/main/harness-research/champion.yaml" style="color:var(--accent)">opencastor-ops/harness-research/champion.yaml</a>.
+      </p>
+
+      <!-- Live harness research -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:64px;margin-bottom:16px">Live now: Community-tuned harness configs</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        This isn't "coming soon" anymore. Every robot already broadcasts its
+        <code>hardware_tier</code> &mdash; <code>pi5-hailo</code>, <code>pi4-8gb</code>, <code>server</code>,
+        and so on. The research pipeline uses that metadata to match work units to hardware profiles
+        and build champion configs that are <em>specific to your setup</em>.
+      </p>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        When your Pi 5 + Hailo-8L robot idles, it runs harness evaluation scenarios tuned to its exact hardware combo. How aggressive
+        should <code>thinking_budget</code> be when the NPU is handling inference? What <code>context_budget</code>
+        saturates the memory bandwidth? What retry policy actually improves outcomes on a robot with 100ms camera
+        latency? These questions have hardware-specific answers, and only a fleet of real robots can answer them.
+      </p>
+
+      <div class="reveal" style="margin:32px 0;overflow-x:auto">
+        <table class="arch-table">
+          <thead>
+            <tr>
+              <th>Hardware profile</th>
+              <th>Key tunables explored</th>
+              <th>What contributors unlock</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Pi 5 + Hailo-8L NPU</strong></td>
+              <td><code>nexa_enabled</code>, <code>thinking_budget</code>, NPU model routing</td>
+              <td>Optimal on-device inference split between NPU and cloud</td>
+            </tr>
+            <tr>
+              <td><strong>Pi 5 · 8 GB (no NPU)</strong></td>
+              <td><code>context_budget</code>, <code>fast_model</code> selection</td>
+              <td>Best local model for each task class without NPU offload</td>
+            </tr>
+            <tr>
+              <td><strong>Pi 4 · 4 GB</strong></td>
+              <td><code>cost_gate_usd</code>, aggressive <code>thinking_budget</code> floor</td>
+              <td>Minimal-cloud config that still produces reliable behavior</td>
+            </tr>
+            <tr>
+              <td><strong>Waveshare ALPHA</strong></td>
+              <td>Arm-manipulation HITL thresholds, retry policy</td>
+              <td>Consent + safety gates tuned to physical manipulation latency</td>
+            </tr>
+            <tr>
+              <td><strong>Unitree Go2</strong></td>
+              <td>Gait-aware drift detection, parallel fork config</td>
+              <td>Navigation harness that doesn't fight the onboard locomotion stack</td>
+            </tr>
+            <tr>
+              <td><strong>Server-class (Jetson, x86)</strong></td>
+              <td>Higher <code>context_budget</code>, multi-model tiers, parallel branches</td>
+              <td>Full-power harness that saturates available VRAM without waste</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        The nightly pipeline finds the winning config across all contributors and stores it as a
+        <strong>pending update</strong> for each robot. You decide when to apply it &mdash; per robot, or fleet-wide.
+        Champion configs are never pushed automatically. You can also enable auto-apply per robot if you prefer.
+      </p>
+
+      <div class="wizard-tip reveal" style="margin:32px 0">
+        <strong>How it works today:</strong>
+        <ol style="margin:12px 0 0 0;padding-left:20px;line-height:2">
+          <li>Enable <code>castor contribute</code> (opt-in, one line)</li>
+          <li>Your robot's idle cycles run OHB-1 benchmark tasks on candidate harness configs</li>
+          <li>Results feed the nightly aggregation pipeline alongside other contributors with the same hardware</li>
+          <li>The winning config is stored as a <strong>pending update</strong> for your robot in the app</li>
+          <li>You review it and apply it &mdash; to one robot, or the full fleet &mdash; on your schedule</li>
+          <li>Your contribution stats show which configs your robot helped evaluate and your credit share</li>
+        </ol>
+      </div>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        This is the flywheel. More contributors &rarr; more hardware-specific benchmark data &rarr; better
+        harness configs for everyone with that hardware &rarr; easier to get good results out of the box &rarr;
+        more people adopt OpenCastor &rarr; more contributors. The research pipeline improves the default harness.
+        The fleet makes it specific.
+      </p>
+
+      <!-- Closing -->
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">The infrastructure already exists</h2>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        Chris Albon asked how long before someone launches SETI@Home for the AGI era. The answer is: the
+        infrastructure already exists. OpenCastor gives any robot a standardized runtime. RCAN gives it an
+        identity and a protocol. The registry gives it fleet visibility. <code>castor contribute</code> is just
+        the natural consequence &mdash; if you have the infrastructure, the idle compute question answers itself.
+      </p>
+
+      <p class="reveal" style="font-size:1.0625rem;line-height:1.8;color:var(--text-secondary)">
+        It's opt-in, it's safe, it's preemptible, and it's open source. Your robot was going to idle anyway.
+        Might as well cure something &mdash; and tune your harness while you're at it.
+      </p>
+
+      <!-- CTA -->
+      <div class="reveal" style="margin-top:48px;padding:32px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;text-align:center">
+        <h3 style="font-size:1.25rem;margin-bottom:16px">Enable contribute on your robot</h3>
+        <div class="code-block" style="max-width:400px;margin:0 auto 20px">
+          <div class="code-header">
+            <div class="code-dots"><span></span><span></span><span></span></div>
+            <span class="code-filename">Terminal</span>
+          </div>
+          <div class="code-body">castor contribute start</div>
+        </div>
+        <div class="hero-actions" style="justify-content:center">
+          <a href="https://docs.opencastor.com/runtime/contribute/" class="btn btn-primary">Read the docs</a>
+          <a href="https://github.com/craigm26/OpenCastor" class="btn btn-secondary" target="_blank" rel="noopener">View on GitHub</a>
+        </div>
+      </div>
+
+    </div>
+  </section>
+</main>
+
+<style>
+  .arch-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+  .arch-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: var(--alt-bg);
+    border-bottom: 2px solid var(--border);
+    font-weight: 600;
+  }
+  .arch-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .arch-table tr:last-child td { border-bottom: none; }
+</style>
+
+</BaseLayout>

@@ -58,7 +58,6 @@ def _build_readme_block() -> str:
     lines.append("| Apple Profile | Use case | Guardrails |")
     lines.append("|---|---|---|")
     for profile in apples:
-        use_case = (profile.apple_use_case or "GENERAL").replace("_", " ").title()
         guardrails = (profile.apple_guardrails or "DEFAULT").replace("_", " ").title()
         recommended = " ⭐" if profile.recommended else ""
         lines.append(f"| `{profile.id}`{recommended} | {profile.desc} | {guardrails} |")

@@ -11,7 +11,7 @@ def rcan_a(tmp_path):
     data = {
         "rcan_version": "1.1.0",
         "metadata": {"robot_name": "alex"},
-        "agent": {"provider": "google", "model": "gemini-1.5-flash"},
+        "agent": {"provider": "google", "model": "gemini-2.5-flash"},
         "drivers": [{"id": "wheels", "protocol": "pca9685"}],
     }
     p = tmp_path / "a.rcan.yaml"

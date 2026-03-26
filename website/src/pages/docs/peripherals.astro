@@ -1,0 +1,79 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout
+  title="Hardware & Peripherals — OpenCastor Docs"
+  description="Guide to connecting cameras, LiDAR, motor controllers, and auto-detecting hardware in OpenCastor."
+  ogUrl="https://opencastor.com/docs/peripherals"
+>
+  <section class="page-hero">
+    <p class="section-label reveal">Hardware</p>
+    <h1 class="reveal reveal-d1">Plug-and-Play Peripherals</h1>
+    <p class="reveal reveal-d2">Any USB camera, depth sensor, LiDAR, IMU, or motor controller. OpenCastor auto-detects at startup — no driver code required.</p>
+  </section>
+
+  <section class="section" id="peripherals">
+    <div class="doc-section reveal">
+      <h3>How auto-detection works</h3>
+      <p>At startup (or when you run <code>castor scan</code>), OpenCastor scans:</p>
+      <ul>
+        <li><strong>USB devices</strong> via <code>lsusb</code> (matches against VID:PID like OAK-D, RealSense, RPLiDAR, IMUs).</li>
+        <li><strong>Video devices</strong> via <code>/dev/video*</code> (V4L2-compatible cameras).</li>
+        <li><strong>I²C bus</strong> via <code>i2cdetect</code> (finds PCA9685, MPU-6050, VL53L0X).</li>
+        <li><strong>Serial ports</strong> via <code>/dev/ttyUSB*</code> and <code>/dev/ttyACM*</code>.</li>
+        <li><strong>NPU accelerators</strong> like Hailo-8 and Google Coral.</li>
+      </ul>
+
+      <div class="code-block" style="margin:16px 0">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">Scan connected hardware</span>
+        </div>
+        <div class="code-body"><span class="k">castor scan</span>
+          <br><br><span class="cm"># Example output:</span>
+          <br><span class="s">✓ OAK-D Lite USB 03e7:2485 → camera.type: "oakd"</span>
+          <br><span class="s">✓ Logitech C920 USB 046d:082d → camera.type: "usb" /dev/video0</span>
+          <br><span class="s">✓ PCA9685 I²C 0x40 → driver.type: "pca9685"</span>
+        </div>
+      </div>
+
+      <h3>Auto-detect in your RCAN config</h3>
+      <p>Set <code>type: "auto"</code> on any peripheral block. OpenCastor will pick the best available hardware at runtime.</p>
+      <div class="code-block" style="margin:16px 0">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">rcan.yaml</span>
+        </div>
+        <div class="code-body"><span class="k">camera:</span>
+          <br>&nbsp;&nbsp;<span class="k">type:</span> <span class="s">"auto"</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section alt-section" style="padding: 40px; border-radius: 16px; margin-bottom: 40px;">
+    <h2 style="margin-top:0">Example: Hailo-8 NPU Vision</h2>
+    <p>The Hailo-8 M.2 plugs into the Raspberry Pi 5 AI Kit slot or any M.2 host. OpenCastor auto-detects the Hailo runtime and loads optimized YOLOv8 models.</p>
+    <div class="code-block" style="margin-top:16px;">
+      <div class="code-body">
+<span class="k">camera:</span><br>
+&nbsp;&nbsp;<span class="k">type:</span> <span class="s">"hailo"</span><br>
+&nbsp;&nbsp;<span class="k">hailo_model:</span> <span class="s">"yolov8s"</span><br>
+&nbsp;&nbsp;<span class="k">obstacle_action:</span> <span class="s">"stop"</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="padding: 40px; background: var(--surface); border-radius: 16px;">
+    <h2 style="margin-top:0">Example: OAK-D Depth Camera</h2>
+    <p>Provides stereo depth maps and on-device ML inference using DepthAI v3 for low-latency spatial awareness.</p>
+    <div class="code-block" style="margin-top:16px;">
+      <div class="code-body">
+<span class="k">camera:</span><br>
+&nbsp;&nbsp;<span class="k">type:</span> <span class="s">"oakd"</span><br>
+&nbsp;&nbsp;<span class="k">depth_enabled:</span> <span class="v">true</span><br>
+&nbsp;&nbsp;<span class="k">spatial_detection:</span> <span class="v">true</span>
+      </div>
+    </div>
+  </section>
+
+</DocsLayout>

@@ -7,7 +7,7 @@ Provides session and daily aggregates for the dashboard and /api/usage endpoint.
 Usage::
     from castor.usage import UsageTracker
     tracker = UsageTracker()
-    tracker.log_usage("google", "gemini-2.0-flash", prompt_tokens=150, completion_tokens=80)
+    tracker.log_usage("google", "gemini-2.5-flash", prompt_tokens=150, completion_tokens=80)
     print(tracker.get_session_totals())
     print(tracker.get_daily_totals())
 """
@@ -40,9 +40,9 @@ _SESSION_ID: str = str(uuid.uuid4())
 
 _COST_TABLE: dict[str, dict[str, tuple]] = {
     "google": {
-        "gemini-2.0-flash": (0.0, 0.0),
+        "gemini-2.5-flash": (0.0, 0.0),
         "gemini-2.5-flash-lite": (0.0, 0.0),
-        "default": (0.075, 0.30),  # gemini-1.5-pro-level fallback / 1M → /1k
+        "default": (0.075, 0.30),  # gemini-2.5-pro-level fallback / 1M → /1k
     },
     "openai": {
         "gpt-4.1-mini": (0.0004, 0.0016),
@@ -189,7 +189,7 @@ class UsageTracker:
 
         Args:
             provider:          Provider name (e.g. ``"google"``, ``"openai"``).
-            model:             Model name (e.g. ``"gemini-2.0-flash"``).
+            model:             Model name (e.g. ``"gemini-2.5-flash"``).
             prompt_tokens:     Number of input / prompt tokens consumed.
             completion_tokens: Number of output / completion tokens generated.
             cost_usd:          Optional explicit cost override in USD.
