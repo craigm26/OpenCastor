@@ -271,9 +271,12 @@ def publish_sbom_to_rrf(sbom: RCANBOM, rrf_token: str) -> dict:
 
 def cmd_sbom_generate(args) -> None:
     """castor sbom generate — build SBOM from installed packages."""
-    from castor.config import load_config
-    config = load_config(getattr(args, "config", None))
-    rrn = config.get("rrn") or config.get("robot_rrn") or "RRN-UNKNOWN"
+    import yaml as _yaml
+    _cp = getattr(args, "config", None)
+    config = (_yaml.safe_load(open(_cp)) if _cp else {}) if _cp else {}
+    # also check metadata subkey
+    meta = config.get("metadata", config)
+    rrn = config.get("rrn") or config.get("metadata", {}).get("rrn") or config.get("robot_rrn") or "RRN-UNKNOWN"
 
     # Derive SBOM URL from robot's RURI or a configured base URL
     ruri = config.get("ruri", "")

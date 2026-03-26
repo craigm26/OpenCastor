@@ -1943,6 +1943,48 @@ def cmd_status(args) -> None:
     print()
 
 
+def _cmd_attest_dispatch(args) -> None:
+    """castor attest — RCAN v2.1 §11 firmware manifest (closes #760)."""
+    from castor.firmware import (
+        cmd_attest_generate,
+        cmd_attest_sign,
+        cmd_attest_verify,
+        cmd_attest_serve,
+    )
+    subcmd = getattr(args, "attest_cmd", None)
+    if subcmd == "generate":
+        cmd_attest_generate(args)
+    elif subcmd == "sign":
+        cmd_attest_sign(args)
+    elif subcmd == "verify":
+        cmd_attest_verify(args)
+    elif subcmd == "serve":
+        cmd_attest_serve(args)
+    else:
+        print("Usage: castor attest {generate,sign,verify,serve}")
+        print("  generate  — build manifest from installed packages")
+        print("  sign      — sign with Ed25519 key")
+        print("  verify    — verify signature")
+        print("  serve     — confirm /.well-known/rcan-firmware-manifest.json")
+
+
+def _cmd_sbom_dispatch(args) -> None:
+    """castor sbom — RCAN v2.1 §12 CycloneDX SBOM (closes #761)."""
+    from castor.sbom import cmd_sbom_generate, cmd_sbom_publish, cmd_sbom_verify
+    subcmd = getattr(args, "sbom_cmd", None)
+    if subcmd == "generate":
+        cmd_sbom_generate(args)
+    elif subcmd == "publish":
+        cmd_sbom_publish(args)
+    elif subcmd == "verify":
+        cmd_sbom_verify(args)
+    else:
+        print("Usage: castor sbom {generate,publish,verify}")
+        print("  generate  — CycloneDX SBOM from installed packages")
+        print("  publish   — push to RRF and receive countersignature")
+        print("  verify    — verify RRF countersig")
+
+
 def cmd_attestation(args) -> None:
     """castor attestation — show or regenerate software attestation status."""
     import json
@@ -5947,6 +5989,52 @@ def main() -> None:
     p_attest.add_argument("--json", action="store_true", dest="output_json", help="Output JSON")
     p_attest.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
 
+    # castor attest — RCAN v2.1 §11 firmware manifest (closes #760)
+    p_attest_cmd = sub.add_parser(
+        "attest",
+        help="Firmware manifest attestation (RCAN v2.1 §11)",
+        epilog=(
+            "Examples:\n"
+            "  castor attest generate\n"
+            "  castor attest sign --key robot-private.pem\n"
+            "  castor attest verify\n"
+            "  castor attest serve\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_attest_sub = p_attest_cmd.add_subparsers(dest="attest_cmd", metavar="SUBCMD")
+    p_ag = p_attest_sub.add_parser("generate", help="Generate firmware manifest from installed packages")
+    p_ag.add_argument("--config", default=None, help="RCAN config file")
+    p_ag.add_argument("--out", default=None, help="Output path (default: /run/opencastor/rcan-firmware-manifest.json)")
+    p_as = p_attest_sub.add_parser("sign", help="Sign the firmware manifest with an Ed25519 key")
+    p_as.add_argument("--key", required=True, help="Path to Ed25519 private key PEM")
+    p_as.add_argument("--manifest", default=None, help="Path to manifest JSON (default: /run/opencastor/rcan-firmware-manifest.json)")
+    p_av = p_attest_sub.add_parser("verify", help="Verify firmware manifest signature")
+    p_av.add_argument("--key", required=True, help="Path to Ed25519 public key PEM")
+    p_av.add_argument("--manifest", default=None, help="Path to manifest JSON")
+    p_attest_sub.add_parser("serve", help="Confirm /.well-known/rcan-firmware-manifest.json is reachable")
+
+    # castor sbom — RCAN v2.1 §12 CycloneDX SBOM (closes #761)
+    p_sbom_cmd = sub.add_parser(
+        "sbom",
+        help="CycloneDX SBOM generation and RRF publishing (RCAN v2.1 §12)",
+        epilog=(
+            "Examples:\n"
+            "  castor sbom generate\n"
+            "  castor sbom publish --token <rrf-token>\n"
+            "  castor sbom verify\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_sbom_sub = p_sbom_cmd.add_subparsers(dest="sbom_cmd", metavar="SUBCMD")
+    p_sg = p_sbom_sub.add_parser("generate", help="Generate CycloneDX SBOM from installed packages")
+    p_sg.add_argument("--config", default=None, help="RCAN config file")
+    p_sg.add_argument("--out", default=None, help="Output path (default: /run/opencastor/rcan-sbom.json)")
+    p_sp = p_sbom_sub.add_parser("publish", help="Publish SBOM to RRF and receive countersignature")
+    p_sp.add_argument("--token", default=None, help="RRF API token")
+    p_sp.add_argument("--sbom", default=None, help="Path to SBOM JSON")
+    p_sbom_sub.add_parser("verify", help="Verify RRF countersignature on published SBOM")
+
     p_audit = sub.add_parser(
         "audit",
         help="View the append-only audit log",
@@ -6467,6 +6555,8 @@ def main() -> None:
         "safety": cmd_safety,
         "conformance": cmd_conformance,
         "attestation": cmd_attestation,
+        "attest": _cmd_attest_dispatch,
+        "sbom": _cmd_sbom_dispatch,
         "login": cmd_login,
         "flash": cmd_flash,
         "hub": cmd_hub,

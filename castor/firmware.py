@@ -303,10 +303,12 @@ def load_manifest(path: Optional[Path] = None) -> FirmwareManifest:
 
 def cmd_attest_generate(args) -> None:
     """castor attest generate — build firmware manifest from installed packages."""
-    from castor.config import load_config
+    import yaml as _yaml
+    def load_config(p): return (_yaml.safe_load(open(p)) if p else {}) if p else {}
     config = load_config(getattr(args, "config", None))
-    rrn = config.get("rrn") or config.get("robot_rrn") or "RRN-UNKNOWN"
-    firmware_version = getattr(args, "firmware_version", None)
+    meta = config.get("metadata", {})
+    rrn = config.get("rrn") or meta.get("rrn") or config.get("robot_rrn") or "RRN-UNKNOWN"
+    firmware_version = getattr(args, "firmware_version", None) or meta.get("version")
 
     manifest = generate_manifest(rrn=rrn, firmware_version=firmware_version)
     out = save_manifest(manifest)
