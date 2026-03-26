@@ -1,0 +1,28 @@
+# OpenCastor Harness Config — local_only
+# No cloud API calls. Fully offline. Uses local Ollama model only.
+# Compatible: any hardware running Ollama (pi5_4gb, pi5_8gb, jetson)
+
+name: local_only
+version: "1.0"
+description: >
+  Fully air-gapped — zero cloud API calls. Runs gemma3:1b via local Ollama.
+  Best for privacy-sensitive deployments, offline environments, or
+  robots where cloud latency is unacceptable (home tasks, <0.5s required).
+target_hardware: [pi5_4gb, pi5_8gb, jetson, waveshare]
+best_for: [home]
+ohb1_score: 0.8103
+ohb1_date: "2026-03-21"
+ohb1_breakdown:
+  general: 0.830
+  home: 0.800
+  industrial: 0.800
+config:
+  thinking_budget: 512
+  context_budget: 4096
+  max_iterations: 6
+  cost_gate_usd: 0.00
+  drift_detection: true
+  retry_on_error: true
+  p66_consent_threshold: physical
+  local_model: "gemma3:1b"
+  force_local: true

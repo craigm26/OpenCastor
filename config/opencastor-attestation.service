@@ -1,0 +1,16 @@
+[Unit]
+Description=OpenCastor Software Attestation
+Before=opencastor.service castor-bridge-bob.service
+After=network.target
+
+[Service]
+Type=oneshot
+User=craigm26
+ExecStartPre=/bin/mkdir -p /run/opencastor
+ExecStartPre=/bin/chown craigm26:craigm26 /run/opencastor
+ExecStart=/usr/bin/python3 -m castor.attestation_generator --config /home/craigm26/opencastor/bob.rcan.yaml --out /run/opencastor/attestation.json
+WorkingDirectory=/home/craigm26/OpenCastor
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,75 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout
+  title="Safety & Protocol 66 — OpenCastor Docs"
+  description="OpenCastor implements Protocol 66 for hardware safety reflexes, emergency stops, and verifiable audit trails."
+  ogUrl="https://opencastor.com/docs/safety"
+>
+  <section class="page-hero">
+    <p class="section-label reveal">Safety</p>
+    <h1 class="reveal reveal-d1">Built-in safety kernel</h1>
+    <p class="reveal reveal-d2">Multi-layered safety enforced at the runtime level. Cannot be overridden by model output.</p>
+  </section>
+
+  <section class="section" id="safety">
+    <div class="guide-grid">
+      <div class="guide-card reveal">
+        <h3 style="margin-top:0">🚨 Emergency Stop</h3>
+        <p>Hardware-level e-stop in every control loop. Triggers on collision proximity, timeout, or manual signal. Sub-millisecond response.</p>
+      </div>
+      <div class="guide-card reveal">
+        <h3 style="margin-top:0">🛡️ Anti-Subversion</h3>
+        <p>Detects and blocks prompt injection, jailbreak attempts, and any AI output that tries to bypass safety constraints.</p>
+      </div>
+      <div class="guide-card reveal">
+        <h3 style="margin-top:0">✅ Work Authorization</h3>
+        <p>Actions require explicit authorization. The robot cannot perform tasks outside its declared capabilities without human approval.</p>
+      </div>
+      <div class="guide-card reveal">
+        <h3 style="margin-top:0">📐 Physical Bounds</h3>
+        <p>Enforces velocity limits, workspace boundaries, and collision zones. Hard-coded limits that AI cannot modify.</p>
+      </div>
+      <div class="guide-card reveal">
+        <h3 style="margin-top:0">📋 Tamper-Evident Audit</h3>
+        <p>Every command, sensor reading, and safety event is logged with cryptographic hashes. Full audit trail for compliance.</p>
+      </div>
+      <div class="guide-card reveal">
+        <h3 style="margin-top:0">📡 Sensor Monitoring</h3>
+        <p>Continuous monitoring of IMU, current draw, temperature, and proximity. Automatic shutdown on anomalous readings.</p>
+      </div>
+    </div>
+
+    <div class="wizard-after reveal" style="margin-top:40px; padding:32px; background:var(--surface); border-radius:16px;">
+      <h3 style="margin-top:0">Safety CLI commands</h3>
+      <div class="code-block" style="margin-top:16px;">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">Terminal</span>
+        </div>
+        <div class="code-body"><span class="cm"># View active safety rules</span>
+          <br><span class="k">castor safety rules</span><br><br>
+          <span class="cm"># Verify audit log integrity</span><br>
+          <span class="k">castor audit --verify</span><br><br>
+          <span class="cm"># Live safety monitor</span><br>
+          <span class="k">castor monitor --watch</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section alt-section" style="padding:40px; border-radius:16px; margin-top:40px;" id="protocol-66">
+    <h2 style="margin-top:0">Protocol 66 — Safety Conformance</h2>
+    <p>OpenCastor implements Protocol 66 (P66), the RCAN safety conformance framework. P66 defines five invariants that must hold at all times — enforced at the runtime layer, not the AI layer. Current OpenCastor conformance: <strong>94%</strong>.</p>
+    
+    <ul style="margin-top:16px; line-height:1.8;">
+      <li>ESTOP delivered at QoS 2 (EXACTLY_ONCE) — never blocked by backpressure</li>
+      <li>Local safety always wins — cloud commands pass through the same confidence gates as local commands</li>
+      <li>Audit chain required for all flagged commands</li>
+      <li>Automatic fallback when primary brain latency exceeds threshold</li>
+    </ul>
+
+    <p style="margin-top:16px;">See <a href="https://rcan.dev/docs/safety" style="color:var(--accent)">rcan.dev/docs/safety</a> for the full specification.</p>
+  </section>
+
+</DocsLayout>

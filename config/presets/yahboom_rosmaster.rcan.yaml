@@ -1,125 +1,198 @@
-rcan_version: "1.3"
-
+rcan_version: '1.6'
 metadata:
-  robot_name: "Yahboom_ROSMASTER_X3"
-  robot_uuid: "00000000-0000-0000-0000-000000000016"
-  author: "OpenCastor Default"
-  license: "Apache-2.0"
+  robot_name: Yahboom_ROSMASTER_X3
+  robot_uuid: ae5ee266-f9dd-4025-8eb9-2e0cff2ebfbf
+  author: OpenCastor Default
+  license: Apache-2.0
   tags:
-    - mobile
-    - mecanum
-    - ros2
-    - yahboom
-    - raspberry-pi
-    - stem
-    - amazon
-  description: >
-    Yahboom ROSMASTER X3 — a popular ROS2 learning kit (~$150-200 on Amazon).
-    Features mecanum wheels for holonomic motion, Raspberry Pi 4/5 host, and a
-    Yahboom expansion board with PCA9685 PWM controller. Comes with RGB LEDs,
-    ultrasonic sensor, and optional camera/LiDAR. Excellent for learning ROS2.
+  - mobile
+  - mecanum
+  - ros2
+  - yahboom
+  - raspberry-pi
+  - stem
+  - amazon
+  description: 'Yahboom ROSMASTER X3 — a popular ROS2 learning kit (~$150-200 on Amazon).
+    Features mecanum wheels for holonomic motion, Raspberry Pi 4/5 host, and a Yahboom
+    expansion board with PCA9685 PWM controller. Comes with RGB LEDs, ultrasonic sensor,
+    and optional camera/LiDAR. Excellent for learning ROS2.
 
+    '
+  rrn: RRN-236080450958
+  rrn_uri: rrn://community/robot/opencastor/yahboom-rosmaster-x3/yahboom_rosmaster
 agent:
-  provider: "anthropic"
-  model: "claude-opus-4-6"
+  provider: anthropic
+  model: claude-opus-4-6
   vision_enabled: true
   latency_budget_ms: 200
   safety_stop: true
-
+  offline_provider: ollama
+  confidence_gates:
+  - scope: control
+    min_confidence: 0.75
+    on_fail: block
+  - scope: safety
+    min_confidence: 0.9
+    on_fail: block
 physics:
-  type: "mecanum"
+  type: holonomic
   dof: 4
   chassis:
     wheel_base_mm: 155
     track_width_mm: 145
     wheel_radius_mm: 38
-    # Mecanum roller angle: 45 degrees
-
 drivers:
-  - id: "motor_driver"
-    protocol: "pca9685_i2c"
-    port: "/dev/i2c-1"
-    address: "0x40"
-    frequency: 50
-    # Mecanum wheel layout:
-    #   FL = Front Left  (channel 0) — roller direction: /
-    #   FR = Front Right (channel 1) — roller direction: \
-    #   RL = Rear Left   (channel 2) — roller direction: \
-    #   RR = Rear Right  (channel 3) — roller direction: /
-    channels:
-      front_left: 0
-      front_right: 1
-      rear_left: 2
-      rear_right: 3
-    polarity:
-      front_left: 1
-      front_right: -1
-      rear_left: 1
-      rear_right: -1
-
-  - id: "servo_camera_pan"
-    protocol: "pca9685_i2c"
-    port: "/dev/i2c-1"
-    address: "0x40"
-    frequency: 50
-    channels:
-      pan: 8
-      tilt: 9
-    servo_range_deg: 180
-
-  - id: "rgb_leds"
-    protocol: "gpio_ws2812"
-    gpio_pin: 18    # WS2812B LED strip via GPIO18 (PWM)
-    led_count: 4
-
-  - id: "ultrasonic_sensor"
-    protocol: "gpio_hcsr04"
-    trigger_pin: 27
-    echo_pin: 22
-    max_range_cm: 400
-
-  - id: "camera"
-    protocol: "v4l2"
-    device: "/dev/video0"
-    resolution: "640x480"
-    fps: 30
-
-  - id: "imu"
-    protocol: "i2c_mpu6050"
-    port: "/dev/i2c-1"
-    address: "0x68"
-
+- id: motor_driver
+  protocol: pca9685_i2c
+  port: /dev/i2c-1
+  address: '0x40'
+  frequency: 50
+  channels:
+    front_left: 0
+    front_right: 1
+    rear_left: 2
+    rear_right: 3
+  polarity:
+    front_left: 1
+    front_right: -1
+    rear_left: 1
+    rear_right: -1
+- id: servo_camera_pan
+  protocol: pca9685_i2c
+  port: /dev/i2c-1
+  address: '0x40'
+  frequency: 50
+  channels:
+    pan: 8
+    tilt: 9
+  servo_range_deg: 180
+- id: rgb_leds
+  protocol: gpio_ws2812
+  gpio_pin: 18
+  led_count: 4
+- id: ultrasonic_sensor
+  protocol: gpio_hcsr04
+  trigger_pin: 27
+  echo_pin: 22
+  max_range_cm: 400
+- id: camera
+  protocol: v4l2
+  device: /dev/video0
+  resolution: 640x480
+  fps: 30
+- id: imu
+  protocol: i2c_mpu6050
+  port: /dev/i2c-1
+  address: '0x68'
 ros2:
   enabled: true
-  namespace: "/rosmaster"
+  namespace: /rosmaster
   topics:
-    cmd_vel: "/rosmaster/cmd_vel"
-    odom: "/rosmaster/odom"
-    scan: "/rosmaster/scan"    # If LiDAR attached
-  node_name: "opencastor_rosmaster"
-
+    cmd_vel: /rosmaster/cmd_vel
+    odom: /rosmaster/odom
+    scan: /rosmaster/scan
+  node_name: opencastor_rosmaster
 connection:
-  type: "local"    # Runs directly on Raspberry Pi
-
+  type: local
 network:
   telemetry_stream: true
   sim_to_real_sync: true
-  allow_remote_override: true
-
+  allow_remote_override: false
 rcan_protocol:
   port: 8000
-  capabilities: [status, nav, teleop, chat, vision]
+  capabilities:
+  - status
+  - nav
+  - teleop
+  - chat
+  - vision
   enable_mdns: true
   enable_jwt: false
-
 notes:
-  setup: >
-    1. Flash Yahboom's official Raspberry Pi image (Ubuntu 22.04 + ROS2 Humble),
-       or install OpenCastor on a stock Raspberry Pi OS.
-    2. Enable I2C: sudo raspi-config → Interfaces → I2C → Enable
-    3. pip install opencastor adafruit-circuitpython-pca9685
-    4. castor run --config yahboom_rosmaster.rcan.yaml
-  second_hand_tips: >
-    The ROSMASTER appears on Amazon Warehouse deals, eBay, and occasionally
-    in university robotics lab surplus. Check that the Raspberry Pi is included
-    (sometimes sold separately). The PCA9685 expansion board is the key component.
+  setup: "1. Flash Yahboom's official Raspberry Pi image (Ubuntu 22.04 + ROS2 Humble),\n\
+    \   or install OpenCastor on a stock Raspberry Pi OS.\n2. Enable I2C: sudo raspi-config\
+    \ → Interfaces → I2C → Enable 3. pip install opencastor adafruit-circuitpython-pca9685\
+    \ 4. castor run --config yahboom_rosmaster.rcan.yaml\n"
+  second_hand_tips: 'The ROSMASTER appears on Amazon Warehouse deals, eBay, and occasionally
+    in university robotics lab surplus. Check that the Raspberry Pi is included (sometimes
+    sold separately). The PCA9685 expansion board is the key component.
+
+    '
+tiered_brain:
+  fast_provider: ollama
+  fast_model: gemma3:1b
+  slow_provider: anthropic
+  slow_model: claude-opus-4-6
+  planner_interval: 10
+agent_roster:
+- id: nav_specialist
+  provider: ollama
+  model: gemma3:4b
+  scope: nav
+- id: chat_specialist
+  provider: anthropic
+  model: claude-opus-4-6
+  scope: chat
+geofence:
+  enabled: false
+  boundary:
+    type: none
+reactive:
+  min_obstacle_m: 0.3
+  fallback_provider: ollama
+cameras:
+  main:
+    type: http
+    url: http://127.0.0.1:8765/snapshot
+safety:
+  local_safety_wins: true
+  emergency_stop_distance: 0.4
+  estop_bypass_rate_limit: true
+  watchdog:
+    timeout_s: 10
+hardware_safety:
+  physical_estop: false
+  hardware_watchdog_mcu: false
+p66:
+  enabled: true
+  loa_enforcement: true
+  consent_required: true
+  manifest:
+    estop_qos_bypass: true
+consent:
+  required: true
+  mode: explicit
+  scope_threshold: control
+security:
+  replay_protection:
+    enabled: true
+    window_s: 30
+  signing:
+    enabled: false
+    algorithm: Ed25519
+loa:
+  enforcement: true
+  min_loa_for_control: 1
+human_identity:
+  loa_required: 1
+transport:
+  supported:
+  - http
+  - mqtt
+  constrained_enabled: false
+multimodal:
+  enabled: true
+  max_chunk_bytes: 1048576
+offline:
+  enabled: true
+  fallback_provider: ollama
+r2ram:
+  scopes:
+  - discover
+  - status
+  - chat
+  - control
+  - safety
+federation:
+  enabled: true
+  consent_bridge: false

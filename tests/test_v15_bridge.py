@@ -16,19 +16,15 @@ from __future__ import annotations
 
 import time
 import uuid
-from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import MagicMock, patch, PropertyMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from castor.cloud.bridge import (
-    CastorBridge,
-    OFFLINE_THRESHOLD_S,
     ESTOP_ACK_DEADLINE_S,
+    OFFLINE_THRESHOLD_S,
     SAFETY_REPLAY_WINDOW_S,
+    CastorBridge,
 )
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers / fixtures

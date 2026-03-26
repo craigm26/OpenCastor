@@ -17,10 +17,10 @@ Note: rcan.replay.ReplayCache.check_and_record returns (bool, str) tuple
 
 from __future__ import annotations
 
-import sys
 import os
-import time
+import sys
 import threading
+import time
 import uuid
 
 import pytest
@@ -293,7 +293,7 @@ class TestBridgeIntegration:
 
     def test_bridge_safety_cache_window(self):
         """Safety cache uses 10s window."""
-        from castor.cloud.bridge import CastorBridge, SAFETY_REPLAY_WINDOW_S
+        from castor.cloud.bridge import SAFETY_REPLAY_WINDOW_S, CastorBridge
         config = {"rrn": "RRN-00000001", "metadata": {"name": "TestBot"}}
         bridge = CastorBridge(config=config, firebase_project="test-project")
         assert bridge._safety_replay_cache.window_s == SAFETY_REPLAY_WINDOW_S

@@ -1,0 +1,18 @@
+[Unit]
+Description=OpenCastor Software Attestation
+Before=castor-gateway.service opencastor.service
+After=network.target
+
+[Service]
+Type=oneshot
+User={user}
+WorkingDirectory={working_dir}
+ExecStartPre=/bin/mkdir -p /run/opencastor
+ExecStart={python} -m castor.attestation_generator --config {config} --out /run/opencastor/attestation.json
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=opencastor-attestation
+
+[Install]
+WantedBy=multi-user.target

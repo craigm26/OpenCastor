@@ -3,15 +3,10 @@
 from __future__ import annotations
 
 import json
-import unittest.mock as mock
 import urllib.error
-from io import BytesIO
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from castor.rcan.http_transport import discover_robot, send_message
-
 
 # ---------------------------------------------------------------------------
 # send_message tests

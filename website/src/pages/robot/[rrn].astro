@@ -1,0 +1,197 @@
+---
+/**
+ * /robot/:rrn — Public robot profile page
+ *
+ * Static paths generated at build time from community configs.
+ * Phase 2: Firebase-loaded profiles for opted-in robots (client-side hydration).
+ *
+ * Robots opt in via: metadata.public_profile: true in their .rcan.yaml
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import yaml from 'js-yaml';
+
+export async function getStaticPaths() {
+  const dirs = [
+    resolve(process.cwd(), '../config/community'),
+    resolve(process.cwd(), '../config/presets'),
+  ];
+
+  const paths = [];
+  for (const dir of dirs) {
+    if (!existsSync(dir)) continue;
+    const files = readdirSync(dir).filter(f => f.endsWith('.rcan.yaml'));
+    for (const filename of files) {
+      const content = readFileSync(`${dir}/${filename}`, 'utf8');
+      let parsed: any = {};
+      try { parsed = yaml.load(content) as any; } catch {}
+
+      // Only generate pages for robots with explicit RRN
+      const rrn = parsed?.metadata?.rrn;
+      if (!rrn) continue;
+
+      // Normalize RRN for URL slug (RRN-000000000001 → rrn-000000000001)
+      const slug = rrn.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+
+      paths.push({
+        params: { rrn: slug },
+        props: { filename, content, parsed, rrn, dir: dir.includes('community') ? 'community' : 'presets' }
+      });
+    }
+  }
+  return paths;
+}
+
+const { filename, content, parsed, rrn, dir } = Astro.props;
+
+const robotName   = parsed?.metadata?.robot_name || rrn;
+const description = parsed?.metadata?.description || `RCAN v${parsed?.rcan_version || '?'} robot`;
+const rcanVersion = parsed?.rcan_version || '?';
+const provider    = parsed?.agent?.provider || 'unknown';
+const model       = parsed?.agent?.model || '';
+const physicsType = parsed?.physics?.type || 'unknown';
+const dof         = parsed?.physics?.dof || '?';
+const configId    = filename.replace('.rcan.yaml', '');
+const capabilities= parsed?.rcan_protocol?.capabilities || [];
+const hasCamera   = !!(parsed?.hardware?.camera || parsed?.cameras);
+const hasArm      = !!(parsed?.physics?.type === 'arm' || (parsed?.drivers || []).some((d: any) => d.id?.includes('arm') || d.id?.includes('motor')));
+
+const tags = [physicsType, provider, `rcan-${rcanVersion}`, dir].filter(Boolean);
+---
+
+<BaseLayout
+  title={`${robotName} — OpenCastor Robot Profile`}
+  description={`${description} | RCAN v${rcanVersion} | ${provider}`}
+  ogUrl={`https://opencastor.com/robot/${rrn.toLowerCase()}`}
+>
+
+<main>
+  <section style="max-width:860px;margin:0 auto;padding:60px 24px 80px">
+
+    <!-- Breadcrumb -->
+    <nav style="font-size:.82rem;color:var(--text-muted);margin-bottom:28px">
+      <a href="/explore" style="color:var(--accent)">← Explore</a>
+      <span style="margin:0 8px">/</span>
+      <span>Robots</span>
+      <span style="margin:0 8px">/</span>
+      <span>{robotName}</span>
+    </nav>
+
+    <!-- Robot header -->
+    <div style="display:flex;align-items:flex-start;gap:24px;margin-bottom:32px;flex-wrap:wrap">
+      <!-- Robot avatar -->
+      <div style="width:80px;height:80px;background:linear-gradient(135deg,var(--accent,#0ea5e9),#7c3aed);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:2rem;flex-shrink:0">
+        {physicsType === 'arm' ? '🦾' : physicsType === 'differential' ? '🤖' : physicsType === 'holonomic' ? '🛞' : '🤖'}
+      </div>
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+          <h1 style="margin:0;font-size:1.8rem">{robotName}</h1>
+          <span style="background:rgba(34,197,94,.15);color:#22c55e;font-size:.75rem;padding:2px 8px;border-radius:20px">online profile</span>
+        </div>
+        <p style="color:var(--text-muted);margin:0 0 10px;font-size:.95rem">{description}</p>
+        <div style="font-size:.8rem;color:var(--text-muted);font-family:monospace">{rrn}</div>
+      </div>
+    </div>
+
+    <!-- Stats bar -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;margin-bottom:32px">
+      {[
+        { label: 'RCAN Version', value: rcanVersion },
+        { label: 'Physics', value: physicsType },
+        { label: 'DOF', value: String(dof) },
+        { label: 'AI Provider', value: provider },
+        { label: 'Camera', value: hasCamera ? 'Yes' : 'No' },
+        { label: 'Arm', value: hasArm ? 'Yes' : 'No' },
+      ].map(({ label, value }) => (
+        <div style="background:var(--surface-2,#1a1a2e);border:1px solid var(--border-color,rgba(255,255,255,.1));border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">{label}</div>
+          <div style="font-weight:600;font-size:.9rem">{value}</div>
+        </div>
+      ))}
+    </div>
+
+    <!-- Tags -->
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:28px">
+      {tags.map(tag => (
+        <span style="background:rgba(14,165,233,.15);color:var(--accent,#0ea5e9);font-size:.75rem;padding:3px 10px;border-radius:4px">{tag}</span>
+      ))}
+    </div>
+
+    <!-- Capabilities -->
+    {capabilities.length > 0 && (
+      <div style="margin-bottom:28px">
+        <h3 style="font-size:1rem;margin:0 0 12px">Capabilities</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          {capabilities.map((cap: string) => (
+            <span style="background:var(--surface-2);border:1px solid var(--border-color,rgba(255,255,255,.1));color:var(--text-muted);font-size:.8rem;padding:4px 12px;border-radius:6px">{cap}</span>
+          ))}
+        </div>
+      </div>
+    )}
+
+    <!-- Model info -->
+    {model && (
+      <div style="background:var(--surface-2);border:1px solid var(--border-color,rgba(255,255,255,.1));border-radius:10px;padding:16px;margin-bottom:28px">
+        <h3 style="margin:0 0 8px;font-size:.9rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">AI Model</h3>
+        <div style="font-family:monospace;font-size:.9rem">{provider}/{model}</div>
+      </div>
+    )}
+
+    <!-- Config card -->
+    <div style="background:var(--surface-2);border:1px solid var(--accent,#0ea5e9);border-radius:10px;padding:16px;margin-bottom:28px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:4px">Installed config</div>
+          <div style="font-weight:600">{filename}</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <a href={`/config/${configId}`} class="btn btn-sm btn-secondary">View config →</a>
+          <button class="btn btn-sm btn-primary" onclick={`navigator.clipboard.writeText('castor install opencastor.com/config/${configId}'); this.textContent='Copied!'; setTimeout(()=>this.textContent='Install',1500)`}>Install</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dynamic section: live robot status (Phase 2 — Firebase) -->
+    <div id="live-status" style="display:none;background:var(--surface-2);border:1px solid var(--border-color,rgba(255,255,255,.1));border-radius:10px;padding:16px;margin-bottom:28px">
+      <h3 style="margin:0 0 12px;font-size:.9rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Live Status</h3>
+      <div id="live-status-content">Loading...</div>
+    </div>
+
+    <!-- Actions -->
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <a href={`https://github.com/craigm26/OpenCastor/blob/main/config/${dir}/${filename}`}
+         class="btn btn-secondary" target="_blank">View on GitHub →</a>
+      <a href="/explore" class="btn btn-secondary">← All Robots</a>
+    </div>
+
+  </section>
+</main>
+
+<script define:vars={{ rrn, configId }}>
+// Phase 2: load live status from Firebase if robot is online
+// Uncomment when robots write to Firestore robots/{rrn}
+/*
+async function loadLiveStatus() {
+  try {
+    const snap = await getDoc(doc(db, 'robots', rrn));
+    if (snap.exists()) {
+      const data = snap.data();
+      const el = document.getElementById('live-status');
+      const content = document.getElementById('live-status-content');
+      el.style.display = 'block';
+      const ago = Math.round((Date.now() - data.last_seen?.toMillis()) / 60000);
+      content.innerHTML = `
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <div><span style="color:#22c55e">●</span> Last seen ${ago}m ago</div>
+          <div>Session: ${data.session_id || 'idle'}</div>
+          <div>LoA: ${data.current_loa ?? '?'}</div>
+        </div>`;
+    }
+  } catch(e) { console.debug('Live status unavailable', e); }
+}
+loadLiveStatus();
+*/
+</script>
+
+</BaseLayout>

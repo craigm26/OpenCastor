@@ -1,0 +1,72 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout
+  title="AI Providers — OpenCastor Docs"
+  description="Guide to supported AI providers including Apple Foundation Models, Anthropic, Gemini, OpenAI, Hugging Face, and local inference."
+  ogUrl="https://opencastor.com/docs/providers"
+>
+  <section class="page-hero">
+    <p class="section-label reveal">AI Brains</p>
+    <h1 class="reveal reveal-d1">Apple Foundation Models + 12+ Providers</h1>
+    <p class="reveal reveal-d2">Setup picks compatible stacks first (<code>apple_native</code>, <code>mlx_local_vision</code>, <code>ollama_universal_local</code>), then lets you swap providers with one config change.</p>
+  </section>
+
+  <section class="section" id="providers">
+    <div class="wizard-tip reveal" style="margin-bottom:32px">
+      <strong>Catalog snapshot:</strong> stacks: <code>apple_native</code>, <code>mlx_local_vision</code>, <code>ollama_universal_local</code> &middot; Apple profiles: <code>apple-balanced</code>, <code>apple-creative</code>, <code>apple-tagging</code>
+    </div>
+
+    <div class="guide-grid">
+      <div class="guide-card reveal">
+        <h3 style="margin-top:0"><span style="color:#111">●</span> Apple Foundation Models</h3>
+        <p>On-device Apple Intelligence language model for eligible Macs. Profile presets: <code>apple-balanced</code>, <code>apple-creative</code>, <code>apple-tagging</code>. No API key required.</p>
+        <div class="hw-card-meta" style="margin-top:12px; font-size:0.75rem;">provider: "apple"</div>
+      </div>
+      
+      <div class="guide-card reveal">
+        <h3 style="margin-top:0"><span style="color:#D97706">●</span> Anthropic</h3>
+        <p>Claude Opus 4, Sonnet 4. Best for complex planning and safety-critical reasoning. API key or OAuth.</p>
+        <div class="hw-card-meta" style="margin-top:12px; font-size:0.75rem;">provider: "anthropic" &middot; ANTHROPIC_API_KEY</div>
+      </div>
+      
+      <div class="guide-card reveal">
+        <h3 style="margin-top:0"><span style="color:#4285F4">●</span> Google Gemini</h3>
+        <p>Gemini 2.5 Flash, Pro. Excellent vision and embodied reasoning. Google AI Studio key.</p>
+        <div class="hw-card-meta" style="margin-top:12px; font-size:0.75rem;">provider: "google" &middot; GOOGLE_API_KEY</div>
+      </div>
+      
+      <div class="guide-card reveal">
+        <h3 style="margin-top:0"><span style="color:#10A37F">●</span> OpenAI</h3>
+        <p>GPT-4.1, GPT-4o, o3. Strong tool use and function calling. Traditional API key.</p>
+        <div class="hw-card-meta" style="margin-top:12px; font-size:0.75rem;">provider: "openai" &middot; OPENAI_API_KEY</div>
+      </div>
+      
+      <div class="guide-card reveal">
+        <h3 style="margin-top:0"><span style="color:#FFD21E">●</span> Hugging Face</h3>
+        <p>1M+ models. Free inference API tier. Best for $0 fast brain.</p>
+        <div class="hw-card-meta" style="margin-top:12px; font-size:0.75rem;">provider: "huggingface" &middot; HF_TOKEN</div>
+      </div>
+      
+      <div class="guide-card reveal">
+        <h3 style="margin-top:0"><span style="color:#888">●</span> Ollama</h3>
+        <p>Run models locally with zero cloud dependency. Llama 3.3, Mistral, Phi-3.</p>
+        <div class="hw-card-meta" style="margin-top:12px; font-size:0.75rem;">provider: "ollama"</div>
+      </div>
+
+      <div class="guide-card reveal">
+        <h3 style="margin-top:0"><span style="color:#7C3AED">●</span> MLX (Apple Silicon)</h3>
+        <p>Native GPU inference on Apple Silicon. Qwen2.5-VL, Llama 3.3. 400+ tok/s on M4 Max.</p>
+        <div class="hw-card-meta" style="margin-top:12px; font-size:0.75rem;">provider: "mlx" &middot; pip install mlx-lm</div>
+      </div>
+
+      <div class="guide-card reveal">
+        <h3 style="margin-top:0"><span style="color:#D97706">●</span> Claude OAuth</h3>
+        <p>Use your existing Claude Pro/Team subscription via a browser-based OAuth flow.</p>
+        <div class="hw-card-meta" style="margin-top:12px; font-size:0.75rem;">provider: "claude_oauth" &middot; castor login</div>
+      </div>
+    </div>
+  </section>
+
+</DocsLayout>

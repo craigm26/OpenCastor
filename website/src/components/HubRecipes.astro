@@ -1,0 +1,407 @@
+---
+// A component that renders the featured recipes and handles client-side filtering.
+---
+
+<!-- ======== TYPE FILTER TABS ======== -->
+<section class="section" style="padding-top:20px;padding-bottom:20px">
+  <div class="container">
+    <div class="hub-filter-bar reveal" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+      <button class="hub-filter-btn active" data-filter="all" onclick="hubFilter('all',this)">All</button>
+      <button class="hub-filter-btn" data-filter="preset" onclick="hubFilter('preset',this)">🤖 Presets</button>
+      <button class="hub-filter-btn" data-filter="skill" onclick="hubFilter('skill',this)">🧩 Skills</button>
+      <button class="hub-filter-btn" data-filter="harness" onclick="hubFilter('harness',this)">📦 Harnesses</button>
+    </div>
+    <p class="hub-filter-desc" id="hub-type-desc" style="font-size:0.875rem;color:var(--text-muted);margin-bottom:24px;">
+      <strong>Presets</strong> = full robot config (hardware + brain). <strong>Skills</strong> = single capabilities you can add to any robot. <strong>Harnesses</strong> = complete bundles (preset + skills + persona).
+    </p>
+  </div>
+</section>
+
+<!-- ======== FEATURED RECIPES ======== -->
+<section class="section alt-section" id="recipes" style="padding-top:20px">
+  <div class="container">
+    <div class="hw-grid">
+
+      <div class="hw-card reveal" data-type="preset">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">🏠</div>
+          <span class="status status-green">Tested</span>
+        </div>
+        <h3>PiCar-X Home Patrol Bot</h3>
+        <p>Autonomous nightly patrol with Gemini vision. Spots open windows, water leaks, and items on the floor.
+          Alerts via WhatsApp.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">SunFounder PiCar-X</span>
+          <span class="recipe-tag">Pi 4B</span>
+          <span class="recipe-tag">Gemini</span>
+        </div>
+        <div class="hw-card-meta">
+          <span>by <a href="https://github.com/robotmike" target="_blank" style="color:var(--accent);text-decoration:none"><strong>@robotmike</strong></a></span>
+          <span>&middot; ~$120 &middot; Beginner</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor install picar-home-patrol-e7f3a1</code>
+        </div>
+      </div>
+
+      <div class="hw-card reveal reveal-d1" data-type="preset">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">🌿</div>
+          <span class="status status-green">Tested</span>
+        </div>
+        <h3>Farm Scout — Crop Inspector</h3>
+        <p>4WD rover that checks crop rows for pests, disease, and dry spots using Llama 3.3 on Hugging Face. Daily
+          Telegram reports.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">Freenove 4WD</span>
+          <span class="recipe-tag">Pi 5</span>
+          <span class="recipe-tag">Llama 3.3</span>
+        </div>
+        <div class="hw-card-meta">
+          <span>by <a href="https://github.com/agribot_sarah" target="_blank" style="color:var(--accent);text-decoration:none"><strong>@agribot_sarah</strong></a></span>
+          <span>&middot; ~$200 &middot; Intermediate</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor install llama-farm-scout-b4d2e8</code>
+        </div>
+      </div>
+
+      <div class="hw-card reveal reveal-d2" data-type="preset">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">🎓</div>
+          <span class="status status-green">Tested</span>
+        </div>
+        <h3>Classroom Q&amp;A Assistant</h3>
+        <p>Wheeled robot that answers student questions via WhatsApp using Claude Haiku. Rate-limited and
+          content-filtered for classroom use.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">SunFounder PiCar-X</span>
+          <span class="recipe-tag">Pi 4B</span>
+          <span class="recipe-tag">Claude Haiku</span>
+        </div>
+        <div class="hw-card-meta">
+          <span>by <a href="https://github.com/edu_maker_jen" target="_blank" style="color:var(--accent);text-decoration:none"><strong>@edu_maker_jen</strong></a></span>
+          <span>&middot; ~$140 &middot; Beginner</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor install classroom-assistant-a1c3f7</code>
+        </div>
+      </div>
+
+      <div class="hw-card reveal reveal-d3" data-type="preset">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">🏭</div>
+          <span class="status status-green">Tested</span>
+        </div>
+        <h3>Warehouse Inventory Scanner</h3>
+        <p>Nightly aisle patrols with Gemini vision reading QR codes and shelf labels. Flags misplaced items and
+          empty slots in a morning report.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">Freenove 4WD + LiDAR</span>
+          <span class="recipe-tag">Pi 5</span>
+          <span class="recipe-tag">Gemini 2.5</span>
+        </div>
+        <div class="hw-card-meta">
+          <span>by <a href="https://github.com/warehouse_tim" target="_blank" style="color:var(--accent);text-decoration:none"><strong>@warehouse_tim</strong></a></span>
+          <span>&middot; ~$280 &middot; Intermediate</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor install warehouse-inventory-d5e9b2</code>
+        </div>
+      </div>
+
+      <div class="hw-card reveal reveal-d4" data-type="preset">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">🌱</div>
+          <span class="status status-green">Tested</span>
+        </div>
+        <h3>Garden Health Monitor</h3>
+        <p>Solar-powered stationary robot monitoring plant health and soil moisture. Daily Telegram reports with
+          watering recommendations via GPT-4o.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">RPi 4B + sensors</span>
+          <span class="recipe-tag">Solar</span>
+          <span class="recipe-tag">GPT-4o</span>
+        </div>
+        <div class="hw-card-meta">
+          <span>by <a href="https://github.com/green_thumb_bot" target="_blank" style="color:var(--accent);text-decoration:none"><strong>@green_thumb_bot</strong></a></span>
+          <span>&middot; ~$95 &middot; Beginner</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor install garden-monitor-f2a8c4</code>
+        </div>
+      </div>
+
+      <div class="hw-card reveal reveal-d5" data-type="preset">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">🐱</div>
+          <span class="status status-green">Tested</span>
+        </div>
+        <h3>Pet Companion Bot</h3>
+        <p>Interactive robot that entertains cats and dogs with random movement and treat dispensing. Claude Sonnet
+          vision detects pet behavior.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">PiCar-X + servo</span>
+          <span class="recipe-tag">Pi 4B</span>
+          <span class="recipe-tag">Claude Sonnet</span>
+        </div>
+        <div class="hw-card-meta">
+          <span>by <a href="https://github.com/petbot_carlos" target="_blank" style="color:var(--accent);text-decoration:none"><strong>@petbot_carlos</strong></a></span>
+          <span>&middot; ~$85 &middot; Beginner</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor install pet-companion-b7d1e6</code>
+        </div>
+      </div>
+
+      <div class="hw-card reveal reveal-d6" data-type="preset">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">🔬</div>
+          <span class="status status-green">Tested</span>
+        </div>
+        <h3>Research Data Collector</h3>
+        <p>Multi-sensor fleet platform for environmental field research. GPS-tagged data, fleet coordination, and
+          structured JSONL logging.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">Freenove 4WD</span>
+          <span class="recipe-tag">Pi 5 + GPS</span>
+          <span class="recipe-tag">Gemini 2.5</span>
+        </div>
+        <div class="hw-card-meta">
+          <span>by <a href="https://github.com/fieldbot_research" target="_blank" style="color:var(--accent);text-decoration:none"><strong>@fieldbot_research</strong></a></span>
+          <span>&middot; ~$220 &middot; Advanced</span>
+        </div>
+        <div style="margin-top:12px">
+          <code
+            style="font-size:0.75rem;color:var(--accent)">castor install research-data-collector-c9f4a3</code>
+        </div>
+      </div>
+
+
+      <!-- SKILLS -->
+      <div class="hw-card reveal" data-type="skill">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">👁️</div>
+          <span class="status status-green">Built-in Skill</span>
+        </div>
+        <h3>camera-describe</h3>
+        <p>Capture and describe what the robot's camera sees. Works with any camera-equipped robot. No consent needed — read-only vision.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">vision</span>
+          <span class="recipe-tag">camera</span>
+          <span class="recipe-tag">any robot</span>
+        </div>
+        <div class="hw-card-meta">
+          <span>by <strong>OpenCastor</strong></span>
+          <span>&middot; Free &middot; Beginner</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor install skill:camera-describe</code>
+        </div>
+      </div>
+
+      <div class="hw-card reveal reveal-d1" data-type="skill">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">🌐</div>
+          <span class="status status-green">Built-in Skill</span>
+        </div>
+        <h3>web-lookup</h3>
+        <p>Answer questions requiring current or external information. Uses Brave Search API or DuckDuckGo fallback. No robot hardware required.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">web</span>
+          <span class="recipe-tag">search</span>
+          <span class="recipe-tag">any robot</span>
+        </div>
+        <div class="hw-card-meta">
+          <span>by <strong>OpenCastor</strong></span>
+          <span>&middot; Free &middot; Beginner</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor install skill:web-lookup</code>
+        </div>
+      </div>
+
+      <div class="hw-card reveal reveal-d2" data-type="skill">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">🦾</div>
+          <span class="status" style="background:var(--orange-light);color:var(--orange)">Consent Required</span>
+        </div>
+        <h3>arm-manipulate</h3>
+        <p>Pick up, grab, place, and manipulate objects using a robotic arm. Requires explicit user consent before executing. Supports SO-ARM101 and Dynamixel arms.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">arm</span>
+          <span class="recipe-tag">manipulation</span>
+          <span class="recipe-tag">gripper</span>
+          <span class="recipe-tag">so-arm101</span>
+        </div>
+        <div class="hw-card-meta">
+          <span>by <strong>OpenCastor</strong></span>
+          <span>&middot; Free &middot; Intermediate</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor install skill:arm-manipulate</code>
+        </div>
+      </div>
+
+      <div class="hw-card reveal reveal-d3" data-type="skill">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">🗺️</div>
+          <span class="status" style="background:var(--orange-light);color:var(--orange)">Consent Required</span>
+        </div>
+        <h3>navigate-to</h3>
+        <p>Move to named locations, follow users, or navigate to coordinates. Uses camera + distance sensors for safe navigation. Requires explicit consent for physical motion.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">navigation</span>
+          <span class="recipe-tag">drive</span>
+          <span class="recipe-tag">differential drive</span>
+        </div>
+        <div class="hw-card-meta">
+          <span>by <strong>OpenCastor</strong></span>
+          <span>&middot; Free &middot; Intermediate</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor install skill:navigate-to</code>
+        </div>
+      </div>
+
+      <div class="hw-card reveal reveal-d4" data-type="skill">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">🤝</div>
+          <span class="status status-green">Built-in Skill</span>
+        </div>
+        <h3>peer-coordinate</h3>
+        <p>Consult, delegate to, or collaborate with other robots in the fleet via RCAN. "Ask Alex to check the other room." Bob and Alex use this to split tasks.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">rcan</span>
+          <span class="recipe-tag">fleet</span>
+          <span class="recipe-tag">multi-robot</span>
+        </div>
+        <div class="hw-card-meta">
+          <span>by <strong>OpenCastor</strong></span>
+          <span>&middot; Free &middot; Advanced</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor install skill:peer-coordinate</code>
+        </div>
+      </div>
+
+      <!-- HARNESSES -->
+      <div class="hw-card reveal reveal-d5" data-type="harness">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">🐾</div>
+          <span class="status" style="background:var(--purple-light);color:var(--purple)">Harness Bundle</span>
+        </div>
+        <h3>Bob — Pi 4 + OAK-D</h3>
+        <p>Complete harness for a Raspberry Pi 4 + OAK-D robot with Gemini 2.0 Flash brain. Includes web-lookup, camera-describe, peer-coordinate skills + RCAN 1.6 config. Craig's primary research robot.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">raspberry-pi-4</span>
+          <span class="recipe-tag">oak-d</span>
+          <span class="recipe-tag">gemini-2.0</span>
+          <span class="recipe-tag">rcan-1.6</span>
+        </div>
+        <div class="hw-card-meta">
+          <span>by <a href="https://github.com/craigm26" target="_blank" style="color:var(--accent);text-decoration:none"><strong>@craigm26</strong></a></span>
+          <span>&middot; Free (Gemini) &middot; Intermediate</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor install harness:bob-pi4-oakd</code>
+        </div>
+      </div>
+
+      <div class="hw-card reveal reveal-d6" data-type="harness">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">🦿</div>
+          <span class="status" style="background:var(--purple-light);color:var(--purple)">Harness Bundle</span>
+        </div>
+        <h3>Alex — SO-ARM101 + Gemini</h3>
+        <p>Complete harness for a SO-ARM101 6-DOF arm with Gemini 2.0 Flash brain in Docker. Includes arm-manipulate, peer-coordinate skills, full P66 safety config.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">so-arm101</span>
+          <span class="recipe-tag">6dof-arm</span>
+          <span class="recipe-tag">gemini-2.0</span>
+          <span class="recipe-tag">docker</span>
+        </div>
+        <div class="hw-card-meta">
+          <span>by <a href="https://github.com/craigm26" target="_blank" style="color:var(--accent);text-decoration:none"><strong>@craigm26</strong></a></span>
+          <span>&middot; Free (Gemini) &middot; Advanced</span>
+        </div>
+        <div style="margin-top:12px">
+          <code style="font-size:0.75rem;color:var(--accent)">castor install harness:alex-so-arm101</code>
+        </div>
+      </div>
+
+      <div class="hw-card reveal reveal-d7">
+        <div class="hw-card-top">
+          <div class="hw-card-icon">✨</div>
+          <span class="status" style="background:var(--accent-light);color:var(--accent)">Your recipe?</span>
+        </div>
+        <h3>Share Your Build</h3>
+        <p>Got a working robot config? Package it with <code>castor share</code> and help the next
+          builder skip the hard parts.</p>
+        <div class="recipe-tags">
+          <span class="recipe-tag">Any AI</span>
+          <span class="recipe-tag">Any hardware</span>
+        </div>
+        <div class="hw-card-meta">Any budget &middot; Any difficulty</div>
+        <div style="margin-top:12px">
+          <a href="#submit" class="btn btn-primary btn-sm">Submit a Recipe &rarr;</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<style>
+  .hub-filter-btn {
+    padding: 6px 16px;
+    border-radius: 20px;
+    border: 1.5px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .hub-filter-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .hub-filter-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  :root[data-theme="dark"] .hub-filter-btn.active { color: #fff; }
+  .hub-filter-desc { transition: opacity 0.2s; }
+</style>
+
+<script is:inline>
+  function hubFilter(type, btn) {
+    // Update button states
+    document.querySelectorAll('.hub-filter-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+
+    // Show/hide cards
+    document.querySelectorAll('[data-type]').forEach(function(card) {
+      if (type === 'all' || card.dataset.type === type) {
+        card.style.display = '';
+      } else {
+        card.style.display = 'none';
+      }
+    });
+
+    // Update description
+    var desc = document.getElementById('hub-type-desc');
+    if (desc) {
+      var descriptions = {
+        all: '<strong>Presets</strong> = full robot config (hardware + brain). <strong>Skills</strong> = single capabilities you can add to any robot. <strong>Harnesses</strong> = complete bundles (preset + skills + persona).',
+        preset: '<strong>Presets</strong> &#8212; complete <code>*.rcan.yaml</code> files describing a robot&#8217;s hardware + brain setup. One command to get a robot running.',
+        skill: '<strong>Skills</strong> &#8212; individual capabilities you can add to any robot. Each skill teaches the robot one thing: navigate, describe, search, coordinate.',
+        harness: '<strong>Harnesses</strong> &#8212; complete bundles: preset + skills + persona + eval cases. Everything to replicate a specific robot&#8217;s intelligence. Like a Docker image for robot brains.'
+      };
+      desc.innerHTML = descriptions[type] || descriptions.all;
+    }
+  }
+</script>

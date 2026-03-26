@@ -1,5 +1,5 @@
 # Minimal OpenCastor config — copy and edit this.
-# Full docs: https://opencastor.com/docs/config/
+# Full docs: https://docs.opencastor.com/runtime/overview/
 
 rcan_version: "1.3"
 

@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import pytest
-from unittest.mock import MagicMock, patch
 
-from castor.context import ContextBuilder, BuiltContext
+from castor.context import BuiltContext, ContextBuilder
 from castor.harness import HarnessContext
 from castor.tools import ToolRegistry
 
@@ -14,7 +12,7 @@ from castor.tools import ToolRegistry
 def _builder(config=None, tool_registry=None):
     cfg = config or {
         "name": "TestBot",
-        "model": "gemini-2.0-flash",
+        "model": "gemini-2.5-flash",
         "harness": {"auto_rag": False, "auto_telemetry": False, "context_budget": 0.8},
     }
     reg = tool_registry or ToolRegistry()
@@ -57,7 +55,7 @@ class TestContextBuilder:
     async def test_persona_contains_name(self):
         builder = _builder(config={
             "name": "RoboCastor",
-            "model": "gemini-2.0-flash",
+            "model": "gemini-2.5-flash",
             "harness": {"auto_rag": False, "auto_telemetry": False},
         })
         ctx = HarnessContext(instruction="hi", scope="chat")
@@ -115,7 +113,7 @@ class TestContextBuilder:
         assert "[ROBOT STATUS]" not in built.system_prompt
 
     def test_context_limit_gemini(self):
-        builder = _builder(config={"model": "gemini-2.0-flash", "harness": {}})
+        builder = _builder(config={"model": "gemini-2.5-flash", "harness": {}})
         assert builder._context_limit == 1_000_000
 
     def test_context_limit_default(self):

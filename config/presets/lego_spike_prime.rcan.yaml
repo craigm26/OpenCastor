@@ -1,106 +1,184 @@
-rcan_version: "1.3"
-
+rcan_version: '1.6'
 metadata:
-  robot_name: "LEGO_SPIKE_Prime"
-  robot_uuid: "00000000-0000-0000-0000-000000000011"
-  author: "OpenCastor Default"
-  license: "Apache-2.0"
+  robot_name: LEGO_SPIKE_Prime
+  robot_uuid: bda496ee-2845-4432-a353-ccecba3240ca
+  author: OpenCastor Default
+  license: Apache-2.0
   tags:
-    - mobile
-    - educational
-    - lego
-    - spike
-    - micropython
-    - ble
-    - stem
-    - second-hand
-  description: >
-    LEGO SPIKE Prime — the modern classroom successor to Mindstorms EV3.
-    Increasingly common in school donations and STEM lab surplus (~$320 new).
-    Hub connects via USB or BLE; runs MicroPython. Angular/medium motors on
-    ports A-F; force, color, distance sensors on same ports.
+  - mobile
+  - educational
+  - lego
+  - spike
+  - micropython
+  - ble
+  - stem
+  - second-hand
+  description: 'LEGO SPIKE Prime — the modern classroom successor to Mindstorms EV3.
+    Increasingly common in school donations and STEM lab surplus (~$320 new). Hub
+    connects via USB or BLE; runs MicroPython. Angular/medium motors on ports A-F;
+    force, color, distance sensors on same ports.
 
+    '
+  rrn: RRN-782008841781
+  rrn_uri: rrn://community/robot/opencastor/lego-spike-prime/lego_spike_prime
 agent:
-  provider: "anthropic"
-  model: "claude-sonnet-4-5"
+  provider: anthropic
+  model: claude-sonnet-4-5
   vision_enabled: false
   latency_budget_ms: 400
   safety_stop: true
-
+  offline_provider: ollama
+  confidence_gates:
+  - scope: control
+    min_confidence: 0.75
+    on_fail: block
+  - scope: safety
+    min_confidence: 0.9
+    on_fail: block
 physics:
-  type: "differential_drive"
+  type: differential
   dof: 2
   chassis:
     wheel_base_mm: 140
     wheel_radius_mm: 32
-
 drivers:
-  - id: "left_motor"
-    protocol: "spike_hub_serial"
-    port: "A"
-    device: "motor"
-    direction: 1
-
-  - id: "right_motor"
-    protocol: "spike_hub_serial"
-    port: "B"
-    device: "motor"
-    direction: -1
-
-  - id: "arm_motor"
-    protocol: "spike_hub_serial"
-    port: "C"
-    device: "motor"
-    direction: 1
-
-  - id: "force_sensor"
-    protocol: "spike_hub_serial"
-    port: "D"
-    device: "force_sensor"
-
-  - id: "color_sensor"
-    protocol: "spike_hub_serial"
-    port: "E"
-    device: "color_sensor"
-
-  - id: "distance_sensor"
-    protocol: "spike_hub_serial"
-    port: "F"
-    device: "distance_sensor"
-
-  - id: "imu"
-    protocol: "spike_hub_internal"
-    device: "imu"
-    # Built into the hub; provides yaw/pitch/roll + acceleration
-
+- id: left_motor
+  protocol: spike_hub_serial
+  port: A
+  device: motor
+  direction: 1
+- id: right_motor
+  protocol: spike_hub_serial
+  port: B
+  device: motor
+  direction: -1
+- id: arm_motor
+  protocol: spike_hub_serial
+  port: C
+  device: motor
+  direction: 1
+- id: force_sensor
+  protocol: spike_hub_serial
+  port: D
+  device: force_sensor
+- id: color_sensor
+  protocol: spike_hub_serial
+  port: E
+  device: color_sensor
+- id: distance_sensor
+  protocol: spike_hub_serial
+  port: F
+  device: distance_sensor
+- id: imu
+  protocol: spike_hub_internal
+  device: imu
 connection:
-  # USB CDC serial (preferred) or BLE via bleak library
-  type: "serial"
-  port: "/dev/ttyACM0"   # Linux; macOS: /dev/cu.usbmodem*; Win: COMx
+  type: serial
+  port: /dev/ttyACM0
   baud: 115200
   ble_alternative:
     enabled: false
-    adapter: "hci0"
-    device_name: "LEGO Hub"
-
+    adapter: hci0
+    device_name: LEGO Hub
 network:
   telemetry_stream: true
   sim_to_real_sync: false
-  allow_remote_override: true
-
+  allow_remote_override: false
 rcan_protocol:
   port: 8000
-  capabilities: [status, nav, teleop, chat]
+  capabilities:
+  - status
+  - nav
+  - teleop
+  - chat
   enable_mdns: false
   enable_jwt: false
-
 notes:
-  setup: >
-    1. Connect SPIKE Prime hub via USB-C cable.
-    2. Put hub in REPL/shell mode via LEGO Education SPIKE app → advanced → REPL.
-    3. Or use the spike-prime-tools Python package: pip install spike-prime
-    4. castor run --config config/presets/lego_spike_prime.rcan.yaml
-  second_hand_tips: >
-    Often found in school auction lots or STEM program surplus. Check hub battery
-    health (charge fully before testing). All 6 ports are multi-function — same
-    cable works for motors and sensors.
+  setup: '1. Connect SPIKE Prime hub via USB-C cable. 2. Put hub in REPL/shell mode
+    via LEGO Education SPIKE app → advanced → REPL. 3. Or use the spike-prime-tools
+    Python package: pip install spike-prime 4. castor run --config config/presets/lego_spike_prime.rcan.yaml
+
+    '
+  second_hand_tips: 'Often found in school auction lots or STEM program surplus. Check
+    hub battery health (charge fully before testing). All 6 ports are multi-function
+    — same cable works for motors and sensors.
+
+    '
+tiered_brain:
+  fast_provider: ollama
+  fast_model: gemma3:1b
+  slow_provider: anthropic
+  slow_model: claude-sonnet-4-5
+  planner_interval: 10
+agent_roster:
+- id: nav_specialist
+  provider: ollama
+  model: gemma3:4b
+  scope: nav
+- id: chat_specialist
+  provider: anthropic
+  model: claude-sonnet-4-5
+  scope: chat
+geofence:
+  enabled: false
+  boundary:
+    type: none
+reactive:
+  min_obstacle_m: 0.3
+  fallback_provider: ollama
+cameras:
+  main:
+    type: http
+    url: http://127.0.0.1:8765/snapshot
+safety:
+  local_safety_wins: true
+  emergency_stop_distance: 0.4
+  estop_bypass_rate_limit: true
+  watchdog:
+    timeout_s: 10
+hardware_safety:
+  physical_estop: false
+  hardware_watchdog_mcu: false
+p66:
+  enabled: true
+  loa_enforcement: true
+  consent_required: true
+  manifest:
+    estop_qos_bypass: true
+consent:
+  required: true
+  mode: explicit
+  scope_threshold: control
+security:
+  replay_protection:
+    enabled: true
+    window_s: 30
+  signing:
+    enabled: false
+    algorithm: Ed25519
+loa:
+  enforcement: true
+  min_loa_for_control: 1
+human_identity:
+  loa_required: 1
+transport:
+  supported:
+  - http
+  - mqtt
+  constrained_enabled: false
+multimodal:
+  enabled: true
+  max_chunk_bytes: 1048576
+offline:
+  enabled: true
+  fallback_provider: ollama
+r2ram:
+  scopes:
+  - discover
+  - status
+  - chat
+  - control
+  - safety
+federation:
+  enabled: true
+  consent_bridge: false

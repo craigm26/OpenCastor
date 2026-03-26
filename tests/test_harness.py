@@ -12,22 +12,21 @@ Covers:
 
 from __future__ import annotations
 
-import asyncio
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from castor.harness import (
+    ESTOP_TOOLS,
+    PHYSICAL_TOOLS,
+    SCOPE_LEVELS,
     AgentHarness,
     HarnessContext,
-    HarnessResult,
     HarnessHook,
-    PHYSICAL_TOOLS,
-    ESTOP_TOOLS,
-    SCOPE_LEVELS,
+    HarnessResult,
 )
-from castor.tools import ToolRegistry, ToolResult
 from castor.providers.base import Thought
-
+from castor.tools import ToolRegistry
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 

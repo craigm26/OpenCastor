@@ -67,20 +67,60 @@ const moonSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" 
 
     <!-- Center links + mobile drawer -->
     <div class="nav-links" id="navLinks">
+      
+      <!-- 'Community' Dropdown: Aggregates Hub and Explore -->
       <div class="nav-dropdown">
-        <a href="/docs" class={currentPath === '/docs' || currentPath.startsWith('/docs/') ? 'nav-active' : ''}>Docs</a>
+        <span class="nav-dropdown-title nav-toggle">Community
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </span>
         <div class="nav-dropdown-menu">
-          <a href="/docs/getting-started">Getting Started</a>
-          <a href="/docs/hardware/so-arm101">SO-ARM101</a>
-          <a href="/docs#configuration">RCAN Config</a>
-          <a href="/docs#safety">Protocol 66</a>
-          <a href="/docs#cli">CLI Reference</a>
+          <a href="/explore">Explore Configs</a>
+          <a href="/hub">Community Hub</a>
+          <a href="https://app.opencastor.com">App</a>
         </div>
       </div>
-      <a href="/hardware"  class={currentPath === '/hardware'  ? 'nav-active' : ''}>Hardware</a>
-      <a href="/tutorials" class={currentPath === '/tutorials' ? 'nav-active' : ''}>Tutorials</a>
-      <a href="/hub"       class={currentPath === '/hub'       ? 'nav-active' : ''}>Hub</a>
-      <a href="/about"     class={currentPath === '/about'     ? 'nav-active' : ''}>About</a>
+
+      <!-- 'Resources' Dropdown: Hardware, Tutorials, Docs -->
+      <div class="nav-dropdown">
+        <span class="nav-dropdown-title nav-toggle">Resources
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </span>
+        <div class="nav-dropdown-menu">
+          <a href="/tutorials">Tutorials</a>
+          <a href="/hardware">Hardware</a>
+          <a href="https://docs.opencastor.com/runtime/harness/">Harnesses</a>
+        </div>
+      </div>
+
+      <!-- 'Docs' Dropdown: Core docs mapping -->
+      <div class="nav-dropdown">
+        <span class="nav-dropdown-title nav-toggle" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false"><a href="https://docs.opencastor.com/getting-started/quickstart/" class="nav-dropdown-fallback-link" tabindex="-1">Docs</a>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </span>
+        <div class="nav-dropdown-menu">
+          <a href="https://docs.opencastor.com/getting-started/quickstart/">Getting Started</a>
+          <a href="https://docs.opencastor.com/getting-started/hardware-profiles/">SO-ARM101 Guide</a>
+          <a href="https://docs.opencastor.com/getting-started/configuration/">RCAN config.yaml</a>
+          <a href="https://docs.opencastor.com/runtime/safety/">Protocol 66</a>
+          <a href="https://docs.opencastor.com/runtime/cli/">CLI Reference</a>
+        </div>
+      </div>
+
+      <!-- 'Ecosystem' Dropdown -->
+      <div class="nav-dropdown">
+        <span class="nav-dropdown-title nav-toggle">Ecosystem
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </span>
+        <div class="nav-dropdown-menu">
+          <a href="https://docs.opencastor.com/getting-started/quickstart/">Ecosystem Overview</a>
+          <a href="https://rcan.dev" target="_blank" rel="noopener">RCAN Protocol</a>
+          <a href="https://robotregistryfoundation.org" target="_blank" rel="noopener">Robot Registry</a>
+          <a href="https://app.opencastor.com" target="_blank" rel="noopener">OpenCastor Fleet</a>
+        </div>
+      </div>
+
+      <a href="/blog" class={currentPath.startsWith('/blog') ? 'nav-active' : ''}>Blog</a>
+      <a href="/about" class={currentPath === '/about' ? 'nav-active' : ''}>About</a>
 
       <!-- Theme pill — visible inside mobile drawer only -->
       <div class="nav-drawer-theme">
@@ -160,7 +200,7 @@ const moonSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" 
       toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
       document.body.style.overflow = open ? 'hidden' : '';
     });
-    // Close on nav link click
+    // Close on simple nav link click
     links.querySelectorAll('a').forEach(function (a) {
       a.addEventListener('click', function () {
         links.classList.remove('open');
@@ -168,6 +208,45 @@ const moonSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" 
         toggle.setAttribute('aria-expanded', 'false');
         document.body.style.overflow = '';
       });
+    });
+    // Toggle internal groups (.nav-dropdown) on all screen sizes
+    links.querySelectorAll('.nav-toggle').forEach(function (t) {
+      t.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var parent = this.closest('.nav-dropdown');
+        var isOpen = parent.classList.contains('is-open');
+        // Close all others first
+        document.querySelectorAll('.nav-dropdown').forEach(function (d) {
+          d.classList.remove('is-open');
+        });
+        if (!isOpen) parent.classList.add('is-open');
+      });
+    });
+    // Keyboard Enter/Space to toggle dropdowns (accessibility)
+    links.querySelectorAll('.nav-toggle').forEach(function (t) {
+      t.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          t.click();
+        }
+      });
+    });
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('.nav-dropdown')) {
+        document.querySelectorAll('.nav-dropdown').forEach(function (d) {
+          d.classList.remove('is-open');
+        });
+      }
+    });
+    // Keyboard accessibility: close on Escape
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        document.querySelectorAll('.nav-dropdown').forEach(function (d) {
+          d.classList.remove('is-open');
+        });
+      }
     });
   }
 

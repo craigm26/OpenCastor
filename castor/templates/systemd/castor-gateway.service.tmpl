@@ -1,0 +1,29 @@
+[Unit]
+Description=OpenCastor Gateway — {config_stem}
+Documentation=https://docs.opencastor.com
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={user}
+WorkingDirectory={working_dir}
+Environment=PYTHONUNBUFFERED=1
+Environment=OPENCASTOR_VENV={venv_root}
+ExecStartPre=/bin/sh -c 'fuser -k 8000/tcp 2>/dev/null || true'
+ExecStart={python} -m castor.cli gateway --config {config}
+Restart=on-failure
+RestartSec=5s
+KillMode=control-group
+KillSignal=SIGTERM
+TimeoutStopSec=15
+SendSIGKILL=yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=castor-gateway
+
+# Limit memory so the robot doesn't OOM the Pi
+MemoryMax=1G{hardened_block}
+
+[Install]
+WantedBy=multi-user.target

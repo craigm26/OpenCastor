@@ -4,7 +4,15 @@ from castor.fs import CastorFS
 from castor.security_posture import detect_attestation_status, publish_attestation
 
 
-def test_detect_attestation_from_env(monkeypatch):
+def test_detect_attestation_from_env(monkeypatch, tmp_path):
+    # Clear any file-based attestation so env vars are the sole source.
+    # Also patch the default paths to non-existent locations so a leftover
+    # /tmp/opencastor_attestation.json cannot contaminate this test.
+    monkeypatch.delenv("OPENCASTOR_ATTESTATION_PATH", raising=False)
+    monkeypatch.setattr(
+        "castor.security_posture._DEFAULT_ATTESTATION_PATHS",
+        (str(tmp_path / "no-proc.json"), str(tmp_path / "no-run.json")),
+    )
     monkeypatch.setenv("OPENCASTOR_SECURE_BOOT", "1")
     monkeypatch.setenv("OPENCASTOR_MEASURED_BOOT", "0")
     monkeypatch.setenv("OPENCASTOR_SIGNED_UPDATES", "1")

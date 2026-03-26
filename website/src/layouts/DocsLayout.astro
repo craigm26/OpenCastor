@@ -1,0 +1,299 @@
+---
+import BaseLayout from './BaseLayout.astro';
+
+export interface Props {
+  title: string;
+  description?: string;
+  ogUrl?: string;
+}
+
+const { title, description, ogUrl } = Astro.props;
+let currentPath = Astro.url.pathname.replace(/\/$/, '') || '/';
+// special case for /docs which might map to /docs/index
+if (currentPath === '/docs/index') {
+  currentPath = '/docs';
+}
+
+const sidebarLinks = [
+  { group: 'Overview', items: [
+    { label: 'Introduction & Quick Start', href: '/docs' },
+    { label: 'Complete Setup Guide', href: '/docs/getting-started' },
+    { label: 'Setup Wizard', href: '/docs/setup-wizard' },
+    { label: 'Architecture', href: '/docs/architecture' }
+  ]},
+  { group: 'Core API', items: [
+    { label: 'Configuration (RCAN)', href: '/docs/configuration' },
+    { label: 'Hardware & Auto-Detect', href: '/docs/peripherals' },
+    { label: 'Safety & Protocol 66', href: '/docs/safety' }
+  ]},
+  { group: 'Hardware Guides', items: [
+    { label: 'SO-ARM101 Manipulation', href: '/docs/hardware/so-arm101' },
+    { label: 'Harnesses', href: '/docs/harness' }
+  ]},
+  { group: 'Ecosystem', items: [
+    { label: 'AI Providers', href: '/docs/providers' },
+    { label: 'Ecosystem Reference', href: '/docs/ecosystem' },
+    { label: 'Contribute (Idle Compute)', href: '/docs/contribute' }
+  ]}
+];
+
+// Flatten links for automated Next/Prev pagination
+const allLinks = sidebarLinks.flatMap(g => g.items);
+const currentIndex = allLinks.findIndex(l => l.href === currentPath);
+const prevLink = currentIndex > 0 ? allLinks[currentIndex - 1] : null;
+const nextLink = currentIndex >= 0 && currentIndex < allLinks.length - 1 ? allLinks[currentIndex + 1] : null;
+---
+<BaseLayout title={title} description={description} ogUrl={ogUrl}>
+  <div class="docs-container container">
+    <aside class="docs-sidebar reveal">
+      <div class="sidebar-sticky">
+        <div class="sidebar-header">
+          <div class="sidebar-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" placeholder="Search docs..." />
+            <span class="search-hint">⌘K</span>
+          </div>
+          <div class="sidebar-version-row">
+            <div class="sidebar-version">
+              <span>v2.1.0 stable</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+            <button class="mobile-sidebar-toggle" id="docsMenuToggle" aria-label="Toggle Documentation Menu">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <nav class="sidebar-nav-grouped" id="docsNavMenu">
+          {sidebarLinks.map(group => (
+            <div class="sidebar-group">
+              <h4 class="sidebar-group-title">{group.group}</h4>
+              <div class="sidebar-group-items">
+                {group.items.map(link => (
+                  <a 
+                    href={link.href} 
+                    class={`sidebar-link ${currentPath === link.href ? 'active' : ''}`}
+                  >
+                    {link.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+          ))}
+        </nav>
+      </div>
+    </aside>
+    <main class="docs-content">
+      <slot />
+
+      <!-- Automated Pagination -->
+      <div class="docs-pagination">
+        {prevLink ? (
+          <a href={prevLink.href} class="btn btn-secondary docs-prev-btn">
+            &larr; {prevLink.label}
+          </a>
+        ) : <div />}
+        {nextLink ? (
+          <a href={nextLink.href} class="btn btn-secondary docs-next-btn">
+            Next: {nextLink.label} &rarr;
+          </a>
+        ) : <div />}
+      </div>
+    </main>
+  </div>
+</BaseLayout>
+
+<script is:inline>
+  document.addEventListener('DOMContentLoaded', () => {
+    const toggle = document.getElementById('docsMenuToggle');
+    const menu = document.getElementById('docsNavMenu');
+    if (toggle && menu) {
+      toggle.addEventListener('click', () => {
+        menu.classList.toggle('is-open');
+      });
+    }
+  });
+</script>
+
+<style>
+.docs-container {
+  display: flex;
+  gap: 48px;
+  padding-top: 120px;
+  padding-bottom: 80px;
+}
+.docs-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+}
+.sidebar-sticky {
+  position: sticky;
+  top: 100px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+}
+.sidebar-header { margin-bottom: 24px; }
+.sidebar-search {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 12px;
+  margin-bottom: 12px; transition: border-color var(--dur) var(--ease);
+}
+.sidebar-search:focus-within { border-color: var(--accent); }
+.sidebar-search svg { width: 14px; height: 14px; color: var(--text-muted); }
+.sidebar-search input {
+  flex: 1; background: transparent; border: none; outline: none;
+  font-family: var(--font-body); font-size: 0.8125rem; color: var(--text);
+  width: 100%;
+}
+.sidebar-search input::placeholder { color: var(--text-muted); }
+.search-hint { font-family: var(--font-mono); font-size: 0.6875rem; color: var(--text-muted); background: var(--surface); padding: 2px 6px; border-radius: 4px; }
+.sidebar-version-row {
+  display: flex; gap: 8px; align-items: center; justify-content: space-between;
+}
+.sidebar-version {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.75rem; font-weight: 500; color: var(--text-secondary);
+  padding: 6px 10px; background: var(--surface); border-radius: var(--radius-sm);
+  cursor: pointer; transition: color var(--dur) var(--ease);
+  flex: 1;
+}
+.sidebar-version:hover { color: var(--text); }
+.sidebar-version svg { width: 14px; height: 14px; }
+.mobile-sidebar-toggle {
+  display: none; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 6px; cursor: pointer; color: var(--text);
+  align-items: center; justify-content: center;
+}
+.mobile-sidebar-toggle svg { width: 16px; height: 16px; }
+
+.sidebar-group { margin-bottom: 24px; }
+.sidebar-group:last-child { margin-bottom: 0; }
+.sidebar-group-title {
+  font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-muted); margin-bottom: 12px; font-weight: 600;
+}
+.sidebar-group-items {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.sidebar-link {
+  font-size: 0.875rem; color: var(--text-secondary); text-decoration: none;
+  padding: 8px 12px; border-radius: var(--radius-sm);
+  transition: all var(--dur) var(--ease); border-left: 2px solid transparent;
+}
+.sidebar-link:hover {
+  background: var(--surface); color: var(--text); padding-left: 16px;
+}
+.sidebar-link.active {
+  background: rgba(14, 165, 233, 0.08);
+  color: #fff;
+  font-weight: 600;
+  border-left-color: var(--cyan);
+  text-shadow: 0 0 12px rgba(168, 85, 247, 0.4);
+}
+[data-theme="light"] .sidebar-link.active {
+  color: var(--accent);
+  text-shadow: none;
+}
+.docs-content {
+  flex: 1;
+  min-width: 0;
+  max-width: 800px;
+}
+.docs-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 64px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+.docs-prev-btn, .docs-next-btn { white-space: normal; text-align: left; }
+
+/* Base styling for generated docs pages */
+.docs-content :global(.page-hero) {
+  padding: 0 0 40px 0;
+  text-align: left;
+}
+.docs-content :global(h1) {
+  font-size: 3rem;
+  margin-bottom: 16px;
+}
+.docs-content :global(h2) {
+  font-size: 2rem;
+  margin-top: 48px;
+  margin-bottom: 24px;
+}
+.docs-content :global(h3) {
+  font-size: 1.5rem;
+  margin-top: 32px;
+  margin-bottom: 16px;
+}
+.docs-content :global(p) {
+  margin-bottom: 16px;
+  font-size: 1.0625rem;
+}
+.docs-content :global(ul:not(.sidebar-nav)) {
+  list-style: disc;
+  padding-left: 20px;
+  margin-bottom: 24px;
+}
+.docs-content :global(li) {
+  margin-bottom: 8px;
+  font-size: 1.0625rem;
+  color: var(--text-secondary);
+}
+.docs-content :global(.section) {
+  padding: 0;
+  margin-bottom: 40px;
+}
+.docs-content :global(.doc-section) {
+  margin-bottom: 40px;
+}
+
+@media (max-width: 900px) {
+  .docs-container {
+    flex-direction: column;
+    padding-top: 100px;
+  }
+  .docs-sidebar {
+    width: 100%;
+  }
+  .sidebar-sticky {
+    position: relative;
+    top: 0;
+    padding: 16px;
+  }
+  .mobile-sidebar-toggle {
+    display: flex;
+  }
+  .sidebar-nav-grouped {
+    display: none;
+    margin-top: 16px;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+  .sidebar-nav-grouped.is-open {
+    display: block;
+  }
+  .docs-content :global(h1) {
+    font-size: 2.5rem;
+  }
+  .docs-pagination {
+    flex-direction: column;
+    gap: 16px;
+    align-items: stretch;
+  }
+  .docs-prev-btn, .docs-next-btn {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+  }
+}
+</style>

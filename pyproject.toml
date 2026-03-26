@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opencastor"
-version = "2026.3.17.10"
+version = "2026.3.21.2"
 description = "The Universal Runtime for Embodied AI"
 readme = "README.md"
 license = "Apache-2.0"
@@ -63,7 +63,7 @@ dependencies = [
     "rich>=13.0.0",
     "argcomplete>=3.0.0",
     # RCAN Python SDK — official protocol implementation
-    "rcan>=0.3.0,<1.0",
+    "rcan>=0.6.0,<1.0",
 ]
 
 [project.optional-dependencies]
@@ -92,7 +92,7 @@ channels = [
 ]
 rcan = [
     "zeroconf>=0.131.0",
-    "rcan>=0.3.0,<1.0",
+    "rcan>=0.6.0,<1.0",
 ]
 dynamixel = ["dynamixel-sdk>=3.7.31"]
 hlabs = ["python-can>=4.0"]  # HLaboratories ACB v2.0 CAN Bus support (pyserial is a core dep)
@@ -163,7 +163,7 @@ opencastor = "castor.cli:_friendly_error_handler"
 [project.urls]
 Homepage = "https://opencastor.com"
 Repository = "https://github.com/craigm26/OpenCastor"
-Documentation = "https://opencastor.com/docs"
+Documentation = "https://docs.opencastor.com"
 "Bug Tracker" = "https://github.com/craigm26/OpenCastor/issues"
 "Changelog" = "https://github.com/craigm26/OpenCastor/blob/main/CHANGELOG.md"
 "Discord" = "https://discord.gg/jMjA8B26Bq"
@@ -173,6 +173,7 @@ include = ["castor*"]
 
 [tool.setuptools.package-data]
 castor = ["py.typed"]
+"castor.harness" = ["*.yaml"]
 "castor.profiles" = ["**/*.yaml"]
 "castor.profiles.hlabs" = ["*.yaml"]
 "castor.profiles.lerobot" = ["*.yaml"]
@@ -180,6 +181,7 @@ castor = ["py.typed"]
 "castor.profiles.arduino" = ["*.yaml"]
 "castor.profiles.odrive" = ["*.yaml"]
 "castor.profiles.coral" = ["*.yaml"]
+"castor.templates" = ["**/*"]
 
 [tool.ruff]
 line-length = 100
@@ -203,3 +205,4 @@ indent-style = "space"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
+asyncio_mode = "auto"

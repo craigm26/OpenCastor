@@ -191,12 +191,25 @@ class BaseChannel(ABC):
             self.logger.error("handle_mission_trigger error: %s", exc)
             return f"❌ Could not start mission *{mission_name}*: {exc}"
 
-    async def handle_message(self, chat_id: str, text: str) -> Optional[str]:
+    async def handle_message(
+        self,
+        chat_id: str,
+        text: str,
+        sender_scope: str = "discover",
+        sender_loa: int = 0,
+    ) -> Optional[str]:
         """
         Process an incoming message and return a reply.
         Subclasses call this from their platform-specific message handler.
 
         Applies per-chat_id rate limiting before forwarding to the callback.
+
+        Args:
+            chat_id:      Channel-specific sender/chat identifier.
+            text:         Inbound message text.
+            sender_scope: RCAN scope resolved at the channel boundary
+                          (default: "discover" — most restrictive).
+            sender_loa:   Level of Assurance for this sender (default: 0).
         """
         self.logger.info(f"[{self.name}] Message from {chat_id}: {text[:80]}")
 
@@ -251,6 +264,19 @@ class BaseChannel(ABC):
                 if interpreted.get("dry_run"):
                     self._pending_confirmations[chat_id] = {"text": text}
                     return self._render_dry_run_preview(interpreted)
+
+                # Set RCAN scope context vars so the callback can read scope
+                # without a signature change.
+                try:
+                    from castor.channels.scope_resolver import (
+                        _current_sender_loa,
+                        _current_sender_scope,
+                    )
+
+                    _current_sender_scope.set(sender_scope)
+                    _current_sender_loa.set(sender_loa)
+                except Exception:
+                    pass
 
                 # Push message into shared session store for multi-channel routing
                 try:

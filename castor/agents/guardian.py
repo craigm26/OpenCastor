@@ -21,6 +21,41 @@ _FORBIDDEN_ACTION_TYPES: set[str] = {"self_destruct", "unsafe_move", "override_e
 # Default max allowed speed fraction (0.0–1.0)
 _DEFAULT_MAX_SPEED = 0.9
 
+# ---------------------------------------------------------------------------
+# RCAN scope → allowed action type allowlist (RCAN v1.6 §4.2)
+#
+# Scopes with ``None`` are unrestricted (all action types allowed).
+# Scopes with a set are fail-closed: unknown/unlisted action types are vetoed.
+# ---------------------------------------------------------------------------
+SCOPE_ACTION_ALLOWLIST: dict[str, Optional[set[str]]] = {
+    "discover": {"ping", "status", "get_info"},
+    "status": {"ping", "status", "get_info", "get_telemetry", "get_pose"},
+    "chat": {
+        "ping",
+        "status",
+        "get_info",
+        "get_telemetry",
+        "get_pose",
+        "speak",
+        "navigate_to",
+        "describe_scene",
+    },
+    "control": None,  # None = all actions allowed (unrestricted)
+    "system": None,
+    "safety": None,
+}
+
+# Scope levels mirror castor.swarm.consensus.SCOPE_LEVELS (avoid circular import)
+_SCOPE_LEVELS: dict[str, int] = {
+    "discover": 0,
+    "transparency": 0,
+    "status": 1,
+    "chat": 2,
+    "control": 3,
+    "system": 3,
+    "safety": 99,
+}
+
 # SharedState keys to monitor by default
 _DEFAULT_MONITORED_KEYS = [
     "swarm.nav_action",
@@ -107,18 +142,48 @@ class GuardianAgent(BaseAgent):
     # ------------------------------------------------------------------
 
     def _validate(self, key: str, action: dict[str, Any]) -> Optional[SafetyVeto]:
-        """Validate a single action dict. Returns SafetyVeto on violation."""
+        """Validate a single action dict. Returns SafetyVeto on violation.
+
+        Validation rules (applied in order):
+        1. Forbidden action types — always vetoed.
+        2. E-stop active — any non-safe action is vetoed.
+        3. Speed limit — speed > max_speed is vetoed.
+        4. Scope enforcement — action type must be in the RCAN scope allowlist.
+           Unknown action types at restricted scopes are fail-closed (vetoed).
+           Scopes with ``None`` in the allowlist are unrestricted (pass-through).
+        """
         action_type = action.get("type") or action.get("action", "")
 
+        # Rule 1: Forbidden types
         if action_type in _FORBIDDEN_ACTION_TYPES:
             return SafetyVeto(key, action, f"forbidden:{action_type}")
 
+        # Rule 2: E-stop
         if self.estop_active and action_type not in ("stop", "idle", "wait", ""):
             return SafetyVeto(key, action, "estop_active")
 
+        # Rule 3: Speed limit
         speed = action.get("speed", 0.0)
         if isinstance(speed, (int, float)) and speed > self.max_speed:
             return SafetyVeto(key, action, f"speed_limit:{speed:.2f}>{self.max_speed:.2f}")
+
+        # Rule 4: RCAN scope enforcement
+        # Only enforced when the action explicitly carries a ``scope`` key.
+        # Actions without a scope field (e.g. legacy actions from pre-scope code) pass
+        # through unchanged — this preserves backward-compatibility with existing tests.
+        if "scope" in action:
+            scope = action["scope"]
+            allowed = SCOPE_ACTION_ALLOWLIST.get(scope)
+            if allowed is not None:
+                # Restricted scope — check allowlist (fail-closed for unknown types)
+                if action_type and action_type not in ("stop", "idle", "wait", ""):
+                    if action_type not in allowed:
+                        return SafetyVeto(
+                            key,
+                            action,
+                            f"scope_violation:action '{action_type}' not allowed under scope '{scope}'",
+                        )
+            # allowed is None → unrestricted scope (control/system/safety) — no scope veto
 
         return None
 

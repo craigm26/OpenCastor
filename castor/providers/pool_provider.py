@@ -10,12 +10,12 @@ Config::
     pool:
       - provider: google
         api_key: KEY1
-        model: gemini-2.0-flash
+        model: gemini-2.5-flash
         weight: 2          # optional; higher = more frequently selected
         priority: 1        # optional; lower = tried first in cascade strategy
       - provider: google
         api_key: KEY2
-        model: gemini-2.0-flash
+        model: gemini-2.5-flash
       - provider: anthropic
         api_key: KEY3
         model: claude-haiku-4-5

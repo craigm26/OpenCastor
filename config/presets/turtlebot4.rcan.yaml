@@ -1,113 +1,191 @@
-rcan_version: "1.3"
-
+rcan_version: '1.6'
 metadata:
-  robot_name: "TurtleBot4"
-  robot_uuid: "00000000-0000-0000-0000-000000000018"
-  manufacturer: "iRobot + ROBOTIS"
-  model: "TurtleBot4"
-  author: "OpenCastor Default"
-  license: "Apache-2.0"
+  robot_name: TurtleBot4
+  robot_uuid: 69d9bcc4-a71f-4b5b-adfe-cf7429598186
+  manufacturer: iRobot + ROBOTIS
+  model: TurtleBot4
+  author: OpenCastor Default
+  license: Apache-2.0
   tags:
-    - ros2
-    - turtlebot4
-    - research
-    - indoor
-    - oak-d
-  description: >
-    TurtleBot4 — co-developed by iRobot and ROBOTIS. Built on the iRobot Create3
-    mobile base with a Raspberry Pi 4 and OAK-D Lite stereo depth camera + 360°
-    lidar. The flagship ROS2 research and teaching platform with integrated
-    autonomous charging via the Create3 home base.
+  - ros2
+  - turtlebot4
+  - research
+  - indoor
+  - oak-d
+  description: 'TurtleBot4 — co-developed by iRobot and ROBOTIS. Built on the iRobot
+    Create3 mobile base with a Raspberry Pi 4 and OAK-D Lite stereo depth camera +
+    360° lidar. The flagship ROS2 research and teaching platform with integrated autonomous
+    charging via the Create3 home base.
 
+    '
+  rrn: RRN-498477532735
+  rrn_uri: rrn://community/robot/opencastor/turtlebot4/turtlebot4
 agent:
-  provider: "anthropic"
-  model: "claude-sonnet-4-5"
+  provider: anthropic
+  model: claude-sonnet-4-5
   vision_enabled: true
   latency_budget_ms: 200
   safety_stop: true
-
+  offline_provider: ollama
+  confidence_gates:
+  - scope: control
+    min_confidence: 0.75
+    on_fail: block
+  - scope: safety
+    min_confidence: 0.9
+    on_fail: block
 physics:
-  type: "differential_drive"
+  type: differential
   dof: 2
   chassis:
     wheel_base_mm: 233
     wheel_radius_mm: 36
-
 camera:
-  type: "oakd"
-  resolution: [1280, 720]
+  type: oakd
+  resolution:
+  - 1280
+  - 720
   framerate: 30
   depth_enabled: true
-
 drivers:
-  - id: "create3_ros2_bridge"
-    protocol: "ros2_bridge"
-    # iRobot Create3 exposes standard ROS2 navigation topics
-    topics:
-      cmd_vel: "/cmd_vel"
-      odom: "/odom"
-      battery: "/battery_state"
-      dock: "/dock_status"
-      hazards: "/hazard_detection"
-
-  - id: "lidar"
-    protocol: "ros2_bridge"
-    sensor_type: "lidar"
-    model: "RPLIDAR A1M8"
-    topics:
-      scan: "/scan"
-    scan_range_m: 12.0
-    angular_resolution_deg: 1.0
-
-  - id: "oak_d_lite"
-    protocol: "ros2_bridge"
-    sensor_type: "depth_camera"
-    model: "OAK-D Lite"
-    topics:
-      rgb: "/oakd/rgb/image_raw"
-      depth: "/oakd/stereo/image_raw"
-      point_cloud: "/oakd/stereo/points"
-    depth_range_m: [0.4, 8.0]
-
-  - id: "imu"
-    protocol: "ros2_bridge"
-    sensor_type: "imu"
-    topics:
-      imu: "/imu"
-
+- id: create3_ros2_bridge
+  protocol: ros2_bridge
+  topics:
+    cmd_vel: /cmd_vel
+    odom: /odom
+    battery: /battery_state
+    dock: /dock_status
+    hazards: /hazard_detection
+- id: lidar
+  protocol: ros2_bridge
+  sensor_type: lidar
+  model: RPLIDAR A1M8
+  topics:
+    scan: /scan
+  scan_range_m: 12.0
+  angular_resolution_deg: 1.0
+- id: oak_d_lite
+  protocol: ros2_bridge
+  sensor_type: depth_camera
+  model: OAK-D Lite
+  topics:
+    rgb: /oakd/rgb/image_raw
+    depth: /oakd/stereo/image_raw
+    point_cloud: /oakd/stereo/points
+  depth_range_m:
+  - 0.4
+  - 8.0
+- id: imu
+  protocol: ros2_bridge
+  sensor_type: imu
+  topics:
+    imu: /imu
 ros2:
   enabled: true
-  namespace: "/tb4"
+  namespace: /tb4
   domain_id: 0
-
 connection:
-  type: "local"
-
+  type: local
 network:
   telemetry_stream: true
   sim_to_real_sync: false
   allow_remote_override: false
-
 rcan_protocol:
   port: 8000
-  capabilities: [status, nav, teleop, chat, vision]
+  capabilities:
+  - status
+  - nav
+  - teleop
+  - chat
+  - vision
   enable_mdns: true
   enable_jwt: false
-
 safety:
   obstacle_stop_cm: 25
   estop_on_startup: false
   max_linear_speed_mps: 0.31
-  max_angular_speed_radps: 1.90
-
+  max_angular_speed_radps: 1.9
+  local_safety_wins: true
+  emergency_stop_distance: 0.4
+  estop_bypass_rate_limit: true
+  watchdog:
+    timeout_s: 10
 notes:
-  setup: >
-    Requires ROS2 Humble on Raspberry Pi 4.
-    Create3 firmware must be ≥ G.4.1 for full ROS2 support.
-    Install turtlebot4 packages: sudo apt install ros-humble-turtlebot4-robot
+  setup: 'Requires ROS2 Humble on Raspberry Pi 4. Create3 firmware must be ≥ G.4.1
+    for full ROS2 support. Install turtlebot4 packages: sudo apt install ros-humble-turtlebot4-robot
     Launch: ros2 launch turtlebot4_bringup standard.launch.py
+
+    '
   hardware:
-    compute: "Raspberry Pi 4 (4GB recommended)"
-    base: "iRobot Create3 (autonomous charging)"
-    camera: "Luxonis OAK-D Lite (RGB + stereo depth)"
-    lidar: "RPLIDAR A1M8 (360°, 12m range)"
+    compute: Raspberry Pi 4 (4GB recommended)
+    base: iRobot Create3 (autonomous charging)
+    camera: Luxonis OAK-D Lite (RGB + stereo depth)
+    lidar: RPLIDAR A1M8 (360°, 12m range)
+tiered_brain:
+  fast_provider: ollama
+  fast_model: gemma3:1b
+  slow_provider: anthropic
+  slow_model: claude-sonnet-4-5
+  planner_interval: 10
+agent_roster:
+- id: nav_specialist
+  provider: ollama
+  model: gemma3:4b
+  scope: nav
+- id: chat_specialist
+  provider: anthropic
+  model: claude-sonnet-4-5
+  scope: chat
+geofence:
+  enabled: false
+  boundary:
+    type: none
+reactive:
+  min_obstacle_m: 0.3
+  fallback_provider: ollama
+hardware_safety:
+  physical_estop: false
+  hardware_watchdog_mcu: false
+p66:
+  enabled: true
+  loa_enforcement: true
+  consent_required: true
+  manifest:
+    estop_qos_bypass: true
+consent:
+  required: true
+  mode: explicit
+  scope_threshold: control
+security:
+  replay_protection:
+    enabled: true
+    window_s: 30
+  signing:
+    enabled: false
+    algorithm: Ed25519
+loa:
+  enforcement: true
+  min_loa_for_control: 1
+human_identity:
+  loa_required: 1
+transport:
+  supported:
+  - http
+  - mqtt
+  constrained_enabled: false
+multimodal:
+  enabled: true
+  max_chunk_bytes: 1048576
+offline:
+  enabled: true
+  fallback_provider: ollama
+r2ram:
+  scopes:
+  - discover
+  - status
+  - chat
+  - control
+  - safety
+federation:
+  enabled: true
+  consent_bridge: false

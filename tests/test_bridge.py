@@ -1,10 +1,8 @@
 """Tests for castor.cloud.bridge and castor.cloud.consent_manager."""
 from __future__ import annotations
 
-import time
 import unittest
-from unittest.mock import MagicMock, patch
-
+from unittest.mock import MagicMock
 
 # ---------------------------------------------------------------------------
 # ConsentManager tests

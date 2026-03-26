@@ -1,0 +1,50 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout
+  title="Tiered Brain Architecture — OpenCastor Docs"
+  description="Understanding OpenCastor's three layers of intelligence: Planner, Fast Brain, and Reactive Layer."
+  ogUrl="https://opencastor.com/docs/architecture"
+>
+  <section class="page-hero">
+    <p class="section-label reveal">Architecture</p>
+    <h1 class="reveal reveal-d1">Tiered Cognitive Architecture</h1>
+    <p class="reveal reveal-d2">Three layers of intelligence — from reflexive safety to long-horizon planning. Each tier runs independently with automatic escalation.</p>
+  </section>
+
+  <section class="section alt-section" id="tiered-brain" style="padding: 40px; border-radius: 16px;">
+    <div class="arch-visual reveal">
+      <div class="arch-tier" style="background: linear-gradient(135deg, rgba(168,85,247,0.08), var(--bg-card)); border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
+        <div class="arch-tier-icon" style="background: var(--purple-light);">🧠</div>
+        <div class="arch-tier-content">
+          <h3>Planner</h3>
+          <p>Long-horizon reasoning, task decomposition, and strategic planning. Claude, GPT-4.1, Gemini. Activated when fast brain confidence drops below <code style="font-size:0.75rem;padding:2px 5px">escalation_threshold</code>.</p>
+        </div>
+        <span class="arch-tier-badge" style="background: var(--purple-light); color: var(--purple);">~2s latency</span>
+      </div>
+      <div class="arch-tier" style="background: linear-gradient(135deg, rgba(99,102,241,0.08), var(--bg-card)); border-radius: 0;">
+        <div class="arch-tier-icon" style="background: var(--accent-glow);">⚡</div>
+        <div class="arch-tier-content">
+          <h3>Fast Brain</h3>
+          <p>Real-time perception and quick decisions. Open-source models via HuggingFace, Ollama, or llama.cpp. Handles 90%+ of routine tasks at ~100ms.</p>
+        </div>
+        <span class="arch-tier-badge" style="background: var(--accent-glow); color: var(--accent);">~100ms</span>
+      </div>
+      <div class="arch-tier" style="background: linear-gradient(135deg, rgba(34,197,94,0.08), var(--bg-card)); border-top-left-radius: 0; border-top-right-radius: 0;">
+        <div class="arch-tier-icon" style="background: var(--green-light);">🛡️</div>
+        <div class="arch-tier-content">
+          <h3>Reactive Layer</h3>
+          <p>Hardware-level safety reflexes — emergency stop, collision avoidance, physical bounds. No AI latency — pure code. Always active, cannot be overridden by model output.</p>
+        </div>
+        <span class="arch-tier-badge" style="background: var(--green-light); color: var(--green);">&lt;1ms</span>
+      </div>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:40px">
+      <h3>How Escalation Works</h3>
+      <p>The fast brain handles every incoming request first. If its confidence score falls below the configured <code>escalation_threshold</code> (default 0.7), the request is automatically routed to the planner for deeper reasoning. The reactive layer runs continuously in parallel — it intercepts and overrides any command that violates physical safety constraints, regardless of which brain tier issued it.</p>
+    </div>
+  </section>
+
+</DocsLayout>

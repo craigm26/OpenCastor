@@ -83,7 +83,7 @@ _DRIVER_RULES: list[tuple[list[str], str]] = [
 ]
 
 _PROVIDER_RULES: list[tuple[list[str], str, str]] = [
-    (["google", "gemini"], "google", "gemini-2.0-flash-exp"),
+    (["google", "gemini"], "google", "gemini-2.5-flash"),
     (["openai", "gpt", "chatgpt"], "openai", "gpt-4.1"),
     (["anthropic", "claude"], "anthropic", "claude-sonnet-4-6"),
     (["groq"], "groq", "llama-3.3-70b-versatile"),
@@ -132,7 +132,7 @@ def extract_config_fields(description: str) -> dict:
 
     prov_rule = _match_rules(desc, _PROVIDER_RULES)
     provider = prov_rule[1] if prov_rule else "google"
-    model = prov_rule[2] if prov_rule else "gemini-2.0-flash-exp"
+    model = prov_rule[2] if prov_rule else "gemini-2.5-flash"
 
     vision_enabled = camera_type in ("oakd", "usb", "picamera2")
 

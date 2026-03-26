@@ -1,0 +1,77 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout
+  title="Introduction & Quick Start — OpenCastor"
+  description="Get started with OpenCastor in 5 minutes. Apple Foundation Models, stack-aware setup, and a full API/CLI."
+  ogUrl="https://opencastor.com/docs"
+>
+  <section class="page-hero">
+    <p class="section-label reveal">Documentation</p>
+    <h1 class="reveal reveal-d1">From zero to robot<br>in five minutes.</h1>
+    <p class="reveal reveal-d2">Everything you need to install, configure, and deploy your first AI-powered robot. v2026.3.8.1</p>
+  </section>
+
+  <!-- Installation / Quick Start -->
+  <section class="section" id="install">
+    <div class="quickstart reveal">
+      <h2 style="font-size:1.5rem;margin-bottom:28px">Quick Start</h2>
+
+      <div class="quickstart-step">
+        <div class="quickstart-num">1</div>
+        <div>
+          <h4>Install OpenCastor</h4>
+          <p style="font-size:0.9375rem;color:var(--text-secondary);margin-bottom:8px">One command installs everything: Python deps, hardware drivers, and the interactive wizard.</p>
+          <div class="code-block" style="margin-bottom:12px">
+            <div class="code-header">
+              <div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">Linux / macOS</span>
+            </div>
+            <div class="code-body">curl -sL opencastor.com/install | bash</div>
+          </div>
+          <div class="code-block" style="margin-bottom:12px">
+            <div class="code-header">
+              <div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">pip (all platforms)</span>
+            </div>
+            <div class="code-body">pip install opencastor</div>
+          </div>
+          <div class="code-block" style="margin-bottom:12px">
+            <div class="code-header">
+              <div class="code-dots"><span></span><span></span><span></span></div><span class="code-filename">Windows (PowerShell)</span>
+            </div>
+            <div class="code-body">irm opencastor.com/install.ps1 | iex</div>
+          </div>
+          <p style="font-size:0.875rem;color:var(--text-secondary);margin-top:8px">Optional on macOS: preinstall Apple SDK support. Setup can also install it later with your consent.</p>
+        </div>
+      </div>
+
+      <div class="quickstart-step">
+        <div class="quickstart-num">2</div>
+        <div>
+          <h4>Run the setup wizard</h4>
+          <p style="font-size:0.9375rem;color:var(--text-secondary);margin-bottom:8px">Setup v2 walks you through device-aware stack selection, model profiles, and fallbacks.</p>
+          <code>castor wizard</code>
+        </div>
+      </div>
+
+      <div class="quickstart-step">
+        <div class="quickstart-num">3</div>
+        <div>
+          <h4>Launch</h4>
+          <p style="font-size:0.9375rem;color:var(--text-secondary);margin-bottom:8px">Start the runtime. Your robot is now an AI agent ready for commands.</p>
+          <code>castor run --config my_robot.rcan.yaml</code>
+        </div>
+      </div>
+
+      <div class="quickstart-step">
+        <div class="quickstart-num">4</div>
+        <div>
+          <h4>Verify</h4>
+          <p style="font-size:0.9375rem;color:var(--text-secondary);margin-bottom:8px">Run the doctor to check that dependencies, drivers, and providers are correctly configured.</p>
+          <code>castor doctor</code>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+</DocsLayout>
