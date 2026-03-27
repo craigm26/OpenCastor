@@ -899,12 +899,25 @@ class CastorBridge:
                 "capabilities": self.capabilities,
                 "version": self.version,
                 "bridge_version": BRIDGE_VERSION,
-                "rcan_version": "1.6",  # v1.6: version negotiation
+                "rcan_version": "2.2",
                 "registered_at": datetime.now(timezone.utc).isoformat(),
                 "status": {
                     "online": True,
                     "last_seen": datetime.now(timezone.utc).isoformat(),
                 },
+                # RCAN v1.5/v1.6 fields (safe defaults)
+                "revocation_status": "active",
+                "supports_qos_2": True,
+                "supports_delegation": True,
+                "offline_capable": True,
+                "supported_transports": ["http", "compact", "minimal"],
+                "min_loa_for_control": 2,
+                "loa_enforcement": False,
+                "multimodal_enabled": True,
+                "registry_tier": "community",
+                # RCAN v2.1/v2.2 fields
+                "authority_handler_enabled": True,
+                "audit_retention_days": 3650,
             },
             merge=True,
         )
