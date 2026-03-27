@@ -1964,7 +1964,7 @@ def _cmd_attest_dispatch(args) -> None:
     else:
         print("Usage: castor attest {generate,sign,verify,serve}")
         print("  generate  — build manifest from installed packages")
-        print("  sign      — sign with Ed25519 key")
+        print("  sign      — sign with ML-DSA-65 key (FIPS 204)")
         print("  verify    — verify signature")
         print("  serve     — confirm /.well-known/rcan-firmware-manifest.json")
 
@@ -6109,15 +6109,29 @@ def main() -> None:
         default=None,
         help="Output path (default: /run/opencastor/rcan-firmware-manifest.json)",
     )
-    p_as = p_attest_sub.add_parser("sign", help="Sign the firmware manifest with an Ed25519 key")
-    p_as.add_argument("--key", required=True, help="Path to Ed25519 private key PEM")
+    p_as = p_attest_sub.add_parser(
+        "sign", help="Sign the firmware manifest with ML-DSA-65 (RCAN v2.2)"
+    )
+    p_as.add_argument(
+        "--key",
+        "--pq-key",
+        default=None,
+        help="Path to ML-DSA-65 key file (default: ~/.opencastor/pq_signing.key)",
+        dest="key",
+    )
     p_as.add_argument(
         "--manifest",
         default=None,
         help="Path to manifest JSON (default: /run/opencastor/rcan-firmware-manifest.json)",
     )
-    p_av = p_attest_sub.add_parser("verify", help="Verify firmware manifest signature")
-    p_av.add_argument("--key", required=True, help="Path to Ed25519 public key PEM")
+    p_av = p_attest_sub.add_parser("verify", help="Verify ML-DSA-65 firmware manifest signature")
+    p_av.add_argument(
+        "--key",
+        "--pq-key",
+        default=None,
+        help="Path to ML-DSA-65 public key file (default: ~/.opencastor/pq_signing.pub)",
+        dest="key",
+    )
     p_av.add_argument("--manifest", default=None, help="Path to manifest JSON")
     p_attest_sub.add_parser(
         "serve", help="Confirm /.well-known/rcan-firmware-manifest.json is reachable"
