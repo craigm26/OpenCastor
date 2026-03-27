@@ -1559,6 +1559,116 @@ def cmd_safety(args) -> None:
     print("castor safety: coming soon.")
 
 
+def cmd_llmfit(args) -> None:
+    """castor llmfit — check if a local model fits in device RAM.
+
+    TurboQuant is a KV-cache-only runtime patch (not a weight format).
+    Model weights stay the same — only the KV cache is compressed (~2.6x).
+    Enables larger context windows on memory-constrained edge hardware.
+
+    Examples:
+        castor llmfit gemma3:4b
+        castor llmfit qwen3:8b --kv-compression turboquant --ctx 16384
+        castor llmfit gemma3:4b --provider vllm --json
+        castor llmfit --list-models
+    """
+    import json as _json
+    from castor.llmfit import (
+        check_fit,
+        get_device_ram_gb,
+        get_total_ram_gb,
+        turboquant_ecosystem_status,
+        _MODEL_WEIGHT_GB,
+    )
+
+    if getattr(args, "list_models", False):
+        print("\nKnown models (with weight size data):")
+        for mid, wgb in sorted(_MODEL_WEIGHT_GB.items()):
+            print(f"  {mid:<28} {wgb:.1f} GB weights")
+        return
+
+    if getattr(args, "tq_status", False):
+        eco = turboquant_ecosystem_status()
+        if getattr(args, "output_json", False):
+            print(_json.dumps(eco, indent=2))
+            return
+        print(f"\n{eco['spec']}")
+        print(f"Paper: {eco['paper']}")
+        print(f"Compression: {eco['compression_ratio']}")
+        print(f"Note: {eco['note']}")
+        print("\nRuntime status:")
+        for name, info in eco["runtimes"].items():
+            icon = "✅" if info["status"] == "supported" else "⏳"
+            print(f"  {icon} {name:<12} {info['status']:<22} {info.get('impl', '')}")
+        print("\nHuggingFace:")
+        print(f"  {eco['huggingface_models']['note']}")
+        for ex in eco["huggingface_models"]["examples"]:
+            print(f"  • {ex['id']}  [{ex['runtime']}]  → {ex['result']}")
+        print("\nBob (Pi5 + Hailo-8):")
+        bob = eco["edge_recommendation"]["bob_pi5_hailo8"]
+        print(f"  Status: {bob['status']}")
+        print(f"  Path: {bob['path']}")
+        print(f"  Best model today: {bob['best_model_today']}")
+        print(f"  Best with TQ: {bob['best_model_with_tq']}")
+        return
+
+    model_id = getattr(args, "model", None)
+    if not model_id:
+        print("Usage: castor llmfit <model_id> [options]")
+        print("       castor llmfit --list-models")
+        print("       castor llmfit --tq-status")
+        return
+
+    ctx = getattr(args, "ctx", 8192)
+    kv_comp = getattr(args, "kv_compression", "none")
+    kv_bits = getattr(args, "kv_bits", 3)
+    provider = getattr(args, "provider", "ollama")
+    ram_override = getattr(args, "ram", None)
+
+    result = check_fit(
+        model_id=model_id,
+        context_tokens=ctx,
+        kv_compression=kv_comp,
+        kv_bits=kv_bits,
+        provider=provider,
+        device_ram_gb=ram_override,
+    )
+
+    if getattr(args, "output_json", False):
+        import dataclasses
+
+        print(_json.dumps(dataclasses.asdict(result), indent=2))
+        return
+
+    total_gb = get_total_ram_gb()
+    avail_gb = result.device_ram_gb
+    print(f"\n[LLMFit] {result.model_id}")
+    print(f"  Device RAM:  {avail_gb:.1f} GB available / {total_gb:.1f} GB total")
+    print(f"  Weights:     {result.weights_gb:.1f} GB")
+    if result.kv_compression == "turboquant":
+        print(
+            f"  KV cache:    {result.kv_cache_gb:.2f} GB  "
+            f"(TurboQuant {result.kv_compression_ratio:.1f}x, was {result.kv_cache_gb_baseline:.2f} GB)"
+        )
+    else:
+        print(f"  KV cache:    {result.kv_cache_gb:.2f} GB  (ctx={ctx:,} tokens, no compression)")
+    print(f"  Overhead:    {result.overhead_gb:.1f} GB")
+    print(f"  Total:       {result.total_required_gb:.2f} GB / {avail_gb:.1f} GB")
+    print()
+    if result.fits:
+        print(f"  ✅ Fits  (headroom: {result.headroom_gb:.1f} GB)")
+    else:
+        print(f"  ❌ Does not fit  (exceeds by {-result.headroom_gb:.1f} GB)")
+    print(f"  Max context: {result.max_context_tokens:,} tokens")
+    if result.kv_compression == "turboquant":
+        print(f"  TQ runtime:  {result.tq_runtime} ({result.tq_status})")
+    if result.warnings:
+        print()
+        for w in result.warnings:
+            print(f"  ⚠  {w}")
+    print()
+
+
 def cmd_iso_check(args) -> None:
     """castor iso-check — ISO/TC 299 + EU AI Act self-assessment.
 
@@ -6258,6 +6368,50 @@ def main() -> None:
     p_iso.add_argument("--json", action="store_true", help="Output JSON")
     p_conformance.add_argument("--json", action="store_true", help="Output raw JSON manifest")
 
+    # castor llmfit
+    p_llmfit = sub.add_parser(
+        "llmfit",
+        help="Check if a local model fits in device RAM (with/without TurboQuant)",
+        epilog=(
+            "Examples:\n"
+            "  castor llmfit gemma3:4b\n"
+            "  castor llmfit qwen3:8b --kv-compression turboquant --ctx 16384\n"
+            "  castor llmfit --list-models\n"
+            "  castor llmfit --tq-status\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_llmfit.add_argument("model", nargs="?", default=None, help="Model ID (e.g. gemma3:4b)")
+    p_llmfit.add_argument(
+        "--kv-compression",
+        default="none",
+        choices=["none", "turboquant"],
+        help="KV cache compression method (default: none)",
+    )
+    p_llmfit.add_argument(
+        "--ctx", type=int, default=8192, help="Context window tokens (default: 8192)"
+    )
+    p_llmfit.add_argument(
+        "--kv-bits", type=int, default=3, help="KV bits for TurboQuant (default: 3)"
+    )
+    p_llmfit.add_argument(
+        "--provider",
+        default="ollama",
+        choices=["ollama", "vllm", "llamacpp", "mlx"],
+        help="Inference provider (affects TurboQuant support status)",
+    )
+    p_llmfit.add_argument(
+        "--ram",
+        type=float,
+        default=None,
+        help="Override available RAM in GB (default: auto-detect)",
+    )
+    p_llmfit.add_argument("--json", action="store_true", dest="output_json", help="Output JSON")
+    p_llmfit.add_argument("--list-models", action="store_true", help="List all known models")
+    p_llmfit.add_argument(
+        "--tq-status", action="store_true", help="Show TurboQuant ecosystem status across runtimes"
+    )
+
     p_attest = sub.add_parser(
         "attestation",
         help="Show or regenerate software attestation status",
@@ -6869,6 +7023,7 @@ def main() -> None:
         "safety": cmd_safety,
         "conformance": cmd_conformance,
         "iso-check": cmd_iso_check,
+        "llmfit": cmd_llmfit,
         "attestation": cmd_attestation,
         "attest": _cmd_attest_dispatch,
         "sbom": _cmd_sbom_dispatch,
