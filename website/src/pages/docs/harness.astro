@@ -41,13 +41,13 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <div class="section-header reveal">
         <p class="section-label">Diagram 1</p>
         <h2 class="section-title">Current Architecture</h2>
-        <p class="section-desc">Full request path from user input to response — v2026.3.20.4+</p>
+        <p class="section-desc">Full request path from user input to response — v2026.3.27.1+</p>
       </div>
 
       <div class="mermaid-card reveal">
         <div class="mermaid-header">
           <span class="mermaid-label">opencastor/castor/harness.py · context.py · trajectory.py</span>
-          <span class="mermaid-version">v2026.3.20.4+</span>
+          <span class="mermaid-version">v2026.3.27.1+</span>
         </div>
         <div class="mermaid">
 flowchart TD
@@ -178,7 +178,7 @@ timeline
     v2026.3.17.4 : SkillSystem : SkillSelector : 5 Agent Tools : castor eval CLI
     v2026.3.17.5 : DualModelHarness : DriftDetectionHook : castor trajectory CLI
     v2026.3.17.6 : castor share/install/explore : Two-tier autoresearch
-    v2026.3.20.4 : RCAN v1.10.0 100/100 : Canonical MessageType : castor contribute : Harness research pipeline
+    v2026.3.27.1 : RCAN v2.2 100/100 : Canonical MessageType : castor contribute : Harness research pipeline
         </div>
       </div>
 
@@ -216,7 +216,7 @@ timeline
         <pre class="code-body" id="ascii-art" style="white-space:pre;overflow-x:auto;font-size:0.75rem;line-height:1.5">
 ┌─────────────────────────────────────────────────────────────────┐
 │                  OpenCastor Agent Harness                       │
-│                      v2026.3.20.4+                             │
+│                      v2026.3.27.1+                             │
 └─────────────────────────────────────────────────────────────────┘
 
 User / App / RCAN peer
@@ -285,7 +285,7 @@ ESTOP: absolute — bypasses context, hooks, tools, logging
       <div class="code-block reveal" style="max-width:760px;margin:0 auto">
         <div class="code-header">
           <div class="code-dots"><span></span><span></span><span></span></div>
-          <span class="code-filename">robot.rcan.yaml — RCAN v1.10 canonical (100/100 conformance)</span>
+          <span class="code-filename">robot.rcan.yaml — RCAN v2.2 (100/100 conformance)</span>
           <a href="https://github.com/craigm26/OpenCastor/blob/main/config/arm.rcan.yaml" class="copy-btn" target="_blank" rel="noopener">View on GitHub →</a>
         </div>
         <div class="code-body">
@@ -294,7 +294,7 @@ ESTOP: absolute — bypasses context, hooks, tools, logging
 <span class="k">metadata</span>:
   <span class="k">robot_name</span>: MyRobot
   <span class="k">robot_uuid</span>: <span class="s">00000000-0000-4000-8000-000000000001</span>
-  <span class="k">description</span>: <span class="s">RCAN v1.10 full-conformance config</span>
+  <span class="k">description</span>: <span class="s">RCAN v2.2 full-conformance config</span>
   <span class="k">author</span>: your-github-handle
   <span class="k">license</span>: <span class="s">Apache-2.0</span>
   <span class="k">rrn</span>: <span class="s">RRN-000000000001</span>

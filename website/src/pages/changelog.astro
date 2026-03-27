@@ -20,7 +20,34 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       <div class="changelog-timeline">
 
         <!-- v2026.3.21.1 -->
-        <div class="changelog-release current reveal" id="v2026.3.21.1">
+        <div class="changelog-release current reveal" id="v2026.3.27.1">
+          <div class="release-header">
+            <span class="release-version">v2026.3.27.1</span>
+            <span class="release-badge badge-new">Latest</span>
+            <span class="release-badge badge-feature">RCAN v2.2</span>
+            <span class="release-badge badge-feature">ML-DSA-65</span>
+            <span class="release-date">March 27, 2026</span>
+          </div>
+          <div class="release-body">
+            <h3>RCAN v2.2 &mdash; Post-Quantum Primary &bull; Dual-Brain &bull; LLMFit &bull; Hardware Stats</h3>
+            <ul>
+              <li><strong>RCAN v2.2 &mdash; ML-DSA-65 primary</strong> &mdash; Ed25519 fully removed (not sunset-dated, removed). <code>signature.alg = "ml-dsa-65"</code> is the sole wire format. Legacy <code>pq_sig</code> field removed. Q-Day timeline accelerated from 2028 to 2026.</li>
+              <li><strong>rcan-py v1.2.1</strong> &mdash; 675 tests, <code>MLDSAKeyPair</code>, <code>sign_message()</code>/<code>verify_message()</code> with <code>require_pq=True</code> default. <code>KeyPair</code> stub redirects to <code>MLDSAKeyPair</code> with <code>DeprecationWarning</code>.</li>
+              <li><strong>rcan-ts v1.2.1</strong> &mdash; 545 tests, <code>SignatureBlock.alg</code> narrowed to literal <code>"ml-dsa-65"</code>, <code>pqSig</code> removed from <code>RCANMessageData</code>.</li>
+              <li><strong>Dual-brain architecture</strong> &mdash; <code>brain_reactive</code> (VLA/SLM, fast) + <code>brain_planning</code> (Claude/GPT, slow). Confidence gate at 0.60 &mdash; below escalates to planning brain. Wire field: <code>brain</code> added to action dict.</li>
+              <li><strong>Production data wipe + re-registration</strong> &mdash; Firestore <code>robots</code> collection + RRF KV cleared. Bob (RRN-000000000001) re-registered with new ML-DSA-65 key, dual-brain configured.</li>
+              <li><strong>castor conformance L5</strong> &mdash; Full RCAN v2.2 compliance report across 6 domains. Score formula: <code>max(0, 100 &minus; failed&times;10 &minus; warned&times;3)</code>. Bob scores 100/100. <code>GET /api/conformance</code> endpoint added.</li>
+              <li><strong>castor iso-check</strong> &mdash; ISO 13482, ISO 10218-2, ISO 42001, EU AI Act Art. 12/13/14/15/16j self-assessment. Bob: COMPLIANT (self-declared). EU AI Act deadline: August 2, 2026.</li>
+              <li><strong>castor llmfit</strong> &mdash; Model-fit checker: BF16 weight estimate + KV cache + overhead vs device RAM. TurboQuant 2.6&times; compression. MoE-aware. <code>psutil</code>-optional with <code>/proc/meminfo</code> fallback.</li>
+              <li><strong>castor/system_info.py</strong> &mdash; Real hardware stats in <code>/api/status</code>: RAM, disk, CPU temp, NPU detection (Hailo-8/8L, Coral TPU, Qualcomm HTP), GPU, active model size, context window, llmfit headroom, tok/s. Auto-flows to Firestore via 30s telemetry push.</li>
+              <li><strong>opencastor-client hardware stats</strong> &mdash; Robot detail screen shows live RAM, disk, CPU &deg;C, NPU+TOPS, GPU, model+size, TurboQuant KV status, llmfit headroom, and tok/s as pill chips.</li>
+              <li><strong>DISCOVER iso_conformance block</strong> &mdash; RCAN DISCOVER (msg_type=1) now includes <code>iso_conformance</code> block. <code>rcan_version</code> bumped to <code>"2.2"</code> in all gateway endpoints.</li>
+              <li>OpenCastor gateway: <code>GET /api/attest</code>, <code>POST /api/attest/verify</code>, <code>GET /api/sbom</code>, <code>GET /api/sbom/download</code>, <code>GET /api/conformance</code>.</li>
+              <li>opencastor-client: <code>AttestationCard</code> + compliance report button on robot detail. <code>/robot/:rrn/attestation</code> alias route.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="changelog-release reveal" id="v2026.3.21.1">
           <div class="release-header">
             <span class="release-version">v2026.3.21.1</span>
             <span class="release-badge badge-new">Latest</span>

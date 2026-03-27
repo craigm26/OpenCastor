@@ -1,0 +1,158 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout
+  title="Post-Quantum Security (ML-DSA-65) — OpenCastor Docs"
+  description="RCAN v2.2 uses ML-DSA-65 (CRYSTALS-Dilithium) as the sole signing algorithm. Ed25519 has been fully removed."
+  ogUrl="https://opencastor.com/docs/pqc"
+>
+  <section class="page-hero">
+    <p class="section-label reveal">Security</p>
+    <h1 class="reveal reveal-d1">Post-Quantum<br><span class="gradient-text">Signing (ML-DSA-65)</span></h1>
+    <p class="reveal reveal-d2">RCAN v2.2 uses ML-DSA-65 (NIST FIPS 204 / CRYSTALS-Dilithium) as the <em>sole</em> message signing algorithm. Ed25519 has been fully removed — not sunset-dated, removed.</p>
+  </section>
+
+  <section class="section" id="overview">
+    <div class="doc-section reveal">
+      <h2 class="section-title">Why Now?</h2>
+      <p>The Q-Day timeline was accelerated. Harvest-now-decrypt-later attacks targeting today's Ed25519-signed robot telemetry are a real threat horizon. OpenCastor made ML-DSA-65 primary in 2026 — ahead of the NIST IR 8547 deadline of 2029 — because fleet data signed today must remain trustworthy for the lifetime of the robots that generated it.</p>
+      <ul style="list-style-type: disc; margin-left: 20px; line-height: 1.8; margin-top: 12px;">
+        <li><strong>2026 (now)</strong> — ML-DSA-65 primary; Ed25519 fully removed from rcan-py, rcan-ts, OpenCastor</li>
+        <li><strong>2027</strong> — Ed25519 sunset across all RRF registry tiers</li>
+        <li><strong>2029</strong> — NIST IR 8547 compliance deadline for federal systems</li>
+      </ul>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">Key Sizes</h2>
+      <table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:0.875rem">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border)">
+            <th style="text-align:left;padding:8px 12px">Field</th>
+            <th style="text-align:right;padding:8px 12px">Size</th>
+            <th style="text-align:left;padding:8px 12px">Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom:1px solid var(--border-subtle)">
+            <td style="padding:8px 12px">Public key</td>
+            <td style="text-align:right;padding:8px 12px"><code>1952 bytes</code></td>
+            <td style="padding:8px 12px">Stored raw in <code>.pub</code> file</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border-subtle)">
+            <td style="padding:8px 12px">Secret key</td>
+            <td style="text-align:right;padding:8px 12px"><code>4032 bytes</code></td>
+            <td style="padding:8px 12px">Part of binary keypair file</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border-subtle)">
+            <td style="padding:8px 12px">Keypair file</td>
+            <td style="text-align:right;padding:8px 12px"><code>5990 bytes</code></td>
+            <td style="padding:8px 12px"><code>MLDS</code> magic + 2-byte pk_len + pk + sk</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 12px">Signature</td>
+            <td style="text-align:right;padding:8px 12px"><code>3309 bytes</code></td>
+            <td style="padding:8px 12px">Embedded in <code>message.signature</code> block</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">Quick Start</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">generate, sign, and verify</span>
+        </div>
+        <div class="code-body">
+<span class="cm"># Generate ML-DSA-65 keypair</span><br>
+<span class="p">castor keygen --pq</span><br>
+<span class="cm"># &#8594; ~/.opencastor/pq_signing.key  (5990 bytes, MLDS header)</span><br>
+<span class="cm"># &#8594; ~/.opencastor/pq_signing.pub   (1952 bytes, raw public key)</span><br><br>
+<span class="cm"># Sign the firmware manifest</span><br>
+<span class="p">castor attest sign --config bob.rcan.yaml</span><br><br>
+<span class="cm"># Verify a signature</span><br>
+<span class="p">castor attest verify --config bob.rcan.yaml</span><br>
+<span class="cm"># ML-DSA-65: VALID &#10003;</span><br><br>
+<span class="cm"># Run full conformance check</span><br>
+<span class="p">castor conformance --config bob.rcan.yaml</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">Wire Format</h2>
+      <p style="margin-bottom:12px">Every RCAN v2.2 message carries a single <code>signature</code> block. The legacy <code>pq_sig</code> field has been removed — there is no dual-signature period.</p>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">RCAN v2.2 message signature block</span>
+        </div>
+        <div class="code-body">
+<span class="k">signature:</span><br>
+&nbsp;&nbsp;<span class="k">alg:</span> <span class="s">"ml-dsa-65"</span> <span class="cm"># the only valid value in v2.2</span><br>
+&nbsp;&nbsp;<span class="k">kid:</span> <span class="s">"7c21bf58"</span> <span class="cm"># first 8 hex chars of SHA-256(public_key)</span><br>
+&nbsp;&nbsp;<span class="k">sig:</span> <span class="s">"&lt;base64url, 3309 bytes&gt;"</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">SDK Usage — rcan-py v1.2.1</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">Python</span>
+        </div>
+        <div class="code-body">
+<span class="k">from</span> <span class="n">rcan.signing</span> <span class="k">import</span> <span class="n">MLDSAKeyPair</span><br>
+<span class="k">from</span> <span class="n">rcan.message</span> <span class="k">import</span> <span class="n">sign_message, verify_message</span><br><br>
+<span class="cm"># Load existing keypair</span><br>
+<span class="n">kp</span> <span class="p">=</span> <span class="n">MLDSAKeyPair</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="s">"~/.opencastor/pq_signing.key"</span><span class="p">)</span><br><br>
+<span class="cm"># Sign</span><br>
+<span class="n">signed</span> <span class="p">=</span> <span class="n">sign_message</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">kp</span><span class="p">)</span><br><br>
+<span class="cm"># Verify (require_pq=True is the default in v2.2)</span><br>
+<span class="n">result</span> <span class="p">=</span> <span class="n">verify_message</span><span class="p">(</span><span class="n">signed</span><span class="p">,</span> <span class="n">public_key</span><span class="p">=</span><span class="n">kp</span><span class="p">.</span><span class="n">public_key</span><span class="p">)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">SDK Usage — rcan-ts v1.2.1</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">TypeScript / Node</span>
+        </div>
+        <div class="code-body">
+<span class="k">import</span> <span class="p">&#123;</span> <span class="n">mldsa65</span> <span class="p">&#125;</span> <span class="k">from</span> <span class="s">'@noble/post-quantum/ml-dsa'</span><span class="p">;</span><br>
+<span class="k">import</span> <span class="p">&#123;</span> <span class="n">signMessage, verifyMessage</span> <span class="p">&#125;</span> <span class="k">from</span> <span class="s">'@continuonai/rcan-ts'</span><span class="p">;</span><br><br>
+<span class="cm">// Generate</span><br>
+<span class="k">const</span> <span class="n">kp</span> <span class="p">=</span> <span class="n">mldsa65</span><span class="p">.</span><span class="n">keygen</span><span class="p">();</span><br><br>
+<span class="cm">// Sign — signature is first arg in verify</span><br>
+<span class="k">const</span> <span class="n">sig</span> <span class="p">=</span> <span class="n">mldsa65</span><span class="p">.</span><span class="n">sign</span><span class="p">(</span><span class="n">msgBytes</span><span class="p">,</span> <span class="n">kp</span><span class="p">.</span><span class="n">secretKey</span><span class="p">);</span><br>
+<span class="k">const</span> <span class="n">ok</span> <span class="p">=</span> <span class="n">mldsa65</span><span class="p">.</span><span class="n">verify</span><span class="p">(</span><span class="n">sig</span><span class="p">,</span> <span class="n">msgBytes</span><span class="p">,</span> <span class="n">kp</span><span class="p">.</span><span class="n">publicKey</span><span class="p">);</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">RRF Integration</h2>
+      <p>The Robot Registry Foundation stores the robot's <code>pq_kid</code> (key ID) and <code>pq_public_key_b64</code> at registration. The RRF countersigns SBOMs using its own Ed25519 root key. Any party can verify a robot's identity and SBOM via the RRF registry.</p>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">Further Reading</h2>
+      <ul style="list-style-type: disc; margin-left: 20px; line-height: 1.8;">
+        <li><a href="/docs/conformance" style="color:var(--accent)">Conformance &amp; ISO</a> — how PQ status is reflected in the compliance report</li>
+        <li><a href="https://rcan.dev" style="color:var(--accent)">RCAN v2.2 Specification</a> — full wire format reference</li>
+        <li><a href="https://csrc.nist.gov/pubs/fips/204/final" style="color:var(--accent)">NIST FIPS 204</a> — ML-DSA standard</li>
+        <li><a href="https://github.com/continuonai/rcan-py" style="color:var(--accent)">rcan-py</a> — <code>rcan.signing.MLDSAKeyPair</code></li>
+        <li><a href="https://github.com/continuonai/rcan-ts" style="color:var(--accent)">rcan-ts</a> — <code>@noble/post-quantum</code> integration</li>
+      </ul>
+    </div>
+  </section>
+
+</DocsLayout>

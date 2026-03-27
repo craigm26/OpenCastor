@@ -1,0 +1,130 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout
+  title="LLMFit & TurboQuant — OpenCastor Docs"
+  description="castor llmfit: check whether a model fits in device RAM, and how TurboQuant KV compression expands context on memory-constrained robots."
+  ogUrl="https://opencastor.com/docs/llmfit"
+>
+  <section class="page-hero">
+    <p class="section-label reveal">Optimization</p>
+    <h1 class="reveal reveal-d1">LLMFit<br><span class="gradient-text">&amp; TurboQuant KV</span></h1>
+    <p class="reveal reveal-d2">Run a model that actually fits — and use KV-cache compression to stretch context on memory-limited hardware like the Raspberry Pi 5 (8 GB).</p>
+  </section>
+
+  <section class="section" id="llmfit">
+
+    <div class="doc-section reveal">
+      <h2 class="section-title">castor llmfit</h2>
+      <p style="margin-bottom:12px">Checks whether a model (by name or parameter count) fits in the device's available RAM. Shows weight size, KV cache estimate, headroom, and max context window — with or without TurboQuant compression.</p>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">castor llmfit --model gemma3:4b --device-ram 8</span>
+        </div>
+        <div class="code-body">
+<span class="k">model:</span>           <span class="s">gemma3:4b</span><br>
+<span class="k">params_b:</span>        <span class="n">4.0</span><br>
+<span class="k">weight_gb:</span>       <span class="n">2.40</span> GB (BF16)<br>
+<span class="k">kv_cache_gb:</span>     <span class="n">1.26</span> GB (4k ctx, 18 layers, 128 dim)<br>
+<span class="k">overhead_gb:</span>     <span class="n">0.50</span> GB<br>
+<span class="k">total_gb:</span>        <span class="n">4.16</span> GB<br>
+<span class="k">device_ram_gb:</span>   <span class="n">8.00</span> GB<br>
+<span class="k">threshold_gb:</span>    <span class="n">6.80</span> GB  (85% of device RAM)<br>
+<span class="k">headroom_gb:</span>     <span class="n">+2.64</span> GB<br>
+<span class="k">status:</span>          <span style="color:var(--green)">ok &#10003;</span><br>
+<span class="k">max_ctx:</span>         <span class="n">~15,900</span> tokens
+        </div>
+      </div>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">TurboQuant KV Compression</h2>
+      <p style="margin-bottom:12px">TurboQuant is a <strong>runtime KV-cache compression patch</strong> — not a weight format. Any model already loaded in Ollama, vLLM, or mlx-lm can use it. The KV cache is compressed to 2-bit or 4-bit integers while weights stay in BF16, giving ~2.6&times; cache size reduction with minimal quality loss.</p>
+      <div class="code-block" style="margin-bottom:20px">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">castor llmfit --model qwen3.5:35b --device-ram 8 --turboquant</span>
+        </div>
+        <div class="code-body">
+<span class="k">model:</span>               <span class="s">qwen3.5:35b (MoE — 16/64 active layers)</span><br>
+<span class="k">weight_gb:</span>           <span class="n">20.0</span> GB<br>
+<span class="k">kv_cache_gb (raw):</span>   <span class="n">8.2</span> GB<br>
+<span class="k">kv_cache_gb (TQ):</span>    <span class="n">3.2</span> GB  <span class="cm"># MoE-aware: only 25% layers are active</span><br>
+<span class="k">total_gb:</span>            <span class="n">23.7</span> GB<br>
+<span class="k">device_ram_gb:</span>       <span class="n">8.0</span> GB<br>
+<span class="k">status:</span>              <span style="color:var(--red,#f87171)">oom &#10007;  (-15.7 GB over threshold)</span><br>
+<span class="k">suggestion:</span>          <span class="s">Try gemma3:4b or llama3.2:3b on 8 GB</span>
+        </div>
+      </div>
+
+      <p style="margin-bottom:12px">Enable TurboQuant in your robot config:</p>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">bob.rcan.yaml — TurboQuant config</span>
+        </div>
+        <div class="code-body">
+<span class="k">local_inference:</span><br>
+&nbsp;&nbsp;<span class="k">kv_compression:</span> <span class="s">"turboquant"</span> <span class="cm"># none | turboquant</span><br>
+&nbsp;&nbsp;<span class="k">kv_bits:</span> <span class="n">2</span> <span class="cm"># 2 or 4</span><br>
+&nbsp;&nbsp;<span class="k">provider:</span> <span class="s">"ollama"</span> <span class="cm"># ollama | vllm | llamacpp | mlx</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">MoE-Aware Estimates</h2>
+      <p>Mixture-of-Experts models like Qwen3.5-35B-A3B only activate a fraction of layers per token. <code>castor llmfit</code> accounts for this — KV cache is computed against active layers only, not total. For Qwen3.5-35B that's 16/64 = 25% of layers, dramatically reducing the cache estimate.</p>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">Formula</h2>
+      <div style="font-family:monospace;font-size:0.875rem;background:var(--surface-2,#1e2130);padding:16px 20px;border-radius:8px;line-height:2;color:var(--text)">
+        weight_gb &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= params_b &times; 2.0 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(BF16 bytes per param)<br>
+        kv_bytes_per_layer &nbsp;= hidden_dim &times; 2 &times; 2 &times; ctx_len &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(K+V, 2 bytes each)<br>
+        kv_raw_gb &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= kv_bytes_per_layer &times; layers / 1e9<br>
+        kv_tq_gb &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= kv_raw_gb / 2.6 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(TurboQuant ratio)<br>
+        total_gb &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= weight_gb + kv_gb + 0.5 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(overhead)<br>
+        status &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= "ok" if total_gb &le; device_ram_gb &times; 0.85 else "oom"
+      </div>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">Ecosystem Support</h2>
+      <ul style="list-style-type: disc; margin-left: 20px; line-height: 1.8;">
+        <li><strong>vLLM</strong> — Triton kernel implementation, Qwen3.5-27B tested, 2.6&times; compression. <a href="https://github.com/vllm-project/vllm/issues/38171" style="color:var(--accent)">Upstream tracking issue</a>.</li>
+        <li><strong>mlx-lm (Apple Silicon)</strong> — Qwen3.5-35B-A3B-4bit, +32% prompt throughput measured.</li>
+        <li><strong>llama.cpp</strong> — CPU C implementation in community discussion (not yet merged to main).</li>
+        <li><strong>Ollama</strong> — Will inherit TurboQuant from llama.cpp once merged upstream.</li>
+        <li><strong>ExLlamaV2 / LM Studio</strong> — Planned.</li>
+      </ul>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">Hardware Stats in the App</h2>
+      <p>When a robot is running, <code>/api/status</code> now returns live hardware and model runtime data — including llmfit headroom — which flows to Firestore and appears in the OpenCastor mobile app as live chips on the robot detail screen.</p>
+      <ul style="list-style-type: disc; margin-left: 20px; line-height: 1.8; margin-top: 12px;">
+        <li>RAM available / total (color-coded: orange &lt;30%, red &lt;15%)</li>
+        <li>Disk free</li>
+        <li>CPU temperature (orange ≥65°C, red ≥80°C)</li>
+        <li>NPU detected (Hailo-8, Coral TPU, Qualcomm HTP) + TOPS rating</li>
+        <li>Active model, provider, weight size, context window</li>
+        <li>TurboQuant KV status and bits</li>
+        <li>LLMFit headroom (green) or OOM warning (red)</li>
+        <li>Tokens/second</li>
+      </ul>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">Further Reading</h2>
+      <ul style="list-style-type: disc; margin-left: 20px; line-height: 1.8;">
+        <li><a href="/docs/providers" style="color:var(--accent)">AI Providers</a> — Ollama, vLLM, llama.cpp, Apple MLX setup</li>
+        <li><a href="/docs/architecture" style="color:var(--accent)">Architecture</a> — dual-brain design, model selection strategy</li>
+        <li><a href="/docs/configuration" style="color:var(--accent)">Configuration</a> — <code>local_inference</code> YAML block</li>
+      </ul>
+    </div>
+  </section>
+
+</DocsLayout>

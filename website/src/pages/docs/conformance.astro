@@ -1,0 +1,139 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout
+  title="Conformance & ISO — OpenCastor Docs"
+  description="castor conformance and castor iso-check: RCAN v2.2 compliance reports, Protocol 66 scoring, and ISO self-assessment."
+  ogUrl="https://opencastor.com/docs/conformance"
+>
+  <section class="page-hero">
+    <p class="section-label reveal">Security</p>
+    <h1 class="reveal reveal-d1">Conformance<br><span class="gradient-text">&amp; ISO Checks</span></h1>
+    <p class="reveal reveal-d2">Two CLI commands give you a complete view of RCAN v2.2 compliance and ISO/regulatory self-assessment for any robot config.</p>
+  </section>
+
+  <section class="section" id="conformance">
+
+    <div class="doc-section reveal">
+      <h2 class="section-title">castor conformance</h2>
+      <p style="margin-bottom:12px">Runs the full RCAN v2.2 compliance checker across six domains. Each check returns <code>pass</code>, <code>warn</code>, or <code>fail</code> with a numeric score (<code>100 &minus; failed&times;10 &minus; warned&times;3</code>).</p>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">castor conformance --config bob.rcan.yaml</span>
+        </div>
+        <div class="code-body">
+<span class="k">rcan_version:</span>        <span style="color:var(--green)">pass</span>   RCAN 2.2 &#10003;<br>
+<span class="k">metadata:</span>            <span style="color:var(--green)">pass</span>   robot_name + robot_uuid present<br>
+<span class="k">agent_provider:</span>      <span style="color:var(--green)">pass</span>   anthropic &#10003;<br>
+<span class="k">pq_signing_key:</span>      <span style="color:var(--green)">pass</span>   ML-DSA-65 keypair found<br>
+<span class="k">firmware_pq_sig:</span>     <span style="color:var(--green)">pass</span>   manifest signature valid<br>
+<span class="k">dual_brain:</span>          <span style="color:var(--green)">pass</span>   brain_reactive + brain_planning configured<br>
+<br>
+<span class="k">score:</span> <span class="n">100/100</span>   <span style="color:var(--green)">overall_status: compliant</span>
+        </div>
+      </div>
+      <p style="margin-top:12px;font-size:0.875rem;color:var(--text-muted)">Use <code>--json</code> for machine-readable output. The <code>GET /api/conformance</code> endpoint returns the same report over HTTP.</p>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">castor iso-check</h2>
+      <p style="margin-bottom:12px">Self-assessment against ISO 13482, ISO 10218-2, ISO 42001, and the EU AI Act (Art. 12–16). All results are <strong>self-declared</strong> — formal certification requires a notified body audit.</p>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">castor iso-check --config bob.rcan.yaml</span>
+        </div>
+        <div class="code-body">
+<span class="k">ISO 13482</span>  (personal care robots)   <span style="color:var(--text-muted)">not declared</span><br>
+<span class="k">ISO 10218-2</span> (industrial robots)     <span style="color:var(--text-muted)">not declared</span><br>
+<span class="k">ISO 42001</span>  (AI management system)    <span style="color:var(--green)">DECLARED &#10003;</span><br>
+<span class="k">EU AI Act</span><br>
+&nbsp;&nbsp;<span class="k">Art. 12</span>  Record-keeping            <span style="color:var(--green)">PASS</span>  audit log present<br>
+&nbsp;&nbsp;<span class="k">Art. 13</span>  Transparency               <span style="color:var(--green)">PASS</span>  ruri + capabilities declared<br>
+&nbsp;&nbsp;<span class="k">Art. 14</span>  Human oversight             <span style="color:var(--green)">PASS</span>  P66 ESTOP always honored<br>
+&nbsp;&nbsp;<span class="k">Art. 15</span>  Accuracy / robustness        <span style="color:var(--green)">PASS</span>  dual-brain + confidence gate<br>
+&nbsp;&nbsp;<span class="k">Art. 16j</span> PQC readiness               <span style="color:var(--green)">PASS</span>  ML-DSA-65 primary<br>
+<br>
+<span style="color:var(--green)">Overall: COMPLIANT (self-declared)</span><br>
+<span class="cm">Self-assessment only. Formal certification requires a notified body audit.</span><br>
+<span class="cm">EU AI Act deadline: August 2, 2026</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">Scoring Formula</h2>
+      <p><code>score = max(0, 100 &minus; failed &times; 10 &minus; warned &times; 3)</code></p>
+      <ul style="list-style-type: disc; margin-left: 20px; line-height: 1.8; margin-top: 12px;">
+        <li>A robot with 0 failures and 0 warnings scores <strong>100/100</strong></li>
+        <li>Each <code>fail</code> deducts 10 points</li>
+        <li>Each <code>warn</code> deducts 3 points (used for missing optional items like PQ key in dev)</li>
+        <li>Bob (RRN-000000000001) is the reference robot — scores 100/100</li>
+      </ul>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">DISCOVER Block</h2>
+      <p style="margin-bottom:12px">The RCAN DISCOVER message (msg_type=1) broadcast by every robot now includes a live <code>iso_conformance</code> block. Any peer querying the robot can read its self-declared compliance status without a separate API call.</p>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">DISCOVER response — iso_conformance block</span>
+        </div>
+        <div class="code-body">
+<span class="k">rcan_version:</span> <span class="s">"2.2"</span><br>
+<span class="k">iso_conformance:</span><br>
+&nbsp;&nbsp;<span class="k">iso_42001:</span> <span class="v">true</span><br>
+&nbsp;&nbsp;<span class="k">eu_ai_act:</span> <span class="v">true</span><br>
+&nbsp;&nbsp;<span class="k">last_checked:</span> <span class="s">"2026-03-27T02:00:00Z"</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">API Endpoints</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">OpenCastor gateway HTTP API</span>
+        </div>
+        <div class="code-body">
+<span class="cm"># Full RCAN v2.2 conformance report (JSON)</span><br>
+<span class="p">GET /api/conformance</span><br><br>
+<span class="cm"># Firmware manifest metadata + signature prefix</span><br>
+<span class="p">GET /api/attest</span><br><br>
+<span class="cm"># Live ML-DSA-65 signature verification</span><br>
+<span class="p">POST /api/attest/verify</span><br><br>
+<span class="cm"># CycloneDX SBOM metadata</span><br>
+<span class="p">GET /api/sbom</span><br><br>
+<span class="cm"># Full CycloneDX SBOM JSON download</span><br>
+<span class="p">GET /api/sbom/download</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">EU AI Act Obligations</h2>
+      <p style="margin-bottom:12px">OpenCastor implements the following EU AI Act obligations for high-risk AI systems. <strong>Compliance deadline: August 2, 2026.</strong></p>
+      <ul style="list-style-type: disc; margin-left: 20px; line-height: 1.8;">
+        <li><strong>Art. 12 — Record-keeping:</strong> Audit log written to <code>~/.opencastor/audit.jsonl</code>. Configurable retention (default 3650 days).</li>
+        <li><strong>Art. 13 — Transparency:</strong> Robot identity (RURI), capabilities, and RCAN version declared in every DISCOVER broadcast.</li>
+        <li><strong>Art. 14 — Human oversight:</strong> Protocol 66 ESTOP is always honored — cannot be overridden by any AI layer, regardless of instruction.</li>
+        <li><strong>Art. 15 — Accuracy &amp; robustness:</strong> Dual-brain architecture with confidence gating. Planning brain escalation ensures high-stakes decisions get deeper reasoning.</li>
+        <li><strong>Art. 16j — PQC readiness:</strong> ML-DSA-65 primary as of 2026. No Ed25519 in production signing path.</li>
+      </ul>
+    </div>
+
+    <div class="doc-section reveal" style="margin-top:32px">
+      <h2 class="section-title">Further Reading</h2>
+      <ul style="list-style-type: disc; margin-left: 20px; line-height: 1.8;">
+        <li><a href="/docs/pqc" style="color:var(--accent)">Post-Quantum Security</a> — ML-DSA-65 key generation</li>
+        <li><a href="/docs/safety" style="color:var(--accent)">Safety &amp; Protocol 66</a> — P66 invariants</li>
+        <li><a href="/docs/configuration" style="color:var(--accent)">Configuration</a> — <code>iso_conformance</code> YAML block</li>
+      </ul>
+    </div>
+  </section>
+
+</DocsLayout>
