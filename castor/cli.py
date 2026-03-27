@@ -1573,11 +1573,12 @@ def cmd_llmfit(args) -> None:
         castor llmfit --list-models
     """
     import json as _json
+
     from castor.llmfit import (
+        _MODEL_WEIGHT_GB,
         check_fit,
         get_total_ram_gb,
         turboquant_ecosystem_status,
-        _MODEL_WEIGHT_GB,
     )
 
     if getattr(args, "list_models", False):
