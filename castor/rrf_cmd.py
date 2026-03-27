@@ -23,8 +23,9 @@ RRF_BASE = "https://robot-registry-foundation.pages.dev"
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _load_config(config_path: str | None) -> tuple[dict, Path]:
-    import yaml
     from pathlib import Path
+
+    import yaml
 
     if config_path:
         p = Path(config_path).expanduser()
@@ -48,8 +49,9 @@ def _load_config(config_path: str | None) -> tuple[dict, Path]:
 
 def _post(path: str, body: dict, token: str | None = None) -> dict:
     """POST via curl subprocess — avoids Cloudflare bot protection blocking urllib UA."""
+    import os
     import subprocess
-    import tempfile, os
+    import tempfile
     url = f"{RRF_BASE}{path}"
     # Write body to temp file to avoid shell quoting issues
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
@@ -122,7 +124,6 @@ def _load_token(token_path: str | None = None) -> str | None:
 
 def cmd_rrf_register(args) -> None:
     """Register this robot with the RRF and receive/confirm an RRN."""
-    import yaml
 
     cfg, cfg_path = _load_config(getattr(args, "config", None))
     meta = cfg.get("metadata", {})
@@ -137,7 +138,7 @@ def cmd_rrf_register(args) -> None:
     pq_pub = _load_pq_pub()
     token = _load_token(getattr(args, "token", None))
 
-    print(f"\n🤖  Registering robot with RRF...")
+    print("\n🤖  Registering robot with RRF...")
     print(f"    Name:             {name}")
     print(f"    Manufacturer:     {manufacturer}")
     print(f"    Model:            {model}")
@@ -293,7 +294,7 @@ def cmd_rrf_models(args) -> None:
     vla_model = brain.get("model", "openvla/openvla-7b")
     models_to_register.append({
         "name": "OpenVLA",
-        "version": "v7b-1.0",
+        "version": "7b-1.0",
         "model_family": "vla",
         "architecture": "transformer",
         "parameter_count_b": 7.0,
@@ -312,7 +313,6 @@ def cmd_rrf_models(args) -> None:
             m = layer.get("model", "")
             if "/" in m:
                 planning_model = m.split("/")[-1]
-    fallback_model = cfg.get("provider_fallback", {}).get("model", planning_model)
 
     models_to_register.append({
         "name": "Claude",
@@ -338,7 +338,7 @@ def cmd_rrf_models(args) -> None:
         body = {k: v for k, v in m.items() if v is not None}
         import time
         # Retry with backoff to handle CF KV eventual consistency (counter may lag)
-        for attempt in range(3):
+        for _attempt in range(3):
             result = _post("/v2/models/register", body, token)
             rmn = result.get("rmn")
             if rmn and rmn not in rmns:
@@ -388,10 +388,10 @@ def cmd_rrf_harness(args) -> None:
     if model_rmns:
         body["model_ids"] = model_rmns
 
-    print(f"\n⚙️   Registering AI harness to RRF...")
-    print(f"    Name:     OpenCastor Dual-Brain")
+    print("\n⚙️   Registering AI harness to RRF...")
+    print("    Name:     OpenCastor Dual-Brain")
     print(f"    Version:  {firmware_version}")
-    print(f"    Type:     hybrid (VLA + LLM planner)")
+    print("    Type:     hybrid (VLA + LLM planner)")
     print(f"    Models:   {model_rmns or '(none registered yet)'}")
     print(f"    Robot:    {rrn}")
 
@@ -427,7 +427,7 @@ def cmd_rrf_status(args) -> None:
                 for k, v in e.get("summary", {}).items():
                     print(f"    │   {k}: {v}")
         else:
-            print(f"    └─ (none)")
+            print("    └─ (none)")
         print()
 
     print(f"  Registry: {RRF_BASE}/registry/")
@@ -439,7 +439,7 @@ def cmd_rrf_wipe(args) -> None:
     import subprocess
     secret = getattr(args, "secret", "clawd-wipe-2026")
     url = f"{RRF_BASE}/admin/wipe?secret={secret}"
-    print(f"🗑️   Wiping all RRF KV records via admin endpoint...")
+    print("🗑️   Wiping all RRF KV records via admin endpoint...")
     result = subprocess.run(
         ["curl", "-s", "-H", "User-Agent: OpenCastor/2026.3.27.1 castor-cli/rrf", url],
         capture_output=True, text=True, timeout=30,
