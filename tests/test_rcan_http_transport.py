@@ -17,7 +17,9 @@ def test_send_message_unreachable_host_returns_none():
     """send_message returns None when the host is not reachable (URLError)."""
     with patch("urllib.request.urlopen") as mock_urlopen:
         mock_urlopen.side_effect = urllib.error.URLError("connection refused")
-        result = send_message("unreachable.local", {"type": 1, "source": "rcan://x", "target": "rcan://y"})
+        result = send_message(
+            "unreachable.local", {"type": 1, "source": "rcan://x", "target": "rcan://y"}
+        )
     assert result is None
 
 
@@ -31,7 +33,9 @@ def test_send_message_http_error_returns_none():
             hdrs=None,
             fp=None,
         )
-        result = send_message("example.local", {"type": 2, "source": "rcan://x", "target": "rcan://y"})
+        result = send_message(
+            "example.local", {"type": 2, "source": "rcan://x", "target": "rcan://y"}
+        )
     assert result is None
 
 
@@ -39,7 +43,9 @@ def test_send_message_timeout_returns_none():
     """send_message returns None on timeout (TimeoutError wrapped as URLError)."""
     with patch("urllib.request.urlopen") as mock_urlopen:
         mock_urlopen.side_effect = TimeoutError("timed out")
-        result = send_message("slow.local", {"type": 1, "source": "rcan://x", "target": "rcan://y"}, timeout_s=0.001)
+        result = send_message(
+            "slow.local", {"type": 1, "source": "rcan://x", "target": "rcan://y"}, timeout_s=0.001
+        )
     assert result is None
 
 

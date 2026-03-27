@@ -90,9 +90,7 @@ class TestFederationEstopBypass:
         assert result is True
         assert "ESTOP bypasses federation check" in caplog.text
 
-    def test_cross_registry_normal_command_logs_loa(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_cross_registry_normal_command_logs_loa(self, caplog: pytest.LogCaptureFixture) -> None:
         """Cross-registry non-ESTOP command logs 'Cross-registry command from ...'."""
         bridge = _make_bridge()
 
@@ -173,9 +171,10 @@ class TestLoaLogOnlyMode:
         # Stub always returns LoA 1, required is 3 → should fail when enforcement is on
         # But our stub _validate_loa_stub always returns True regardless
         # So we patch to simulate actual enforcement
-        with patch(
-            "castor.cloud.bridge._validate_loa_for_scope", return_value=False
-        ), patch("castor.cloud.bridge._extract_loa_from_jwt", return_value=1):
+        with (
+            patch("castor.cloud.bridge._validate_loa_for_scope", return_value=False),
+            patch("castor.cloud.bridge._extract_loa_from_jwt", return_value=1),
+        ):
             doc = _cmd_doc(scope="control", instruction="move arm", token="fake.jwt.token")
             result = bridge._check_loa("cmd-loa-003", doc, scope="control")
         assert result is False

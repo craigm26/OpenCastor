@@ -124,6 +124,9 @@ class TestWebSearchFallback:
     def test_num_results_capped(self):
         """num_results should be capped at 5."""
         # Just test the capping logic doesn't crash
-        with patch("castor.agent_tools._ddg_search", return_value=[{"title": "t", "url": "u", "snippet": "s"}]):
+        with patch(
+            "castor.agent_tools._ddg_search",
+            return_value=[{"title": "t", "url": "u", "snippet": "s"}],
+        ):
             result = web_search(query="test", num_results=100)
         assert isinstance(result, list)

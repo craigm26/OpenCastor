@@ -109,7 +109,7 @@ def dummy_trajectory_db(tmp_path: Path) -> Path:
                 "camera-describe" if i % 3 == 0 else None,
                 5000 + i * 100,
                 1 if i % 5 == 0 else 0,  # 20% compaction rate
-                '[]',
+                "[]",
                 "ok",
                 500,
                 "test-model",

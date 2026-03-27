@@ -17,6 +17,7 @@ from starlette.testclient import TestClient
 def api_mod():
     """Return the castor.api module for direct state manipulation."""
     import castor.api as mod
+
     return mod
 
 
@@ -141,6 +142,7 @@ class TestHardwareResponseShape:
 class TestComputeHardwareTier:
     def _tier(self, ram_gb, cpu_model, accelerators):
         from castor.api import _compute_hardware_tier
+
         return _compute_hardware_tier(ram_gb, cpu_model, accelerators)
 
     def test_hailo_accelerator_returns_pi5_hailo(self):

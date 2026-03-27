@@ -655,6 +655,7 @@ class TestModuleLevelFlags:
 # SafetyLayer integration tests (Task D)
 # =====================================================================
 
+
 class TestDriverBaseSafetyLayer:
     """Verify SafetyLayer routing in DriverBase.move()."""
 

@@ -108,7 +108,6 @@ class TestAllRequestsIncludeAuthHeader:
 
         captured_headers: list[dict] = []
 
-
         def fake_get(url: str, headers: dict | None = None, **kwargs: Any) -> MagicMock:
             captured_headers.append(headers or {})
             resp = MagicMock()
@@ -127,11 +126,13 @@ class TestAllRequestsIncludeAuthHeader:
         # Simulate what _get and _post do in dashboard.py
         GW = ss.gateway_url
 
-        with patch("requests.get", side_effect=fake_get), patch(
-            "requests.post", side_effect=fake_post
+        with (
+            patch("requests.get", side_effect=fake_get),
+            patch("requests.post", side_effect=fake_post),
         ):
             # Simulate _get calls
             import requests
+
             requests.get(f"{GW}/health", headers=_hdr(), timeout=2.0)
             requests.get(f"{GW}/api/status", headers=_hdr(), timeout=2.0)
             # Simulate _post calls
@@ -300,11 +301,7 @@ class TestWarnNoTokenFunction:
         source = dashboard_path.read_text()
 
         tree = ast.parse(source)
-        func_names = [
-            node.name
-            for node in ast.walk(tree)
-            if isinstance(node, ast.FunctionDef)
-        ]
+        func_names = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
         assert "_warn_no_token" in func_names, (
             "castor/dashboard.py must define _warn_no_token() to warn users "
             "when no API token is configured"
@@ -319,6 +316,5 @@ class TestWarnNoTokenFunction:
 
         # Check that the ESTOP button section references _warn_no_token
         assert "_warn_no_token" in source, (
-            "dashboard.py ESTOP handler must call _warn_no_token() "
-            "to prevent silent 401 failures"
+            "dashboard.py ESTOP handler must call _warn_no_token() to prevent silent 401 failures"
         )

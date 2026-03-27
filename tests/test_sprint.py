@@ -187,9 +187,7 @@ class TestSubmitScore:
         # Should return the existing best, not the lower submitted score
         assert entry.best_score == 90.0
         # ref.set should NOT have been called
-        ref = (
-            db.collection.return_value.document.return_value.collection.return_value.document.return_value
-        )
+        ref = db.collection.return_value.document.return_value.collection.return_value.document.return_value
         ref.set.assert_not_called()
 
 
@@ -260,9 +258,7 @@ class TestFinalizeSprint:
                 with patch(
                     "castor.competitions.sprint._get_firestore_client", return_value=_mock_db()
                 ):
-                    with patch(
-                        "castor.competitions.sprint.award_credits", side_effect=_mock_award
-                    ):
+                    with patch("castor.competitions.sprint.award_credits", side_effect=_mock_award):
                         payouts = mgr.finalize_sprint(comp.id)
 
         assert payouts["RRN-A"] == 500  # 50% of 1000
@@ -284,16 +280,28 @@ class TestFinalizeSprint:
 class TestComputeStatus:
     def test_upcoming(self):
         now = _now()
-        assert _compute_status(now + timedelta(hours=1), now + timedelta(hours=5)) == CompetitionStatus.UPCOMING
+        assert (
+            _compute_status(now + timedelta(hours=1), now + timedelta(hours=5))
+            == CompetitionStatus.UPCOMING
+        )
 
     def test_active(self):
         now = _now()
-        assert _compute_status(now - timedelta(hours=1), now + timedelta(hours=3)) == CompetitionStatus.ACTIVE
+        assert (
+            _compute_status(now - timedelta(hours=1), now + timedelta(hours=3))
+            == CompetitionStatus.ACTIVE
+        )
 
     def test_locked(self):
         now = _now()
-        assert _compute_status(now - timedelta(hours=2), now + timedelta(minutes=30)) == CompetitionStatus.LOCKED
+        assert (
+            _compute_status(now - timedelta(hours=2), now + timedelta(minutes=30))
+            == CompetitionStatus.LOCKED
+        )
 
     def test_completed(self):
         now = _now()
-        assert _compute_status(now - timedelta(hours=3), now - timedelta(hours=1)) == CompetitionStatus.COMPLETED
+        assert (
+            _compute_status(now - timedelta(hours=3), now - timedelta(hours=1))
+            == CompetitionStatus.COMPLETED
+        )

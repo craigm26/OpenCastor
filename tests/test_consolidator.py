@@ -244,9 +244,7 @@ class TestRetrievalTracking:
         EpisodeConsolidator.record_retrieval(fresh_db, ep_id)
 
         conn = sqlite3.connect(fresh_db)
-        row = conn.execute(
-            "SELECT retrieval_count FROM episodes WHERE id = ?", (ep_id,)
-        ).fetchone()
+        row = conn.execute("SELECT retrieval_count FROM episodes WHERE id = ?", (ep_id,)).fetchone()
         conn.close()
         assert row[0] == 2
 

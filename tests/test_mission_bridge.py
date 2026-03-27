@@ -12,6 +12,7 @@ Covers:
   9. _execute_command calls _write_mission_response when context=mission_thread
  10. Mission response includes robot RRN and name in from_rrn/from_name
 """
+
 from __future__ import annotations
 
 import unittest
@@ -44,6 +45,7 @@ def _make_bridge(db=None, rrn="RRN-000000000001", robot_name="Bob"):
 # 1. _build_mission_context — non-mission command → None
 # ---------------------------------------------------------------------------
 
+
 class TestBuildMissionContextNonMission(unittest.TestCase):
     def test_returns_none_for_regular_command(self):
         bridge = _make_bridge()
@@ -61,6 +63,7 @@ class TestBuildMissionContextNonMission(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 2. _build_mission_context — mission_thread → returns string
 # ---------------------------------------------------------------------------
+
 
 class TestBuildMissionContextMission(unittest.TestCase):
     def _mission_doc(self):
@@ -110,6 +113,7 @@ class TestBuildMissionContextMission(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 4. _write_mission_response — writes correct doc to Firestore
 # ---------------------------------------------------------------------------
+
 
 class TestWriteMissionResponse(unittest.TestCase):
     def _make_mock_db(self):
@@ -192,6 +196,7 @@ class TestWriteMissionResponse(unittest.TestCase):
 # 5. _write_mission_response — skips when no mission_id
 # ---------------------------------------------------------------------------
 
+
 class TestWriteMissionResponseNoMissionId(unittest.TestCase):
     def test_skips_when_no_mission_id(self):
         db = MagicMock()
@@ -206,6 +211,7 @@ class TestWriteMissionResponseNoMissionId(unittest.TestCase):
 # 6. _write_mission_response — skips when db is None
 # ---------------------------------------------------------------------------
 
+
 class TestWriteMissionResponseNoDb(unittest.TestCase):
     def test_skips_when_db_is_none(self):
         bridge = _make_bridge(db=None)
@@ -217,6 +223,7 @@ class TestWriteMissionResponseNoDb(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 7. _dispatch_to_gateway passes system_context for mission commands
 # ---------------------------------------------------------------------------
+
 
 class TestDispatchMissionContext(unittest.TestCase):
     def _mock_response(self, json_data):
@@ -278,6 +285,7 @@ class TestDispatchMissionContext(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 10. Robot name used in from_name field
 # ---------------------------------------------------------------------------
+
 
 class TestWriteMissionResponseRobotName(unittest.TestCase):
     def _make_mock_db(self):

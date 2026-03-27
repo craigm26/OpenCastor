@@ -117,6 +117,7 @@ def client():
 @pytest.fixture()
 def api_mod():
     import castor.api as mod
+
     return mod
 
 
@@ -376,9 +377,7 @@ class TestRCANScopeCompliance:
         valid_scopes = {"discover", "status", "chat", "control", "safety", "system"}
         body = client.get("/api/skills").json()
         for cmd in body["builtin_commands"]:
-            assert cmd["scope"] in valid_scopes, (
-                f"{cmd['cmd']} has invalid scope: {cmd['scope']}"
-            )
+            assert cmd["scope"] in valid_scopes, f"{cmd['cmd']} has invalid scope: {cmd['scope']}"
 
     def test_physical_commands_have_control_or_system_scope(self, client, api_mod):
         """navigate-to and arm-manipulate must be control scope (RCAN §2.3)."""

@@ -1204,6 +1204,7 @@ class TestSafetyEstopDistanceConfigured:
 # ISO conformance (closes #755)
 # ---------------------------------------------------------------------------
 
+
 class TestISOCheck:
     """Tests for castor iso-check command and DISCOVER iso_conformance payload."""
 
@@ -1233,6 +1234,7 @@ class TestISOCheck:
 
         import io
         import sys
+
         buf = io.StringIO()
         sys.stdout = buf
         try:
@@ -1263,6 +1265,7 @@ class TestISOCheck:
 
         import io
         import sys
+
         buf = io.StringIO()
         sys.stdout = buf
         try:
@@ -1296,6 +1299,7 @@ class TestISOCheck:
         import inspect
 
         from castor import api as api_mod
+
         src = inspect.getsource(api_mod)
         assert "iso_conformance" in src
         assert "iso_42001" in src

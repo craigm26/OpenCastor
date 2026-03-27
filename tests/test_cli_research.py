@@ -219,8 +219,18 @@ class TestCmdSeason:
         from castor.commands.season import cmd_season
 
         seasons = [
-            {"id": "2025-fall", "status": "completed", "start_date": "2025-09-01", "end_date": "2025-11-30"},
-            {"id": "2026-spring", "status": "active", "start_date": "2026-03-01", "end_date": "2026-05-31"},
+            {
+                "id": "2025-fall",
+                "status": "completed",
+                "start_date": "2025-09-01",
+                "end_date": "2025-11-30",
+            },
+            {
+                "id": "2026-spring",
+                "status": "active",
+                "start_date": "2026-03-01",
+                "end_date": "2026-05-31",
+            },
         ]
         args = _make_args(list_seasons=True, class_id=None)
 

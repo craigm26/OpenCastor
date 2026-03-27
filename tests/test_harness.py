@@ -30,6 +30,7 @@ from castor.tools import ToolRegistry
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 
+
 def _make_provider(response_text="Hello!", tool_calls=None):
     """Create a mock provider that returns a given Thought."""
     provider = MagicMock()
@@ -57,6 +58,7 @@ def _make_harness(provider=None, config=None, enabled=True):
 
 # ── P66 ESTOP bypass ──────────────────────────────────────────────────────────
 
+
 class TestP66ESTOPBypass:
     """P66 invariant: ESTOP bypasses ALL harness steps."""
 
@@ -82,7 +84,9 @@ class TestP66ESTOPBypass:
     async def test_estop_ignores_max_iterations(self):
         """ESTOP never hits iteration limit."""
         provider = _make_provider("stopped")
-        harness = _make_harness(provider, config={"harness": {"enabled": True, "max_iterations": 0}})
+        harness = _make_harness(
+            provider, config={"harness": {"enabled": True, "max_iterations": 0}}
+        )
         ctx = HarnessContext(instruction="ESTOP", scope="safety")
         result = await harness.run(ctx)
         assert result.p66_estop_bypassed is True
@@ -107,6 +111,7 @@ class TestP66ESTOPBypass:
 
 
 # ── Physical tool consent gating ──────────────────────────────────────────────
+
 
 class TestP66PhysicalToolConsent:
     """P66: physical tools blocked without consent or wrong scope."""
@@ -145,15 +150,29 @@ class TestP66PhysicalToolConsent:
     async def test_non_physical_tool_auto_approved(self):
         """web_search should not require consent."""
         reg = ToolRegistry()
-        reg.register("web_search", lambda query="": [{"title": "test"}],
-                     description="Search the web",
-                     parameters={"query": {"type": "string", "required": True}})
+        reg.register(
+            "web_search",
+            lambda query="": [{"title": "test"}],
+            description="Search the web",
+            parameters={"query": {"type": "string", "required": True}},
+        )
         tool_calls = [{"name": "web_search", "args": {"query": "lego bricks"}}]
         thought_with_tool = Thought(raw_text="", tool_calls=tool_calls)
         final_thought = Thought(raw_text="Lego bricks are plastic interlocking toys.")
         provider = _make_provider()
         provider.think_with_tools.side_effect = [thought_with_tool, final_thought]
-        harness = AgentHarness(provider=provider, config={"harness": {"enabled": True, "max_iterations": 3, "p66_audit": False, "retry_on_error": False}}, tool_registry=reg)
+        harness = AgentHarness(
+            provider=provider,
+            config={
+                "harness": {
+                    "enabled": True,
+                    "max_iterations": 3,
+                    "p66_audit": False,
+                    "retry_on_error": False,
+                }
+            },
+            tool_registry=reg,
+        )
         ctx = HarnessContext(instruction="what are lego bricks?", scope="chat")
         result = await harness.run(ctx)
         # Should NOT be blocked
@@ -162,6 +181,7 @@ class TestP66PhysicalToolConsent:
 
 
 # ── Scope-based tool filtering ─────────────────────────────────────────────────
+
 
 class TestScopeFiltering:
     """P66: physical tools not advertised in non-control scopes."""
@@ -176,10 +196,17 @@ class TestScopeFiltering:
 
     def test_control_scope_includes_physical_tools(self):
         reg = ToolRegistry()
-        reg.register("move", lambda **kw: "moved", description="Move robot",
-                     parameters={"linear": {"type": "number"}})
-        harness = AgentHarness(provider=_make_provider(), tool_registry=reg,
-                                config={"harness": {"enabled": True, "p66_audit": False, "retry_on_error": False}})
+        reg.register(
+            "move",
+            lambda **kw: "moved",
+            description="Move robot",
+            parameters={"linear": {"type": "number"}},
+        )
+        harness = AgentHarness(
+            provider=_make_provider(),
+            tool_registry=reg,
+            config={"harness": {"enabled": True, "p66_audit": False, "retry_on_error": False}},
+        )
         tools = harness._get_tools_for_scope("control")
         tool_names = {t.get("function", {}).get("name", "") for t in tools}
         assert "move" in tool_names
@@ -191,6 +218,7 @@ class TestScopeFiltering:
 
 
 # ── Legacy mode ───────────────────────────────────────────────────────────────
+
 
 class TestLegacyMode:
     """harness.enabled=false should behave identically to direct provider.think()."""
@@ -217,6 +245,7 @@ class TestLegacyMode:
 
 
 # ── Hook lifecycle ─────────────────────────────────────────────────────────────
+
 
 class TestHookLifecycle:
     """Hooks must be called at correct lifecycle points."""
@@ -269,6 +298,7 @@ class TestHookLifecycle:
 
 # ── Result fields ─────────────────────────────────────────────────────────────
 
+
 class TestResultFields:
     @pytest.mark.asyncio
     async def test_run_id_unique(self):
@@ -287,6 +317,7 @@ class TestResultFields:
 
 
 # ── Constant correctness ──────────────────────────────────────────────────────
+
 
 class TestConstants:
     def test_physical_tools_frozenset(self):

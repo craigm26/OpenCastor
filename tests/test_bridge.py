@@ -1,4 +1,5 @@
 """Tests for castor.cloud.bridge and castor.cloud.consent_manager."""
+
 from __future__ import annotations
 
 import unittest
@@ -8,10 +9,11 @@ from unittest.mock import MagicMock
 # ConsentManager tests
 # ---------------------------------------------------------------------------
 
-class TestConsentManager(unittest.TestCase):
 
+class TestConsentManager(unittest.TestCase):
     def _make_manager(self, owner: str = "rrn://craigm26", db: object = None):
         from castor.cloud.consent_manager import ConsentManager
+
         return ConsentManager(robot_rrn="RRN-000000000001", owner=owner, db=db)
 
     # Same-owner
@@ -128,6 +130,7 @@ class TestConsentManager(unittest.TestCase):
 
     def test_future_expiry_accepted(self):
         from datetime import datetime, timedelta, timezone
+
         future = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
         cm = self._make_manager()
         cm._cache["rrn://partner"] = {
@@ -186,10 +189,11 @@ class TestConsentManager(unittest.TestCase):
 # CastorBridge unit tests (no Firebase connection)
 # ---------------------------------------------------------------------------
 
-class TestCastorBridgeUnit(unittest.TestCase):
 
+class TestCastorBridgeUnit(unittest.TestCase):
     def _make_bridge(self):
         from castor.cloud.bridge import CastorBridge
+
         config = {
             "rrn": "RRN-000000000001",
             "name": "bob",
@@ -219,6 +223,7 @@ class TestCastorBridgeUnit(unittest.TestCase):
 
     def test_auth_headers_with_token(self):
         from castor.cloud.bridge import CastorBridge
+
         bridge = CastorBridge(
             config={"rrn": "RRN-1", "name": "bob", "owner": "rrn://x", "capabilities": []},
             firebase_project="test",
@@ -248,10 +253,11 @@ class TestCastorBridgeUnit(unittest.TestCase):
 # Firestore models tests
 # ---------------------------------------------------------------------------
 
-class TestFirestoreModels(unittest.TestCase):
 
+class TestFirestoreModels(unittest.TestCase):
     def test_command_doc_roundtrip(self):
         from castor.cloud.firestore_models import CommandDoc, CommandStatus
+
         doc = CommandDoc(
             instruction="move forward",
             scope="chat",
@@ -261,10 +267,11 @@ class TestFirestoreModels(unittest.TestCase):
         d = doc.to_dict()
         self.assertEqual(d["instruction"], "move forward")
         self.assertEqual(d["status"], CommandStatus.PENDING)
-        self.assertNotIn("result", d)   # None fields excluded
+        self.assertNotIn("result", d)  # None fields excluded
 
     def test_consent_request_doc_roundtrip(self):
         from castor.cloud.firestore_models import ConsentRequestDoc, ConsentStatus
+
         doc = ConsentRequestDoc(
             from_rrn="RRN-000000000005",
             from_owner="rrn://partner",
@@ -279,6 +286,7 @@ class TestFirestoreModels(unittest.TestCase):
 
     def test_consent_peer_doc_roundtrip(self):
         from castor.cloud.firestore_models import ConsentPeerDoc
+
         doc = ConsentPeerDoc(
             peer_rrn="RRN-000000000005",
             peer_owner="rrn://partner",
@@ -294,16 +302,18 @@ class TestFirestoreModels(unittest.TestCase):
 # RCAN message types
 # ---------------------------------------------------------------------------
 
-class TestRCANConsentMessageTypes(unittest.TestCase):
 
+class TestRCANConsentMessageTypes(unittest.TestCase):
     def test_consent_message_types_exist(self):
         from castor.rcan.message import MessageType
+
         self.assertEqual(MessageType.CONSENT_REQUEST, 20)
         self.assertEqual(MessageType.CONSENT_GRANT, 21)
         self.assertEqual(MessageType.CONSENT_DENY, 22)
 
     def test_consent_message_roundtrip(self):
         from castor.rcan.message import MessageType, RCANMessage
+
         msg = RCANMessage(
             type=MessageType.CONSENT_REQUEST,
             source="rcan://craigm26.bob-001",

@@ -53,13 +53,25 @@ def _make_submit_db(
     season_doc = _mock_doc({"status": season_status})
     # ── class document ────────────────────────────────────────────────
     class_doc = _mock_doc(
-        {"hardware_tier": class_hw_tier, "model_id": "gemini-2.5-flash",
-         "season_id": "2026-04", "scenario_pack_id": "default"}
+        {
+            "hardware_tier": class_hw_tier,
+            "model_id": "gemini-2.5-flash",
+            "season_id": "2026-04",
+            "scenario_pack_id": "default",
+        }
     )
     # ── entry document ────────────────────────────────────────────────
-    entry_data = {"best_score": existing_score, "submitted_at": 1000,
-                  "season_id": "2026-04", "class_id": "pi5-hailo8l__gemini-2.5-flash",
-                  "rrn": "RRN-001"} if existing_score is not None else None
+    entry_data = (
+        {
+            "best_score": existing_score,
+            "submitted_at": 1000,
+            "season_id": "2026-04",
+            "class_id": "pi5-hailo8l__gemini-2.5-flash",
+            "rrn": "RRN-001",
+        }
+        if existing_score is not None
+        else None
+    )
     entry_doc = _mock_doc(entry_data, doc_id="RRN-001")
     # ── robot document ────────────────────────────────────────────────
     robot_data = {"hardware_tier": robot_hw_tier} if robot_hw_tier else None
@@ -103,9 +115,10 @@ def _make_finalize_db(class_ids: list[str]) -> MagicMock:
     db = MagicMock()
 
     season_doc = _mock_doc({"status": "ACTIVE"})
-    class_stream_docs = [_mock_doc({"hardware_tier": cid.split("__")[0],
-                                    "model_id": cid.split("__")[1]}, doc_id=cid)
-                         for cid in class_ids]
+    class_stream_docs = [
+        _mock_doc({"hardware_tier": cid.split("__")[0], "model_id": cid.split("__")[1]}, doc_id=cid)
+        for cid in class_ids
+    ]
 
     season_ref = MagicMock()
     season_ref.get.return_value = season_doc
@@ -202,17 +215,25 @@ def test_leaderboard_sorted_correctly():
     """get_class_leaderboard returns entries sorted descending with correct ranks."""
     # Three entry docs in unsorted order
     raw_scores = [("RRN-A", 0.7), ("RRN-B", 0.9), ("RRN-C", 0.5)]
-    docs = [_mock_doc({"best_score": score, "submitted_at": 1000,
-                       "season_id": "2026-04", "class_id": "pi5-hailo8l__gemini-2.5-flash",
-                       "rrn": rrn}, doc_id=rrn)
-            for rrn, score in raw_scores]
+    docs = [
+        _mock_doc(
+            {
+                "best_score": score,
+                "submitted_at": 1000,
+                "season_id": "2026-04",
+                "class_id": "pi5-hailo8l__gemini-2.5-flash",
+                "rrn": rrn,
+            },
+            doc_id=rrn,
+        )
+        for rrn, score in raw_scores
+    ]
 
     db = MagicMock()
     # Chain: db.collection().document().collection().document().collection().stream() → docs
     entries_coll = MagicMock()
     entries_coll.stream.return_value = docs
-    db.collection.return_value.document.return_value.collection.return_value \
-        .document.return_value.collection.return_value = entries_coll
+    db.collection.return_value.document.return_value.collection.return_value.document.return_value.collection.return_value = entries_coll
 
     with patch("castor.competitions.bracket_season._get_firestore_client", return_value=db):
         mgr = BracketSeasonManager()
@@ -234,29 +255,54 @@ def test_finalize_awards_class_champions():
     class_id = "pi5-hailo8l__gemini-2.5-flash"
     db = _make_finalize_db([class_id])
 
-    rank1 = BracketEntry(season_id="2026-04", class_id=class_id, rrn="RRN-001",
-                         best_score=0.9, submitted_at=1000, rank=1)
-    rank2 = BracketEntry(season_id="2026-04", class_id=class_id, rrn="RRN-002",
-                         best_score=0.7, submitted_at=900, rank=2)
+    rank1 = BracketEntry(
+        season_id="2026-04",
+        class_id=class_id,
+        rrn="RRN-001",
+        best_score=0.9,
+        submitted_at=1000,
+        rank=1,
+    )
+    rank2 = BracketEntry(
+        season_id="2026-04",
+        class_id=class_id,
+        rrn="RRN-002",
+        best_score=0.7,
+        submitted_at=900,
+        rank=2,
+    )
 
     with (
         patch("castor.competitions.bracket_season._get_firestore_client", return_value=db),
-        patch.object(BracketSeasonManager, "get_class_leaderboard",
-                     return_value=[rank1, rank2]),
-        patch.object(BracketSeasonManager, "_get_owner_uid",
-                     side_effect=lambda _db, rrn: f"owner-{rrn}"),
-        patch("castor.contribute.credits.award_credits",
-              side_effect=[2000, 1000, 5000]) as mock_award,
+        patch.object(BracketSeasonManager, "get_class_leaderboard", return_value=[rank1, rank2]),
+        patch.object(
+            BracketSeasonManager, "_get_owner_uid", side_effect=lambda _db, rrn: f"owner-{rrn}"
+        ),
+        patch(
+            "castor.contribute.credits.award_credits", side_effect=[2000, 1000, 5000]
+        ) as mock_award,
     ):
         mgr = BracketSeasonManager()
         champions = mgr.finalize_season("2026-04")
 
     # rank-1 call: scenarios_completed=200
-    rank1_call = call("owner-RRN-001", "RRN-001", scenarios_completed=200,
-                      beat_champion=False, rare_tier=False, tier="2026-04")
+    rank1_call = call(
+        "owner-RRN-001",
+        "RRN-001",
+        scenarios_completed=200,
+        beat_champion=False,
+        rare_tier=False,
+        tier="2026-04",
+    )
     # rank-2 call: scenarios_completed=100
-    rank2_call = call("owner-RRN-002", "RRN-002", scenarios_completed=100,
-                      beat_champion=False, rare_tier=False, tier="2026-04")
+    rank2_call = call(
+        "owner-RRN-002",
+        "RRN-002",
+        scenarios_completed=100,
+        beat_champion=False,
+        rare_tier=False,
+        tier="2026-04",
+    )
     mock_award.assert_any_call(*rank1_call.args, **rank1_call.kwargs)
     mock_award.assert_any_call(*rank2_call.args, **rank2_call.kwargs)
 
@@ -281,10 +327,22 @@ def test_grand_champion_gets_bonus():
     class_b = "server__gemini-2.5-pro"
     db = _make_finalize_db([class_a, class_b])
 
-    winner_a = BracketEntry(season_id="2026-04", class_id=class_a, rrn="RRN-A",
-                            best_score=0.95, submitted_at=1000, rank=1)
-    winner_b = BracketEntry(season_id="2026-04", class_id=class_b, rrn="RRN-B",
-                            best_score=0.80, submitted_at=900, rank=1)
+    winner_a = BracketEntry(
+        season_id="2026-04",
+        class_id=class_a,
+        rrn="RRN-A",
+        best_score=0.95,
+        submitted_at=1000,
+        rank=1,
+    )
+    winner_b = BracketEntry(
+        season_id="2026-04",
+        class_id=class_b,
+        rrn="RRN-B",
+        best_score=0.80,
+        submitted_at=900,
+        rank=1,
+    )
 
     def _lb(season_id: str, class_id: str) -> list[BracketEntry]:
         return [winner_a] if class_id == class_a else [winner_b]
@@ -292,10 +350,12 @@ def test_grand_champion_gets_bonus():
     with (
         patch("castor.competitions.bracket_season._get_firestore_client", return_value=db),
         patch.object(BracketSeasonManager, "get_class_leaderboard", side_effect=_lb),
-        patch.object(BracketSeasonManager, "_get_owner_uid",
-                     side_effect=lambda _db, rrn: f"owner-{rrn}"),
-        patch("castor.contribute.credits.award_credits",
-              side_effect=[2000, 2000, 5000]) as mock_award,
+        patch.object(
+            BracketSeasonManager, "_get_owner_uid", side_effect=lambda _db, rrn: f"owner-{rrn}"
+        ),
+        patch(
+            "castor.contribute.credits.award_credits", side_effect=[2000, 2000, 5000]
+        ) as mock_award,
     ):
         mgr = BracketSeasonManager()
         champions = mgr.finalize_season("2026-04")
@@ -314,8 +374,14 @@ def test_grand_champion_gets_bonus():
     assert not_gc.credits_awarded == 2000
 
     # grand champion bonus call: scenarios_completed=500
-    gc_call = call("owner-RRN-A", "RRN-A", scenarios_completed=500,
-                   beat_champion=False, rare_tier=False, tier="2026-04_grand_champion")
+    gc_call = call(
+        "owner-RRN-A",
+        "RRN-A",
+        scenarios_completed=500,
+        beat_champion=False,
+        rare_tier=False,
+        tier="2026-04_grand_champion",
+    )
     mock_award.assert_any_call(*gc_call.args, **gc_call.kwargs)
 
 

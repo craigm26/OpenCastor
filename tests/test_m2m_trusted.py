@@ -23,27 +23,26 @@ from castor.auth.m2m_trusted import (
 
 
 def _make_jwt(payload: dict) -> str:
-    header = base64.urlsafe_b64encode(
-        json.dumps({"alg": "EdDSA", "typ": "JWT"}).encode()
-    ).rstrip(b"=").decode()
-    body = base64.urlsafe_b64encode(
-        json.dumps(payload).encode()
-    ).rstrip(b"=").decode()
+    header = (
+        base64.urlsafe_b64encode(json.dumps({"alg": "EdDSA", "typ": "JWT"}).encode())
+        .rstrip(b"=")
+        .decode()
+    )
+    body = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
     return f"{header}.{body}.fakesig"
 
 
 VALID_PAYLOAD = {
-    "sub":         "orchestrator:fleet-brain",
-    "iss":         "rrf.rcan.dev",
+    "sub": "orchestrator:fleet-brain",
+    "iss": "rrf.rcan.dev",
     "rcan_scopes": ["fleet.trusted"],
-    "fleet_rrns":  ["RRN-000000000001", "RRN-000000000005"],
-    "exp":         int(time.time()) + 86400,
-    "rrf_sig":     "fakesig123",
+    "fleet_rrns": ["RRN-000000000001", "RRN-000000000005"],
+    "exp": int(time.time()) + 86400,
+    "rrf_sig": "fakesig123",
 }
 
 
 class TestValidateM2MTrustedMessage(unittest.TestCase):
-
     def setUp(self):
         _active_sessions.clear()
 
@@ -110,7 +109,6 @@ class TestValidateM2MTrustedMessage(unittest.TestCase):
 
 
 class TestSessionLifecycle(unittest.TestCase):
-
     def setUp(self):
         _active_sessions.clear()
 
@@ -164,7 +162,6 @@ class TestSessionLifecycle(unittest.TestCase):
 
 
 class TestRevocationCache(unittest.TestCase):
-
     def test_empty_cache_not_revoked(self):
         cache = RevocationCache()
         self.assertFalse(cache.is_revoked("orch:any"))

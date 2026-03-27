@@ -7,11 +7,13 @@ from castor.harness.cost_meter import PRICE_PER_1K, CostMeter
 
 @pytest.fixture
 def meter():
-    return CostMeter({
-        "budget_usd": 0.05,
-        "alert_at": 0.8,
-        "model": "gemini-2.0-flash",
-    })
+    return CostMeter(
+        {
+            "budget_usd": 0.05,
+            "alert_at": 0.8,
+            "model": "gemini-2.0-flash",
+        }
+    )
 
 
 def test_record_accumulates(meter):

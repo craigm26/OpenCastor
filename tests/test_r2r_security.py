@@ -37,7 +37,7 @@ def _make_bridge_instance(extra_rcan: dict | None = None):
     return bridge
 
 
-def _make_intent(scope: str = "chat") -> DelegatedIntent:
+def _make_intent(scope: str = "chat"):
     from castor.swarm.consensus import DelegatedIntent
 
     return DelegatedIntent(

@@ -31,13 +31,18 @@ def _secondary(text="SAFE - path clear"):
 
 def _dual_harness(primary=None, secondary=None, mode="safety_oracle", p66_veto=True):
     cfg = {
-        "harness": {"enabled": True, "max_iterations": 3, "p66_audit": False,
-                    "retry_on_error": False, "drift_detection": False},
+        "harness": {
+            "enabled": True,
+            "max_iterations": 3,
+            "p66_audit": False,
+            "retry_on_error": False,
+            "drift_detection": False,
+        },
         "secondary": {
             "mode": mode,
             "scope_filter": ["control"],
             "p66_veto": p66_veto,
-        }
+        },
     }
     return DualModelHarness(
         primary=primary or _provider(),
@@ -161,13 +166,14 @@ class TestConsensusMode:
         sec = _secondary("DISAGREE - unsafe, obstacle in path")
         prov = _provider()
         tool_calls = [{"name": "move", "args": {"linear": 1.0}}]
-        prov.think_with_tools.return_value = Thought(
-            raw_text="moving", tool_calls=tool_calls
-        )
+        prov.think_with_tools.return_value = Thought(raw_text="moving", tool_calls=tool_calls)
         h = _dual_harness(primary=prov, secondary=sec, mode="consensus")
         ctx = HarnessContext(instruction="go fast", scope="control", consent_granted=True)
         result = await h.run(ctx)
-        assert "disagrees" in result.thought.raw_text.lower() or "pause" in result.thought.raw_text.lower()
+        assert (
+            "disagrees" in result.thought.raw_text.lower()
+            or "pause" in result.thought.raw_text.lower()
+        )
 
 
 class TestDriftDetectionHook:
@@ -178,6 +184,7 @@ class TestDriftDetectionHook:
         from castor.tools import ToolRegistry
 
         call_count = [0]
+
         def _think(*a, **kw):
             call_count[0] += 1
             # Return tool call first 3 times, then text
@@ -190,8 +197,16 @@ class TestDriftDetectionHook:
         prov.think_with_tools.side_effect = _think
         prov.model_name = "test"
 
-        cfg = {"harness": {"enabled": True, "max_iterations": 5, "p66_audit": False,
-                           "retry_on_error": False, "drift_detection": True, "drift_threshold": 0.15}}
+        cfg = {
+            "harness": {
+                "enabled": True,
+                "max_iterations": 5,
+                "p66_audit": False,
+                "retry_on_error": False,
+                "drift_detection": True,
+                "drift_threshold": 0.15,
+            }
+        }
         h = AgentHarness(provider=prov, config=cfg, tool_registry=ToolRegistry())
         ctx = HarnessContext(instruction="what is your status", scope="chat")
         result = await h.run(ctx)
@@ -200,6 +215,7 @@ class TestDriftDetectionHook:
 
     def test_word_overlap_similarity(self):
         from castor.harness import _word_overlap_similarity
+
         # Same words → high similarity
         assert _word_overlap_similarity("pick up the red brick", "picking red brick up") > 0.3
         # Completely different → low
