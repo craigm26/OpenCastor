@@ -30,9 +30,27 @@ class TestCmdLeaderboard:
         from castor.commands.leaderboard import cmd_leaderboard
 
         rows = [
-            {"rank": 1, "robot_name": "alpha", "score": 95.0, "eval_count": 10, "last_eval": "2026-03-20"},
-            {"rank": 2, "robot_name": "beta", "score": 88.0, "eval_count": 8, "last_eval": "2026-03-19"},
-            {"rank": 3, "robot_name": "gamma", "score": 72.0, "eval_count": 5, "last_eval": "2026-03-18"},
+            {
+                "rank": 1,
+                "robot_name": "alpha",
+                "score": 95.0,
+                "eval_count": 10,
+                "last_eval": "2026-03-20",
+            },
+            {
+                "rank": 2,
+                "robot_name": "beta",
+                "score": 88.0,
+                "eval_count": 8,
+                "last_eval": "2026-03-19",
+            },
+            {
+                "rank": 3,
+                "robot_name": "gamma",
+                "score": 72.0,
+                "eval_count": 5,
+                "last_eval": "2026-03-18",
+            },
         ]
         args = _make_args(tier="community", season=None, top=10, output_json=False, config=None)
 
@@ -75,7 +93,9 @@ class TestCmdLeaderboard:
         args = _make_args(tier="community", season=None, top=10, output_json=False, config=None)
 
         with patch("castor.commands.leaderboard._fetch_leaderboard_http", return_value=None):
-            with patch("castor.commands.leaderboard._fetch_leaderboard_firestore", return_value=rows):
+            with patch(
+                "castor.commands.leaderboard._fetch_leaderboard_firestore", return_value=rows
+            ):
                 with patch.dict("os.environ", {"GOOGLE_APPLICATION_CREDENTIALS": "/creds.json"}):
                     cmd_leaderboard(args)
 
@@ -104,7 +124,13 @@ class TestCmdCompeteList:
         from castor.commands.compete import cmd_compete
 
         competitions = [
-            {"name": "Sprint Q1", "type": "sprint", "seconds_remaining": 7200, "credit_pool": 100, "robot_count": 5}
+            {
+                "name": "Sprint Q1",
+                "type": "sprint",
+                "seconds_remaining": 7200,
+                "credit_pool": 100,
+                "robot_count": 5,
+            }
         ]
         args = _make_args(compete_action="list", competition_id=None)
 

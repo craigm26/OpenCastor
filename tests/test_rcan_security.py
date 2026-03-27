@@ -91,7 +91,7 @@ class TestP66EstopInvariant:
         assert is_estop is True, "test prerequisite: doc must be identified as ESTOP"
 
         # The replay check would return False for a duplicate
-        replay_result = bridge._check_replay(cmd_id, doc, is_safety=True)
+        bridge._check_replay(cmd_id, doc, is_safety=True)
         # Result doesn't matter — the point is we never call it for ESTOP
         # Verify that the offline check also passes for ESTOP
         bridge._offline_mode = True

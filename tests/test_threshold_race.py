@@ -62,7 +62,9 @@ def test_submit_below_threshold():
     race = _make_race(mgr, target=0.80)
 
     with patch("castor.competitions.threshold_race._get_firestore_client", return_value=None):
-        entry = mgr.submit_claim(race.id, "rrn://org/robot/test/bot-1", score=0.70, candidate_id="cand-1")
+        entry = mgr.submit_claim(
+            race.id, "rrn://org/robot/test/bot-1", score=0.70, candidate_id="cand-1"
+        )
 
     assert entry.best_score == 0.70
     assert entry.verification_status == VerificationStatus.PENDING
@@ -88,7 +90,9 @@ def test_submit_claim_triggers_verification():
     mgr.verify_claim = _fake_verify  # type: ignore[method-assign]
 
     with patch("castor.competitions.threshold_race._get_firestore_client", return_value=None):
-        entry = mgr.submit_claim(race.id, "rrn://org/robot/test/bot-2", score=0.85, candidate_id="cand-2")
+        entry = mgr.submit_claim(
+            race.id, "rrn://org/robot/test/bot-2", score=0.85, candidate_id="cand-2"
+        )
 
     assert entry.verification_status == VerificationStatus.VERIFYING
     assert len(verify_called) == 1
@@ -160,7 +164,9 @@ def test_soft_deadline_partial_payout():
 
     with (
         patch("castor.competitions.threshold_race._get_firestore_client", return_value=None),
-        patch("castor.competitions.threshold_race.ThresholdRaceManager._award_credits") as mock_award,
+        patch(
+            "castor.competitions.threshold_race.ThresholdRaceManager._award_credits"
+        ) as mock_award,
     ):
         result = mgr.check_soft_deadline(race.id)
 

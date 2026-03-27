@@ -18,6 +18,7 @@ from castor.hardware.so_arm101.constants import (
 
 # ── constants ─────────────────────────────────────────────────────────────────
 
+
 def test_follower_motors_count():
     assert len(FOLLOWER_MOTORS) == 6
 
@@ -56,6 +57,7 @@ def test_assembly_steps_have_descriptions():
 
 # ── config generator ──────────────────────────────────────────────────────────
 
+
 def test_generate_config_single_arm():
     yaml = generate_config(follower_port="/dev/ttyACM0")
     assert "follower_arm" in yaml
@@ -91,6 +93,7 @@ def test_generate_config_rrn():
 
 # ── assembly guide ────────────────────────────────────────────────────────────
 
+
 def test_assembly_steps_json():
     steps = assembly_steps_json()
     assert len(steps) == len(FOLLOWER_ASSEMBLY_STEPS)
@@ -110,20 +113,24 @@ def test_assembly_guide_runs(capsys):
 
 # ── port finder (no hardware) ─────────────────────────────────────────────────
 
+
 def test_detect_feetech_ports_no_crash():
     """Should return a list (possibly empty) even without hardware."""
     from castor.hardware.so_arm101.port_finder import detect_feetech_ports
+
     result = detect_feetech_ports()
     assert isinstance(result, list)
 
 
 def test_list_serial_ports_no_crash():
     from castor.hardware.so_arm101.port_finder import list_serial_ports
+
     result = list_serial_ports()
     assert isinstance(result, list)
 
 
 # ── motor setup (dry run) ─────────────────────────────────────────────────────
+
 
 def test_motor_setup_dry_run():
     from castor.hardware.so_arm101.motor_setup import setup_motors
@@ -154,6 +161,7 @@ def test_motor_setup_leader_dry_run():
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
+
 def test_arm_cli_help():
     from castor.hardware.so_arm101.cli import build_parser
 
@@ -177,18 +185,21 @@ def test_arm_cli_config_dry(tmp_path):
     from castor.hardware.so_arm101.cli import cmd_config
 
     out = str(tmp_path / "test.rcan.yaml")
-    cmd_config(argparse.Namespace(
-        name="test_arm",
-        out=out,
-        follower_port="/dev/ttyACM0",
-        leader_port=None,
-    ))
+    cmd_config(
+        argparse.Namespace(
+            name="test_arm",
+            out=out,
+            follower_port="/dev/ttyACM0",
+            leader_port=None,
+        )
+    )
     content = Path(out).read_text()
     assert "test_arm" in content
     assert "feetech" in content
 
 
 # ── lerobot bridge ────────────────────────────────────────────────────────────
+
 
 def test_lerobot_bridge_status():
     from castor.hardware.so_arm101.lerobot_bridge import status
@@ -248,6 +259,7 @@ def test_arm_cli_status_no_crash(capsys):
 
 # ── record / grasp (new in #658) ──────────────────────────────────────────────
 
+
 def test_record_no_lerobot(capsys):
     """cmd_record should return 1 and print a helpful message when LeRobot is absent."""
     import argparse
@@ -291,10 +303,13 @@ def test_record_with_lerobot(capsys):
     mock_result = MagicMock()
     mock_result.returncode = 0
 
-    with patch(
-        "castor.hardware.so_arm101.lerobot_bridge.LeRobotBridge",
-        return_value=mock_bridge,
-    ), patch("subprocess.run", return_value=mock_result) as mock_run:
+    with (
+        patch(
+            "castor.hardware.so_arm101.lerobot_bridge.LeRobotBridge",
+            return_value=mock_bridge,
+        ),
+        patch("subprocess.run", return_value=mock_result) as mock_run,
+    ):
         rc = cmd_record(
             argparse.Namespace(
                 port="/dev/ttyACM0",
@@ -320,8 +335,10 @@ def test_grasp_hook_no_hailo(capsys):
     from castor.hardware.so_arm101.cli import cmd_grasp
 
     # Patch both the importlib spec lookup and the local file existence check
-    with patch("importlib.util.find_spec", return_value=None), \
-         patch("os.path.exists", return_value=False):
+    with (
+        patch("importlib.util.find_spec", return_value=None),
+        patch("os.path.exists", return_value=False),
+    ):
         rc = cmd_grasp(argparse.Namespace())
 
     assert rc == 1
@@ -330,6 +347,7 @@ def test_grasp_hook_no_hailo(capsys):
 
 
 # ── safety_bridge ─────────────────────────────────────────────────────────────
+
 
 class TestSafetyBridge:
     """Tests for castor.hardware.so_arm101.safety_bridge.write_arm_command."""
@@ -390,6 +408,7 @@ class TestSafetyBridge:
 
 # ── vision.py (camera ROI) ────────────────────────────────────────────────────
 
+
 def test_get_camera_frame_roi_no_camera():
     """Returns None gracefully when cv2 is unavailable."""
     from unittest.mock import patch
@@ -408,6 +427,7 @@ def test_get_camera_frame_roi_returns_none_on_bad_device():
         import cv2  # noqa: F401
     except ImportError:
         import pytest
+
         pytest.skip("cv2 not installed")
 
     from unittest.mock import MagicMock
@@ -424,6 +444,7 @@ def test_get_camera_frame_roi_returns_none_on_bad_device():
 
 
 # ── rcan_bridge.py ────────────────────────────────────────────────────────────
+
 
 def test_send_arm_pose_rcan_no_config():
     """Returns True (graceful) even without rcan.yaml and without yaml installed."""
@@ -446,9 +467,7 @@ def test_send_arm_pose_rcan_builds_message():
     captured_msgs = []
 
     # Patch logger.info on the already-imported module to capture log output
-    with patch(
-        "castor.hardware.so_arm101.rcan_bridge.logger"
-    ) as mock_logger:
+    with patch("castor.hardware.so_arm101.rcan_bridge.logger") as mock_logger:
         mock_logger.info.side_effect = lambda fmt, msg: captured_msgs.append(msg)
 
         result = send_arm_pose_rcan(

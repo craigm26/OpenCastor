@@ -22,14 +22,23 @@ class TestDefaultRules:
     def test_expected_rule_ids(self):
         proto = SafetyProtocol()
         expected = {
-            "MOTION_001", "MOTION_002", "MOTION_003", "MOTION_004",
+            "MOTION_001",
+            "MOTION_002",
+            "MOTION_003",
+            "MOTION_004",
             "FORCE_001",
-            "HUMAN_001", "HUMAN_002",
+            "HUMAN_001",
+            "HUMAN_002",
             "WORKSPACE_001",
-            "ARM_001", "ARM_002", "ARM_003",
+            "ARM_001",
+            "ARM_002",
+            "ARM_003",
             "THERMAL_001",
-            "ELECTRICAL_001", "ELECTRICAL_002",
-            "SOFTWARE_001", "SOFTWARE_002", "SOFTWARE_003",
+            "ELECTRICAL_001",
+            "ELECTRICAL_002",
+            "SOFTWARE_001",
+            "SOFTWARE_002",
+            "SOFTWARE_003",
             "EMERGENCY_001",
             "PROPERTY_001",
             "PRIVACY_001",
@@ -420,8 +429,10 @@ class TestNoOp:
 # Protocol 66 Phase 2 — Extended rules
 # ---------------------------------------------------------------------------
 
+
 def test_human_001_estop():
     from castor.safety.protocol import SafetyProtocol
+
     p = SafetyProtocol()
     viols = p.check_action({"human_distance_m": 0.1})
     rule_ids = [v.rule_id for v in viols]
@@ -432,6 +443,7 @@ def test_human_001_estop():
 
 def test_human_001_ok():
     from castor.safety.protocol import SafetyProtocol
+
     p = SafetyProtocol()
     viols = p.check_action({"human_distance_m": 1.0})
     assert not any(v.rule_id == "HUMAN_001" for v in viols)
@@ -439,6 +451,7 @@ def test_human_001_ok():
 
 def test_human_002_slowdown():
     from castor.safety.protocol import SafetyProtocol
+
     p = SafetyProtocol()
     # 1.0m away, going 0.5 m/s — should trigger HUMAN_002
     viols = p.check_action({"human_distance_m": 1.0, "linear_velocity": 0.5})
@@ -447,6 +460,7 @@ def test_human_002_slowdown():
 
 def test_human_002_ok():
     from castor.safety.protocol import SafetyProtocol
+
     p = SafetyProtocol()
     # 1.0m away, going 0.2 m/s — within zone but within speed limit
     viols = p.check_action({"human_distance_m": 1.0, "linear_velocity": 0.2})
@@ -455,6 +469,7 @@ def test_human_002_ok():
 
 def test_arm_001_joint_velocity():
     from castor.safety.protocol import SafetyProtocol
+
     p = SafetyProtocol()
     viols = p.check_action({"joint_velocities": [0.5, 0.5, 5.0, 0.5, 0.5, 0.5]})
     assert any(v.rule_id == "ARM_001" for v in viols)
@@ -462,6 +477,7 @@ def test_arm_001_joint_velocity():
 
 def test_arm_001_ok():
     from castor.safety.protocol import SafetyProtocol
+
     p = SafetyProtocol()
     viols = p.check_action({"joint_velocities": [0.5, 1.0, 1.5, 0.5, 0.5, 0.5]})
     assert not any(v.rule_id == "ARM_001" for v in viols)
@@ -469,6 +485,7 @@ def test_arm_001_ok():
 
 def test_arm_002_payload():
     from castor.safety.protocol import SafetyProtocol
+
     p = SafetyProtocol()
     viols = p.check_action({"payload_kg": 8.0})
     assert any(v.rule_id == "ARM_002" for v in viols)
@@ -476,6 +493,7 @@ def test_arm_002_payload():
 
 def test_arm_003_singularity_critical():
     from castor.safety.protocol import SafetyProtocol
+
     p = SafetyProtocol()
     viols = p.check_action({"singularity_metric": 0.005})
     assert any(v.rule_id == "ARM_003" and v.severity == "critical" for v in viols)
@@ -483,6 +501,7 @@ def test_arm_003_singularity_critical():
 
 def test_arm_003_singularity_warn():
     from castor.safety.protocol import SafetyProtocol
+
     p = SafetyProtocol()
     viols = p.check_action({"singularity_metric": 0.03})
     assert any(v.rule_id == "ARM_003" and v.severity == "warning" for v in viols)
@@ -490,6 +509,7 @@ def test_arm_003_singularity_warn():
 
 def test_electrical_001_low_voltage():
     from castor.safety.protocol import SafetyProtocol
+
     p = SafetyProtocol()
     viols = p.check_action({"motor_voltage_v": 7.0})
     assert any(v.rule_id == "ELECTRICAL_001" for v in viols)
@@ -497,6 +517,7 @@ def test_electrical_001_low_voltage():
 
 def test_electrical_001_high_voltage():
     from castor.safety.protocol import SafetyProtocol
+
     p = SafetyProtocol()
     viols = p.check_action({"motor_voltage_v": 20.0})
     assert any(v.rule_id == "ELECTRICAL_001" for v in viols)
@@ -504,6 +525,7 @@ def test_electrical_001_high_voltage():
 
 def test_electrical_001_ok():
     from castor.safety.protocol import SafetyProtocol
+
     p = SafetyProtocol()
     viols = p.check_action({"motor_voltage_v": 12.0})
     assert not any(v.rule_id == "ELECTRICAL_001" for v in viols)
@@ -511,6 +533,7 @@ def test_electrical_001_ok():
 
 def test_electrical_002_overcurrent():
     from castor.safety.protocol import SafetyProtocol
+
     p = SafetyProtocol()
     viols = p.check_action({"motor_current_a": 12.0})
     assert any(v.rule_id == "ELECTRICAL_002" for v in viols)
@@ -518,6 +541,7 @@ def test_electrical_002_overcurrent():
 
 def test_motion_004_reversal():
     from castor.safety.protocol import SafetyProtocol
+
     p = SafetyProtocol()
     # Going 0.5 m/s, commanded -0.5 m/s = reversal
     viols = p.check_action({"linear_velocity": -0.5, "prev_linear_velocity": 0.5})
@@ -526,6 +550,7 @@ def test_motion_004_reversal():
 
 def test_motion_004_ok_slow():
     from castor.safety.protocol import SafetyProtocol
+
     p = SafetyProtocol()
     # Under threshold speed — reversal allowed
     viols = p.check_action({"linear_velocity": -0.5, "prev_linear_velocity": 0.1})
@@ -534,6 +559,7 @@ def test_motion_004_ok_slow():
 
 def test_software_002_low_confidence():
     from castor.safety.protocol import SafetyProtocol
+
     p = SafetyProtocol()
     viols = p.check_action({"ai_confidence": 0.4})
     assert any(v.rule_id == "SOFTWARE_002" for v in viols)
@@ -541,6 +567,7 @@ def test_software_002_low_confidence():
 
 def test_software_003_missing_thought_id():
     from castor.safety.protocol import SafetyProtocol
+
     p = SafetyProtocol()
     viols = p.check_action({"ai_generated": True})
     assert any(v.rule_id == "SOFTWARE_003" for v in viols)
@@ -548,6 +575,7 @@ def test_software_003_missing_thought_id():
 
 def test_software_003_ok_with_thought_id():
     from castor.safety.protocol import SafetyProtocol
+
     p = SafetyProtocol()
     viols = p.check_action({"ai_generated": True, "thought_id": "thought-abc-123"})
     assert not any(v.rule_id == "SOFTWARE_003" for v in viols)
@@ -555,24 +583,35 @@ def test_software_003_ok_with_thought_id():
 
 def test_p66_manifest_structure():
     from castor.safety.p66_manifest import build_manifest
+
     m = build_manifest(safety_layer=None)
     assert m["manifest_version"] == "1.0"
     assert m["summary"]["total_rules"] >= 20
     assert m["summary"]["implemented"] >= 15
     rule_ids = {r["rule_id"] for r in m["rules"]}
     expected = {
-        "MOTION_001", "MOTION_002", "MOTION_003", "MOTION_004",
-        "FORCE_001", "HUMAN_001", "HUMAN_002",
-        "ARM_001", "ARM_002", "ARM_003",
-        "ELECTRICAL_001", "ELECTRICAL_002",
-        "SOFTWARE_001", "SOFTWARE_002", "SOFTWARE_003",
-        "EMERGENCY_001", "EMERGENCY_002",
-        "PROPERTY_001", "PRIVACY_001",
-        "HARDWARE_001", "HARDWARE_002",
+        "MOTION_001",
+        "MOTION_002",
+        "MOTION_003",
+        "MOTION_004",
+        "FORCE_001",
+        "HUMAN_001",
+        "HUMAN_002",
+        "ARM_001",
+        "ARM_002",
+        "ARM_003",
+        "ELECTRICAL_001",
+        "ELECTRICAL_002",
+        "SOFTWARE_001",
+        "SOFTWARE_002",
+        "SOFTWARE_003",
+        "EMERGENCY_001",
+        "EMERGENCY_002",
+        "PROPERTY_001",
+        "PRIVACY_001",
+        "HARDWARE_001",
+        "HARDWARE_002",
     }
     assert expected.issubset(rule_ids)
     assert "invariants" in m
-    assert all(
-        inv["status"] == "enforced"
-        for inv in m["invariants"].values()
-    )
+    assert all(inv["status"] == "enforced" for inv in m["invariants"].values())

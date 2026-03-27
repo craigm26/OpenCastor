@@ -35,10 +35,12 @@ if _RCAN_PATH not in sys.path:
 # Fixtures
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def cache():
     """Return a fresh ReplayCache with 30s window."""
     from rcan.replay import ReplayCache
+
     return ReplayCache(window_s=30)
 
 
@@ -46,6 +48,7 @@ def cache():
 def safety_cache():
     """Return a fresh ReplayCache with 10s safety window."""
     from rcan.replay import ReplayCache
+
     return ReplayCache(window_s=10)
 
 
@@ -60,6 +63,7 @@ def _now() -> float:
 # ─────────────────────────────────────────────────────────────────────────────
 # Fresh message acceptance
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestFreshMessages:
     def test_fresh_message_accepted(self, cache):
@@ -93,6 +97,7 @@ class TestFreshMessages:
 # Replay rejection
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestReplayRejection:
     def test_duplicate_msg_id_rejected(self, cache):
         """The same msg_id submitted twice is rejected on second submission."""
@@ -125,6 +130,7 @@ class TestReplayRejection:
 # ─────────────────────────────────────────────────────────────────────────────
 # Stale timestamp rejection
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestStaleTimestamps:
     def test_stale_message_rejected(self, cache):
@@ -162,6 +168,7 @@ class TestStaleTimestamps:
 # ─────────────────────────────────────────────────────────────────────────────
 # Safety window (10s)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestSafetyWindow:
     def test_safety_cache_rejects_11s_old_message(self, safety_cache):
@@ -203,10 +210,12 @@ class TestSafetyWindow:
 # Eviction and memory management
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestEviction:
     def test_max_size_enforced(self):
         """Cache evicts when max_size is reached."""
         from rcan.replay import ReplayCache
+
         cache = ReplayCache(window_s=30, max_size=100)
         now = _now()
         for _ in range(120):
@@ -219,10 +228,12 @@ class TestEviction:
 # Thread safety
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestThreadSafety:
     def test_concurrent_unique_messages(self):
         """Concurrent unique messages are all accepted without corruption."""
         from rcan.replay import ReplayCache
+
         cache = ReplayCache(window_s=30)
         errors: list[str] = []
         msg_ids = [_msg_id() for _ in range(50)]
@@ -244,6 +255,7 @@ class TestThreadSafety:
     def test_concurrent_duplicate_mostly_rejected(self):
         """Concurrent duplicate submissions: at most one succeeds."""
         from rcan.replay import ReplayCache
+
         cache = ReplayCache(window_s=30)
         mid = _msg_id()
         now = _now()
@@ -268,10 +280,12 @@ class TestThreadSafety:
 # Bridge integration
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestBridgeIntegration:
     def test_stub_allows_all_commands(self):
         """_ReplayCacheStub always allows commands (fail-open)."""
         from castor.cloud.bridge import _ReplayCacheStub
+
         stub = _ReplayCacheStub(window_s=30)
         allowed, reason = stub.check_and_record("test-id", time.time() - 100)
         assert allowed is True
@@ -280,6 +294,7 @@ class TestBridgeIntegration:
     def test_bridge_uses_replay_cache(self):
         """CastorBridge.__init__ creates replay cache instances."""
         from castor.cloud.bridge import CastorBridge
+
         config = {
             "rrn": "RRN-00000001",
             "metadata": {"name": "TestBot"},
@@ -294,6 +309,7 @@ class TestBridgeIntegration:
     def test_bridge_safety_cache_window(self):
         """Safety cache uses 10s window."""
         from castor.cloud.bridge import SAFETY_REPLAY_WINDOW_S, CastorBridge
+
         config = {"rrn": "RRN-00000001", "metadata": {"name": "TestBot"}}
         bridge = CastorBridge(config=config, firebase_project="test-project")
         assert bridge._safety_replay_cache.window_s == SAFETY_REPLAY_WINDOW_S
@@ -301,6 +317,7 @@ class TestBridgeIntegration:
     def test_bridge_replay_check_fresh(self):
         """bridge._check_replay returns True for a fresh command."""
         from castor.cloud.bridge import CastorBridge
+
         bridge = CastorBridge(
             config={"rrn": "RRN-00000001", "metadata": {"name": "T"}},
             firebase_project="test",
@@ -312,6 +329,7 @@ class TestBridgeIntegration:
     def test_bridge_replay_check_duplicate(self):
         """bridge._check_replay returns False on second submission of same cmd_id."""
         from castor.cloud.bridge import CastorBridge
+
         bridge = CastorBridge(
             config={"rrn": "RRN-00000001", "metadata": {"name": "T"}},
             firebase_project="test",
@@ -324,6 +342,7 @@ class TestBridgeIntegration:
     def test_bridge_replay_check_stale(self):
         """bridge._check_replay returns False for stale command (>30s old)."""
         from castor.cloud.bridge import CastorBridge
+
         bridge = CastorBridge(
             config={"rrn": "RRN-00000001", "metadata": {"name": "T"}},
             firebase_project="test",

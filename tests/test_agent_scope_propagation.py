@@ -32,9 +32,7 @@ def make_guardian(config=None, state=None):
 
 
 def make_orchestrator(state=None, consensus=None):
-    return OrchestratorAgent(
-        config={}, shared_state=state or SharedState(), consensus=consensus
-    )
+    return OrchestratorAgent(config={}, shared_state=state or SharedState(), consensus=consensus)
 
 
 def _veto_result(guardian, scope, action_type):

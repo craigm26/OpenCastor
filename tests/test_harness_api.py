@@ -123,6 +123,7 @@ def client():
 @pytest.fixture()
 def api_mod():
     import castor.api as mod
+
     return mod
 
 

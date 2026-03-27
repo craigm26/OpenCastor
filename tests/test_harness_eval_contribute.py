@@ -103,7 +103,10 @@ def test_run_harness_eval_unit_no_firestore():
     hw = {"cpu_cores": 4}
 
     # Firestore import raises — should be gracefully skipped
-    with patch("castor.contribute.harness_eval._get_firestore_client", side_effect=Exception("no firestore")):
+    with patch(
+        "castor.contribute.harness_eval._get_firestore_client",
+        side_effect=Exception("no firestore"),
+    ):
         result = run_harness_eval_unit(wu, hw)
 
     assert result.status == "complete"

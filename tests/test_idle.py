@@ -188,9 +188,7 @@ class TestIsRobotIdle:
         orig = idle_mod._TRAJECTORY_DB
         try:
             idle_mod._TRAJECTORY_DB = db_with_recent_activity
-            state = asyncio.run(
-                is_robot_idle(min_idle_s=300, battery_min=0, respect_hours=False)
-            )
+            state = asyncio.run(is_robot_idle(min_idle_s=300, battery_min=0, respect_hours=False))
             assert not state.is_idle
             assert any("active" in r for r in state.reasons_blocked)
         finally:
@@ -204,7 +202,8 @@ class TestIsRobotIdle:
             idle_mod._TRAJECTORY_DB = db_with_old_activity
             # Simulate 2 PM (business hours)
             with patch.object(
-                IdleState, "__init__",
+                IdleState,
+                "__init__",
                 lambda self: (
                     setattr(self, "is_idle", True),
                     setattr(self, "reasons_blocked", []),
@@ -215,9 +214,7 @@ class TestIsRobotIdle:
                     None,
                 )[-1],
             ):
-                state = asyncio.run(
-                    is_robot_idle(min_idle_s=60, battery_min=0, respect_hours=True)
-                )
+                state = asyncio.run(is_robot_idle(min_idle_s=60, battery_min=0, respect_hours=True))
             assert not state.is_idle or True  # test passes either way (patching is complex)
         finally:
             idle_mod._TRAJECTORY_DB = orig

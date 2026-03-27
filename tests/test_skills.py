@@ -99,7 +99,13 @@ class TestSkillLoader:
         loader = SkillLoader()
         skills = loader.load_all()
         # At minimum the 5 built-in skills should be present
-        expected = {"web-lookup", "camera-describe", "navigate-to", "arm-manipulate", "peer-coordinate"}
+        expected = {
+            "web-lookup",
+            "camera-describe",
+            "navigate-to",
+            "arm-manipulate",
+            "peer-coordinate",
+        }
         missing = expected - set(skills.keys())
         assert not missing, f"Missing built-in skills: {missing}"
 
@@ -198,7 +204,7 @@ class TestFrontmatterParsing:
         assert body == "# Just a body"
 
     def test_parse_yaml_simple(self):
-        yaml_text = "name: my-skill\nversion: \"1.0\"\nmax_iterations: 8"
+        yaml_text = 'name: my-skill\nversion: "1.0"\nmax_iterations: 8'
         parsed = _parse_yaml_simple(yaml_text)
         assert parsed["name"] == "my-skill"
         assert parsed["max_iterations"] == 8
@@ -207,11 +213,12 @@ class TestFrontmatterParsing:
 class TestEvalJsonFiles:
     """Verify eval.json files are valid for skills that have them."""
 
-    @pytest.mark.parametrize("skill_name", [
-        "web-lookup", "navigate-to", "arm-manipulate", "peer-coordinate"
-    ])
+    @pytest.mark.parametrize(
+        "skill_name", ["web-lookup", "navigate-to", "arm-manipulate", "peer-coordinate"]
+    )
     def test_eval_json_valid(self, skill_name):
         from castor.skills.loader import _BUILTIN_DIR
+
         eval_path = _BUILTIN_DIR / skill_name / "tests" / "eval.json"
         assert eval_path.exists(), f"eval.json missing for {skill_name}"
         cases = json.loads(eval_path.read_text())

@@ -77,6 +77,7 @@ def _cmd_ref_mock():
 # 1. ReplayCache integration (GAP-03)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestReplayCacheIntegration:
     def test_replay_cache_created_on_init(self):
         """Bridge creates replay caches on __init__."""
@@ -167,6 +168,7 @@ class TestReplayCacheIntegration:
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. SenderType audit trail (GAP-08)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestSenderTypeAudit:
     def test_sender_type_included_in_complete_entry(self):
@@ -267,6 +269,7 @@ class TestSenderTypeAudit:
 # 3. QoS for ESTOP (GAP-11)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestEstopQoS:
     def test_estop_ack_qos_written(self):
         """ESTOP commands get ack_qos='acknowledged' written to Firestore."""
@@ -326,6 +329,7 @@ class TestEstopQoS:
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. Offline mode (GAP-06)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestOfflineMode:
     def test_starts_online(self):
@@ -403,6 +407,7 @@ class TestOfflineMode:
 # 5. Training data consent (GAP-10)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestTrainingConsent:
     def test_training_consent_not_required_by_default(self):
         """training_consent_required defaults to False."""
@@ -462,10 +467,12 @@ class TestTrainingConsent:
 # 6. Version negotiation — bridge registers with rcan_version=1.5
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestVersionNegotiation:
     def test_bridge_version_is_v15(self):
         """BRIDGE_VERSION is updated for v1.5 release."""
         from castor.cloud.bridge import BRIDGE_VERSION
+
         major, minor = BRIDGE_VERSION.split(".")[:2]
         assert major == "1"
         assert int(minor) >= 5

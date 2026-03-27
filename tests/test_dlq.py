@@ -50,6 +50,7 @@ def test_purge_old(dlq):
     dlq.push("cmd-old", "inst", "chat", "err")
     # Artificially age by directly manipulating (via another DLQ instance)
     import sqlite3
+
     old_time = time.time() - 8 * 86400  # 8 days ago
     conn = sqlite3.connect(dlq._db_path)
     conn.execute("UPDATE dead_letters SET created_at = ?", (old_time,))

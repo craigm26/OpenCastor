@@ -229,7 +229,12 @@ class TestSessionMessageFields:
         from castor.channels.session import SessionMessage
 
         msg = SessionMessage(
-            role="user", text="cmd", channel="whatsapp", chat_id="555", sender_scope="discover", sender_loa=0
+            role="user",
+            text="cmd",
+            channel="whatsapp",
+            chat_id="555",
+            sender_scope="discover",
+            sender_loa=0,
         )
         assert msg.sender_scope == "discover"
         assert msg.sender_loa == 0
@@ -272,7 +277,7 @@ class TestHandleChannelMessageScopeEnforcement:
         with mock.patch.object(api_mod, "_capture_live_frame", return_value=None):
             with mock.patch.object(api_mod, "_get_active_brain", return_value=brain):
                 with mock.patch.object(api_mod, "_speak_reply", return_value=None):
-                    result = api_mod._handle_channel_message("whatsapp", "111", "move")
+                    api_mod._handle_channel_message("whatsapp", "111", "move")
         api_mod.state.brain = original_brain
         api_mod.state.fs = original_fs
         api_mod.state.driver = original_driver

@@ -220,7 +220,6 @@ def test_source_contains_actionable_401_message():
 
 
 def test_embedding_loop_uses_module_level_hdr():
-    src = SRC_PATH.read_text()
     # Extract _run_embedding_loop function source
     mod = _load_module("")
     func_src = inspect.getsource(mod._run_embedding_loop)

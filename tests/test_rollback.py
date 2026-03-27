@@ -1,6 +1,5 @@
 """Tests for castor.harness.rollback."""
 
-
 import pytest
 
 from castor.harness.rollback import RollbackManager

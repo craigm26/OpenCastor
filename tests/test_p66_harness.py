@@ -29,13 +29,21 @@ def _make_provider(text="ok", tool_calls=None):
 
 def _harness(provider=None, scope_override=None):
     p = provider or _make_provider()
-    cfg = {"harness": {"enabled": True, "max_iterations": 3, "p66_audit": False, "retry_on_error": False}}
+    cfg = {
+        "harness": {
+            "enabled": True,
+            "max_iterations": 3,
+            "p66_audit": False,
+            "retry_on_error": False,
+        }
+    }
     return AgentHarness(provider=p, config=cfg, tool_registry=ToolRegistry())
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # P66 INVARIANT 1 — ESTOP bypasses context building
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestP66_Invariant1_ESTOPBypassesContext:
     @pytest.mark.asyncio
@@ -63,6 +71,7 @@ class TestP66_Invariant1_ESTOPBypassesContext:
 # P66 INVARIANT 2 — ESTOP bypasses tool loop
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestP66_Invariant2_ESTOPBypassesToolLoop:
     @pytest.mark.asyncio
     async def test_estop_no_tool_calls(self):
@@ -77,7 +86,14 @@ class TestP66_Invariant2_ESTOPBypassesToolLoop:
     async def test_estop_no_iteration_limit_applied(self):
         """ESTOP completes in one provider call regardless of max_iterations=0."""
         provider = _make_provider("halted")
-        cfg = {"harness": {"enabled": True, "max_iterations": 0, "p66_audit": False, "retry_on_error": False}}
+        cfg = {
+            "harness": {
+                "enabled": True,
+                "max_iterations": 0,
+                "p66_audit": False,
+                "retry_on_error": False,
+            }
+        }
         h = AgentHarness(provider=provider, config=cfg, tool_registry=ToolRegistry())
         ctx = HarnessContext(instruction="ESTOP", scope="safety")
         result = await h.run(ctx)
@@ -88,6 +104,7 @@ class TestP66_Invariant2_ESTOPBypassesToolLoop:
 # ═══════════════════════════════════════════════════════════════════════════════
 # P66 INVARIANT 3 — ESTOP bypasses secondary veto (when dual-model is added)
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestP66_Invariant3_ESTOPBypassesSecondaryVeto:
     @pytest.mark.asyncio
@@ -104,6 +121,7 @@ class TestP66_Invariant3_ESTOPBypassesSecondaryVeto:
 # ═══════════════════════════════════════════════════════════════════════════════
 # P66 INVARIANT 4 — ESTOP bypasses consent dialog
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestP66_Invariant4_ESTOPNeverRequiresConsent:
     @pytest.mark.asyncio
@@ -129,6 +147,7 @@ class TestP66_Invariant4_ESTOPNeverRequiresConsent:
 # P66 INVARIANT 5 — Physical tool in chat scope → blocked
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestP66_Invariant5_PhysicalToolBlockedInChatScope:
     @pytest.mark.asyncio
     async def test_move_blocked_in_chat_scope(self):
@@ -142,8 +161,9 @@ class TestP66_Invariant5_PhysicalToolBlockedInChatScope:
         # Either blocked record or consent-request response
         blocked_calls = [r for r in result.tools_called if r.p66_blocked]
         is_consent_response = "confirm" in result.thought.raw_text.lower()
-        assert blocked_calls or is_consent_response, \
+        assert blocked_calls or is_consent_response, (
             "Physical tool in chat scope must be blocked or trigger consent request"
+        )
 
     @pytest.mark.asyncio
     async def test_physical_tool_not_in_chat_schema(self):
@@ -164,6 +184,7 @@ class TestP66_Invariant5_PhysicalToolBlockedInChatScope:
 # P66 INVARIANT 6 — Consent required → consent-request returned before tool exec
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestP66_Invariant6_ConsentRequiredBeforePhysical:
     @pytest.mark.asyncio
     async def test_physical_tool_consent_not_granted(self):
@@ -182,6 +203,7 @@ class TestP66_Invariant6_ConsentRequiredBeforePhysical:
 # ═══════════════════════════════════════════════════════════════════════════════
 # P66 INVARIANT — Trajectory record always has P66 audit fields
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestP66_TrajectoryAuditFields:
     @pytest.mark.asyncio

@@ -66,7 +66,7 @@ def test_export_and_reload(tracer):
 
 def test_get_trace_in_memory(tracer):
     root = tracer.start_trace("mem.test")
-    child = tracer.start_span("child", parent=root)
+    tracer.start_span("child", parent=root)
     spans = tracer.get_trace(root.trace_id)
     assert len(spans) == 2
 
@@ -89,6 +89,7 @@ def test_purge_old(tracer, tmp_path):
     # Age the file
     import os
     import pathlib
+
     for f in pathlib.Path(str(tmp_path / "traces")).rglob("*.jsonl"):
         old_time = time.time() - 8 * 86400
         os.utime(f, (old_time, old_time))
@@ -124,7 +125,7 @@ async def test_async_context_manager(tracer):
 def test_nested_spans_same_trace(tracer):
     root = tracer.start_trace("nested.test")
     child1 = tracer.start_span("child1", parent=root)
-    child2 = tracer.start_span("child2", parent=root)
+    tracer.start_span("child2", parent=root)
     grandchild = tracer.start_span("grandchild", parent=child1)
 
     assert child1.trace_id == root.trace_id

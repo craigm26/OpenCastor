@@ -907,20 +907,22 @@ async def system_upgrade(request: Request):
         _pip_cmd = [_sys.executable, "-m", "pip", "install", "-e", _editable_src, "--quiet"]
         if not _in_venv:
             _pip_cmd.append("--break-system-packages")
-        _restart_script = "\n".join([
-            "import subprocess, sys, os, time, signal",
-            f"src = {_editable_src!r}",
-            f"pip_cmd = {_pip_cmd!r}",
-            "git_res = subprocess.run(['git', '-C', src, 'pull', '--ff-only'],",
-            "    capture_output=True, text=True)",
-            "print('git pull:', git_res.stdout.strip() or git_res.stderr.strip())",
-            "pip_res = subprocess.run(pip_cmd, capture_output=True)",
-            "if pip_res.returncode == 0:",
-            "    time.sleep(1)",
-            "    os.kill(os.getppid(), signal.SIGTERM)",
-            "else:",
-            "    print('pip -e failed:', pip_res.stderr.decode(), file=sys.stderr)",
-        ])
+        _restart_script = "\n".join(
+            [
+                "import subprocess, sys, os, time, signal",
+                f"src = {_editable_src!r}",
+                f"pip_cmd = {_pip_cmd!r}",
+                "git_res = subprocess.run(['git', '-C', src, 'pull', '--ff-only'],",
+                "    capture_output=True, text=True)",
+                "print('git pull:', git_res.stdout.strip() or git_res.stderr.strip())",
+                "pip_res = subprocess.run(pip_cmd, capture_output=True)",
+                "if pip_res.returncode == 0:",
+                "    time.sleep(1)",
+                "    os.kill(os.getppid(), signal.SIGTERM)",
+                "else:",
+                "    print('pip -e failed:', pip_res.stderr.decode(), file=sys.stderr)",
+            ]
+        )
         pkg_label = f"editable:{_editable_src}"
     else:
         # PyPI install
@@ -929,16 +931,18 @@ async def system_upgrade(request: Request):
         _pip_cmd = [_sys.executable, "-m", "pip", "install", "--upgrade", pkg]
         if not _in_venv:
             _pip_cmd.append("--break-system-packages")
-        _restart_script = "\n".join([
-            "import subprocess, sys, os, time, signal",
-            f"pip_cmd = {_pip_cmd!r}",
-            "res = subprocess.run(pip_cmd, capture_output=True)",
-            "if res.returncode == 0:",
-            "    time.sleep(2)",
-            "    os.kill(os.getppid(), signal.SIGTERM)",
-            "else:",
-            "    print('pip failed:', res.stderr.decode(), file=sys.stderr)",
-        ])
+        _restart_script = "\n".join(
+            [
+                "import subprocess, sys, os, time, signal",
+                f"pip_cmd = {_pip_cmd!r}",
+                "res = subprocess.run(pip_cmd, capture_output=True)",
+                "if res.returncode == 0:",
+                "    time.sleep(2)",
+                "    os.kill(os.getppid(), signal.SIGTERM)",
+                "else:",
+                "    print('pip failed:', res.stderr.decode(), file=sys.stderr)",
+            ]
+        )
 
     logger.info("system_upgrade: upgrading %s then restarting gateway", pkg_label)
     subprocess.Popen(

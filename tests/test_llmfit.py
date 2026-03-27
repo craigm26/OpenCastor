@@ -1,6 +1,7 @@
 """tests/test_llmfit.py — Tests for castor/llmfit.py LLMFit module."""
 
 from __future__ import annotations
+
 import pytest
 
 
@@ -76,9 +77,7 @@ class TestCheckFit:
     def test_moe_model_partial_compression(self):
         from castor.llmfit import check_fit
 
-        r_dense = check_fit(
-            "qwen3:8b", context_tokens=8192, kv_compression="turboquant", device_ram_gb=16.0
-        )
+        check_fit("qwen3:8b", context_tokens=8192, kv_compression="turboquant", device_ram_gb=16.0)
         r_moe = check_fit(
             "qwen3.5:35b-a3b", context_tokens=8192, kv_compression="turboquant", device_ram_gb=64.0
         )

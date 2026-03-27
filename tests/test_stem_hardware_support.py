@@ -149,6 +149,7 @@ def test_tutorial_page_has_reveal_observer_wiring():
     layout_path = _repo_root() / "website" / "src" / "layouts" / "BaseLayout.astro"
     if not layout_path.exists():
         import pytest
+
         pytest.skip("website/src/layouts/BaseLayout.astro not found — skipping reveal check")
     html = layout_path.read_text(encoding="utf-8")
     assert "IntersectionObserver" in html

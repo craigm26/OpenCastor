@@ -16,6 +16,7 @@ from castor.rcan.key_rotation import (
 
 # ── derive_key_id ─────────────────────────────────────────────────────────────
 
+
 def test_derive_key_id_is_8_chars():
     kid = derive_key_id("RRN-00000001")
     assert len(kid) == 8
@@ -41,6 +42,7 @@ def test_derive_key_id_hex():
 
 
 # ── get_current_key_id ────────────────────────────────────────────────────────
+
 
 def test_get_current_key_id_returns_existing():
     config = {"security": {"key_id": "aabbccdd"}}
@@ -70,6 +72,7 @@ def test_get_current_key_id_falls_back_to_unknown_rrn():
 
 # ── get_accepted_key_ids ──────────────────────────────────────────────────────
 
+
 def test_accepted_key_ids_contains_current():
     config = {"security": {"key_id": "aabbccdd"}}
     assert "aabbccdd" in get_accepted_key_ids(config)
@@ -87,7 +90,7 @@ def test_accepted_key_ids_includes_previous_when_in_window():
         "security": {
             "key_id": "newkeyid",
             "previous_key_id": "oldkeyid",
-            "rotated_at": now - 60,   # rotated 60 s ago
+            "rotated_at": now - 60,  # rotated 60 s ago
             "rotation_window_s": 300,  # 5-minute window
         }
     }
@@ -103,7 +106,7 @@ def test_accepted_key_ids_excludes_previous_after_window_expires():
         "security": {
             "key_id": "newkeyid",
             "previous_key_id": "oldkeyid",
-            "rotated_at": now - 400,   # rotated 400 s ago
+            "rotated_at": now - 400,  # rotated 400 s ago
             "rotation_window_s": 300,  # 5-minute window → expired
         }
     }
@@ -141,6 +144,7 @@ def test_accepted_key_ids_custom_window():
 
 
 # ── validate_incoming_key_id ──────────────────────────────────────────────────
+
 
 def test_validate_none_key_id_permissive():
     config = {"security": {"key_id": "aabbccdd"}}
@@ -194,6 +198,7 @@ def test_validate_previous_key_id_after_window():
 
 # ── stamp_outgoing_message ────────────────────────────────────────────────────
 
+
 def test_stamp_outgoing_message_adds_key_id():
     config = {"security": {"key_id": "aabbccdd"}}
     msg: dict = {"action": "ping"}
@@ -211,6 +216,7 @@ def test_stamp_outgoing_message_derives_key_id_if_absent():
 
 
 # ── rotate_key ────────────────────────────────────────────────────────────────
+
 
 def test_rotate_key_updates_key_id():
     config: dict = {"security": {"key_id": "oldkeyid"}}

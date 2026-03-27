@@ -53,11 +53,13 @@ class TestContextBuilder:
 
     @pytest.mark.asyncio
     async def test_persona_contains_name(self):
-        builder = _builder(config={
-            "name": "RoboCastor",
-            "model": "gemini-2.5-flash",
-            "harness": {"auto_rag": False, "auto_telemetry": False},
-        })
+        builder = _builder(
+            config={
+                "name": "RoboCastor",
+                "model": "gemini-2.5-flash",
+                "harness": {"auto_rag": False, "auto_telemetry": False},
+            }
+        )
         ctx = HarnessContext(instruction="hi", scope="chat")
         built = await builder.build(ctx, history=[])
         assert "RoboCastor" in built.system_prompt
@@ -90,11 +92,13 @@ class TestContextBuilder:
 
     @pytest.mark.asyncio
     async def test_rag_skipped_when_disabled(self):
-        builder = _builder(config={
-            "name": "TestBot",
-            "model": "default",
-            "harness": {"auto_rag": False, "auto_telemetry": False},
-        })
+        builder = _builder(
+            config={
+                "name": "TestBot",
+                "model": "default",
+                "harness": {"auto_rag": False, "auto_telemetry": False},
+            }
+        )
         ctx = HarnessContext(instruction="hello", scope="chat")
         built = await builder.build(ctx, history=[])
         assert built.rag_chunks == 0
@@ -102,11 +106,13 @@ class TestContextBuilder:
 
     @pytest.mark.asyncio
     async def test_telemetry_skipped_when_disabled(self):
-        builder = _builder(config={
-            "name": "TestBot",
-            "model": "default",
-            "harness": {"auto_rag": False, "auto_telemetry": False},
-        })
+        builder = _builder(
+            config={
+                "name": "TestBot",
+                "model": "default",
+                "harness": {"auto_rag": False, "auto_telemetry": False},
+            }
+        )
         ctx = HarnessContext(instruction="hello", scope="chat")
         built = await builder.build(ctx, history=[])
         assert built.telemetry_injected is False
