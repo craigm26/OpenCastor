@@ -1,28 +1,82 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# OpenCastor v2026.3.26.1 — Reference robot config (RCAN v2.1)
+# OpenCastor v2026.3.27.1 — Reference robot config (RCAN v2.2)
 # Copy this file and customize for your robot.
 #
 # Registration: Bob (RRN-000000000001) — fully registered, L5 compliant
-# Generated:    2026-03-26
+# Generated:    2026-03-27
+#
+# RCAN v2.2 highlights:
+#   - ML-DSA-65 primary signing (Ed25519 removed)
+#   - dual-brain: VLA reactive + LLM planning
+#   - M2M_TRUSTED with explicit fleet_rrns, ≤60s revocation polling
+#   - EU AI Act Art. 11/12 compliance blocks
 # ─────────────────────────────────────────────────────────────────────────────
 
-rcan_version: '2.1'
+rcan_version: '2.2'
 
-# EU AI Act compliance — required for RCAN v2.1 L5
+# ── EU AI Act compliance ──────────────────────────────────────────────────────
 authority_handler_enabled: true       # AUTHORITY_ACCESS (41) handler
 audit_retention_days: 3650            # 10yr — EU AI Act Art. 12
 
+# ── Robot identity ─────────────────────────────────────────────────────────────
 metadata:
   robot_name: bob
   manufacturer: craigm26
   model: opencastor-rpi5-hailo
-  version: '2026.3.26.1'
+  version: '2026.3.27.1'
   rrn: RRN-000000000001
   rrn_uri: rrn://craigm26/robot/opencastor-rpi5-hailo/bob-001
 
 port: 8000
 host: 0.0.0.0
 
+# ── Agent (LLM planning brain) ────────────────────────────────────────────────
+# RCAN v2.2: agent is the planning brain; brain_reactive is the VLA/reactive layer
+agent:
+  model: anthropic/claude-sonnet-4-6
+  provider: anthropic
+  confidence_gates:
+    - scope: control
+      min_confidence: 0.70
+      on_fail: escalate
+    - scope: system
+      min_confidence: 0.90
+      on_fail: block
+
+# ── Dual-brain (RCAN v2.2) ───────────────────────────────────────────────────
+brain_reactive: vla/openvla-7b      # reactive/VLA layer — runs at ≤50ms
+brain_planning: anthropic/claude-sonnet-4-6  # planning layer — runs at human timescale
+brain_confidence_gate: 0.60         # reactive confidence below this escalates to planning
+
+# ── PQ signing (RCAN v2.2 mandatory) ─────────────────────────────────────────
+rcan_protocol:
+  signing_alg: ml-dsa-65            # ML-DSA-65 is PRIMARY (Ed25519 removed in v2.2)
+  require_pq: true
+  pq_key_path: ~/.opencastor/pq_signing.key
+  pq_pub_path: ~/.opencastor/pq_signing.pub
+
+# ── Physics ───────────────────────────────────────────────────────────────────
+physics:
+  type: ackermann
+  dof: 2
+
+# ── Drivers ───────────────────────────────────────────────────────────────────
+drivers:
+  - type: camera
+    name: oak-d-lite
+    enabled: true
+  - type: motor
+    name: base-controller
+    enabled: true
+
+# ── Network ───────────────────────────────────────────────────────────────────
+network:
+  mdns: true
+  mdns_service: _opencastor._tcp
+  rrf_endpoint: https://robot-registry-foundation.pages.dev
+  revocation_poll_interval_s: 60    # ≤60s required by RCAN v2.2 M2M_TRUSTED spec
+
+# ── Safety ────────────────────────────────────────────────────────────────────
 safety:
   local_safety_wins: true
   min_obstacle_m: 0.3
@@ -30,31 +84,30 @@ safety:
   watchdog:
     timeout_s: 10
 
+hardware_safety:
+  hardware_estop: false
+  hardware_watchdog: false
+
+# ── HITL gates ────────────────────────────────────────────────────────────────
 hitl_gates:
   - scope: destructive
     action_types: [delete, irreversible]
     require_auth: true
     on_fail: block
 
+# ── Capabilities ─────────────────────────────────────────────────────────────
 capabilities:
   - status
   - nav
   - teleop
   - vision
   - chat
+  - fleet                           # v2.2: M2M multi-robot delegation
 
-brain:
-  provider: google
-  model: gemini-2.5-flash
-  confidence_gates:
-    - scope: control
-      min_confidence: 0.75
-      on_fail: block
-
-hardware_safety:
-  hardware_estop: false
-  hardware_watchdog: false
-
-physics:
-  type: ackermann
-  dof: 2
+# ── ISO 42001 conformance (RCAN v2.2) ─────────────────────────────────────────
+iso_conformance:
+  iso_42001: true
+  self_assessed: true
+  conformance_level: 5
+  last_assessed: '2026-03-27'
+  notes: 'Self-assessment. See castor compliance for details.'
