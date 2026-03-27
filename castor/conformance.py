@@ -1783,7 +1783,103 @@ class ConformanceChecker:
             self._v21_authority_handler(),
             self._v21_audit_chain_retention(),
             self._v21_rcan_version(),
+            self._v22_pq_signing_key(),
+            self._v22_firmware_pq_sig(),
         ]
+
+    def _v22_pq_signing_key(self) -> ConformanceResult:
+        """RCAN v2.2 §7.2 — ML-DSA-65 signing key MUST exist (Q-Day 2029 is primary NOW)."""
+        import os
+        from pathlib import Path
+
+        cid = "rcan_v22.pq_signing_key"
+        pq_path = Path(
+            os.environ.get("OPENCASTOR_PQ_KEY_PATH")
+            or self._cfg.get("pq_key_path")
+            or str(Path.home() / ".opencastor" / "pq_signing.key")
+        )
+        if pq_path.exists():
+            try:
+                from rcan.signing import MLDSAKeyPair
+
+                kp = MLDSAKeyPair.load(str(pq_path))
+                return ConformanceResult(
+                    check_id=cid,
+                    category="rcan_v22",
+                    status="pass",
+                    detail=f"ML-DSA-65 signing key present (kid={kp.key_id}, FIPS 204)",
+                )
+            except Exception as e:
+                return ConformanceResult(
+                    check_id=cid,
+                    category="rcan_v22",
+                    status="fail",
+                    detail=f"ML-DSA-65 key file corrupt or unreadable: {e}",
+                    fix="Run `castor keygen --pq --force` to regenerate the key",
+                )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v22",
+            status="fail",
+            detail="ML-DSA-65 signing key missing — robot is NOT Q-Day protected (Q-Day 2029)",
+            fix="Run `castor keygen --pq` to generate ~/.opencastor/pq_signing.key",
+        )
+
+    def _v22_firmware_pq_sig(self) -> ConformanceResult:
+        """RCAN v2.2 §11 — firmware manifest MUST carry ML-DSA-65 pq_sig."""
+        import json
+        import os
+        from pathlib import Path
+
+        cid = "rcan_v22.firmware_pq_sig"
+        paths = [
+            os.environ.get("OPENCASTOR_FIRMWARE_MANIFEST_PATH", ""),
+            "/run/opencastor/rcan-firmware-manifest.json",
+            "/tmp/opencastor-firmware-manifest.json",
+        ]
+        manifest_path = next((p for p in paths if p and Path(p).exists()), None)
+        if not manifest_path:
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v22",
+                status="warn",
+                detail="Firmware manifest not found — run `castor attest generate && castor attest sign`",
+                fix="castor attest generate && castor attest sign",
+            )
+        try:
+            m = json.loads(Path(manifest_path).read_text())
+            pq_sig = m.get("pq_sig")
+            pq_alg = m.get("pq_alg", "")
+            if pq_sig and pq_alg == "ml-dsa-65":
+                return ConformanceResult(
+                    check_id=cid,
+                    category="rcan_v22",
+                    status="pass",
+                    detail=f"Firmware manifest has ML-DSA-65 pq_sig at {manifest_path}",
+                )
+            if pq_sig:
+                return ConformanceResult(
+                    check_id=cid,
+                    category="rcan_v22",
+                    status="warn",
+                    detail=f"Firmware manifest has pq_sig but alg={pq_alg!r} (expected ml-dsa-65)",
+                    fix="Re-sign: castor keygen --pq --force && castor attest sign --key <key>",
+                )
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v22",
+                status="fail",
+                detail="Firmware manifest lacks ML-DSA-65 pq_sig — Ed25519 only (not Q-Day safe)",
+                fix="Run `castor keygen --pq && castor attest sign --key <ed25519-key>`",
+            )
+        except Exception as e:
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v22",
+                status="warn",
+                detail=f"Could not read firmware manifest: {e}",
+                fix="castor attest generate && castor attest sign",
+            )
 
     def _v21_rcan_version(self) -> ConformanceResult:
         cid = "rcan_v21.rcan_version"

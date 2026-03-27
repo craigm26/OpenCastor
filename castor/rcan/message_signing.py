@@ -1,5 +1,5 @@
 """
-RCAN message signing integration for OpenCastor — v2.2 hybrid (Ed25519 + ML-DSA-65).
+RCAN message signing integration for OpenCastor — v2.2 ML-DSA-65 primary signing.
 
 Wires rcan-py's signing module into the OpenCastor action pipeline.
 Signs outbound RCAN messages with Ed25519 (backward-compat) and ML-DSA-65
@@ -19,7 +19,7 @@ Environment:
     OPENCASTOR_SIGNING_ENABLED     — "true" / "false" to override config
     OPENCASTOR_PQ_SIGNING_DISABLED — set "true" to disable ML-DSA (Ed25519 only)
 
-Q-Day timeline: hybrid 2026–2028, ML-DSA primary 2028+, Ed25519 sunset 2029
+Q-Day timeline: ML-DSA-65 PRIMARY NOW (2026). Ed25519 verify-only. Sunset 2027.
 
 Usage:
     from castor.rcan.message_signing import get_signer, sign_action_payload
@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 class MessageSigner:
     """
-    Signs outbound RCAN action payloads with Ed25519 + ML-DSA-65 (v2.2 hybrid).
+    Signs outbound RCAN action payloads with ML-DSA-65 (primary) + Ed25519 (legacy compat).
 
     At boot, loads or generates both an Ed25519 key and an ML-DSA-65 key.
     - `signature` field — Ed25519 (backward-compatible with RCAN v2.1)
@@ -125,12 +125,12 @@ class MessageSigner:
                 self._pq_key_id,
             )
         except ImportError:
-            logger.debug(
-                "dilithium-py not installed — ML-DSA-65 signing disabled. "
-                "Install with: pip install dilithium-py"
+            logger.error(
+                "CRITICAL: dilithium-py not installed — ML-DSA-65 signing DISABLED. "
+                "Robot is NOT Q-Day protected. Install with: pip install dilithium-py"
             )
         except Exception as exc:
-            logger.warning("RCAN ML-DSA-65 signing setup failed (non-fatal): %s", exc)
+            logger.error("RCAN ML-DSA-65 signing setup failed: %s", exc)
 
     @property
     def available(self) -> bool:

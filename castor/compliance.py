@@ -15,11 +15,13 @@ from typing import IO, Any
 # Version constants
 # ─────────────────────────────────────────────────────────────────────────────
 
-SPEC_VERSION: str = "2.1"
+SPEC_VERSION: str = "2.2"
 
 ACCEPTED_RCAN_VERSIONS: tuple[str, ...] = (
     "2.1",
     "2.1.0",
+    "2.2",
+    "2.2.0",
 )
 
 
