@@ -137,7 +137,7 @@ class TestRegisterDryRun:
                 pass
 
         captured = capsys.readouterr()
-        assert "rcan.dev" in captured.out
+        assert "robot-registry-foundation.pages.dev/v2/registry" in captured.out
 
     def test_dry_run_prints_complete_message(self, capsys):
         cmd_register = _import_cmd_register()
