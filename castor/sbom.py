@@ -54,7 +54,7 @@ class SBOMComponent:
 @dataclass
 class RCANSBOMExtensions:
     rrn: str
-    spec_version: str = "2.1.0"
+    spec_version: str = "2.2.0"
     attestation_ref: str = ""  # URL where this SBOM is served (filled in after save)
     rrf_countersig: Optional[str] = None  # set after castor sbom publish
 
@@ -120,7 +120,7 @@ class RCANBOM:
             xr = d["x-rcan"]
             rcan_ext = RCANSBOMExtensions(
                 rrn=xr.get("rrn", ""),
-                spec_version=xr.get("spec_version", "2.1.0"),
+                spec_version=xr.get("spec_version", "2.2.0"),
                 attestation_ref=xr.get("attestation_ref", ""),
                 rrf_countersig=xr.get("rrf_countersig"),
             )
@@ -208,7 +208,7 @@ def generate_sbom(rrn: str, sbom_url: str = "") -> RCANBOM:
 
     rcan_ext = RCANSBOMExtensions(
         rrn=rrn,
-        spec_version="2.1.0",
+        spec_version="2.2.0",
         attestation_ref=sbom_url,
     )
 
