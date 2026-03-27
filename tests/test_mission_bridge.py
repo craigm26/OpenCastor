@@ -14,10 +14,8 @@ Covers:
 """
 from __future__ import annotations
 
-import threading
 import unittest
-from datetime import timezone
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 
 def _make_bridge(db=None, rrn="RRN-000000000001", robot_name="Bob"):

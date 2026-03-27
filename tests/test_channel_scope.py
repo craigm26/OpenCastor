@@ -11,7 +11,6 @@ Covers:
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import fields as dc_fields
 from unittest import mock
 
@@ -49,12 +48,12 @@ class TestScopeResolverExports:
         assert "slack" in CHANNEL_SCOPE_MAP
 
     def test_module_exports_context_vars(self):
+        import contextvars
+
         from castor.channels.scope_resolver import (
             _current_sender_loa,
             _current_sender_scope,
         )
-
-        import contextvars
 
         assert isinstance(_current_sender_scope, contextvars.ContextVar)
         assert isinstance(_current_sender_loa, contextvars.ContextVar)
@@ -333,8 +332,9 @@ class TestChannelAdapterScopeImports:
 
     def test_whatsapp_calls_resolve_scope_on_dispatch(self):
         """resolve_sender_scope is called in _handle_incoming before dispatch."""
-        from castor.channels import whatsapp_neonize
         from types import SimpleNamespace
+
+        from castor.channels import whatsapp_neonize
 
         config = {"dm_policy": "open", "self_chat_mode": False}
         with mock.patch.object(whatsapp_neonize, "HAS_NEONIZE", True):

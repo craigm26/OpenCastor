@@ -2,7 +2,7 @@
 
 import pytest
 
-from castor.harness.cost_meter import CostMeter, RunCost, PRICE_PER_1K
+from castor.harness.cost_meter import PRICE_PER_1K, CostMeter
 
 
 @pytest.fixture

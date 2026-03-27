@@ -1,10 +1,6 @@
 """Tests for castor.attestation_generator — software attestation checks."""
 
 import json
-import os
-from pathlib import Path
-
-import pytest
 
 from castor.attestation_generator import (
     check_code_integrity,

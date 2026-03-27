@@ -13,13 +13,12 @@ from castor.auth.m2m_trusted import (
     M2MTrustedAuthError,
     M2MTrustedSession,
     RevocationCache,
-    _token_hash,
-    validate_m2m_trusted_message,
-    register_session,
-    terminate_session,
+    _active_sessions,
     get_active_sessions,
     has_active_m2m_trusted_sessions,
-    _active_sessions,
+    register_session,
+    terminate_session,
+    validate_m2m_trusted_message,
 )
 
 

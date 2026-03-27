@@ -6,10 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from unittest.mock import MagicMock, patch
-
-import pytest
-
+from unittest.mock import patch
 
 # ---------------------------------------------------------------------------
 # Helpers

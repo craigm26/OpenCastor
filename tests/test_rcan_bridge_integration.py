@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-
 # ---------------------------------------------------------------------------
 # parse_inbound — spec vs internal format
 # ---------------------------------------------------------------------------
@@ -38,7 +37,8 @@ def test_parse_inbound_spec_format():
 
 def test_parse_inbound_internal_format():
     """parse_inbound should return an OpenCastor RCANMessage for internal-format bodies."""
-    from castor.rcan.message import MessageType, RCANMessage as OCMessage
+    from castor.rcan.message import MessageType
+    from castor.rcan.message import RCANMessage as OCMessage
     from castor.rcan.sdk_bridge import parse_inbound
 
     body = {

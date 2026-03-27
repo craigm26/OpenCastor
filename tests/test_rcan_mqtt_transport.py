@@ -2,8 +2,6 @@
 
 import json
 
-import pytest
-
 from castor.channels.rcan_mqtt_transport import RCANMQTTTransport
 
 

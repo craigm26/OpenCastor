@@ -5,11 +5,7 @@ tests/test_cli_research.py — Tests for castor research and castor season CLI c
 from __future__ import annotations
 
 import argparse
-import pathlib
-from unittest.mock import MagicMock, patch
-
-import pytest
-
+from unittest.mock import patch
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from castor.harness.span_tracer import Span, SpanTracer
+from castor.harness.span_tracer import SpanTracer
 
 
 @pytest.fixture
@@ -87,7 +87,8 @@ def test_purge_old(tracer, tmp_path):
     tracer.export_trace(span.trace_id)
 
     # Age the file
-    import os, pathlib
+    import os
+    import pathlib
     for f in pathlib.Path(str(tmp_path / "traces")).rglob("*.jsonl"):
         old_time = time.time() - 8 * 86400
         os.utime(f, (old_time, old_time))

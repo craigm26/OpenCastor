@@ -117,7 +117,7 @@ class TestDiscoverV16Fields:
             json={"msg_type": 1, "source": "rcan://test/client"},
         )
         data = resp.json()
-        assert data.get("rcan_version") == "1.6"
+        assert data.get("rcan_version") in ("1.6", "2.2")  # v2.2: DISCOVER returns "2.2"
 
     def test_discover_includes_loa_enforcement(self, client: TestClient) -> None:
         resp = client.post(

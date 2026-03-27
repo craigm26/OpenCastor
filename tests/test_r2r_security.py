@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from unittest.mock import MagicMock, patch
+
 import pytest
 
 # ---------------------------------------------------------------------------
@@ -24,7 +24,7 @@ import pytest
 
 def _make_bridge_instance(extra_rcan: dict | None = None):
     """Construct a minimal CastorBridge with attributes set directly (no real init)."""
-    from castor.cloud.bridge import CastorBridge, _FEDERATION_STUB_ACTIVE, _TrustAnchorCacheStub
+    from castor.cloud.bridge import CastorBridge
 
     rcan_cfg: dict = extra_rcan or {}
     bridge = CastorBridge.__new__(CastorBridge)
@@ -37,7 +37,7 @@ def _make_bridge_instance(extra_rcan: dict | None = None):
     return bridge
 
 
-def _make_intent(scope: str = "chat") -> "DelegatedIntent":
+def _make_intent(scope: str = "chat") -> DelegatedIntent:
     from castor.swarm.consensus import DelegatedIntent
 
     return DelegatedIntent(
@@ -112,6 +112,7 @@ class TestFederationTrustFlag:
     def test_federation_rejection_path_in_check_federation(self):
         """Verify the rejection guard is in _check_federation source."""
         import inspect
+
         from castor.cloud.bridge import CastorBridge
 
         src = inspect.getsource(CastorBridge._check_federation)
@@ -239,6 +240,7 @@ class TestRcanMessageEndpointAuth:
         RCAN-Signature.  Verify the inline auth guard exists in source.
         """
         import inspect
+
         import castor.api as api_mod
 
         src = inspect.getsource(api_mod.rcan_receive_message)

@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import tempfile
 
-import pytest
-
 from castor.harness.memory import (
     FilesystemBackend,
     FirestoreBackend,

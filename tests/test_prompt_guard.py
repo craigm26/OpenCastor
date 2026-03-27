@@ -2,7 +2,7 @@
 
 import pytest
 
-from castor.harness.prompt_guard import PromptGuard, GuardResult
+from castor.harness.prompt_guard import GuardResult, PromptGuard
 
 
 @pytest.fixture

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, call, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, call
 
-from castor.competitions.models import BracketEntry, INITIAL_CLASSES
 from castor.competitions.bracket_season import BracketSeasonManager
-
+from castor.competitions.models import INITIAL_CLASSES, BracketEntry
 
 # ---------------------------------------------------------------------------
 # Mock helpers

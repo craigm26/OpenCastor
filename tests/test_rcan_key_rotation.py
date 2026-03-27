@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import time
-from unittest.mock import patch
-
-import pytest
 
 from castor.rcan.key_rotation import (
     KEY_ID_WILDCARD,
@@ -16,7 +13,6 @@ from castor.rcan.key_rotation import (
     stamp_outgoing_message,
     validate_incoming_key_id,
 )
-
 
 # ── derive_key_id ─────────────────────────────────────────────────────────────
 

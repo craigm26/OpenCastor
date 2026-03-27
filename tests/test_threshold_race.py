@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from castor.competitions.models import RaceStatus, ThresholdEntry, ThresholdRace, VerificationStatus
 from castor.competitions.threshold_race import ThresholdRaceManager

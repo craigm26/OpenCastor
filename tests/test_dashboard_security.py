@@ -11,13 +11,8 @@ rendering the full Streamlit app), so we patch `st.session_state` as needed.
 
 from __future__ import annotations
 
-import importlib
-import types
 from typing import Any
 from unittest.mock import MagicMock, patch
-
-import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -113,7 +108,6 @@ class TestAllRequestsIncludeAuthHeader:
 
         captured_headers: list[dict] = []
 
-        import requests as _req_real
 
         def fake_get(url: str, headers: dict | None = None, **kwargs: Any) -> MagicMock:
             captured_headers.append(headers or {})

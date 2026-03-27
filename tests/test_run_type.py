@@ -5,10 +5,10 @@ from __future__ import annotations
 import pytest
 
 from castor.contribute.work_unit import (
+    _VALID_RUN_TYPES,
     RUN_TYPE_COMMUNITY,
     RUN_TYPE_PERSONAL,
     WorkUnit,
-    _VALID_RUN_TYPES,
 )
 
 

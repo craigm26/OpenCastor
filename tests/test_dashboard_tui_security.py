@@ -13,8 +13,6 @@ import types
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 # ---------------------------------------------------------------------------
 # Helpers to (re-)load the module with a given env
 # ---------------------------------------------------------------------------

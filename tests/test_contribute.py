@@ -3,8 +3,6 @@
 import threading
 import time
 
-import pytest
-
 from castor.contribute.coordinator import SimulatedCoordinator
 from castor.contribute.runner import run_work_unit
 from castor.contribute.work_unit import WorkUnit, WorkUnitResult

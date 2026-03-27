@@ -1210,6 +1210,7 @@ class TestISOCheck:
     def test_cmd_iso_check_runs(self, tmp_path):
         """iso-check runs without error on a valid config."""
         import yaml
+
         from castor.cli import cmd_iso_check
 
         cfg = make_valid_config()
@@ -1230,7 +1231,8 @@ class TestISOCheck:
             config = str(p)
             json = False
 
-        import io, sys
+        import io
+        import sys
         buf = io.StringIO()
         sys.stdout = buf
         try:
@@ -1244,7 +1246,10 @@ class TestISOCheck:
 
     def test_cmd_iso_check_json_output(self, tmp_path):
         """iso-check --json outputs parseable JSON with iso_checks key."""
-        import json, yaml
+        import json
+
+        import yaml
+
         from castor.cli import cmd_iso_check
 
         cfg = make_valid_config()
@@ -1256,7 +1261,8 @@ class TestISOCheck:
             config = str(p)
             json = True
 
-        import io, sys
+        import io
+        import sys
         buf = io.StringIO()
         sys.stdout = buf
         try:
@@ -1271,8 +1277,9 @@ class TestISOCheck:
 
     def test_discover_payload_includes_iso_conformance(self):
         """DISCOVER response (msg_type=1) includes iso_conformance block."""
-        from castor.api import app, state
         from fastapi.testclient import TestClient
+
+        from castor.api import app, state
 
         client = TestClient(app)
         state.config = {
@@ -1287,6 +1294,7 @@ class TestISOCheck:
             pass
         # At minimum verify the DISCOVER handler code path includes iso_conformance
         import inspect
+
         from castor import api as api_mod
         src = inspect.getsource(api_mod)
         assert "iso_conformance" in src

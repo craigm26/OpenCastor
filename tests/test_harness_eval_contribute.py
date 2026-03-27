@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import sys
-from unittest.mock import MagicMock, patch
-
+from unittest.mock import patch
 
 # ---------------------------------------------------------------------------
 # 1. detect_hardware_tier — Hailo-8L NPU

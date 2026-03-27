@@ -1,7 +1,5 @@
 """Tests for castor.harness.rollback."""
 
-import tempfile
-from pathlib import Path
 
 import pytest
 

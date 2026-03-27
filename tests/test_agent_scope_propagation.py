@@ -12,14 +12,11 @@ Covers:
 """
 
 import asyncio
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from castor.agents.guardian import SCOPE_ACTION_ALLOWLIST, GuardianAgent
 from castor.agents.orchestrator import OrchestratorAgent
 from castor.agents.shared_state import Intent, SharedState
-
 
 # ---------------------------------------------------------------------------
 # Helpers

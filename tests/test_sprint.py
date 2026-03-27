@@ -19,7 +19,6 @@ from castor.competitions.models import (
 )
 from castor.competitions.sprint import SprintManager, _compute_status, _now
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

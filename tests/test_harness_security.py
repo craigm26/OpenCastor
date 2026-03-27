@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import tempfile
 
-import pytest
-
 from castor.harness.security import (
     OPAGuardrail,
     SecurityContext,
@@ -21,7 +19,6 @@ def test_opa_guardrail_fallback_allow():
 
 def test_opa_guardrail_enforce_raises():
     """In enforce mode, denied action raises PermissionError (mocked via monkeypatch)."""
-    import urllib.error
 
     g = OPAGuardrail(url="http://localhost:19999/nonexistent", mode="enforce", timeout=0.1)
     # Unreachable → fallback=allow, so no raise expected even in enforce

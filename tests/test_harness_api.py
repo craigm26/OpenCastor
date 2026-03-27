@@ -10,7 +10,7 @@ These tests follow the same fixture/pattern as test_api_endpoints.py:
 import contextlib
 import copy
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from starlette.testclient import TestClient

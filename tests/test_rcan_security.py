@@ -23,8 +23,8 @@ import pytest
 
 from castor.cloud.bridge import (
     CastorBridge,
-    _ReplayCacheStub,
     _make_replay_cache,
+    _ReplayCacheStub,
 )
 
 # ---------------------------------------------------------------------------
@@ -120,6 +120,7 @@ class TestP66EstopInvariant:
         is guarded by `not is_estop and not self._check_replay(...)`.
         """
         import inspect
+
         import castor.cloud.bridge as _bridge_mod
 
         src = inspect.getsource(_bridge_mod.CastorBridge._execute_command)

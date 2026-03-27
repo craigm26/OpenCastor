@@ -14,12 +14,10 @@ Verifies:
 import contextlib
 import copy
 import time
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 from starlette.testclient import TestClient
-
 
 # ---------------------------------------------------------------------------
 # Test configs
@@ -481,7 +479,6 @@ class TestHarnessAPIAdminRole:
 class TestHarnessForbiddenKeys:
     def test_post_harness_does_not_overwrite_safety(self, client, api_mod):
         """POST /api/harness must not overwrite the safety top-level key."""
-        import castor.api as mod
 
         original_safety = {"estop_enabled": True, "my_secret": "keep_this"}
         api_mod.state.config = {
@@ -499,7 +496,8 @@ class TestHarnessForbiddenKeys:
             },
         }
 
-        import tempfile, os
+        import os
+        import tempfile
 
         with tempfile.NamedTemporaryFile(suffix=".yaml", delete=False) as tf:
             tf.write(b"# placeholder\n")
