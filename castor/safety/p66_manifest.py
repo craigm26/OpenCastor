@@ -439,7 +439,7 @@ def build_manifest(safety_layer: Any = None, hardware_caps: Optional[dict] = Non
         "federation_enabled": False,
         "supported_transports": ["http"],
         "min_loa_for_control": 1,
-        "loa_enforcement": True,   # RCAN v2.2 default: enforce (not log-only)
+        "loa_enforcement": True,  # RCAN v2.2 default: enforce (not log-only)
         "multimodal_enabled": True,
         "opencastor_version": __import__("castor").__version__,
         "generated_at": int(time.time() * 1000),
