@@ -872,56 +872,87 @@ async def system_upgrade(request: Request):
     except Exception:
         pass
 
-    version: str | None = body.get("version")
-    pkg = f"opencastor=={version}" if version else "opencastor"
+    # Strip leading 'v' — app sends "v2026.3.27.1", pip expects "2026.3.27.1"
+    version_raw: str | None = body.get("version")
+    version: str | None = version_raw.lstrip("v") if version_raw else None
 
-    # Run pip, then restart the gateway process so new code is actually loaded.
-    # Detect venv vs system Python: in a venv sys.prefix != sys.base_prefix.
-    # Venv pip doesn't need --break-system-packages; system Python does.
+    import os as _os
     import sys as _sys
 
     _in_venv = _sys.prefix != _sys.base_prefix
-    cmd = [
-        sys.executable,
-        "-m",
-        "pip",
-        "install",
-        "--upgrade",
-        pkg,
-    ]
-    if not _in_venv:
-        cmd.insert(-1, "--break-system-packages")
 
-    # Build a restart wrapper: pip install, then SIGTERM the parent gateway process.
-    # NOTE: os.execv(sys.executable, sys.argv) does NOT work here because this
-    # script runs as `python -c <script>`, so sys.argv == ['-c'] — execv would
-    # just rerun the no-op subprocess, never restarting the actual gateway.
-    # Instead we kill the gateway (our parent); systemd Restart=on-failure revives it.
-    _restart_script = "\n".join(
-        [
+    # Detect editable install so we can do git pull + pip install -e .
+    # instead of a no-op PyPI upgrade.
+    _editable_src: str | None = None
+    try:
+        import importlib.metadata as _meta
+        import json as _json
+
+        _du_text = _meta.distribution("opencastor").read_text("direct_url.json")
+        if _du_text:
+            _du = _json.loads(_du_text)
+            _url = _du.get("url", "")
+            if _url.startswith("file://") and _du.get("dir_info", {}).get("editable"):
+                _editable_src = _url[7:]  # strip "file://"
+    except Exception:
+        pass
+
+    # Fallback: well-known local path
+    if not _editable_src:
+        _candidate = _os.path.expanduser("~/OpenCastor")
+        if _os.path.isfile(_os.path.join(_candidate, "pyproject.toml")):
+            _editable_src = _candidate
+
+    if _editable_src:
+        # Editable/git install: pull latest commits then refresh pip metadata
+        _pip_cmd = [_sys.executable, "-m", "pip", "install", "-e", _editable_src, "--quiet"]
+        if not _in_venv:
+            _pip_cmd.append("--break-system-packages")
+        _restart_script = "\n".join([
             "import subprocess, sys, os, time, signal",
-            f"pip_cmd = {cmd!r}",
+            f"src = {_editable_src!r}",
+            f"pip_cmd = {_pip_cmd!r}",
+            "git_res = subprocess.run(['git', '-C', src, 'pull', '--ff-only'],",
+            "    capture_output=True, text=True)",
+            "print('git pull:', git_res.stdout.strip() or git_res.stderr.strip())",
+            "pip_res = subprocess.run(pip_cmd, capture_output=True)",
+            "if pip_res.returncode == 0:",
+            "    time.sleep(1)",
+            "    os.kill(os.getppid(), signal.SIGTERM)",
+            "else:",
+            "    print('pip -e failed:', pip_res.stderr.decode(), file=sys.stderr)",
+        ])
+        pkg_label = f"editable:{_editable_src}"
+    else:
+        # PyPI install
+        pkg = f"opencastor=={version}" if version else "opencastor"
+        pkg_label = pkg
+        _pip_cmd = [_sys.executable, "-m", "pip", "install", "--upgrade", pkg]
+        if not _in_venv:
+            _pip_cmd.append("--break-system-packages")
+        _restart_script = "\n".join([
+            "import subprocess, sys, os, time, signal",
+            f"pip_cmd = {_pip_cmd!r}",
             "res = subprocess.run(pip_cmd, capture_output=True)",
             "if res.returncode == 0:",
-            "    time.sleep(2)  # let pip finalize before restart",
-            "    os.kill(os.getppid(), signal.SIGTERM)  # kill gateway; systemd restarts it",
+            "    time.sleep(2)",
+            "    os.kill(os.getppid(), signal.SIGTERM)",
             "else:",
             "    print('pip failed:', res.stderr.decode(), file=sys.stderr)",
-        ]
-    )
+        ])
 
-    logger.info("system_upgrade: installing %s then restarting gateway", pkg)
+    logger.info("system_upgrade: upgrading %s then restarting gateway", pkg_label)
     subprocess.Popen(
-        [sys.executable, "-c", _restart_script],
+        [_sys.executable, "-c", _restart_script],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
 
     return {
         "status": "upgrading",
-        "package": pkg,
-        "note": "Gateway will restart automatically after pip succeeds (~30s). "
-        "Poll /api/status to confirm new version.",
+        "package": pkg_label,
+        "mode": "editable+git" if _editable_src else "pypi",
+        "note": "Gateway will restart after upgrade (~30s). Poll /api/status to confirm version.",
     }
 
 
