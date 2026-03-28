@@ -338,6 +338,18 @@ class CastorBridge:
         self._replay_cache = _make_replay_cache(window_s=30)
         self._safety_replay_cache = _make_replay_cache(window_s=SAFETY_REPLAY_WINDOW_S)
 
+        # Telemetry tiering: static fields pushed every 10 cycles (~5min at 30s)
+        # Live fields (status, model_runtime, system) pushed every cycle.
+        self._telemetry_cycle: int = 0
+        self._STATIC_PUSH_EVERY: int = 10  # push static fields every N live cycles
+
+        # BigQuery batch buffer — flushed every 5 min or 10 samples
+        self._bq_buffer: list[dict[str, Any]] = []
+        self._BQ_FLUSH_EVERY: int = 10  # flush after N samples
+        self._bq_dataset = "opencastor_telemetry"
+        self._bq_table = "robot_telemetry"
+        self._gcs_audit_bucket = "opencastor-audit"
+
         # GAP-06: Offline mode tracking
         self._last_firestore_success: float = time.time()
         self._offline_mode: bool = False
@@ -937,8 +949,47 @@ class CastorBridge:
         self._record_firestore_success()
         log.info("Robot %s (%s) registered in Firestore", self.robot_name, self.rrn)
 
+    # ── Static fields (identity, config) — pushed infrequently ──────────────
+
+    _STATIC_TELEMETRY_KEYS: frozenset[str] = frozenset(
+        {
+            # These change rarely — push every _STATIC_PUSH_EVERY cycles (~5 min)
+            "capabilities",
+            "provider_fallback",
+            "providers",
+            "channels_available",
+            "security_posture",
+            "ruri",
+            "robot_name",
+            "rcan_transport_supported",
+            "rcan_max_payload_bytes",
+            "offline_fallback",
+            "config_loaded",
+            "audit_log_path",
+            "ws_telemetry_url",
+            "ws_safety_url",
+            "local_ip",
+            "version",
+            "opencastor_version",
+            "rcan_bridge",
+            "camera_mode",
+            "camera_model",
+            # harness_config intentionally excluded — stored in user_harness_config
+            # by the Flutter app; bridge writes here are stale and expensive.
+        }
+    )
+
     def _publish_telemetry(self) -> None:
-        """Fetch live status from gateway and push to Firestore."""
+        """Fetch live status from gateway and push to Firestore.
+
+        Split strategy (v2.2):
+        - LIVE fields: pushed every cycle (30s) — status, model_runtime, system,
+          brain, channels_active, last_seen, skills counts.
+        - STATIC fields: pushed every _STATIC_PUSH_EVERY cycles (~5 min) —
+          capability arrays, provider configs, security posture, WS URLs, etc.
+        - harness_config: NOT pushed — app manages this via user_harness_config.
+        - BigQuery: live fields buffered and flushed every _BQ_FLUSH_EVERY samples.
+        """
         try:
             import httpx
 
@@ -959,14 +1010,10 @@ class CastorBridge:
             except Exception:
                 pass
 
-            # Also fetch harness config so the Flutter app can display it
-            try:
-                with httpx.Client(timeout=5.0) as client:
-                    hr2 = client.get(f"{self.gateway_url}/api/harness", headers=headers)
-                if hr2.status_code == 200:
-                    telemetry["harness_config"] = hr2.json()
-            except Exception:
-                pass
+            # harness_config intentionally NOT fetched here.
+            # The Flutter app persists it as robots/{rrn}.user_harness_config
+            # which takes priority over telemetry. Fetching it here every 30s
+            # was writing ~1KB/cycle (2.8MB/day) for data that changes weekly.
 
             # Fetch contribution status for Flutter client
             try:
@@ -1045,21 +1092,61 @@ class CastorBridge:
             telemetry.setdefault("rcan_max_payload_bytes", 65536)
             telemetry.setdefault("rcan_transport_supported", ["http", "compact", "minimal"])
 
-            self._robot_ref().set(
-                {
-                    "telemetry": {
-                        **telemetry,
-                        "last_seen": datetime.now(timezone.utc).isoformat(),
-                    },
-                    "opencastor_version": oc_version,
-                    "status": {
-                        "online": True,
-                        "last_seen": datetime.now(timezone.utc).isoformat(),
-                    },
-                },
-                merge=True,
-            )
+            now_iso = datetime.now(timezone.utc).isoformat()
+            self._telemetry_cycle += 1
+            push_static = self._telemetry_cycle % self._STATIC_PUSH_EVERY == 1
+
+            # ── Split live vs static fields ───────────────────────────────
+            live_tele: dict[str, Any] = {
+                k: v for k, v in telemetry.items() if k not in self._STATIC_TELEMETRY_KEYS
+            }
+            live_tele["last_seen"] = now_iso
+
+            update_doc: dict[str, Any] = {
+                "telemetry": live_tele,
+                "opencastor_version": oc_version,
+                "status": {"online": True, "last_seen": now_iso},
+            }
+
+            if push_static:
+                static_tele = {
+                    k: v for k, v in telemetry.items() if k in self._STATIC_TELEMETRY_KEYS
+                }
+                # Merge static fields into the telemetry map
+                update_doc["telemetry"] = {**live_tele, **static_tele}
+                log.debug("Pushed static telemetry fields (cycle %d)", self._telemetry_cycle)
+
+            self._robot_ref().set(update_doc, merge=True)
             self._record_firestore_success()
+
+            # ── Buffer for BigQuery ───────────────────────────────────────
+            system = telemetry.get("system", {}) or {}
+            model_rt = telemetry.get("model_runtime", {}) or {}
+            bq_row = {
+                "rrn": self.rrn,
+                "ts": now_iso,
+                "online": True,
+                "cpu_temp_c": system.get("cpu_temp_c"),
+                "ram_used_pct": system.get("ram_used_pct"),
+                "disk_used_pct": system.get("disk_used_pct"),
+                "ram_total_gb": system.get("ram_total_gb"),
+                "disk_free_gb": system.get("disk_free_gb"),
+                "tokens_per_sec": model_rt.get("tokens_per_sec"),
+                "active_model": model_rt.get("active_model"),
+                "provider": model_rt.get("provider"),
+                "model_size_gb": model_rt.get("model_size_gb"),
+                "kv_compression": model_rt.get("kv_compression"),
+                "llmfit_status": model_rt.get("llmfit_status"),
+                "llmfit_headroom_gb": model_rt.get("llmfit_headroom_gb"),
+                "opencastor_version": oc_version,
+                "rcan_version": "2.2",
+                "loa_enforcement": self._rcan_config.get("loa_enforcement", True),
+                "local_ip": telemetry.get("local_ip"),
+                "raw_json": __import__("json").dumps(live_tele),
+            }
+            self._bq_buffer.append(bq_row)
+            if len(self._bq_buffer) >= self._BQ_FLUSH_EVERY:
+                self._flush_bq_buffer()
 
         except Exception as exc:
             log.warning("Telemetry publish failed: %s", exc)
@@ -1078,12 +1165,89 @@ class CastorBridge:
                 pass
             self._check_offline_mode()
 
+    def _flush_bq_buffer(self) -> None:
+        """Flush buffered telemetry samples to BigQuery (streaming insert).
+
+        Requires the service account to have roles/bigquery.dataEditor.
+        Silently skips if BigQuery is not available or SA lacks permission.
+        """
+        if not self._bq_buffer:
+            return
+        rows = list(self._bq_buffer)
+        self._bq_buffer.clear()
+        try:
+            from google.cloud import bigquery as _bq
+
+            client = _bq.Client(project="opencastor")
+            table_ref = f"opencastor.{self._bq_dataset}.{self._bq_table}"
+            errors = client.insert_rows_json(table_ref, rows)
+            if errors:
+                log.warning("BigQuery insert errors: %s", errors[:2])
+            else:
+                log.debug("BigQuery: flushed %d rows to %s", len(rows), table_ref)
+        except ImportError:
+            pass  # google-cloud-bigquery not installed
+        except Exception as exc:
+            # BQ unavailable or no permission — archive to GCS as fallback
+            log.debug("BigQuery unavailable (%s) — archiving to GCS", exc)
+            self._archive_telemetry_to_gcs(rows)
+
+    def _archive_telemetry_to_gcs(self, rows: list[dict[str, Any]]) -> None:
+        """Write telemetry batch to GCS as newline-delimited JSON.
+
+        Path: gs://opencastor-telemetry-archive/rrn/YYYY-MM-DD/HH-MM-SS.ndjson
+        BigQuery can load from this bucket later via scheduled queries.
+        """
+        try:
+            from google.cloud import storage as _storage
+            import json as _json
+
+            client = _storage.Client(project="opencastor")
+            bucket = client.bucket("opencastor-telemetry-archive")
+            ts = datetime.now(timezone.utc)
+            path = (
+                f"telemetry/{self.rrn}/{ts.strftime('%Y-%m-%d')}/{ts.strftime('%H-%M-%S')}.ndjson"
+            )
+            ndjson = "\n".join(_json.dumps(r) for r in rows)
+            bucket.blob(path).upload_from_string(ndjson, content_type="application/x-ndjson")
+            log.debug("Archived %d rows to gs://opencastor-telemetry-archive/%s", len(rows), path)
+        except Exception as exc:
+            log.debug("GCS archive failed: %s", exc)
+
+    def _write_audit_artifact(
+        self, name: str, content: str | bytes, content_type: str = "application/json"
+    ) -> str | None:
+        """Write an audit artifact (SBOM, attestation) to GCS.
+
+        Returns the GCS URI or None on failure.
+        Path: gs://opencastor-audit/{rrn}/{name}/{YYYY-MM-DD}/{filename}
+        """
+        try:
+            from google.cloud import storage as _storage
+
+            client = _storage.Client(project="opencastor")
+            bucket = client.bucket(self._gcs_audit_bucket)
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            filename = name.split("/")[-1]
+            path = f"{self.rrn}/{name}/{ts}/{filename}"
+            data = content.encode() if isinstance(content, str) else content
+            bucket.blob(path).upload_from_string(data, content_type=content_type)
+            uri = f"gs://{self._gcs_audit_bucket}/{path}"
+            log.info("Audit artifact written: %s", uri)
+            return uri
+        except Exception as exc:
+            log.debug("GCS audit write failed: %s", exc)
+            return None
+
     def _telemetry_loop(self) -> None:
         """Background thread: publish telemetry every telemetry_interval_s."""
         while self._running:
             time.sleep(self.telemetry_interval_s)
             if self._running:
                 self._publish_telemetry()
+        # Flush remaining BQ buffer on stop
+        if self._bq_buffer:
+            self._flush_bq_buffer()
 
     # ------------------------------------------------------------------
     # Command execution
