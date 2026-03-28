@@ -6,6 +6,36 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 
 ---
 
+## [2026.3.28.0] - 2026-03-28
+
+### Added
+- `castor loa` — LoA enforcement CLI (status/enable/disable); default `loa_enforcement: true`
+- `castor components` — hardware component registry (detect/list/register); deterministic RCN IDs
+- `castor rrf` — full RRF v2 provenance chain CLI (register robot/component/model/harness)
+- `castor doctor` — llmfit check wired in; `_check_llmfit()` validates model headroom
+- `system_info.py` — live system metrics (RAM, disk, CPU temp, NPU detection)
+
+### Changed
+- Bridge telemetry split: live fields (30s) vs static fields (5 min) — ~55% write reduction
+- `harness_config` removed from bridge telemetry push (now only in `user_harness_config`)
+- `pq_signing_pub` stripped from Firestore root doc (stored in RRF; reference by `pq_kid`)
+- Bridge pushes LAN IP + WS telemetry/safety URLs to Firestore
+- Bridge pushes skills list to `robots/{rrn}/telemetry/skills` subcollection
+- `channels_active` falls back to `config.agent.channels` when no live channel objects
+- RRF HTTP calls via `curl` subprocess (CF bot protection blocks urllib UA)
+- `loa_enforcement` default changed to `True` in `p66_manifest.py`
+- BigQuery streaming insert for telemetry (buffered, 10-sample flush)
+- GCS audit artifact write helper (`_write_audit_artifact`)
+- GCS NDJSON archive fallback when BigQuery unavailable
+
+### Fixed
+- Gateway `KeyError: 'rcan_protocol'` crash — use `.get("rcan_protocol", {})`
+- LAN IP resolution via UDP socket trick (replaces unreliable `gethostbyname`)
+- `system_upgrade()` editable install detection
+- RRF API calls migrated from v1 → v2 (v1 returns 410 Gone)
+- ruff import sort in bridge.py (CI lint)
+
+
 ## [2026.3.26.1] - 2026-03-26
 
 ### Added
