@@ -2559,7 +2559,8 @@ async def cap_status(request: Request):
         "uptime_s": round(time.time() - state.boot_time, 1),
         "brain": state.brain is not None,
         "driver": state.driver is not None,
-        "channels_active": list(state.channels.keys()),
+        "channels_active": list(state.channels.keys())
+        or (state.config or {}).get("agent", {}).get("channels", []),
         "capabilities": state.capability_registry.names if state.capability_registry else [],
     }
     if state.fs:
