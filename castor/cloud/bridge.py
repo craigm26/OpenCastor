@@ -1199,8 +1199,9 @@ class CastorBridge:
         BigQuery can load from this bucket later via scheduled queries.
         """
         try:
-            from google.cloud import storage as _storage
             import json as _json
+
+            from google.cloud import storage as _storage
 
             client = _storage.Client(project="opencastor")
             bucket = client.bucket("opencastor-telemetry-archive")
