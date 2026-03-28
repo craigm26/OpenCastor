@@ -323,6 +323,7 @@ class CastorBridge:
         self.capabilities: list[str] = config.get("capabilities") or rcan.get("capabilities") or []
         self.version: str = meta.get("version") or config.get("opencastor_version") or "unknown"
         self.firebase_uid: str = config.get("firebase_uid", "")
+        self._rcan_config: dict[str, Any] = config  # stored for identity write
 
         # v1.5: Training data consent config (GAP-10)
         self.training_consent_required: bool = bool(config.get("training_consent_required", False))
@@ -911,20 +912,20 @@ class CastorBridge:
                 "revocation_status": "active",
                 "supports_qos_2": True,
                 "supports_delegation": True,
-                "offline_capable": (self.config or {}).get("offline_capable", False),
-                "supported_transports": (self.config or {})
+                "offline_capable": (self._rcan_config or {}).get("offline_capable", False),
+                "supported_transports": (self._rcan_config or {})
                 .get("agent", {})
                 .get(
                     "supported_transports",
                     ["http", "compact", "minimal", "websocket"],
                 ),
-                "min_loa_for_control": (self.config or {})
+                "min_loa_for_control": (self._rcan_config or {})
                 .get("iso_conformance", {})
                 .get(
                     "min_loa_for_control",
-                    (self.config or {}).get("min_loa_for_control", 1),
+                    (self._rcan_config or {}).get("min_loa_for_control", 1),
                 ),
-                "loa_enforcement": (self.config or {}).get("loa_enforcement", True),
+                "loa_enforcement": (self._rcan_config or {}).get("loa_enforcement", True),
                 "multimodal_enabled": True,
                 "registry_tier": "community",
                 # RCAN v2.1/v2.2 fields
