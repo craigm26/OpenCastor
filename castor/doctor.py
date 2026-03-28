@@ -233,6 +233,39 @@ def _check_commitments() -> CheckResult:
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 
+
+def _check_llmfit() -> CheckResult:
+    """Check if the active model fits in device RAM (LLMFit)."""
+    try:
+        from castor.llmfit import check_fit
+
+        result = check_fit()
+        status = result.get("status", "unknown")
+        model = result.get("active_model", "unknown")
+        headroom = result.get("headroom_gb")
+        max_ctx = result.get("max_context_tokens")
+
+        if status == "ok":
+            detail = (
+                f"Model '{model}' fits — "
+                f"{headroom:.1f} GB headroom, "
+                f"max ctx {max_ctx:,} tokens"
+            )
+            return CheckResult(status="ok", name="LLMFit", detail=detail)
+        elif status == "oom":
+            detail = (
+                f"Model '{model}' may OOM — "
+                f"headroom: {headroom:.1f} GB"
+            )
+            return CheckResult(status="warn", name="LLMFit", detail=detail)
+        else:
+            return CheckResult(status="skip", name="LLMFit", detail=f"Status: {status}")
+    except ImportError:
+        return CheckResult(status="skip", name="LLMFit", detail="castor.llmfit not available")
+    except Exception as exc:
+        return CheckResult(status="skip", name="LLMFit", detail=str(exc))
+
+
 def run_doctor(full: bool = False) -> DoctorReport:
     report = DoctorReport()
     add = report.checks.append
@@ -261,6 +294,7 @@ def run_doctor(full: bool = False) -> DoctorReport:
 
     # Runtime
     add(_check_gateway())
+    add(_check_llmfit())
 
     if full:
         add(_check_rcan_compliance())

@@ -964,6 +964,32 @@ class CastorBridge:
             except Exception:
                 pass
 
+            # Fetch skills + slash commands for Software screen
+            try:
+                with httpx.Client(timeout=5.0) as client:
+                    sk = client.get(f"{self.gateway_url}/api/skills", headers=headers)
+                if sk.status_code == 200:
+                    skills_data = sk.json()
+                    # Write to telemetry/skills subcollection for slashCommandsProvider
+                    try:
+                        self._robot_ref().collection("telemetry").document("skills").set(
+                            {
+                                **skills_data,
+                                "robot_rrn": self.rrn,
+                                "fetched_at": datetime.now(timezone.utc).isoformat(),
+                            },
+                            merge=False,
+                        )
+                    except Exception:
+                        pass
+                    # Also embed summary in main telemetry doc
+                    telemetry["skills_count"] = len(skills_data.get("skills", []))
+                    telemetry["builtin_commands_count"] = len(
+                        skills_data.get("builtin_commands", [])
+                    )
+            except Exception:
+                pass
+
             # Normalise: ensure opencastor_version is always set at both
             # telemetry.opencastor_version AND top-level opencastor_version so
             # all app screens (fleet card reads telemetry.version, detail page
