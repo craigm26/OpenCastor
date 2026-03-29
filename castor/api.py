@@ -2478,6 +2478,13 @@ async def rcan_receive_message(request: Request):
         response_payload["federation_enabled"] = False
         response_payload["signing_alg"] = "ml-dsa-65"
         response_payload["pq_signing_required"] = cfg.get("pq_signing_required", True)
+        rrn = cfg.get("rrn", "")
+        response_payload["rrn"] = rrn
+        response_payload["firmware_hash"] = cfg.get("firmware_hash", "")
+        response_payload["attestation_ref"] = (
+            ("rrf://" + rrn + "/attestation/latest") if rrn else ""
+        )
+        response_payload["pq_kid"] = cfg.get("agent", {}).get("signing", {}).get("pq_kid", "")
         # ISO conformance block (closes #755) — user-declared in config
         iso_cfg = cfg.get("iso_conformance", {})
         response_payload["iso_conformance"] = {
