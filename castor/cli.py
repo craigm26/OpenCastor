@@ -3388,7 +3388,6 @@ def cmd_approvals(args) -> None:
 
 def _cmd_audit_art11(args) -> None:
     """Print EU AI Act Art. 11 compliance summary for this robot."""
-    import json as _json
     import os as _os
 
     # Load config
@@ -3456,9 +3455,9 @@ def _cmd_audit_art11(args) -> None:
     print(
         f"    {'✅' if loa_on else '⚠️ '}  Safety controls (Art. 9)           LoA={'ON' if loa_on else 'OFF'}"
     )
-    print(f"    ✅  Post-market monitoring (Art. 72)  BigQuery + Firestore telemetry")
-    print(f"    ✅  SBOM (Art. 11 §1b)               CycloneDX, RRF-countersigned")
-    print(f"    ⏳  Notified body submission           Deadline: 2026-08-02")
+    print("    ✅  Post-market monitoring (Art. 72)  BigQuery + Firestore telemetry")
+    print("    ✅  SBOM (Art. 11 §1b)               CycloneDX, RRF-countersigned")
+    print("    ⏳  Notified body submission           Deadline: 2026-08-02")
     print()
 
 
