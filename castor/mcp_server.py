@@ -37,9 +37,32 @@ from typing import Any
 
 import httpx
 import yaml
-from mcp.server.fastmcp import FastMCP
 
 from .mcp_auth import resolve_loa
+
+try:
+    from mcp.server.fastmcp import FastMCP
+
+    _MCP_AVAILABLE = True
+except ImportError:
+    _MCP_AVAILABLE = False
+
+    class FastMCP:  # type: ignore[no-redef]
+        _STUB = True
+
+        def __init__(self, *a, **kw) -> None:
+            self._tools: dict = {}
+            self.instructions = kw.get("instructions", "")
+
+        def tool(self):  # noqa: ANN201
+            def decorator(fn):  # type: ignore[return]
+                self._tools[fn.__name__] = fn
+                return fn
+
+            return decorator
+
+        def run(self, **_kw) -> None:
+            raise ImportError("MCP package not installed. Run: pip install 'opencastor[mcp]'")
 
 # ---------------------------------------------------------------------------
 # Config helpers

@@ -7514,23 +7514,6 @@ def main() -> None:
     p_traj_sub.add_parser("export", help="Export all runs as JSONL")
     p_traj_sub.add_parser("stats", help="Show summary statistics")
 
-    # castor mcp — MCP server (Model Context Protocol)
-    p_mcp = sub.add_parser("mcp", help="MCP server — expose robot tools to any AI agent")
-    p_mcp.add_argument("--token", default="", help="Bearer token (or set CASTOR_MCP_TOKEN)")
-    p_mcp.add_argument(
-        "--config", default="", help="Path to RCAN yaml (default: ~/opencastor/bob.rcan.yaml)"
-    )
-    p_mcp_sub = p_mcp.add_subparsers(dest="mcp_cmd")
-
-    # castor mcp token
-    p_mcp_tok = p_mcp_sub.add_parser("token", help="Generate a new MCP client token")
-    p_mcp_tok.add_argument("--name", required=True, help="Client name (e.g. claude-code-laptop)")
-    p_mcp_tok.add_argument("--loa", type=int, default=1, help="LoA level 0–3 (default: 1)")
-    p_mcp_tok.add_argument("--config", default="", help="Path to RCAN yaml")
-
-    # castor mcp clients
-    p_mcp_sub.add_parser("clients", help="List authorised MCP clients")
-
     # Load plugins and merge any plugin-provided commands
     try:
         from castor.plugins import load_plugins
