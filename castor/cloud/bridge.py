@@ -347,6 +347,7 @@ class CastorBridge:
         self._bq_buffer: list[dict[str, Any]] = []
         self._BQ_FLUSH_EVERY: int = 10  # flush after N samples
         self._bq_dataset = "opencastor_telemetry"
+        self._bq_dataset_eu = "opencastor_telemetry_eu"  # EU data residency (GDPR / EU AI Act)
         self._bq_table = "robot_telemetry"
         self._gcs_audit_bucket = "opencastor-audit"
 
@@ -1179,12 +1180,20 @@ class CastorBridge:
             from google.cloud import bigquery as _bq
 
             client = _bq.Client(project="opencastor")
+            # Write to US dataset (primary)
             table_ref = f"opencastor.{self._bq_dataset}.{self._bq_table}"
             errors = client.insert_rows_json(table_ref, rows)
             if errors:
                 log.warning("BigQuery insert errors: %s", errors[:2])
             else:
                 log.debug("BigQuery: flushed %d rows to %s", len(rows), table_ref)
+            # Dual-write to EU dataset (GDPR / EU AI Act data residency)
+            table_ref_eu = f"opencastor.{self._bq_dataset_eu}.{self._bq_table}"
+            errors_eu = client.insert_rows_json(table_ref_eu, rows)
+            if errors_eu:
+                log.debug("BigQuery EU insert errors: %s", errors_eu[:2])
+            else:
+                log.debug("BigQuery EU: flushed %d rows to %s", len(rows), table_ref_eu)
         except ImportError:
             pass  # google-cloud-bigquery not installed
         except Exception as exc:
