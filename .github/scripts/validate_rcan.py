@@ -30,6 +30,7 @@ ACCEPTED_RCAN_VERSIONS = {
     "2.1.0",
     "2.2",  # RCAN v2.2 — ML-DSA-65 primary, dual-brain, fleet scope
     "2.2.0",
+    "2.2.1",
 }
 
 

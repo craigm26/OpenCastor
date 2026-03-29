@@ -22,6 +22,7 @@ ACCEPTED_RCAN_VERSIONS: tuple[str, ...] = (
     "2.1.0",
     "2.2",
     "2.2.0",
+    "2.2.1",
 )
 
 
