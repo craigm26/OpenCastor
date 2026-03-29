@@ -165,3 +165,75 @@ async def ensure_poller_running(notify_fn=None) -> RRFRevocationPoller:
     poller = get_poller(notify_fn=notify_fn)
     await poller.start()
     return poller
+
+
+def get_revocation_status(rrn: str) -> dict:
+    """Return revocation status for *rrn* from the local cache.
+
+    Returns a dict with keys:
+      status        — "active" | "revoked" | "unknown"
+      last_checked_s — epoch seconds of last successful poll (0 if never)
+      source        — "cache" | "rrf" | "unknown"
+    """
+    try:
+        from castor.auth.m2m_trusted import revocation_cache
+
+        is_revoked = revocation_cache.is_revoked(rrn)
+        last_checked = getattr(revocation_cache, "last_updated_s", 0) or 0
+        return {
+            "status": "revoked" if is_revoked else "active",
+            "last_checked_s": int(last_checked),
+            "source": "cache",
+        }
+    except Exception:
+        return {"status": "unknown", "last_checked_s": 0, "source": "unknown"}
+
+
+def force_poll() -> dict:
+    """Synchronously fetch the RRF revocation list and update the cache.
+
+    Returns a summary dict suitable for CLI display.
+    """
+    poller = get_poller()
+    try:
+        data = poller._fetch_revocations()
+        revoked_orchestrators = data.get("revoked_orchestrators", [])
+        revoked_jtis = data.get("revoked_jtis", [])
+        try:
+            from castor.auth.m2m_trusted import revocation_cache
+
+            revocation_cache.update(revoked_orchestrators, revoked_jtis)
+        except Exception:
+            pass
+        return {
+            "ok": True,
+            "revoked_orchestrators": len(revoked_orchestrators),
+            "revoked_jtis": len(revoked_jtis),
+            "polled_at": int(time.time()),
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def get_cache_contents() -> dict:
+    """Return the full contents of the local revocation cache."""
+    try:
+        from castor.auth.m2m_trusted import revocation_cache
+
+        orchestrators = list(getattr(revocation_cache, "revoked_orchestrators", set()))
+        jtis = list(getattr(revocation_cache, "revoked_jtis", set()))
+        last_updated = getattr(revocation_cache, "last_updated_s", 0) or 0
+        return {
+            "revoked_orchestrators": orchestrators,
+            "revoked_jtis": jtis,
+            "last_updated_s": int(last_updated),
+            "entry_count": len(orchestrators) + len(jtis),
+        }
+    except Exception as exc:
+        return {
+            "revoked_orchestrators": [],
+            "revoked_jtis": [],
+            "last_updated_s": 0,
+            "entry_count": 0,
+            "error": str(exc),
+        }

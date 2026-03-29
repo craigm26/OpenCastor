@@ -2523,6 +2523,120 @@ def cmd_attestation(args) -> None:
         print()
 
 
+def cmd_revocation(args) -> None:
+    """castor revocation — manage RRF revocation status (Issue #780).
+
+    Sub-commands:
+      status [rrn]   Show revocation status from cache + RRF
+      poll           Force an immediate RRF revocation poll
+      cache          Show local revocation cache contents
+    """
+
+    sub = getattr(args, "revocation_cmd", None) or "status"
+
+    if sub == "status":
+        from castor.services.rrf_poller import get_revocation_status
+
+        rrn = getattr(args, "rrn", None) or ""
+        if not rrn:
+            import os
+
+            rrn = os.getenv("OPENCASTOR_RRN", "")
+        if not rrn:
+            try:
+                import glob
+
+                candidates = sorted(glob.glob("*.rcan.yaml"))
+                if candidates:
+                    import yaml
+
+                    with open(candidates[0]) as _f:
+                        cfg = yaml.safe_load(_f) or {}
+                    rrn = cfg.get("metadata", {}).get("rrn", cfg.get("rrn", ""))
+            except Exception:
+                pass
+
+        if not rrn:
+            print("  No RRN provided. Pass as argument or set OPENCASTOR_RRN.")
+            print("  Usage: castor revocation status <RRN>")
+            return
+
+        data = get_revocation_status(rrn)
+        status_icon = (
+            "✅" if data["status"] == "active" else ("❌" if data["status"] == "revoked" else "❓")
+        )
+        print(f"\n  RRN: {rrn}")
+        print(f"  Status: {status_icon} {data['status']}")
+        print(f"  Source: {data['source']}")
+        if data["last_checked_s"]:
+            import datetime
+
+            ts = datetime.datetime.fromtimestamp(data["last_checked_s"]).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+            print(f"  Last checked: {ts}")
+        else:
+            print("  Last checked: never")
+        print()
+
+    elif sub == "poll":
+        from castor.services.rrf_poller import force_poll
+
+        print("  Polling RRF revocation list...")
+        result = force_poll()
+        if result.get("ok"):
+            print("  ✅ Poll successful")
+            print(f"     Revoked orchestrators: {result['revoked_orchestrators']}")
+            print(f"     Revoked JTIs:          {result['revoked_jtis']}")
+            import datetime
+
+            ts = datetime.datetime.fromtimestamp(result["polled_at"]).strftime("%Y-%m-%d %H:%M:%S")
+            print(f"     Polled at:             {ts}")
+        else:
+            print(f"  ❌ Poll failed: {result.get('error', 'unknown error')}")
+        print()
+
+    elif sub == "cache":
+        from castor.services.rrf_poller import get_cache_contents
+
+        data = get_cache_contents()
+        print("\n  Revocation Cache")
+        print("  ─────────────────────────────")
+        print(f"  Total entries: {data['entry_count']}")
+        if data.get("error"):
+            print(f"  Warning: {data['error']}")
+        if data["last_updated_s"]:
+            import datetime
+
+            ts = datetime.datetime.fromtimestamp(data["last_updated_s"]).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+            print(f"  Last updated:  {ts}")
+        else:
+            print("  Last updated:  never")
+        orcs = data["revoked_orchestrators"]
+        jtis = data["revoked_jtis"]
+        if orcs:
+            print(f"\n  Revoked orchestrators ({len(orcs)}):")
+            for o in orcs[:20]:
+                print(f"    • {o}")
+            if len(orcs) > 20:
+                print(f"    ... and {len(orcs) - 20} more")
+        if jtis:
+            print(f"\n  Revoked JTIs ({len(jtis)}):")
+            for j in jtis[:20]:
+                print(f"    • {j}")
+            if len(jtis) > 20:
+                print(f"    ... and {len(jtis) - 20} more")
+        if not orcs and not jtis:
+            print("  Cache is empty.")
+        print()
+
+    else:
+        print(f"  Unknown sub-command: {sub}")
+        print("  Usage: castor revocation <status|poll|cache>")
+
+
 def cmd_swarm(args) -> None:
     """castor swarm — placeholder."""
     print("castor swarm: coming soon.")
@@ -7519,6 +7633,8 @@ def main() -> None:
         "compete": cmd_compete,
         "season": cmd_season,
         "research": cmd_research,
+        # Issue #780 — revocation CLI
+        "revocation": cmd_revocation,
     }
 
     # castor eval — skill evaluation harness
@@ -7541,6 +7657,20 @@ def main() -> None:
     p_traj_show.add_argument("id", metavar="RUN_ID")
     p_traj_sub.add_parser("export", help="Export all runs as JSONL")
     p_traj_sub.add_parser("stats", help="Show summary statistics")
+
+    # castor revocation — Issue #780
+    p_revocation = sub.add_parser(
+        "revocation",
+        help="Manage RRF revocation status (status, poll, cache)",
+    )
+    p_rev_sub = p_revocation.add_subparsers(dest="revocation_cmd")
+    p_rev_status = p_rev_sub.add_parser("status", help="Show revocation status from cache + RRF")
+    p_rev_status.add_argument(
+        "rrn", nargs="?", default=None, help="Robot Registration Number (RRN)"
+    )
+    p_rev_sub.add_parser("poll", help="Force an immediate RRF revocation poll")
+    p_rev_sub.add_parser("cache", help="Show local revocation cache contents")
+    p_revocation.set_defaults(revocation_cmd="status")
 
     # Load plugins and merge any plugin-provided commands
     try:
