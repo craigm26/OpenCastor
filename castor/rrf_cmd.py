@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-RRF_BASE = "https://robot-registry-foundation.pages.dev"
+RRF_BASE = "https://robotregistryfoundation.org"
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

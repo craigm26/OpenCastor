@@ -57,7 +57,7 @@ def get_tier_from_rrn(rrn: str) -> Optional[VerificationStatus]:
         import json
         import urllib.request
 
-        url = f"https://robot-registry-foundation.pages.dev/v2/robots/{rrn}"
+        url = f"https://robotregistryfoundation.org/v2/robots/{rrn}"
         req = urllib.request.Request(url, headers={"Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=5) as resp:
             data = json.loads(resp.read())

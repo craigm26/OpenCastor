@@ -1102,7 +1102,7 @@ def cmd_register(args) -> None:
         print(f"  Model:        {meta.get('model', meta.get('robot_name', 'unknown'))}")
         print(f"  Version:      {meta.get('version', meta.get('firmware_version', 'v1'))}")
         print(f"  RCAN version: {config.get('rcan_version', 'unknown')}")
-        print("  Registry:     https://robot-registry-foundation.pages.dev/v2/registry")
+        print("  Registry:     https://robotregistryfoundation.org/v2/registry")
         print("\n✅ Dry run complete — no API calls made.")
         return
 

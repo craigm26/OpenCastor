@@ -33,7 +33,7 @@ SBOM_WELL_KNOWN_PATH = "/.well-known/rcan-sbom.json"
 _DEFAULT_SBOM_FILE = Path("/run/opencastor/rcan-sbom.json")
 _FALLBACK_SBOM_FILE = Path("/tmp/opencastor-rcan-sbom.json")
 
-RRF_SBOM_PUBLISH_URL = "https://robot-registry-foundation.pages.dev/v2/robots/{rrn}/sbom"
+RRF_SBOM_PUBLISH_URL = "https://robotregistryfoundation.org/v2/robots/{rrn}/sbom"
 
 
 # ---------------------------------------------------------------------------
@@ -307,9 +307,7 @@ def cmd_sbom_generate(args) -> None:
     # Derive SBOM URL from robot's RURI or a configured base URL
     config.get("ruri", "")
     sbom_url = getattr(args, "sbom_url", None) or (
-        f"https://robot-registry-foundation.pages.dev/v2/robots/{rrn}/sbom"
-        if rrn != "RRN-UNKNOWN"
-        else ""
+        f"https://robotregistryfoundation.org/v2/robots/{rrn}/sbom" if rrn != "RRN-UNKNOWN" else ""
     )
 
     sbom = generate_sbom(rrn=rrn, sbom_url=sbom_url)
