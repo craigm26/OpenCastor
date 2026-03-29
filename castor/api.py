@@ -95,6 +95,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Track gateway startup time for uptime reporting (Issue #782)
+_startup_time = time.monotonic()
+
 # CORS: configurable via OPENCASTOR_CORS_ORIGINS env var (comma-separated).
 # Defaults to localhost dashboard only. Set OPENCASTOR_CORS_ORIGINS="*" to allow all origins
 # (development only — never use "*" in production).
@@ -382,6 +385,8 @@ async def health():
         "status": "ok",
         "uptime_s": round(time.time() - state.boot_time, 1),
         "version": _castor_pkg.__version__,
+        "rcan_version": "2.2",
+        "rrn": getattr(state, "ruri", "") or "",
     }
 
 
@@ -9867,4 +9872,75 @@ async def api_components_detect(request: Request) -> dict:
         "registered": ok_count,
         "errors": errors,
         "components": components,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Revocation endpoints — Issue #780
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/revocation", dependencies=[Depends(verify_token)])
+async def api_revocation_status():
+    """Revocation status for this robot."""
+    cfg = state.config or {}
+    rrn = cfg.get("rrn", "")
+    # Try to get from rrf_poller if available
+    try:
+        from castor.services.rrf_poller import get_revocation_status
+
+        status_data = get_revocation_status(rrn)
+    except Exception:
+        status_data = {"status": "active", "last_checked_s": 0, "source": "unknown"}
+    return {"rrn": rrn, **status_data}
+
+
+@app.get("/api/revocation/{rrn}", dependencies=[Depends(verify_token)])
+async def api_revocation_peer(rrn: str):
+    """Check if a peer RRN is revoked."""
+    try:
+        from castor.services.rrf_poller import get_revocation_status
+
+        status_data = get_revocation_status(rrn)
+    except Exception:
+        status_data = {"status": "unknown", "last_checked_s": 0, "source": "unknown"}
+    return {"rrn": rrn, **status_data}
+
+
+# ---------------------------------------------------------------------------
+# RCAN spec introspection endpoint — Issue #782
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/rcan/spec")
+async def rcan_spec_endpoint():
+    """RCAN protocol introspection — self-describing spec endpoint."""
+    try:
+        from castor.rcan.message import RCAN_SPEC_VERSION, MessageType
+
+        msg_types = {m.name: m.value for m in MessageType}
+        rcan_ver = RCAN_SPEC_VERSION
+    except Exception:
+        msg_types = {}
+        rcan_ver = "2.2"
+    try:
+        gw_ver = __import__("importlib.metadata", fromlist=["version"]).version("opencastor")
+    except Exception:
+        gw_ver = "unknown"
+    return {
+        "rcan_version": rcan_ver,
+        "message_types": msg_types,
+        "supported_scopes": [
+            "discover",
+            "status",
+            "training",
+            "chat",
+            "control",
+            "safety",
+            "system",
+        ],
+        "signing_alg": "ml-dsa-65",
+        "pq_signing_required": True,
+        "mcp_tool_count": 14,
+        "gateway_version": gw_ver,
     }

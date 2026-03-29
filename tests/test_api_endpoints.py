@@ -1078,10 +1078,11 @@ class TestRequestValidation:
 # =====================================================================
 class TestResponseFormat:
     def test_health_response_keys(self, client):
-        """Public /health returns only status, uptime_s, version (no internal state)."""
+        """Public /health returns status, uptime_s, version + enrichment fields (Issue #782)."""
         body = client.get("/health").json()
-        expected_keys = {"status", "uptime_s", "version"}
-        assert expected_keys == set(body.keys())
+        # Core fields always present; rcan_version and rrn added in #782
+        required_keys = {"status", "uptime_s", "version"}
+        assert required_keys.issubset(set(body.keys()))
 
     def test_command_response_keys(self, client, api_mod):
         api_mod.state.brain = _make_mock_brain()
