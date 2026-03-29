@@ -54,6 +54,20 @@ _MODEL_WEIGHT_GB: dict[str, float] = {
     "smollm2:135m": 0.3,
     "smollm2:360m": 0.7,
     "smollm2:1.7b": 1.8,
+    # GGUF models via HuggingFace / llama-cpp-python
+    "qwen3-4b-thinking:gguf": 2.6,
+}
+
+# ---------------------------------------------------------------------------
+# Model capability flags — thinking, tool_calling, format, etc.
+# ---------------------------------------------------------------------------
+MODEL_FLAGS: dict[str, dict] = {
+    "qwen3-4b-thinking:gguf": {
+        "thinking": True,
+        "tool_calling": True,
+        "format": "gguf",
+        "hf_repo": "TeichAI/Qwen3-4B-Thinking-2507-GPT-5.1-Codex-Max-Distill-GGUF",
+    },
 }
 
 # ---------------------------------------------------------------------------

@@ -119,12 +119,57 @@ class HuggingFaceProvider(BaseProvider):
             self.is_vision,
         )
 
+    def _is_gguf(self) -> bool:
+        """Return True if the configured model is a GGUF model."""
+        model = self.model_name or ""
+        return (
+            ".gguf" in model.lower()
+            or "-gguf" in model.lower()
+            or self.config.get("format") == "gguf"
+        )
+
+    def _generate_gguf(self, prompt: str, **kwargs) -> str:
+        """Route GGUF inference: try Ollama first, then llama-cpp-python."""
+        # Try Ollama first
+        try:
+            from castor.providers.ollama_provider import OllamaProvider
+
+            ollama_config = {**self.config, "model": self.model_name}
+            ollama = OllamaProvider(ollama_config)
+            return ollama.think(b"", prompt).raw_text
+        except ImportError:
+            pass
+        except Exception:
+            pass
+        # Try llama-cpp-python
+        try:
+            from llama_cpp import Llama
+
+            llm = Llama(model_path=self.config.get("model_path", self.model_name))
+            result = llm(prompt, max_tokens=kwargs.get("max_tokens", 512))
+            return result["choices"][0]["text"]
+        except ImportError:
+            raise ImportError(
+                "GGUF models require Ollama or llama-cpp-python. "
+                "Install: pip install llama-cpp-python  OR  install Ollama from https://ollama.com"
+            )
+
     def think(
         self,
         image_bytes: bytes,
         instruction: str,
         surface: str = "whatsapp",
     ) -> Thought:
+        # GGUF models: route to Ollama or llama-cpp-python
+        if self._is_gguf():
+            try:
+                text = self._generate_gguf(instruction)
+                action = self._clean_json(text)
+                return Thought(text, action)
+            except Exception as e:
+                logger.error("GGUF inference error: %s", e)
+                return Thought(f"Error: {e}", None)
+
         try:
             if self.is_vision and image_bytes:
                 return self._think_vision(image_bytes, instruction)

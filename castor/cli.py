@@ -1675,6 +1675,173 @@ def cmd_privacy(args) -> None:
     print_privacy_policy(config)
 
 
+def cmd_consent(args) -> None:
+    """castor consent — manage R2RAM robot-to-robot consent records."""
+    consent_cmd = getattr(args, "consent_cmd", None)
+    config_path = getattr(args, "config", None)
+
+    # Load ConsentManager if possible
+    def _load_manager():
+        try:
+            import yaml
+
+            cfg: dict = {}
+            if config_path:
+                with open(config_path) as f:
+                    cfg = yaml.safe_load(f) or {}
+            rrn = cfg.get("metadata", {}).get("rrn", "RRN-000000000000")
+            owner = cfg.get("metadata", {}).get("owner", "rrn://unknown")
+            from castor.cloud.consent_manager import ConsentManager
+
+            return ConsentManager(robot_rrn=rrn, owner=owner, db=None)
+        except Exception as exc:
+            print(f"  Warning: could not load ConsentManager: {exc}")
+            return None
+
+    # -- training sub-group --
+    if consent_cmd == "training":
+        training_cmd = getattr(args, "training_cmd", None)
+        if training_cmd == "list":
+            mgr = _load_manager()
+            if mgr and hasattr(mgr, "list_training_consents"):
+                records = mgr.list_training_consents()
+                if not records:
+                    print("  No training consent records found.")
+                else:
+                    for r in records:
+                        print(f"  {r}")
+            else:
+                print("  Not yet implemented — see castor/cloud/consent_manager.py")
+        elif training_cmd == "delete":
+            subject_id = getattr(args, "subject_id", None)
+            mgr = _load_manager()
+            if mgr and hasattr(mgr, "delete_training_consent"):
+                mgr.delete_training_consent(subject_id)
+                print(f"  Training consent deleted for subject: {subject_id}")
+            else:
+                print("  Not yet implemented — see castor/cloud/consent_manager.py")
+        else:
+            print("  Usage: castor consent training [list|delete <subject_id>]")
+        return
+
+    # -- main consent subcommands --
+    if consent_cmd == "list":
+        mgr = _load_manager()
+        if mgr and hasattr(mgr, "list_consents"):
+            records = mgr.list_consents()
+            if not records:
+                print("  No consent records found.")
+            else:
+                print(f"  {'ID':36}  {'Peer':30}  {'Status':10}  Scopes")
+                print("  " + "-" * 90)
+                for r in records:
+                    cid = r.get("consent_id", "?")[:36]
+                    peer = r.get("peer_owner", "?")[:30]
+                    status = r.get("status", "?")
+                    scopes = ",".join(r.get("granted_scopes", []))
+                    print(f"  {cid:36}  {peer:30}  {status:10}  {scopes}")
+        else:
+            # Fallback: show cache contents if any
+            if mgr and mgr._cache:
+                print(f"  {'Peer':<40}  {'Status':10}  Scopes")
+                print("  " + "-" * 70)
+                for peer, r in mgr._cache.items():
+                    status = r.get("status", "?")
+                    scopes = ",".join(r.get("granted_scopes", []))
+                    print(f"  {peer:<40}  {status:10}  {scopes}")
+            else:
+                print("  Not yet implemented — see castor/cloud/consent_manager.py")
+
+    elif consent_cmd == "show":
+        consent_id = getattr(args, "consent_id", None)
+        mgr = _load_manager()
+        if mgr and hasattr(mgr, "get_consent"):
+            record = mgr.get_consent(consent_id)
+            if record:
+                import json as _json
+
+                print(_json.dumps(record, indent=2, default=str))
+            else:
+                print(f"  Consent record not found: {consent_id}")
+        else:
+            print("  Not yet implemented — see castor/cloud/consent_manager.py")
+
+    elif consent_cmd == "grant":
+        rrn = getattr(args, "rrn", None)
+        scope_str = getattr(args, "scope", "chat")
+        scopes = [s.strip() for s in (scope_str or "chat").split(",") if s.strip()]
+        mgr = _load_manager()
+        if mgr:
+            try:
+                consent_id = mgr.grant_consent(
+                    peer_owner=f"rrn://{rrn}",
+                    peer_rrn=rrn,
+                    peer_ruri=f"ruri://{rrn}",
+                    granted_scopes=scopes,
+                )
+                print(f"  ✓ Consent granted to {rrn}")
+                print(f"    scopes: {', '.join(scopes)}")
+                print(f"    consent_id: {consent_id}")
+            except Exception as exc:
+                print(f"  ✗ Grant failed: {exc}")
+        else:
+            print("  Not yet implemented — see castor/cloud/consent_manager.py")
+
+    elif consent_cmd == "deny":
+        rrn = getattr(args, "rrn", None)
+        mgr = _load_manager()
+        if mgr and hasattr(mgr, "deny_consent"):
+            try:
+                mgr.deny_consent(rrn)
+                print(f"  ✓ Consent denied for {rrn}")
+            except Exception as exc:
+                print(f"  ✗ Deny failed: {exc}")
+        else:
+            print("  Not yet implemented — see castor/cloud/consent_manager.py")
+
+    elif consent_cmd == "revoke":
+        consent_id = getattr(args, "consent_id", None)
+        mgr = _load_manager()
+        if mgr:
+            try:
+                # Try by consent_id first, fall back to peer_owner
+                if hasattr(mgr, "revoke_consent_by_id"):
+                    mgr.revoke_consent_by_id(consent_id)
+                else:
+                    mgr.revoke_consent(consent_id)
+                print(f"  ✓ Consent revoked: {consent_id}")
+            except Exception as exc:
+                print(f"  ✗ Revoke failed: {exc}")
+        else:
+            print("  Not yet implemented — see castor/cloud/consent_manager.py")
+
+    elif consent_cmd == "export":
+        mgr = _load_manager()
+        if mgr and hasattr(mgr, "export_offline_blob"):
+            try:
+                blob = mgr.export_offline_blob()
+                import json as _json
+
+                print(_json.dumps(blob, indent=2, default=str))
+            except Exception as exc:
+                print(f"  ✗ Export failed: {exc}")
+        else:
+            print("  Not yet implemented — see castor/cloud/consent_manager.py")
+
+    else:
+        print("  Usage: castor consent [list|show|grant|deny|revoke|export|training] [options]")
+        print()
+        print("  Subcommands:")
+        print("    list                           List all consent records")
+        print("    show <consent_id>              Inspect a consent record")
+        print("    grant <rrn> --scope SCOPES     Grant consent (scopes: chat,control,...)")
+        print("    deny <rrn>                     Deny a pending consent request")
+        print("    revoke <consent_id>            Revoke a granted consent")
+        print("    export --offline               Export signed offline blob")
+        print("    training list                  List training consent records")
+        print("    training delete <subject_id>   GDPR erasure")
+
+
 def cmd_profile(args) -> None:
     """castor profile — manage named personality/config profiles."""
     from castor.profiles import (
@@ -1804,6 +1971,7 @@ def cmd_llmfit(args) -> None:
 
     from castor.llmfit import (
         _MODEL_WEIGHT_GB,
+        MODEL_FLAGS,
         check_fit,
         get_total_ram_gb,
         turboquant_ecosystem_status,
@@ -1812,7 +1980,14 @@ def cmd_llmfit(args) -> None:
     if getattr(args, "list_models", False):
         print("\nKnown models (with weight size data):")
         for mid, wgb in sorted(_MODEL_WEIGHT_GB.items()):
-            print(f"  {mid:<28} {wgb:.1f} GB weights")
+            flags = MODEL_FLAGS.get(mid, {})
+            extras = []
+            if flags.get("thinking"):
+                extras.append("thinking=yes")
+            if flags.get("format"):
+                extras.append(f"format={flags['format']}")
+            extras_str = ("  [" + ", ".join(extras) + "]") if extras else ""
+            print(f"  {mid:<32} {wgb:.1f} GB weights{extras_str}")
         return
 
     if getattr(args, "tq_status", False):
@@ -1870,7 +2045,9 @@ def cmd_llmfit(args) -> None:
 
     total_gb = get_total_ram_gb()
     avail_gb = result.device_ram_gb
-    print(f"\n[LLMFit] {result.model_id}")
+    _flags = MODEL_FLAGS.get(model_id.lower().strip(), {})
+    _thinking_tag = "  thinking=yes" if _flags.get("thinking") else ""
+    print(f"\n[LLMFit] {result.model_id}{_thinking_tag}")
     print(f"  Device RAM:  {avail_gb:.1f} GB available / {total_gb:.1f} GB total")
     print(f"  Weights:     {result.weights_gb:.1f} GB")
     if result.kv_compression == "turboquant":
@@ -6445,6 +6622,74 @@ def main() -> None:
     )
     p_priv.add_argument("--config", default="robot.rcan.yaml", help="RCAN config file")
 
+    # castor consent — R2RAM consent management (issue #778)
+    p_consent = sub.add_parser(
+        "consent",
+        help="Manage R2RAM robot-to-robot consent records",
+        epilog=(
+            "Examples:\n"
+            "  castor consent list --config robot.rcan.yaml\n"
+            "  castor consent show <consent_id> --config robot.rcan.yaml\n"
+            "  castor consent grant RRN-000000000002 --scope chat,control --config robot.rcan.yaml\n"
+            "  castor consent deny RRN-000000000002 --config robot.rcan.yaml\n"
+            "  castor consent revoke <consent_id> --config robot.rcan.yaml\n"
+            "  castor consent export --offline --config robot.rcan.yaml\n"
+            "  castor consent training list --config robot.rcan.yaml\n"
+            "  castor consent training delete <subject_id> --config robot.rcan.yaml\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_consent_sub = p_consent.add_subparsers(dest="consent_cmd")
+
+    # consent list
+    p_c_list = p_consent_sub.add_parser("list", help="List all consent records")
+    p_c_list.add_argument("--config", default=None, help="RCAN config file")
+
+    # consent show
+    p_c_show = p_consent_sub.add_parser("show", help="Inspect a consent record")
+    p_c_show.add_argument("consent_id", help="Consent record ID")
+    p_c_show.add_argument("--config", default=None, help="RCAN config file")
+
+    # consent grant
+    p_c_grant = p_consent_sub.add_parser("grant", help="Grant consent to a peer robot")
+    p_c_grant.add_argument("rrn", help="Robot Registry Number of the peer")
+    p_c_grant.add_argument(
+        "--scope",
+        default="chat",
+        help="Comma-separated scopes (e.g. chat,control) — default: chat",
+    )
+    p_c_grant.add_argument("--config", default=None, help="RCAN config file")
+
+    # consent deny
+    p_c_deny = p_consent_sub.add_parser("deny", help="Deny a pending consent request")
+    p_c_deny.add_argument("rrn", help="Robot Registry Number of the peer")
+    p_c_deny.add_argument("--config", default=None, help="RCAN config file")
+
+    # consent revoke
+    p_c_revoke = p_consent_sub.add_parser("revoke", help="Revoke a granted consent")
+    p_c_revoke.add_argument("consent_id", help="Consent record ID to revoke")
+    p_c_revoke.add_argument("--config", default=None, help="RCAN config file")
+
+    # consent export
+    p_c_export = p_consent_sub.add_parser(
+        "export", help="Export signed offline consent blob (RCAN §11)"
+    )
+    p_c_export.add_argument("--offline", action="store_true", help="Include offline-signed blob")
+    p_c_export.add_argument("--config", default=None, help="RCAN config file")
+
+    # consent training (sub-group)
+    p_c_training = p_consent_sub.add_parser("training", help="Manage training data consent records")
+    p_c_training_sub = p_c_training.add_subparsers(dest="training_cmd")
+
+    p_ct_list = p_c_training_sub.add_parser("list", help="List training consent records")
+    p_ct_list.add_argument("--config", default=None, help="RCAN config file")
+
+    p_ct_delete = p_c_training_sub.add_parser(
+        "delete", help="GDPR erasure — delete training data for a subject"
+    )
+    p_ct_delete.add_argument("subject_id", help="Subject ID to erase")
+    p_ct_delete.add_argument("--config", default=None, help="RCAN config file")
+
     # --- Batch 5: Polish & quality-of-life ---
 
     # castor update-check
@@ -7460,6 +7705,7 @@ def main() -> None:
         "components": cmd_components,
         "rrf": cmd_rrf,
         "privacy": cmd_privacy,
+        "consent": cmd_consent,
         # Batch 5 (polish & quality-of-life)
         "update-check": cmd_update_check,
         "profile": cmd_profile,
