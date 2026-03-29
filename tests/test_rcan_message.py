@@ -1,10 +1,18 @@
 """Tests for RCANMessage envelope."""
 
+import hashlib
 import time
 
 import pytest
 
-from castor.rcan.message import MessageType, Priority, RCANMessage
+from castor.rcan.message import (
+    RCAN_SPEC_VERSION,
+    DelegationHop,
+    MediaChunk,
+    MessageType,
+    Priority,
+    RCANMessage,
+)
 
 
 class TestMessageCreation:
@@ -261,3 +269,131 @@ class TestRCANv12Messages:
         assert d["type_name"] == "AUTHORIZE"
         restored = RCANMessage.from_dict(d)
         assert restored.type == MessageType.AUTHORIZE
+
+
+class TestRCANv22EnvelopeFields:
+    """RCAN v2.2 — new envelope fields, DelegationHop, MediaChunk."""
+
+    def test_spec_version_is_2_2(self):
+        assert RCAN_SPEC_VERSION == "2.2"
+
+    def test_rcan_message_has_new_fields_with_defaults(self):
+        msg = RCANMessage(
+            type=MessageType.STATUS,
+            source="rcan://a.b.c",
+            target="rcan://d.e.f",
+        )
+        assert msg.firmware_hash == ""
+        assert msg.attestation_ref == ""
+        assert msg.pq_sig == ""
+        assert msg.pq_alg == "ml-dsa-65"
+        assert msg.delegation_chain == []
+        assert msg.media_chunks == []
+
+    def test_delegation_hop_instantiation(self):
+        hop = DelegationHop(
+            robot_rrn="rrn://opencastor.rover.abc",
+            scope="control",
+            issued_at="2026-01-01T00:00:00Z",
+            expires_at="2026-01-02T00:00:00Z",
+        )
+        assert hop.robot_rrn == "rrn://opencastor.rover.abc"
+        assert hop.scope == "control"
+        assert hop.sig == ""
+
+    def test_delegation_hop_with_sig(self):
+        hop = DelegationHop(
+            robot_rrn="rrn://opencastor.rover.abc",
+            scope="control",
+            issued_at="2026-01-01T00:00:00Z",
+            expires_at="2026-01-02T00:00:00Z",
+            sig="abc123",
+        )
+        assert hop.sig == "abc123"
+
+    def test_media_chunk_verify_hash_passes(self):
+        data = "hello world"
+        correct_hash = "sha256:" + hashlib.sha256(data.encode()).hexdigest()
+        chunk = MediaChunk(
+            chunk_id="chunk-1",
+            mime_type="text/plain",
+            size_bytes=len(data),
+            hash_sha256=correct_hash,
+            data=data,
+        )
+        chunk.verify_hash()  # should not raise
+
+    def test_media_chunk_verify_hash_raises_on_mismatch(self):
+        chunk = MediaChunk(
+            chunk_id="chunk-2",
+            mime_type="text/plain",
+            size_bytes=5,
+            hash_sha256="sha256:wronghash",
+            data="hello",
+        )
+        with pytest.raises(ValueError, match="hash mismatch"):
+            chunk.verify_hash()
+
+    def test_delegation_chain_max_depth_3_raises(self):
+        hops = [
+            {"robot_rrn": f"rrn://r{i}", "scope": "control",
+             "issued_at": "2026-01-01T00:00:00Z", "expires_at": "2026-01-02T00:00:00Z"}
+            for i in range(4)
+        ]
+        d = {
+            "type": MessageType.COMMAND,
+            "source": "rcan://a.b.c",
+            "target": "rcan://d.e.f",
+            "delegation_chain": hops,
+        }
+        with pytest.raises(ValueError, match="delegation chain max depth is 3"):
+            RCANMessage.from_dict(d)
+
+    def test_delegation_chain_exactly_3_is_ok(self):
+        hops = [
+            {"robot_rrn": f"rrn://r{i}", "scope": "control",
+             "issued_at": "2026-01-01T00:00:00Z", "expires_at": "2026-01-02T00:00:00Z"}
+            for i in range(3)
+        ]
+        d = {
+            "type": MessageType.COMMAND,
+            "source": "rcan://a.b.c",
+            "target": "rcan://d.e.f",
+            "delegation_chain": hops,
+        }
+        msg = RCANMessage.from_dict(d)
+        assert len(msg.delegation_chain) == 3
+
+    def test_new_fields_in_to_dict(self):
+        msg = RCANMessage(
+            type=MessageType.STATUS,
+            source="rcan://a.b.c",
+            target="rcan://d.e.f",
+            firmware_hash="sha256:abc",
+            attestation_ref="rrf://rrn/attestation/latest",
+            pq_sig="sig123",
+            pq_alg="ml-dsa-65",
+        )
+        d = msg.to_dict()
+        assert d["firmware_hash"] == "sha256:abc"
+        assert d["attestation_ref"] == "rrf://rrn/attestation/latest"
+        assert d["pq_sig"] == "sig123"
+        assert d["pq_alg"] == "ml-dsa-65"
+        assert d["delegation_chain"] == []
+        assert d["media_chunks"] == []
+
+    def test_new_fields_roundtrip_from_dict(self):
+        d = {
+            "type": MessageType.STATUS,
+            "source": "rcan://a.b.c",
+            "target": "rcan://d.e.f",
+            "firmware_hash": "sha256:abc",
+            "attestation_ref": "rrf://rrn/attestation/latest",
+            "pq_sig": "sig456",
+            "pq_alg": "ml-dsa-65",
+        }
+        msg = RCANMessage.from_dict(d)
+        assert msg.firmware_hash == "sha256:abc"
+        assert msg.attestation_ref == "rrf://rrn/attestation/latest"
+        assert msg.pq_sig == "sig456"
+        assert msg.pq_alg == "ml-dsa-65"

@@ -42,7 +42,7 @@ from typing import Any, Optional
 log = logging.getLogger(__name__)
 
 # RCAN spec version implemented by this module
-RCAN_SPEC_VERSION = "1.9"
+RCAN_SPEC_VERSION = "2.2"
 
 
 class MessageType(IntEnum):
@@ -96,6 +96,41 @@ class MessageType(IntEnum):
     SBOM_UPDATE = 44  # SBOM update notification (v2.1)
 
 
+@dataclass
+class DelegationHop:
+    """A single hop in a delegation chain."""
+
+    robot_rrn: str
+    scope: str
+    issued_at: str
+    expires_at: str
+    sig: str = ""
+
+
+@dataclass
+class MediaChunk:
+    """A media chunk attached to an RCAN message."""
+
+    chunk_id: str
+    mime_type: str
+    size_bytes: int
+    hash_sha256: str
+    data: str = ""
+    ref_url: str = ""
+
+    def verify_hash(self) -> None:
+        """Verify the SHA-256 hash of the data field.
+
+        Raises:
+            ValueError: If the hash does not match.
+        """
+        import hashlib
+
+        actual = "sha256:" + hashlib.sha256(self.data.encode()).hexdigest()
+        if actual != self.hash_sha256:
+            raise ValueError(f"MediaChunk hash mismatch: expected {self.hash_sha256}, got {actual}")
+
+
 class Priority(IntEnum):
     """Message priority levels.  SAFETY skips the normal queue."""
 
@@ -135,6 +170,14 @@ class RCANMessage:
     scope: list[str] = field(default_factory=list)
     version: str = field(default="1.0.0")
     rcan_version: str = field(default_factory=lambda: RCAN_SPEC_VERSION)  # v1.5 §3.5
+
+    # v2.2 envelope fields
+    firmware_hash: str = ""
+    attestation_ref: str = ""
+    pq_sig: str = ""
+    pq_alg: str = "ml-dsa-65"
+    delegation_chain: list = field(default_factory=list)
+    media_chunks: list = field(default_factory=list)
 
     # ------------------------------------------------------------------
     # Factory methods
@@ -297,6 +340,8 @@ class RCANMessage:
         """Serialise to a plain dict (JSON-ready).
 
         v1.5: includes rcan_version in outgoing messages (GAP-12).
+        v2.2: includes envelope fields (firmware_hash, attestation_ref, pq_sig,
+              pq_alg, delegation_chain, media_chunks).
         """
         d = asdict(self)
         # Convert enum ints to their names for readability
@@ -304,6 +349,13 @@ class RCANMessage:
         d["priority_name"] = Priority(self.priority).name
         # Ensure rcan_version is always present in outgoing messages
         d.setdefault("rcan_version", RCAN_SPEC_VERSION)
+        # v2.2 envelope fields are already included via asdict()
+        d.setdefault("firmware_hash", self.firmware_hash)
+        d.setdefault("attestation_ref", self.attestation_ref)
+        d.setdefault("pq_sig", self.pq_sig)
+        d.setdefault("pq_alg", self.pq_alg)
+        d.setdefault("delegation_chain", self.delegation_chain)
+        d.setdefault("media_chunks", self.media_chunks)
         return d
 
     @classmethod
@@ -355,6 +407,18 @@ class RCANMessage:
         # Coerce priority from name if needed
         if isinstance(d.get("priority"), str):
             d["priority"] = Priority[d["priority"].upper()]
+
+        # Populate v2.2 envelope fields
+        d.setdefault("firmware_hash", "")
+        d.setdefault("attestation_ref", "")
+        d.setdefault("pq_sig", "")
+        d.setdefault("pq_alg", "ml-dsa-65")
+        d.setdefault("delegation_chain", [])
+        d.setdefault("media_chunks", [])
+
+        # Validate delegation chain depth (RCAN v2.2 §7)
+        if len(d["delegation_chain"]) > 3:
+            raise ValueError("RCAN: delegation chain max depth is 3")
 
         # Strip unknown fields not in the dataclass (forward-compat)
         import dataclasses as _dc
