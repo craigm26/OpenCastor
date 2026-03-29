@@ -9943,4 +9943,23 @@ async def rcan_spec_endpoint():
         "pq_signing_required": True,
         "mcp_tool_count": 14,
         "gateway_version": gw_ver,
+
+# Issue #781 — RCAN JWKS endpoint (no auth required)
+@app.get("/.well-known/rcan-keys.json")
+async def rcan_jwks() -> dict:
+    """GET /.well-known/rcan-keys.json — RCAN public key set (JWKS-style, unauthenticated)."""
+    cfg = state.config or {}
+    pq_kid = cfg.get("agent", {}).get("signing", {}).get("pq_kid", "")
+    return {
+        "keys": [
+            {
+                "kid": pq_kid,
+                "alg": "ml-dsa-65",
+                "use": "sig",
+                "kty": "oct",
+                "x-rcan-version": "2.2",
+            }
+        ]
+        if pq_kid
+        else []
     }

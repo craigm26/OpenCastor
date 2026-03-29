@@ -4240,6 +4240,155 @@ def cmd_keygen(args) -> None:
                 print("✗ ML-DSA keygen requires: pip install dilithium-py")
 
 
+def cmd_delegation(args) -> None:
+    """castor delegation — RCAN delegation chain management (§delegation)."""
+    subcmd = getattr(args, "delegation_cmd", None)
+
+    if subcmd == "show":
+        import json as _json
+        from pathlib import Path as _Path
+
+        config_path = getattr(args, "config", "robot.rcan.yaml")
+        rrn = getattr(args, "rrn", None)
+
+        try:
+            import yaml as _yaml
+
+            cfg = _yaml.safe_load(_Path(config_path).read_text()) or {}
+        except Exception as exc:
+            print(f"  ✗ Could not load config: {exc}")
+            return
+
+        delegation_cfg = cfg.get("agent", {}).get("delegation", {})
+        if rrn:
+            delegation_cfg = {k: v for k, v in delegation_cfg.items() if rrn in str(k)}
+
+        print("  RCAN Delegation Config")
+        print(f"  Config file: {config_path}")
+        if delegation_cfg:
+            print(_json.dumps(delegation_cfg, indent=2))
+        else:
+            print("  (no delegation config found in agent.delegation)")
+
+    elif subcmd == "verify":
+        import json as _json
+        from pathlib import Path as _Path
+
+        from castor.delegation import validate_chain
+
+        file_path = args.file
+        try:
+            data = _json.loads(_Path(file_path).read_text())
+        except Exception as exc:
+            print(f"  ✗ Could not load file: {exc}")
+            return
+
+        chain = data.get("delegation_chain", [])
+        try:
+            validate_chain(chain)
+            print(f"  ✓ Delegation chain valid ({len(chain)} hop(s))")
+        except ValueError as exc:
+            print(f"  ✗ {exc}")
+
+    elif subcmd == "depth":
+        from castor.delegation import MAX_DELEGATION_DEPTH
+
+        print(f"  RCAN max delegation depth: {MAX_DELEGATION_DEPTH}")
+        print("  (RCAN spec §delegation — chains longer than this are rejected)")
+
+    else:
+        print("  castor delegation <subcommand>")
+        print("    show [rrn] --config FILE   Show delegation config for this robot")
+        print("    verify <file>              Verify delegation chain in a JSON message file")
+        print("    depth                      Print max delegation depth and spec note")
+
+
+def cmd_key_rotation(args) -> None:
+    """castor key-rotation — PQ key lifecycle management."""
+    import time
+    from pathlib import Path as _Path
+
+    subcmd = getattr(args, "key_rotation_cmd", None)
+
+    if subcmd == "status":
+        import yaml as _yaml
+
+        config_path = getattr(args, "config", "robot.rcan.yaml")
+        try:
+            cfg = _yaml.safe_load(_Path(config_path).read_text()) or {}
+        except Exception as exc:
+            print(f"  ✗ Could not load config: {exc}")
+            return
+
+        signing = cfg.get("agent", {}).get("signing", {})
+        pq_kid = signing.get("pq_kid", "(not set)")
+        alg = signing.get("algorithm", "ml-dsa-65")
+        pq_key_path = signing.get("pq_key_path", "")
+
+        print("  PQ Key Rotation Status")
+        print(f"  pq_kid:    {pq_kid}")
+        print(f"  algorithm: {alg}")
+
+        if pq_key_path:
+            key_file = _Path(pq_key_path)
+            if key_file.exists():
+                mtime = key_file.stat().st_mtime
+                age_days = (time.time() - mtime) / 86400
+                print(f"  key file:  {pq_key_path}")
+                print(f"  key age:   {age_days:.1f} days")
+                if age_days > 180:
+                    print("  ⚠  WARNING: PQ key is older than 180 days — rotation recommended")
+            else:
+                print(f"  key file:  {pq_key_path}  (not found)")
+        else:
+            print("  key file:  (pq_key_path not set in config)")
+
+    elif subcmd == "rotate":
+        import subprocess
+
+        import yaml as _yaml
+
+        config_path = getattr(args, "config", "robot.rcan.yaml")
+        try:
+            cfg = _yaml.safe_load(_Path(config_path).read_text()) or {}
+        except Exception as exc:
+            print(f"  ✗ Could not load config: {exc}")
+            return
+
+        signing = cfg.get("agent", {}).get("signing", {})
+        pq_key_path = signing.get(
+            "pq_key_path", str(_Path.home() / ".opencastor" / "pq_signing.key")
+        )
+
+        print(f"  Rotating PQ key → {pq_key_path}")
+        result = subprocess.run(
+            ["castor", "keygen", "--pq", "--out", pq_key_path, "--force"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            print("  ✓ Key rotated successfully")
+            print(result.stdout)
+        else:
+            print("  ✗ Key rotation failed")
+            print(result.stderr or result.stdout)
+
+    elif subcmd == "verify":
+        rrn = getattr(args, "rrn", "")
+        print("  JWKS endpoint for RCAN key verification:")
+        print("  GET /.well-known/rcan-keys.json")
+        print("  (hosted by the castor gateway — start with: castor gateway --config <file>)")
+        if rrn:
+            print(f"  RRN: {rrn}")
+        print("  Note: Signature verification against JWKS is a stub in this release.")
+
+    else:
+        print("  castor key-rotation <subcommand>")
+        print("    status --config FILE   Show current pq_kid, algorithm, key file age")
+        print("    rotate --config FILE   Generate a new PQ key and update config")
+        print("    verify <rrn>           Show JWKS endpoint info for key verification")
+
+
 def cmd_doctor(args) -> None:
     """castor doctor — run system health checks."""
     from castor.doctor import print_report, run_all_checks
@@ -7946,7 +8095,37 @@ def main() -> None:
         "research": cmd_research,
         # Issue #780 — revocation CLI
         "revocation": cmd_revocation,
+        # Issue #779 — delegation chain management
+        "delegation": cmd_delegation,
+        # Issue #781 — PQ key rotation CLI
+        "key-rotation": cmd_key_rotation,
     }
+
+    # castor delegation — RCAN delegation chain (issue #779)
+    p_delegation = sub.add_parser(
+        "delegation", help="RCAN delegation chain management (§delegation)"
+    )
+    p_del_sub = p_delegation.add_subparsers(dest="delegation_cmd")
+    p_del_show = p_del_sub.add_parser("show", help="Show delegation config for this robot")
+    p_del_show.add_argument("rrn", nargs="?", default=None, help="Filter by RRN")
+    p_del_show.add_argument("--config", default="robot.rcan.yaml", help="RCAN config file")
+    p_del_verify = p_del_sub.add_parser(
+        "verify", help="Verify delegation chain in a JSON message file"
+    )
+    p_del_verify.add_argument(
+        "file", metavar="FILE", help="JSON message file containing delegation_chain key"
+    )
+    p_del_sub.add_parser("depth", help="Print max delegation depth (3) and spec note")
+
+    # castor key-rotation — PQ key lifecycle (issue #781)
+    p_keyrot = sub.add_parser("key-rotation", help="PQ key rotation lifecycle management")
+    p_kr_sub = p_keyrot.add_subparsers(dest="key_rotation_cmd")
+    p_kr_status = p_kr_sub.add_parser("status", help="Show current pq_kid, algorithm, key file age")
+    p_kr_status.add_argument("--config", default="robot.rcan.yaml", help="RCAN config file")
+    p_kr_rotate = p_kr_sub.add_parser("rotate", help="Generate a new PQ key and update config")
+    p_kr_rotate.add_argument("--config", default="robot.rcan.yaml", help="RCAN config file")
+    p_kr_verify = p_kr_sub.add_parser("verify", help="Show JWKS endpoint info for key verification")
+    p_kr_verify.add_argument("rrn", nargs="?", default="", help="Robot RRN (optional)")
 
     # castor eval — skill evaluation harness
     p_eval = sub.add_parser("eval", help="Evaluate a skill against its test suite")

@@ -260,6 +260,47 @@ def _check_llmfit() -> CheckResult:
         return CheckResult(status="skip", name="LLMFit", detail=str(exc))
 
 
+def _check_key_age() -> CheckResult:
+    """Check the age of the PQ signing key; warn if older than 180 days."""
+    import time
+    from pathlib import Path
+
+    # Try to locate pq_key_path from config
+    pq_key_path: str = ""
+    config_candidates = [
+        Path("robot.rcan.yaml"),
+        Path.home() / ".opencastor" / "robot.rcan.yaml",
+    ]
+    for candidate in config_candidates:
+        if candidate.exists():
+            try:
+                import yaml
+
+                cfg = yaml.safe_load(candidate.read_text()) or {}
+                pq_key_path = cfg.get("agent", {}).get("signing", {}).get("pq_key_path", "")
+                if pq_key_path:
+                    break
+            except Exception:
+                pass
+
+    # Fall back to default path
+    if not pq_key_path:
+        pq_key_path = str(Path.home() / ".opencastor" / "pq_signing.key")
+
+    key_file = Path(pq_key_path)
+    if not key_file.exists():
+        return CheckResult("PQ key age", "skip", f"key not found: {pq_key_path}")
+
+    age_days = (time.time() - key_file.stat().st_mtime) / 86400
+    if age_days > 180:
+        return CheckResult(
+            "PQ key age",
+            "warn",
+            f"{age_days:.0f} days old — rotation recommended (castor key-rotation rotate)",
+        )
+    return CheckResult("PQ key age", "ok", f"{age_days:.0f} days old")
+
+
 def run_doctor(full: bool = False) -> DoctorReport:
     report = DoctorReport()
     add = report.checks.append
@@ -289,6 +330,7 @@ def run_doctor(full: bool = False) -> DoctorReport:
     # Runtime
     add(_check_gateway())
     add(_check_llmfit())
+    add(_check_key_age())
 
     if full:
         add(_check_rcan_compliance())
