@@ -1447,6 +1447,44 @@ def cmd_compliance(args) -> None:
         for err in chain_errors:
             _pr(f"   ⚠️  {err}", style="yellow")
 
+    # L4/L5: run RCAN v2.1/v2.2 checks
+    level_arg = getattr(args, "level", None)
+    if level_arg in ("L4", "L5"):
+        _pr("\n=== RCAN v2.1/v2.2 (L4/L5) ===")
+        try:
+            from castor.conformance import ConformanceChecker
+
+            checker_v2 = ConformanceChecker(config, config_path=config_path)
+            status_icons = {"pass": "✅", "warn": "⚠️ ", "fail": "❌"}
+
+            # L4: rcan_v21 category
+            v21_results = checker_v2._check_rcan_v21()
+            v21_only = [r for r in v21_results if r.category == "rcan_v21"]
+            v21_pass = all(r.status == "pass" for r in v21_only)
+            level_label_v21 = f"{_tick(v21_pass)} [bold]L4 (RCAN v2.1)[/bold]"
+            _pr(level_label_v21)
+            if v21_only:
+                for r in v21_only:
+                    icon = status_icons.get(r.status, "❓")
+                    _pr(f"   {icon} [{r.check_id}] {r.detail}")
+            else:
+                _pr("   All L4 checks passed", style="green")
+
+            # L5: additionally rcan_v22 category
+            if level_arg == "L5":
+                v22_only = [r for r in v21_results if r.category == "rcan_v22"]
+                v22_pass = all(r.status == "pass" for r in v22_only)
+                level_label_v22 = f"{_tick(v22_pass)} [bold]L5 (RCAN v2.2)[/bold]"
+                _pr(level_label_v22)
+                if v22_only:
+                    for r in v22_only:
+                        icon = status_icons.get(r.status, "❓")
+                        _pr(f"   {icon} [{r.check_id}] {r.detail}")
+                else:
+                    _pr("   All L5 checks passed", style="green")
+        except Exception as _exc:
+            _pr(f"   ⚠️  Could not run v2.x checks: {_exc}", style="yellow")
+
     overall = "L3" if l3_pass else "L2" if l2_pass else "L1" if l1_pass else "FAIL"
     color = "green" if l3_pass else "yellow" if l2_pass else "red"
     _pr(f"\n[{color}]Result: {overall}[/{color}] ({len(issues)} issue(s))\n")
@@ -3324,7 +3362,25 @@ def cmd_validate(args) -> None:
     json_out = getattr(args, "json", False) or getattr(args, "json_out", False)
     strict = getattr(args, "strict", False)
 
-    if category:
+    if category == "rcan_v22":
+        # rcan_v22: run _check_rcan_v21() which covers both v21 and v22 checks
+        results = checker._check_rcan_v21()
+    elif category == "protocol":
+        results = checker.run_category(category)
+        # Replay window check
+        rcan_window = config.get("rcan", {}).get(
+            "replay_window_seconds",
+            config.get("replay_window_seconds", 600),
+        )
+        try:
+            rcan_window = int(rcan_window)
+        except (TypeError, ValueError):
+            rcan_window = 600
+        if rcan_window > 3600:
+            print(f"  ERROR: replay_window_seconds={rcan_window} exceeds 1-hour hard limit")
+        elif rcan_window > 600:
+            print(f"  WARN: replay_window_seconds={rcan_window} exceeds recommended 600s maximum")
+    elif category:
         results = checker.run_category(category)
     else:
         results = checker.run_all()
@@ -5566,9 +5622,9 @@ def main() -> None:
     )
     p_compliance.add_argument(
         "--level",
-        choices=["L1", "L2", "L3"],
+        choices=["L1", "L2", "L3", "L4", "L5"],
         default=None,
-        help="Only check up to this conformance level",
+        help="L1-L3=RCAN v1.x, L4=v2.1 supply chain, L5=v2.2 PQ signing",
     )
     p_compliance.add_argument(
         "--json", action="store_true", dest="output_json", help="Output results as JSON"
@@ -5988,7 +6044,16 @@ def main() -> None:
     p_validate.add_argument(
         "--category",
         default=None,
-        help="Only run checks in this category (safety/provider/protocol/performance/hardware)",
+        choices=[
+            "safety",
+            "provider",
+            "protocol",
+            "performance",
+            "hardware",
+            "rcan_v21",
+            "rcan_v22",
+        ],
+        help="Only run checks in this category (safety/provider/protocol/performance/hardware/rcan_v21/rcan_v22)",  # noqa: E501
     )
     p_validate.add_argument("--json", action="store_true", help="Output results as JSON")
     p_validate.add_argument("--strict", action="store_true", help="Exit with non-zero if any WARN")
