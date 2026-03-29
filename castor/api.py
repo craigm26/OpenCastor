@@ -9943,6 +9943,8 @@ async def rcan_spec_endpoint():
         "pq_signing_required": True,
         "mcp_tool_count": 14,
         "gateway_version": gw_ver,
+    }
+
 
 # Issue #781 — RCAN JWKS endpoint (no auth required)
 @app.get("/.well-known/rcan-keys.json")
