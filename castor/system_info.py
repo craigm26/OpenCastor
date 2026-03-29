@@ -75,12 +75,14 @@ def _cpu_model() -> str:
     """Return a human-readable CPU model string."""
     try:
         # ARM / Pi — check /proc/cpuinfo
-        for line in Path("/proc/cpuinfo").read_text().splitlines():
-            if line.startswith("Model name") or line.startswith("Hardware"):
-                _, _, val = line.partition(":")
-                val = val.strip()
-                if val:
-                    return val
+        # Pi 4/5 use "Model", x86 uses "model name", some ARM boards use "Hardware"
+        for prefix in ("Model name", "model name", "Hardware", "Model"):
+            for line in Path("/proc/cpuinfo").read_text().splitlines():
+                if line.startswith(prefix):
+                    _, _, val = line.partition(":")
+                    val = val.strip()
+                    if val:
+                        return val
     except Exception:
         pass
     return platform.processor() or platform.machine() or "unknown"
@@ -190,7 +192,8 @@ def get_system_info() -> dict[str, Any]:
         "disk_free_gb": disk_free,
         "disk_used_pct": disk_used_pct,
         "cpu_temp_c": _cpu_temp_c(),
-        "npu_detected": npu_name,
+        "npu_detected": npu_name is not None,   # bool — True if NPU found
+        "npu_model": npu_name,                    # str | None — e.g. "hailo-8"
         "npu_tops": npu_tops if npu_name else None,
         "gpu_detected": _detect_gpu(),
     }
