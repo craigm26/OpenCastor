@@ -1036,6 +1036,30 @@ class CastorBridge:
                     sk = client.get(f"{self.gateway_url}/api/skills", headers=headers)
                 if sk.status_code == 200:
                     skills_data = sk.json()
+
+                    # Merge RCAN skills into the skills document
+                    try:
+                        from castor.skills.rcan_skills import list_skills as _list_rcan_skills
+
+                        rcan_skill_docs = [
+                            {
+                                "name": s["name"],
+                                "description": s["description"],
+                                "loa_required": s["loa_required"],
+                                "rcan_message_type": s["rcan_message_type"],
+                                "version": s["version"],
+                            }
+                            for s in _list_rcan_skills()
+                        ]
+                        existing = skills_data.get("rcan_skills", [])
+                        # Deduplicate by name — RCAN skills take precedence
+                        merged_names = {s["name"] for s in rcan_skill_docs}
+                        skills_data["rcan_skills"] = rcan_skill_docs + [
+                            s for s in existing if s.get("name") not in merged_names
+                        ]
+                    except Exception:
+                        pass
+
                     # Write to telemetry/skills subcollection for slashCommandsProvider
                     try:
                         self._robot_ref().collection("telemetry").document("skills").set(
@@ -1053,6 +1077,7 @@ class CastorBridge:
                     telemetry["builtin_commands_count"] = len(
                         skills_data.get("builtin_commands", [])
                     )
+                    telemetry["rcan_skills_count"] = len(skills_data.get("rcan_skills", []))
             except Exception:
                 pass
 
