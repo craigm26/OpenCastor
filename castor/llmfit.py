@@ -370,6 +370,45 @@ def _suggest_smaller(model_id: str, ram_gb: float) -> str:
     return "smollm2:360m"
 
 
+def turboquant_analysis(model_name: str) -> dict:
+    """Return TurboQuant KV savings analysis for a named model.
+
+    Looks up model weight size from ``_MODEL_WEIGHT_GB`` and returns
+    :func:`castor.providers.kv_compression.estimate_kv_savings` result
+    augmented with eligibility flag.
+
+    A model is considered TurboQuant-eligible if its weight size is
+    >= 1.5 GB (proxy for >= 3B parameter count at q4 quantization).
+
+    Args:
+        model_name: Ollama model ID or GGUF alias (e.g. ``"qwen3:4b"``).
+
+    Returns:
+        Dict with KV savings estimates and ``turboquant_eligible`` bool.
+    """
+    from castor.providers.kv_compression import estimate_kv_savings
+
+    mid = model_name.lower().strip()
+    weights_gb = _MODEL_WEIGHT_GB.get(mid)
+
+    if weights_gb is None:
+        # Heuristic from param count in name
+        for part in mid.replace("-", " ").replace("_", " ").split():
+            if part.endswith("b") and part[:-1].replace(".", "").isdigit():
+                params_b = float(part[:-1])
+                weights_gb = round(params_b * 0.55, 1)
+                break
+        if weights_gb is None:
+            weights_gb = 4.0  # safe default
+
+    result = estimate_kv_savings(weights_gb)
+
+    # Eligible if >= 3B params (proxy: weights_gb >= 1.5 GB at q4)
+    turboquant_eligible = weights_gb >= 1.5
+
+    return {**result, "model_name": mid, "turboquant_eligible": turboquant_eligible}
+
+
 def turboquant_ecosystem_status() -> dict:
     """
     Return current TurboQuant implementation status across providers.

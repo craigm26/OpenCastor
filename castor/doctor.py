@@ -301,6 +301,81 @@ def _check_key_age() -> CheckResult:
     return CheckResult("PQ key age", "ok", f"{age_days:.0f} days old")
 
 
+def _check_turboquant() -> CheckResult:
+    """Check TurboQuant KV cache compression configuration.
+
+    If a GGUF model is configured, reports estimated KV savings.
+    Returns ok if TurboQuant is configured, skip (info) if not.
+    """
+    try:
+        from castor.llmfit import _MODEL_WEIGHT_GB, turboquant_analysis
+
+        # Try to detect a GGUF model from RCAN config
+        config_candidates = [
+            Path("robot.rcan.yaml"),
+            Path("bob.rcan.yaml"),
+            Path.home() / ".opencastor" / "robot.rcan.yaml",
+        ]
+        for candidate in config_candidates:
+            if not candidate.exists():
+                continue
+            try:
+                import yaml
+
+                cfg = yaml.safe_load(candidate.read_text()) or {}
+                provider_cfg = cfg.get("provider", cfg.get("llm", {}))
+                if not isinstance(provider_cfg, dict):
+                    continue
+                model = provider_cfg.get("model", "")
+                kv_comp = provider_cfg.get("kv_compression", "none")
+                is_gguf = (
+                    ".gguf" in model.lower()
+                    or "-gguf" in model.lower()
+                    or provider_cfg.get("format") == "gguf"
+                )
+                if not is_gguf:
+                    continue
+                analysis = turboquant_analysis(model)
+                if kv_comp == "turboquant":
+                    detail = (
+                        f"GGUF model '{model}' — "
+                        f"KV cache: {analysis['kv_cache_base_gb']:.2f} GB → "
+                        f"{analysis['kv_cache_compressed_gb']:.2f} GB "
+                        f"(saves {analysis['savings_gb']:.2f} GB)"
+                    )
+                    return CheckResult("TurboQuant KV compression", "ok", detail)
+                else:
+                    detail = (
+                        f"GGUF model '{model}' — TurboQuant not configured; "
+                        f"potential savings: {analysis['savings_gb']:.2f} GB "
+                        f"(set kv_compression: turboquant)"
+                    )
+                    return CheckResult("TurboQuant KV compression", "skip", detail)
+            except Exception:
+                pass
+
+        # No config found — check if any GGUF model is in the known list
+        gguf_models = [m for m in _MODEL_WEIGHT_GB if "gguf" in m]
+        if gguf_models:
+            sample = gguf_models[0]
+            analysis = turboquant_analysis(sample)
+            detail = (
+                f"No GGUF model in RCAN config. "
+                f"Example savings for '{sample}': {analysis['savings_gb']:.2f} GB."
+            )
+            return CheckResult("TurboQuant KV compression", "skip", detail)
+
+        return CheckResult(
+            "TurboQuant KV compression",
+            "skip",
+            "No GGUF model detected — TurboQuant applies to GGUF/llama.cpp/Ollama models",
+        )
+    except ImportError:
+        return CheckResult("TurboQuant KV compression", "skip", "castor.llmfit not available")
+    except Exception as exc:
+        return CheckResult("TurboQuant KV compression", "skip", str(exc))
+
+
 def run_doctor(full: bool = False) -> DoctorReport:
     report = DoctorReport()
     add = report.checks.append
@@ -330,6 +405,7 @@ def run_doctor(full: bool = False) -> DoctorReport:
     # Runtime
     add(_check_gateway())
     add(_check_llmfit())
+    add(_check_turboquant())
     add(_check_key_age())
 
     if full:
