@@ -40,7 +40,30 @@ _ARM_JOINT_KEYS = ["grip_x", "grip_y", "grip_z", "wrist", "gripper"]
 _VLA_DEVICE = os.getenv("VLA_DEVICE", "cpu")
 _UNNORM_KEY = os.getenv("VLA_UNNORM_KEY", "bridge_orig")
 
+
+def _patch_transformers_imports() -> None:
+    """Back-fill symbols that openvla's processing_prismatic.py imports from
+    ``transformers.tokenization_utils``.
+
+    In transformers >= 4.38 (and especially 5.x dev), ``PaddingStrategy``,
+    ``PreTokenizedInput``, ``TextInput``, and ``TruncationStrategy`` were
+    relocated to ``transformers.tokenization_utils_base``.  The openvla
+    remote-code module still uses the old import path, so we patch the module
+    object in-place before AutoProcessor loads the remote code.
+    """
+    try:
+        import transformers.tokenization_utils as _tu
+        import transformers.tokenization_utils_base as _tub
+
+        for _name in ("PaddingStrategy", "PreTokenizedInput", "TextInput", "TruncationStrategy"):
+            if not hasattr(_tu, _name) and hasattr(_tub, _name):
+                setattr(_tu, _name, getattr(_tub, _name))
+    except Exception as exc:  # pragma: no cover
+        logger.debug("_patch_transformers_imports skipped: %s", exc)
+
+
 try:
+    _patch_transformers_imports()
     from PIL import Image as _PILImage
     from transformers import AutoModelForVision2Seq, AutoProcessor
 

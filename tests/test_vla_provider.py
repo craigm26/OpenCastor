@@ -217,3 +217,91 @@ def test_get_provider_returns_vla_provider():
 
     p = get_provider({"provider": "vla", "model": "openvla/openvla-7b"})
     assert isinstance(p, vmod.VLAProvider)
+
+
+# ---------------------------------------------------------------------------
+# Regression: PaddingStrategy ImportError (#793)
+# ---------------------------------------------------------------------------
+
+
+def test_patch_transformers_imports_no_error():
+    """_patch_transformers_imports() must not raise regardless of transformers version."""
+    sys.modules.pop("castor.providers.vla_provider", None)
+    import castor.providers.vla_provider as vmod  # noqa: PLC0415
+
+    # Calling the patch function again should be idempotent and never raise.
+    vmod._patch_transformers_imports()
+
+
+def test_patch_transformers_imports_exposes_padding_strategy():
+    """After _patch_transformers_imports(), PaddingStrategy must be accessible
+    on transformers.tokenization_utils (the path openvla remote code uses)."""
+    sys.modules.pop("castor.providers.vla_provider", None)
+    import castor.providers.vla_provider as vmod  # noqa: PLC0415
+
+    vmod._patch_transformers_imports()
+
+    import transformers.tokenization_utils as tu  # noqa: PLC0415
+
+    assert hasattr(tu, "PaddingStrategy"), (
+        "PaddingStrategy missing from transformers.tokenization_utils after patch — "
+        "openvla's processing_prismatic.py will fail to import"
+    )
+
+
+def test_patch_transformers_imports_exposes_all_relocated_symbols():
+    """All four symbols relocated in transformers 5.x must be present after patching."""
+    sys.modules.pop("castor.providers.vla_provider", None)
+    import castor.providers.vla_provider as vmod  # noqa: PLC0415
+
+    vmod._patch_transformers_imports()
+
+    import transformers.tokenization_utils as tu  # noqa: PLC0415
+
+    for name in ("PaddingStrategy", "PreTokenizedInput", "TextInput", "TruncationStrategy"):
+        assert hasattr(tu, name), f"{name} missing from transformers.tokenization_utils after patch"
+
+
+def test_patch_survives_missing_transformers(monkeypatch):
+    """_patch_transformers_imports() must not raise even if transformers is absent."""
+    import builtins  # noqa: PLC0415
+
+    real_import = builtins.__import__
+
+    def _mock_import(name, *args, **kwargs):
+        if name.startswith("transformers"):
+            raise ImportError(f"mocked absence of {name}")
+        return real_import(name, *args, **kwargs)
+
+    sys.modules.pop("castor.providers.vla_provider", None)
+    import castor.providers.vla_provider as vmod  # noqa: PLC0415
+
+    monkeypatch.setattr(builtins, "__import__", _mock_import)
+    # Must not raise
+    vmod._patch_transformers_imports()
+
+
+def test_vla_provider_imports_without_import_error():
+    """Importing VLAProvider must never raise ImportError (issue #793 regression)."""
+    sys.modules.pop("castor.providers.vla_provider", None)
+    try:
+        from castor.providers.vla_provider import VLAProvider  # noqa: F401, PLC0415
+    except ImportError as exc:
+        pytest.fail(f"VLAProvider import raised ImportError: {exc}")
+
+
+def test_mock_mode_works_without_openvla():
+    """VLAProvider must operate in mock mode when openvla weights are unavailable.
+
+    The confidence from mock mode (0.55) is intentionally below the 0.60 gate
+    so planning brain escalation fires correctly.
+    """
+    sys.modules.pop("castor.providers.vla_provider", None)
+    import castor.providers.vla_provider as vmod  # noqa: PLC0415
+
+    vmod.HAS_TRANSFORMERS = False
+    p = vmod.VLAProvider({"provider": "vla", "model": "openvla/openvla-7b"})
+    assert p._mode == "mock"
+    thought = p.think(b"", "move forward")
+    assert thought.action["confidence"] == pytest.approx(0.55)
+    assert thought.action["brain"] == "vla_mock"
