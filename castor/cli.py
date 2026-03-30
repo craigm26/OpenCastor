@@ -2054,7 +2054,7 @@ def cmd_llmfit(args) -> None:
         print(f"  Best with TQ: {bob['best_model_with_tq']}")
         return
 
-    # turboquant subcommand: castor llmfit turboquant <model>
+    # turboquant subcommand: castor llmfit --turboquant <model>
     tq_model = getattr(args, "turboquant_model", None)
     if tq_model:
         analysis = turboquant_analysis(tq_model)
@@ -2065,14 +2065,14 @@ def cmd_llmfit(args) -> None:
         print(f"  KV cache (TQ 2.6x):  {analysis['kv_cache_compressed_gb']:.2f} GB")
         print(f"  Savings:             {analysis['savings_gb']:.2f} GB")
         print(f"  Compression ratio:   {analysis['compression_ratio']}x")
-        print(f"  TQ eligible (≥3B):   {eligible_icon} {analysis['turboquant_eligible']}")
+        print(f"  TQ eligible (>=3B):  {eligible_icon} {analysis['turboquant_eligible']}")
         print()
         return
 
     model_id = getattr(args, "model", None)
     if not model_id:
         print("Usage: castor llmfit <model_id> [options]")
-        print("       castor llmfit turboquant <model_id>")
+        print("       castor llmfit --turboquant <model_id>")
         print("       castor llmfit --list-models")
         print("       castor llmfit --tq-status")
         return
@@ -5675,55 +5675,9 @@ def _cmd_optimize(args) -> None:
     print()
 
 
-def _cmd_skills_run(args) -> None:
-    """castor skills run <name> [--args '{"key":"val"}'] — run an RCAN skill."""
-    import json as _json
-
-    from castor.skills.rcan_skills import get_skill
-
-    skill_name = getattr(args, "skill_name", None)
-    if not skill_name:
-        print('  Usage: castor skills run <name> [--args \'{"key":"val"}\']')
-        return
-
-    skill = get_skill(skill_name)
-    if skill is None:
-        from castor.skills.rcan_skills import list_skills
-
-        available = [s["name"] for s in list_skills()]
-        print(f"  RCAN skill '{skill_name}' not found.")
-        print(f"  Available RCAN skills: {', '.join(available)}")
-        return
-
-    raw_args = getattr(args, "skill_args", None) or "{}"
-    try:
-        skill_args = _json.loads(raw_args)
-    except _json.JSONDecodeError as exc:
-        print(f"  Error parsing --args JSON: {exc}")
-        return
-
-    # Load config from RCAN yaml if available
-    config: dict = {}
-    try:
-        from castor.configure import load_config
-
-        config = load_config() or {}
-    except Exception:
-        pass
-
-    result = skill["handler"](config, skill_args)
-    print(_json.dumps(result, indent=2, default=str))
-
-
 def _cmd_skills(args) -> None:
     """castor skills — list loaded skills with folder structure and usage stats."""
     import json as _json
-
-    # Dispatch skills subcommands
-    skills_cmd = getattr(args, "skills_cmd", None)
-    if skills_cmd == "run":
-        _cmd_skills_run(args)
-        return
 
     from castor.skills.loader import SkillLoader, get_skill_usage_stats
 
@@ -5775,29 +5729,8 @@ def _cmd_skills(args) -> None:
                 print(f'    {"":24} recent: "{sample}"')
         print()
 
-    # ── RCAN skills section ──────────────────────────────────────
-    try:
-        from castor.skills.rcan_skills import list_skills as _list_rcan_skills
-
-        rcan_skills = _list_rcan_skills()
-        if rcan_skills:
-            print()
-            print(f"  ── RCAN Skills {'─' * 44}")
-            print(f"  {'NAME':<24} {'VER':<8} {'LOA':<5} {'MSG TYPE':<14} DESCRIPTION")
-            print(f"  {'─' * 24} {'─' * 8} {'─' * 5} {'─' * 14} {'─' * 40}")
-            for rs in rcan_skills:
-                print(
-                    f"  {rs['name']:<24} {rs['version']:<8} {rs['loa_required']:<5} "
-                    f"{rs['rcan_message_type']:<14} {rs['description'][:40]}"
-                )
-            print()
-    except Exception:
-        pass
-
     print(
-        f"  {len(skills)} file skills + {len(rcan_skills) if 'rcan_skills' in dir() else 0} RCAN skills"
-        f"  ·  castor skills run <name> --args '{{}}'"
-        f"  ·  castor skills --stats"
+        f"  {len(skills)} skills loaded  ·  castor skills --stats for usage  ·  castor explore --type skill for hub"
     )
     print()
 
@@ -7922,18 +7855,6 @@ def main() -> None:
     p_skills.add_argument("--stats", action="store_true", help="Show usage statistics")
     p_skills.add_argument("--name", "-n", metavar="SKILL_NAME", help="Show details for one skill")
     p_skills.add_argument("--json", action="store_true", dest="skills_json", help="Output JSON")
-    skills_sub = p_skills.add_subparsers(dest="skills_cmd")
-    p_skills_run = skills_sub.add_parser("run", help="Run an RCAN skill by name")
-    p_skills_run.add_argument(
-        "skill_name", metavar="NAME", help="RCAN skill name (e.g. rcan_estop)"
-    )
-    p_skills_run.add_argument(
-        "--args",
-        dest="skill_args",
-        metavar="JSON",
-        default="{}",
-        help='JSON arguments for the skill handler (e.g. \'{"x": 1.0, "y": 2.0}\')',
-    )
 
     # castor optimize
     p_optimize = sub.add_parser(

@@ -130,11 +130,19 @@ class HuggingFaceProvider(BaseProvider):
 
     def _generate_gguf(self, prompt: str, **kwargs) -> str:
         """Route GGUF inference: try Ollama first, then llama-cpp-python."""
+        from castor.providers.kv_compression import TurboQuantConfig, apply_turboquant_ollama
+
+        kv_comp = self.config.get("kv_compression", "none")
+        tq_config = TurboQuantConfig(enabled=(kv_comp == "turboquant"))
+
         # Try Ollama first
         try:
             from castor.providers.ollama_provider import OllamaProvider
 
             ollama_config = {**self.config, "model": self.model_name}
+            if tq_config.enabled:
+                base_options = ollama_config.get("options", {})
+                ollama_config["options"] = apply_turboquant_ollama(base_options, tq_config)
             ollama = OllamaProvider(ollama_config)
             return ollama.think(b"", prompt).raw_text
         except ImportError:
@@ -145,7 +153,11 @@ class HuggingFaceProvider(BaseProvider):
         try:
             from llama_cpp import Llama
 
-            llm = Llama(model_path=self.config.get("model_path", self.model_name))
+            from castor.providers.kv_compression import apply_turboquant_llama_cpp
+
+            llama_kwargs: dict = {"model_path": self.config.get("model_path", self.model_name)}
+            llama_kwargs = apply_turboquant_llama_cpp(llama_kwargs, tq_config)
+            llm = Llama(**llama_kwargs)
             result = llm(prompt, max_tokens=kwargs.get("max_tokens", 512))
             return result["choices"][0]["text"]
         except ImportError:
