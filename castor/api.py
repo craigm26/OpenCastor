@@ -220,6 +220,7 @@ class AppState:
     slam_mapper = None  # SLAMMapper instance (lazy-init, issue #136)
     thought_log = None  # ThoughtLog instance (F4 — AI accountability)
     hitl_gate_manager = None  # HiTLGateManager instance (F3 — HiTL gates)
+    pqc_identity: Optional[dict] = None  # pqc-hybrid-v1 public identity (issue #808)
 
 
 state = AppState()
@@ -5753,6 +5754,29 @@ async def on_startup():
             except Exception as _se:
                 logger.debug("RCAN signing init skipped: %s", _se)
 
+            # Initialize PQC robot identity — pqc-hybrid-v1 (issue #808)
+            try:
+                from castor.crypto.pqc import (
+                    load_or_generate_robot_keypair,
+                    robot_identity_record,
+                )
+
+                _kp, _generated = load_or_generate_robot_keypair()
+                state.pqc_identity = robot_identity_record(_kp)
+                if _generated:
+                    logger.info(
+                        "PQC robot identity created (pqc-hybrid-v1). "
+                        "Private key stored at ~/.opencastor/robot_identity.json — "
+                        "back up before fleet expansion."
+                    )
+                else:
+                    logger.info(
+                        "PQC robot identity loaded (profile=%s)",
+                        state.pqc_identity.get("crypto_profile"),
+                    )
+            except Exception as _pqc_e:
+                logger.warning("PQC robot identity init failed (non-fatal): %s", _pqc_e)
+
             # Initialize multi-provider failover chain (agent.fallbacks in RCAN YAML)
             _agent_cfg = state.config.get("agent", {})
             if _agent_cfg.get("fallbacks"):
@@ -9966,3 +9990,33 @@ async def rcan_jwks() -> dict:
         if pq_kid
         else []
     }
+
+
+# Issue #808 — RCAN node manifest with PQC identity (no auth required)
+@app.get("/.well-known/rcan-node.json")
+async def rcan_node_manifest() -> dict:
+    """GET /.well-known/rcan-node.json — RCAN node manifest with PQC identity fields.
+
+    Exposes crypto_profile, pqc_public_key, and ed25519_public_key so that
+    fleet orchestrators and peer nodes can verify robot identity before
+    accepting commands.  Private key material is never included.
+    """
+    from castor.rcan.node_broadcaster import NodeBroadcaster, NodeConfig
+
+    cfg = state.config or {}
+    node_cfg = NodeConfig.from_rcan_yaml(cfg)
+
+    # Populate public_key from pqc_identity if available
+    if state.pqc_identity:
+        node_cfg.public_key = state.pqc_identity.get("pqc_public_key", node_cfg.public_key)
+
+    broadcaster = NodeBroadcaster(node_cfg)
+    manifest = broadcaster.get_manifest()
+
+    # Inject PQC identity fields (issue #808)
+    if state.pqc_identity:
+        manifest["crypto_profile"] = state.pqc_identity.get("crypto_profile", "")
+        manifest["pqc_public_key"] = state.pqc_identity.get("pqc_public_key", "")
+        manifest["ed25519_public_key"] = state.pqc_identity.get("ed25519_public_key", "")
+
+    return manifest

@@ -7,6 +7,14 @@ Supports:
 - huggingface: HuggingFace Hub token with model gate check
 - mutual_tls: Certificate-based authentication
 - oidc: OpenID Connect / workload identity federation
+
+Deprecation notice (RCAN v2.2 / issue #808):
+  RS256 (RSA + SHA-256) and ES256 (ECDSA + SHA-256) JWT algorithms are
+  deprecated for robot-to-robot authentication.  New deployments MUST use
+  pqc-hybrid-v1 (Ed25519 + ML-DSA-65) via castor.crypto.pqc.  RS256/ES256
+  remain supported only for legacy LLM provider integrations that the
+  operator does not control (e.g. external OIDC issuers).  Do not introduce
+  RS256/ES256 for any new inbound RCAN message authentication.
 """
 
 from __future__ import annotations
@@ -84,7 +92,11 @@ class ApiKeyAuth(ProviderAuth):
 
 
 class BearerAuth(ProviderAuth):
-    """Pre-issued bearer token with optional refresh URL."""
+    """Pre-issued bearer token with optional refresh URL.
+
+    Deprecated for robot identity: if the token is a JWT signed with RS256 or
+    ES256, migrate to pqc-hybrid-v1 (castor.crypto.pqc) per issue #808.
+    """
 
     def authenticate(self) -> AuthCredentials:
         token = _resolve_secret(self.config.get("token", ""))
