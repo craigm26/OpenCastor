@@ -5766,7 +5766,9 @@ async def on_startup():
                 )
 
                 _owner_mode = os.environ.get("ROBOT_OWNER_MODE", "true").lower() not in (
-                    "false", "0", "no"
+                    "false",
+                    "0",
+                    "no",
                 )
                 _pqc_profile = PQC_V1 if _owner_mode else PQC_HYBRID_V1
                 _kp, _generated = load_or_generate_robot_keypair(profile=_pqc_profile)

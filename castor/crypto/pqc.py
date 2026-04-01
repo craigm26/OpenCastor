@@ -37,7 +37,7 @@ logger = logging.getLogger("OpenCastor.Crypto.PQC")
 # Profile constants
 # ---------------------------------------------------------------------------
 
-PQC_V1 = "pqc-v1"          # ML-DSA-65 only — owned/internal robots
+PQC_V1 = "pqc-v1"  # ML-DSA-65 only — owned/internal robots
 PQC_HYBRID_V1 = "pqc-hybrid-v1"  # Ed25519 + ML-DSA-65 — external registrations
 
 # ---------------------------------------------------------------------------
