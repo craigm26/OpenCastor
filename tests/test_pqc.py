@@ -1,4 +1,4 @@
-"""Tests for castor.crypto.pqc — pqc-hybrid-v1 robot identity (issue #808)."""
+"""Tests for castor.crypto.pqc — pqc-v1 and pqc-hybrid-v1 robot identity (issue #808)."""
 
 from __future__ import annotations
 
@@ -10,14 +10,19 @@ from pathlib import Path
 import pytest
 
 from castor.crypto.pqc import (
+    PQC_HYBRID_V1,
+    PQC_V1,
     RobotKeyPair,
     generate_robot_keypair,
+    generate_robot_keypair_v1,
     load_or_generate_robot_keypair,
     load_robot_keypair,
     robot_identity_record,
     save_robot_keypair,
     sign_robot_message,
+    sign_robot_message_v1,
     verify_robot_message,
+    verify_robot_message_v1,
 )
 
 
@@ -214,3 +219,160 @@ def test_load_or_generate_keys_verify_after_reload(tmp_path):
     # Reload from disk and verify
     kp2, _ = load_or_generate_robot_keypair(path)
     assert verify_robot_message(kp2.ed25519_public, kp2.ml_dsa_public, msg, sig)
+
+
+# ---------------------------------------------------------------------------
+# pqc-v1: generate_robot_keypair_v1
+# ---------------------------------------------------------------------------
+
+
+def test_generate_v1_returns_robot_key_pair():
+    kp = generate_robot_keypair_v1()
+    assert isinstance(kp, RobotKeyPair)
+
+
+def test_generate_v1_profile():
+    kp = generate_robot_keypair_v1()
+    assert kp.profile == PQC_V1
+
+
+def test_generate_v1_ml_dsa_key_sizes():
+    kp = generate_robot_keypair_v1()
+    assert len(kp.ml_dsa_public) == 1952
+    assert len(kp.ml_dsa_private) == 4032
+
+
+def test_generate_v1_no_ed25519_keys():
+    kp = generate_robot_keypair_v1()
+    assert kp.ed25519_private is None
+    assert kp.ed25519_public is None
+
+
+def test_generate_v1_produces_distinct_keypairs():
+    kp1 = generate_robot_keypair_v1()
+    kp2 = generate_robot_keypair_v1()
+    assert kp1.ml_dsa_public != kp2.ml_dsa_public
+
+
+# ---------------------------------------------------------------------------
+# pqc-v1: sign_robot_message_v1 / verify_robot_message_v1
+# ---------------------------------------------------------------------------
+
+
+def test_sign_v1_returns_string():
+    kp = generate_robot_keypair_v1()
+    sig = sign_robot_message_v1(kp.ml_dsa_private, b"hello")
+    assert isinstance(sig, str)
+    assert sig.startswith(f"{PQC_V1}.")
+
+
+def test_sign_v1_and_verify_roundtrip():
+    kp = generate_robot_keypair_v1()
+    msg = b"robot:bob:command:move_forward"
+    sig = sign_robot_message_v1(kp.ml_dsa_private, msg)
+    assert verify_robot_message_v1(kp.ml_dsa_public, msg, sig)
+
+
+def test_verify_v1_rejects_wrong_message():
+    kp = generate_robot_keypair_v1()
+    sig = sign_robot_message_v1(kp.ml_dsa_private, b"original")
+    assert not verify_robot_message_v1(kp.ml_dsa_public, b"tampered", sig)
+
+
+def test_verify_v1_rejects_wrong_key():
+    kp1 = generate_robot_keypair_v1()
+    kp2 = generate_robot_keypair_v1()
+    sig = sign_robot_message_v1(kp1.ml_dsa_private, b"hello")
+    assert not verify_robot_message_v1(kp2.ml_dsa_public, b"hello", sig)
+
+
+def test_verify_v1_rejects_wrong_profile_prefix():
+    kp = generate_robot_keypair_v1()
+    sig = sign_robot_message_v1(kp.ml_dsa_private, b"hello")
+    # Swap prefix to hybrid — must fail
+    tampered = sig.replace(f"{PQC_V1}.", "pqc-hybrid-v1.", 1)
+    assert not verify_robot_message_v1(kp.ml_dsa_public, b"hello", tampered)
+
+
+def test_verify_v1_rejects_empty_signature():
+    kp = generate_robot_keypair_v1()
+    assert not verify_robot_message_v1(kp.ml_dsa_public, b"hello", "")
+
+
+def test_verify_v1_rejects_garbled_signature():
+    kp = generate_robot_keypair_v1()
+    assert not verify_robot_message_v1(kp.ml_dsa_public, b"hello", "notbase64!!!")
+
+
+# ---------------------------------------------------------------------------
+# pqc-v1: robot_identity_record
+# ---------------------------------------------------------------------------
+
+
+def test_identity_record_v1_omits_ed25519_key():
+    kp = generate_robot_keypair_v1()
+    record = robot_identity_record(kp)
+    assert record["crypto_profile"] == PQC_V1
+    assert "pqc_public_key" in record
+    assert "ed25519_public_key" not in record
+
+
+def test_identity_record_v1_pqc_key_is_base64url():
+    kp = generate_robot_keypair_v1()
+    record = robot_identity_record(kp)
+    pqc_key = record["pqc_public_key"]
+    decoded = urlsafe_b64decode(pqc_key + "=" * (-len(pqc_key) % 4))
+    assert decoded == kp.ml_dsa_public
+
+
+def test_identity_record_v1_no_private_material():
+    kp = generate_robot_keypair_v1()
+    record = robot_identity_record(kp)
+    record_str = json.dumps(record)
+    ml_priv_b64 = urlsafe_b64encode(kp.ml_dsa_private).decode()
+    assert ml_priv_b64 not in record_str
+
+
+# ---------------------------------------------------------------------------
+# pqc-v1: keypair persistence
+# ---------------------------------------------------------------------------
+
+
+def test_save_and_load_v1_roundtrip(tmp_path):
+    kp = generate_robot_keypair_v1()
+    path = tmp_path / "robot_identity_v1.json"
+    save_robot_keypair(kp, path)
+    kp2 = load_robot_keypair(path)
+    assert kp.ml_dsa_private == kp2.ml_dsa_private
+    assert kp.ml_dsa_public == kp2.ml_dsa_public
+    assert kp.profile == kp2.profile == PQC_V1
+    assert kp2.ed25519_private is None
+    assert kp2.ed25519_public is None
+
+
+def test_save_v1_json_has_no_ed25519_fields(tmp_path):
+    kp = generate_robot_keypair_v1()
+    path = tmp_path / "robot_identity_v1.json"
+    save_robot_keypair(kp, path)
+    data = json.loads(path.read_text())
+    assert "ed25519_private" not in data
+    assert "ed25519_public" not in data
+    assert data["profile"] == PQC_V1
+
+
+def test_load_or_generate_v1_profile(tmp_path):
+    path = tmp_path / "robot_identity_v1.json"
+    kp, generated = load_or_generate_robot_keypair(path, profile=PQC_V1)
+    assert generated is True
+    assert kp.profile == PQC_V1
+    assert kp.ed25519_private is None
+
+
+def test_load_or_generate_v1_verify_after_reload(tmp_path):
+    path = tmp_path / "robot_identity_v1.json"
+    kp, _ = load_or_generate_robot_keypair(path, profile=PQC_V1)
+    msg = b"fleet:command:expand"
+    sig = sign_robot_message_v1(kp.ml_dsa_private, msg)
+
+    kp2, _ = load_or_generate_robot_keypair(path, profile=PQC_V1)
+    assert verify_robot_message_v1(kp2.ml_dsa_public, msg, sig)

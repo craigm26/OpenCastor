@@ -5754,20 +5754,29 @@ async def on_startup():
             except Exception as _se:
                 logger.debug("RCAN signing init skipped: %s", _se)
 
-            # Initialize PQC robot identity — pqc-hybrid-v1 (issue #808)
+            # Initialize PQC robot identity (issue #808)
+            # ROBOT_OWNER_MODE=true (default) → pqc-v1 (ML-DSA-65 only, owned robots)
+            # ROBOT_OWNER_MODE=false → pqc-hybrid-v1 (Ed25519 + ML-DSA-65, external)
             try:
                 from castor.crypto.pqc import (
+                    PQC_HYBRID_V1,
+                    PQC_V1,
                     load_or_generate_robot_keypair,
                     robot_identity_record,
                 )
 
-                _kp, _generated = load_or_generate_robot_keypair()
+                _owner_mode = os.environ.get("ROBOT_OWNER_MODE", "true").lower() not in (
+                    "false", "0", "no"
+                )
+                _pqc_profile = PQC_V1 if _owner_mode else PQC_HYBRID_V1
+                _kp, _generated = load_or_generate_robot_keypair(profile=_pqc_profile)
                 state.pqc_identity = robot_identity_record(_kp)
                 if _generated:
                     logger.info(
-                        "PQC robot identity created (pqc-hybrid-v1). "
+                        "PQC robot identity created (%s). "
                         "Private key stored at ~/.opencastor/robot_identity.json — "
-                        "back up before fleet expansion."
+                        "back up before fleet expansion.",
+                        _kp.profile,
                     )
                 else:
                     logger.info(
@@ -10017,6 +10026,8 @@ async def rcan_node_manifest() -> dict:
     if state.pqc_identity:
         manifest["crypto_profile"] = state.pqc_identity.get("crypto_profile", "")
         manifest["pqc_public_key"] = state.pqc_identity.get("pqc_public_key", "")
-        manifest["ed25519_public_key"] = state.pqc_identity.get("ed25519_public_key", "")
+        # ed25519_public_key is omitted for pqc-v1 (owned robots — no classical component)
+        if state.pqc_identity.get("crypto_profile") != "pqc-v1":
+            manifest["ed25519_public_key"] = state.pqc_identity.get("ed25519_public_key", "")
 
     return manifest
