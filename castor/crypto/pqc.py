@@ -27,7 +27,7 @@ import json
 import logging
 import os
 from base64 import urlsafe_b64decode, urlsafe_b64encode
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
