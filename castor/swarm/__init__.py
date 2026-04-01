@@ -38,6 +38,7 @@ from castor.swarm.events import SwarmEvent
 from castor.swarm.patch_sync import PatchSync
 from castor.swarm.peer import SwarmPeer
 from castor.swarm.shared_memory import SharedMemory
+from castor.swarm.worker import WorkerConfig, WorkerCoordinator, WorkerResult, WorkerTask
 
 __all__ = [
     "SwarmPeer",
@@ -46,4 +47,8 @@ __all__ = [
     "SwarmConsensus",
     "PatchSync",
     "SwarmEvent",
+    "WorkerCoordinator",
+    "WorkerConfig",
+    "WorkerResult",
+    "WorkerTask",
 ]

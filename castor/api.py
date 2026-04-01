@@ -223,6 +223,7 @@ class AppState:
     pqc_identity: Optional[dict] = None  # pqc-hybrid-v1 public identity (issue #808)
     pqc_keypair = None  # RobotKeyPair — held for registration handshake signing
     hook_runner = None  # HookRunner — PreToolUse/PostToolUse safety gating (#817)
+    swarm_worker = None  # WorkerCoordinator — subprocess-isolated perception pipeline (#821)
 
 
 state = AppState()
@@ -5620,6 +5621,15 @@ async def on_startup():
     except Exception as _hook_exc:
         logger.warning("Hook runner initialization skipped: %s", _hook_exc)
 
+    # Initialize swarm worker coordinator for subprocess-isolated perception (#821)
+    try:
+        from castor.swarm.worker import WorkerCoordinator
+
+        state.swarm_worker = WorkerCoordinator()
+        logger.info("Swarm worker coordinator initialized")
+    except Exception as _sw_exc:
+        logger.warning("Swarm worker coordinator initialization skipped: %s", _sw_exc)
+
     load_dotenv_if_available()
 
     config_path = os.getenv("OPENCASTOR_CONFIG", "robot.rcan.yaml")
@@ -10130,3 +10140,44 @@ async def robot_verify(body: _RobotVerifyRequest) -> dict:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
     return {"rrn": claims.get("sub", ""), "verified": True}
+
+
+# ---------------------------------------------------------------------------
+# OAK-D swarm worker — isolated perception pipeline (#821)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/oak/analyze", dependencies=[Depends(verify_token)])
+async def oak_analyze(request: Request):
+    """POST /oak/analyze — run OAK-D depth/RGB analysis in an isolated worker.
+
+    Dispatches the session to a subprocess via :class:`WorkerCoordinator` so
+    that depth analysis of long sessions (300+ frames) never contaminates the
+    parent brain message history.
+
+    Request body::
+
+        {"session_path": "/data/sessions/oak-001", "session_id": "oak-001"}
+
+    Returns a :class:`WorkerResult` serialised as JSON.
+    """
+    import dataclasses
+
+    try:
+        body = await request.json()
+    except Exception:
+        return {"error": "invalid JSON body", "code": "HTTP_400"}
+
+    session_path = (body or {}).get("session_path", "")
+    session_id = (body or {}).get("session_id", "")
+
+    if not session_path:
+        return {"error": "session_path required", "code": "HTTP_400"}
+
+    if state.swarm_worker is None:
+        from castor.swarm.worker import WorkerCoordinator
+
+        state.swarm_worker = WorkerCoordinator(brain_provider=state.brain)
+
+    result = await state.swarm_worker.dispatch_oak_session(session_path, session_id)
+    return dataclasses.asdict(result)
