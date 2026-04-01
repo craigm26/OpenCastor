@@ -5832,7 +5832,7 @@ async def on_startup():
 
             # Load live robot context into brain (issue: feat/live-robot-context)
             try:
-                from castor.brain.robot_context import RobotContext, build_robot_context
+                from castor.brain.robot_context import build_robot_context
 
                 _ctx = build_robot_context(state.config)
                 if state.brain is not None:
