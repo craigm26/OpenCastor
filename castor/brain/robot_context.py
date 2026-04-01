@@ -77,15 +77,29 @@ def build_robot_context(config: dict) -> RobotContext:
     except Exception as exc:
         logger.debug("Could not read gateway log: %s", exc)
 
-    # Session memory — truncated to 2000 chars
+    # Session memory — load structured schema if possible, fall back to raw text
     session_memory = ""
     try:
-        with open(_MEMORY_PATH) as f:
-            session_memory = f.read()[:_MEMORY_TRUNCATE]
-    except FileNotFoundError:
-        pass
-    except Exception as exc:
-        logger.debug("Could not read robot memory: %s", exc)
+        from castor.brain.memory_schema import (
+            apply_confidence_decay,
+            filter_for_context,
+            format_entries_for_context,
+            load_memory,
+        )
+
+        robot_mem = load_memory(_MEMORY_PATH)
+        robot_mem = apply_confidence_decay(robot_mem)
+        eligible = filter_for_context(robot_mem)
+        session_memory = format_entries_for_context(eligible)
+    except Exception:
+        # Fallback: read raw text (free-form robot-memory.md)
+        try:
+            with open(_MEMORY_PATH) as f:
+                session_memory = f.read()[:_MEMORY_TRUNCATE]
+        except FileNotFoundError:
+            pass
+        except Exception as exc:
+            logger.debug("Could not read robot memory: %s", exc)
 
     return RobotContext(
         rrn=rrn,

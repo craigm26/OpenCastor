@@ -38,20 +38,45 @@ def test_format_includes_rrn():
     assert output.startswith("<robot-context")
 
 
-def test_format_memory_truncated_at_2000_chars():
-    """build_robot_context truncates session_memory to 2000 characters."""
-    long_memory = "x" * 5000
+def test_format_memory_uses_structured_schema(tmp_path):
+    """build_robot_context uses structured memory_schema when file is valid YAML."""
+    import yaml
+    from datetime import datetime, timezone
+
+    memory_data = {
+        "schema_version": "1.0",
+        "rrn": "RRN-000000000001",
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+        "entries": [
+            {
+                "id": "mem-abc123",
+                "type": "hardware_observation",
+                "text": "left wheel encoder intermittent under load",
+                "confidence": 0.85,
+                "first_seen": datetime.now(timezone.utc).isoformat(),
+                "last_reinforced": datetime.now(timezone.utc).isoformat(),
+                "observation_count": 3,
+                "tags": ["wheel"],
+            }
+        ],
+    }
+    memory_path = str(tmp_path / "robot-memory.md")
+    with open(memory_path, "w") as f:
+        f.write("---\n" + yaml.dump(memory_data) + "---\n")
+
     with (
-        patch("builtins.open", mock_open(read_data=long_memory)),
+        patch("castor.brain.robot_context._MEMORY_PATH", memory_path),
         patch("castor.brain.robot_context._LOG_PATH", "/nonexistent/log"),
-        patch("castor.brain.robot_context._MEMORY_PATH", "/fake/memory.md"),
     ):
         ctx = build_robot_context(_MINIMAL_CONFIG)
-    assert len(ctx.session_memory) == 2000
+
+    # Structured output should contain the entry text and an emoji prefix
+    assert "wheel encoder" in ctx.session_memory
+    assert any(emoji in ctx.session_memory for emoji in ["🔴", "🟡", "🟢"])
 
 
 def test_build_handles_missing_memory_file():
-    """build_robot_context sets session_memory='' when robot-memory.md does not exist."""
+    """build_robot_context returns placeholder when robot-memory.md does not exist."""
     with tempfile.TemporaryDirectory() as tmp:
         missing = os.path.join(tmp, "robot-memory.md")
         with (
@@ -59,7 +84,8 @@ def test_build_handles_missing_memory_file():
             patch("castor.brain.robot_context._LOG_PATH", "/nonexistent/log"),
         ):
             ctx = build_robot_context(_MINIMAL_CONFIG)
-    assert ctx.session_memory == ""
+    # Missing file → empty memory → placeholder text
+    assert "no stored observations" in ctx.session_memory or ctx.session_memory == ""
 
 
 def test_format_output_has_no_cache_control_markers():
