@@ -4,7 +4,10 @@ import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    from castor.brain.robot_context import RobotContext
 
 from castor.brain.compaction import (
     CompactionStrategy,
@@ -63,6 +66,10 @@ class BaseProvider(ABC):
         # Set by api.py after brain init from RCAN config; used in build_messaging_prompt()
         self._caps: list[str] = []
         self._robot_name: str = "robot"
+        # Robot context — injected by api.py after startup; refreshed every N turns externally
+        self._robot_context: Optional[RobotContext] = None
+        self._context_turn_counter: int = 0
+        self.robot_context_refresh_turns: int = 10
         # Compaction strategy — can be overridden via config["compaction"]
         compaction_cfg = config.get("compaction", {})
         self.compaction_strategy: Optional[CompactionStrategy] = (
@@ -98,6 +105,44 @@ class BaseProvider(ABC):
     def update_system_prompt(self, memory_context: str = "") -> None:
         """Rebuild the system prompt with the provided memory context."""
         self.system_prompt = self._build_system_prompt(memory_context)
+
+    # ── Robot context ─────────────────────────────────────────────────────────
+
+    def set_robot_context(self, ctx: "RobotContext") -> None:
+        """Store a RobotContext snapshot and reset the turn counter.
+
+        Called by api.py at startup and whenever a refresh is triggered.
+        The context is appended to the dynamic section of every outgoing prompt.
+        """
+        self._robot_context = ctx
+        self._context_turn_counter = 0
+        logger.debug("Robot context updated (rrn=%s)", ctx.rrn)
+
+    def _append_robot_context(self, dynamic_content: str) -> str:
+        """Append the robot context block to *dynamic_content* if one is set.
+
+        Increments the turn counter and logs a reminder when the context is
+        approaching staleness (>= robot_context_refresh_turns).  Actual refresh
+        must be triggered externally by api.py.
+
+        Returns the (possibly augmented) dynamic content string.
+        """
+        if self._robot_context is None:
+            return dynamic_content
+
+        from castor.brain.robot_context import format_robot_context
+
+        ctx_block = format_robot_context(self._robot_context)
+        self._context_turn_counter += 1
+        if self._context_turn_counter >= self.robot_context_refresh_turns:
+            logger.info(
+                "Robot context is %d turns old — refresh recommended (call set_robot_context)",
+                self._context_turn_counter,
+            )
+
+        if dynamic_content:
+            return dynamic_content + "\n\n" + ctx_block
+        return ctx_block
 
     # ── Messaging / conversational system prompt ─────────────────────────────
 
@@ -137,6 +182,37 @@ class BaseProvider(ABC):
             sensor_snapshot=sensor_snapshot,
             memory_context=memory_context,
         )
+        if dynamic:
+            return static + "\n\n" + dynamic
+        return static
+
+    def build_messaging_prompt_with_context(
+        self,
+        robot_name: str = "Bob",
+        surface: str = "whatsapp",
+        hardware: Optional[dict[str, str]] = None,
+        capabilities: Optional[list[str]] = None,
+        memory_context: str = "",
+        sensor_snapshot: Optional[dict] = None,
+    ) -> str:
+        """Instance-level wrapper around :meth:`build_messaging_prompt`.
+
+        Appends the live robot context block (if set via
+        :meth:`set_robot_context`) to the dynamic section of the prompt.
+        Providers should call this instead of the classmethod when building
+        per-turn prompts so the context is automatically included.
+        """
+        static = self._build_static_messaging_content(
+            robot_name=robot_name,
+            surface=surface,
+            capabilities=capabilities,
+        )
+        dynamic = self._build_dynamic_messaging_content(
+            hardware=hardware,
+            sensor_snapshot=sensor_snapshot,
+            memory_context=memory_context,
+        )
+        dynamic = self._append_robot_context(dynamic)
         if dynamic:
             return static + "\n\n" + dynamic
         return static
