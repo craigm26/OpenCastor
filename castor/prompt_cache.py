@@ -147,6 +147,41 @@ def build_sensor_reminder(sensor_data: dict) -> str:
     return "\n".join(lines)
 
 
+def build_cached_messaging_blocks(
+    static_content: str,
+    dynamic_content: str = "",
+) -> list[dict]:
+    """
+    Build a messaging system prompt as cached static + uncached dynamic blocks.
+
+    Structure:
+      Block 0: Static content (identity, capabilities, command vocab, rules)
+               — CACHE HERE: identical every call for the same robot/surface
+      Block 1: Dynamic content (telemetry, active task, recent history)
+               — NO cache_control: rebuilt each turn, must not bust the cache anchor
+
+    Returns a list ready to pass as ``system=`` to anthropic.messages.create().
+
+    Example::
+
+        static = provider._build_static_messaging_content(robot_name, surface, caps)
+        dynamic = provider._build_dynamic_messaging_content(hardware, sensor_snapshot)
+        system = build_cached_messaging_blocks(static, dynamic)
+        response = client.messages.create(model=..., system=system, ...)
+    """
+    blocks: list[dict] = [
+        {
+            "type": "text",
+            "text": static_content or "You are an AI-powered robot.",
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+    if dynamic_content and dynamic_content.strip():
+        # Deliberately no cache_control — this block changes every turn
+        blocks.append({"type": "text", "text": dynamic_content})
+    return blocks
+
+
 def _format_rcan_summary(rcan_config: dict) -> str:
     """Summarize RCAN config fields relevant to the AI brain."""
     important_keys = ["robot_name", "description", "physics", "safety", "provider", "model"]
