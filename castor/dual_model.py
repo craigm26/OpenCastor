@@ -171,6 +171,7 @@ class DualModelHarness(AgentHarness):
         built: Any,
         run_id: str = "",
         root_span: Any = None,
+        max_turns_override: int | None = None,
     ) -> tuple[Thought, list, int]:
         """Extended tool loop with secondary model integration."""
         from castor.providers.base import Thought as _Thought
@@ -181,7 +182,8 @@ class DualModelHarness(AgentHarness):
         consent_granted = ctx.consent_granted
         secondary_active = ctx.scope in self._scope_filter
 
-        for iteration in range(self._max_iterations):
+        _max_iter = max_turns_override if max_turns_override is not None else self._max_iterations
+        for iteration in range(_max_iter):
             raw_response = await asyncio.to_thread(
                 self._think_with_tools,
                 ctx.image_bytes,
