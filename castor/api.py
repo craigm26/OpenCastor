@@ -222,6 +222,7 @@ class AppState:
     hitl_gate_manager = None  # HiTLGateManager instance (F3 — HiTL gates)
     pqc_identity: Optional[dict] = None  # pqc-hybrid-v1 public identity (issue #808)
     pqc_keypair = None  # RobotKeyPair — held for registration handshake signing
+    hook_runner = None  # HookRunner — PreToolUse/PostToolUse safety gating (#817)
 
 
 state = AppState()
@@ -2547,8 +2548,24 @@ async def rcan_message_endpoint(request: Request):
             msg = parsed
 
         principal = getattr(request.state, "principal", None)
+
+        # PreToolUse hook gate — runs before INVOKE dispatch (#817)
+        _msg_type = getattr(msg, "msg_type", None)
+        _INVOKE_TYPE = 11
+        if _msg_type == _INVOKE_TYPE and state.hook_runner is not None:
+            _skill_name = getattr(msg, "skill", None) or body.get("skill", "")
+            _skill_params = getattr(msg, "params", None) or body.get("params", {})
+            _hook_result = state.hook_runner.run_pre_tool(_skill_name, _skill_params or {})
+            if not _hook_result.allowed:
+                raise HTTPException(
+                    status_code=403,
+                    detail=_hook_result.message or f"Pre-tool hook denied skill '{_skill_name}'",
+                )
+
         response = state.rcan_router.route(msg, principal)
         return response.to_dict()
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid RCAN message: {e}") from e
 
@@ -5592,6 +5609,16 @@ async def _stop_channels():
 async def on_startup():
     # Always initialize thought history ring buffer (no config needed)
     state.thought_history = collections.deque(maxlen=50)
+
+    # Initialize hook runner for PreToolUse/PostToolUse hardware safety gating (#817)
+    try:
+        from castor.hooks.default_hooks import get_default_hooks
+        from castor.hooks.runner import HookRunner
+
+        state.hook_runner = HookRunner(get_default_hooks())
+        logger.info("Hook runner initialized with default hardware safety hooks")
+    except Exception as _hook_exc:
+        logger.warning("Hook runner initialization skipped: %s", _hook_exc)
 
     load_dotenv_if_available()
 
