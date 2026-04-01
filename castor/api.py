@@ -5787,7 +5787,9 @@ async def on_startup():
                         "PQC robot identity loaded (profile=%s)",
                         state.pqc_identity.get("crypto_profile"),
                     )
-                logger.info("PQC registration handshake enabled (POST /robot/register, /robot/verify)")
+                logger.info(
+                    "PQC registration handshake enabled (POST /robot/register, /robot/verify)"
+                )
             except Exception as _pqc_e:
                 logger.warning("PQC robot identity init failed (non-fatal): %s", _pqc_e)
 
