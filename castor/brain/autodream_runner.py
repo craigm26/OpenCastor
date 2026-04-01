@@ -21,11 +21,18 @@ from datetime import datetime
 from pathlib import Path
 
 from castor.brain.autodream import AutoDreamBrain, DreamResult, DreamSession
+from castor.brain.autodream_issues import build_issue_template, file_github_issue
 
 logger = logging.getLogger("OpenCastor.AutoDreamRunner")
 
 # Cheap, fast model for nightly runs — overridable via env.
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+
+# Set CASTOR_AUTODREAM_DRY_RUN=1 to skip actual gh issue creation.
+DRY_RUN = os.getenv("CASTOR_AUTODREAM_DRY_RUN", "0") != "0"
+
+# GitHub repo to file issues against — overridable via env.
+DEFAULT_GITHUB_REPO = "craigm26/OpenCastor"
 
 OPENCASTOR_DIR = Path.home() / ".opencastor"
 MEMORY_FILE = OPENCASTOR_DIR / "robot-memory.md"
@@ -100,13 +107,18 @@ def _atomic_write(path: Path, content: str) -> None:
         raise
 
 
-def _append_dream_log(date_str: str, result: DreamResult) -> None:
+def _append_dream_log(
+    date_str: str,
+    result: DreamResult,
+    issue_urls: list[str] | None = None,
+) -> None:
     """Append a structured entry to dream-log.jsonl."""
     entry = {
         "date": date_str,
         "learnings": result.learnings,
         "issues": result.issues_detected,
         "summary": result.summary,
+        "issue_urls": issue_urls or [],
     }
     try:
         OPENCASTOR_DIR.mkdir(parents=True, exist_ok=True)
@@ -171,10 +183,22 @@ def main() -> None:
         print(f"autoDream: failed to write robot-memory.md: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    # 6. Append to dream log
-    _append_dream_log(today, result)
+    # 6. File GitHub issues for detected problems
+    issue_urls: list[str] = []
+    if result.issues_detected:
+        repo = os.getenv("CASTOR_GITHUB_REPO", DEFAULT_GITHUB_REPO)
+        rrn = os.getenv("CASTOR_RRN", "unknown")
+        for issue_text in result.issues_detected:
+            template = build_issue_template(issue_text, rrn, today)
+            url = file_github_issue(template, repo, dry_run=DRY_RUN)
+            if url:
+                issue_urls.append(url)
+        logger.info("autoDream filed %d issue(s)", len(issue_urls))
 
-    # 7. Print summary to stdout (captured by autodream.sh)
+    # 7. Append to dream log
+    _append_dream_log(today, result, issue_urls=issue_urls)
+
+    # 8. Print summary to stdout (captured by autodream.sh)
     print(result.summary or f"autoDream {today}: complete")
 
     sys.exit(0)
