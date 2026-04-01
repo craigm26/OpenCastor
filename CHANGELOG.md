@@ -6,6 +6,36 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 
 ---
 
+## [2026.4.1.0] - 2026-04-01
+
+### Added — Post-Quantum Cryptography
+- `castor/crypto/pqc.py` — ML-DSA-65 (NIST FIPS 204) robot identity keypair generation
+- `pqc-v1` profile (ML-DSA-65 only) for operator-owned robots; `pqc-hybrid-v1` (Ed25519+ML-DSA-65) for external
+- `ROBOT_OWNER_MODE` env var routes to correct profile automatically
+- `/.well-known/rcan-node.json` FastAPI route — serves public key + crypto profile
+- `castor/auth/jwt_pqc.py` — `issue_pqc_jwt()` / `verify_pqc_jwt()` with ML-DSA-65
+- `castor/auth/robot_handshake.py` — `POST /robot/register` + `POST /robot/verify` bootstrap endpoints
+
+### Added — Harness Intelligence (Claude Code pattern study)
+- `castor/prompt_cache.py` — static/dynamic system prompt split with `cache_control: ephemeral`; `CacheStats` hit-rate tracking
+- `castor/brain/compaction.py` — `CompactionStrategy`, `should_compact()`, `compact_session()`, `build_continuation_message()` with `suppress_follow_up_questions`
+- `castor/hooks/runner.py` — `HookRunner` with `PreToolUse`/`PostToolUse` shell script gating; fail-open on timeout
+- `castor/hooks/default_hooks.py` — safety_check (e-stop interlock) + audit_log default hooks
+- `castor/tools/permissions.py` — `PermissionMode` enum (READ_ONLY→SAFETY_OVERRIDE) with per-tool `min_loa` declaration
+- `castor/tools/profiles.py` — `$deep` (opus, extended thinking, isolated, 25-turn) and `$quick` (haiku, read-only, stateless) named execution profiles
+- `castor/swarm/worker.py` — `SwarmCoordinator` with subprocess isolation; parent brain history never contaminated
+- `castor/swarm/oak_worker.py` — OAK-D perception analysis worker (frame count, depth stats, anomaly detection)
+- `castor/brain/autodream.py` — `AutoDreamBrain` LLM summarizer (KAIROS pattern); nightly memory consolidation with atomic fallback
+- `castor/brain/autodream_runner.py` — CLI entry point for nightly dream loop
+- `scripts/autodream.sh` — nightly daemon: health diagnostics, LLM memory consolidation, context pruning, bridge auto-restart
+
+### Changed
+- `castor/providers/base.py` — `_maybe_compact()` wired into message dispatch; `compaction_strategy` config field
+- `castor/providers/anthropic_provider.py` — `_cached_system_blocks` via `build_cached_system_prompt()`
+- `castor/api.py` — `AppState` extended with `pqc_keypair`, `hook_runner`, `swarm`; `check_permission()` at tool dispatch; `$deep`/`$quick` prefix routing
+
+---
+
 ## [2026.3.28.0] - 2026-03-28
 
 ### Added
