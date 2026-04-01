@@ -220,3 +220,7 @@ def check_jwt_configured() -> bool:
 # PQC JWT primitives — ML-DSA-65 signed tokens for robot identity handshake.
 # Use for session establishment only; not for per-request auth.
 from castor.auth.jwt_pqc import JWTError, issue_pqc_jwt, verify_pqc_jwt  # noqa: E402,F401
+from castor.auth.robot_handshake import (  # noqa: E402,F401
+    issue_registration_token,
+    verify_registration_token,
+)

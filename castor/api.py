@@ -221,6 +221,7 @@ class AppState:
     thought_log = None  # ThoughtLog instance (F4 — AI accountability)
     hitl_gate_manager = None  # HiTLGateManager instance (F3 — HiTL gates)
     pqc_identity: Optional[dict] = None  # pqc-hybrid-v1 public identity (issue #808)
+    pqc_keypair = None  # RobotKeyPair — held for registration handshake signing
 
 
 state = AppState()
@@ -5773,6 +5774,7 @@ async def on_startup():
                 _pqc_profile = PQC_V1 if _owner_mode else PQC_HYBRID_V1
                 _kp, _generated = load_or_generate_robot_keypair(profile=_pqc_profile)
                 state.pqc_identity = robot_identity_record(_kp)
+                state.pqc_keypair = _kp
                 if _generated:
                     logger.info(
                         "PQC robot identity created (%s). "
@@ -5785,6 +5787,7 @@ async def on_startup():
                         "PQC robot identity loaded (profile=%s)",
                         state.pqc_identity.get("crypto_profile"),
                     )
+                logger.info("PQC registration handshake enabled (POST /robot/register, /robot/verify)")
             except Exception as _pqc_e:
                 logger.warning("PQC robot identity init failed (non-fatal): %s", _pqc_e)
 
@@ -10033,3 +10036,68 @@ async def rcan_node_manifest() -> dict:
             manifest["ed25519_public_key"] = state.pqc_identity.get("ed25519_public_key", "")
 
     return manifest
+
+
+# ---------------------------------------------------------------------------
+# Robot registration handshake — open endpoints (no auth required).
+# Auth cannot be required before identity is established.
+# ---------------------------------------------------------------------------
+
+
+class _RobotRegisterRequest(BaseModel):
+    rrn: str
+    gateway_url: str
+
+
+class _RobotVerifyRequest(BaseModel):
+    token: str
+
+
+@app.post("/robot/register")
+async def robot_register(body: _RobotRegisterRequest) -> dict:
+    """POST /robot/register — issue a PQC-signed registration token.
+
+    Open endpoint (no auth required) — this is the bootstrap handshake;
+    identity is being established here so auth cannot be a prerequisite.
+
+    Request body: ``{"rrn": "<rrn>", "gateway_url": "<url>"}``
+
+    Returns ``{"token": "<jwt>", "public_key": "<b64url>", "crypto_profile": "<profile>"}``.
+    """
+    if state.pqc_keypair is None:
+        raise HTTPException(status_code=503, detail="PQC identity not initialised")
+
+    from castor.auth.robot_handshake import issue_registration_token
+
+    token = issue_registration_token(state.pqc_keypair, body.rrn, body.gateway_url)
+    identity = state.pqc_identity or {}
+    return {
+        "token": token,
+        "public_key": identity.get("pqc_public_key", ""),
+        "crypto_profile": identity.get("crypto_profile", ""),
+    }
+
+
+@app.post("/robot/verify")
+async def robot_verify(body: _RobotVerifyRequest) -> dict:
+    """POST /robot/verify — verify a registration token.
+
+    Open endpoint (no auth required) — completes the bootstrap handshake.
+
+    Request body: ``{"token": "<jwt>"}``
+
+    Returns ``{"rrn": "<rrn>", "verified": true}`` on success,
+    or HTTP 401 if the token is invalid/expired.
+    """
+    if state.pqc_keypair is None:
+        raise HTTPException(status_code=503, detail="PQC identity not initialised")
+
+    from castor.auth.jwt_pqc import JWTError
+    from castor.auth.robot_handshake import verify_registration_token
+
+    try:
+        claims = verify_registration_token(body.token, state.pqc_keypair.ml_dsa_public)
+    except JWTError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+    return {"rrn": claims.get("sub", ""), "verified": True}
