@@ -45,3 +45,7 @@ rich>=13.0.0
 # slack-bolt>=1.18.0         # Slack
 # dynamixel-sdk>=3.7.31      # Dynamixel servos
 # google-generativeai>=0.4.0 # Gemini provider (pip install google-generativeai)
+
+# Post-Quantum Cryptography
+cryptography>=42.0.0
+dilithium-py>=1.0.0
