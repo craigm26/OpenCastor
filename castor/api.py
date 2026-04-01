@@ -5830,6 +5830,23 @@ async def on_startup():
             except Exception as _pqc_e:
                 logger.warning("PQC robot identity init failed (non-fatal): %s", _pqc_e)
 
+            # Load live robot context into brain (issue: feat/live-robot-context)
+            try:
+                from castor.brain.robot_context import build_robot_context
+
+                _ctx = build_robot_context(state.config)
+                if state.brain is not None:
+                    state.brain.set_robot_context(_ctx)
+                logger.info(
+                    "Robot context loaded: rrn=%s host=%s loa=%s errors=%d",
+                    _ctx.rrn,
+                    _ctx.hostname,
+                    _ctx.active_loa,
+                    len(_ctx.last_errors),
+                )
+            except Exception as _rctx_e:
+                logger.warning("Robot context init failed (non-fatal): %s", _rctx_e)
+
             # Initialize multi-provider failover chain (agent.fallbacks in RCAN YAML)
             _agent_cfg = state.config.get("agent", {})
             if _agent_cfg.get("fallbacks"):
