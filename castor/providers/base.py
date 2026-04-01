@@ -6,6 +6,13 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from castor.brain.compaction import (
+    CompactionStrategy,
+    build_continuation_message,
+    compact_session,
+    should_compact,
+)
+
 logger = logging.getLogger("OpenCastor.BaseProvider")
 
 
@@ -56,6 +63,11 @@ class BaseProvider(ABC):
         # Set by api.py after brain init from RCAN config; used in build_messaging_prompt()
         self._caps: list[str] = []
         self._robot_name: str = "robot"
+        # Compaction strategy — can be overridden via config["compaction"]
+        compaction_cfg = config.get("compaction", {})
+        self.compaction_strategy: Optional[CompactionStrategy] = (
+            CompactionStrategy(**compaction_cfg) if compaction_cfg is not False else None
+        )
 
     # ── Vision/action system prompt (used when a camera frame is present) ────
 
@@ -274,6 +286,50 @@ class BaseProvider(ABC):
             parts.append(f"ROBOT MEMORY\n{memory_context}")
 
         return "\n\n".join(parts)
+
+    # ── Compaction ────────────────────────────────────────────────────────────
+
+    def _maybe_compact(
+        self,
+        messages: list,
+        summarizer_fn: Optional[Any] = None,
+    ) -> list:
+        """Check whether *messages* exceeds the compaction threshold.
+
+        If it does, compact the session and prepend a continuation message so
+        the model retains context without hitting the context-window limit.
+
+        Args:
+            messages:      Conversation message list (dicts with role/content).
+            summarizer_fn: Callable[[list], str] that produces a summary of the
+                           messages to be dropped.  When None a simple
+                           concatenation of content fields is used.
+
+        Returns:
+            A (possibly compacted) message list ready to send to the LLM.
+        """
+        strategy = self.compaction_strategy
+        if strategy is None or not should_compact(messages, strategy):
+            return messages
+
+        def _default_summarizer(msgs: list) -> str:
+            parts = []
+            for m in msgs:
+                role = m.get("role", "unknown") if isinstance(m, dict) else "unknown"
+                content = m.get("content", str(m)) if isinstance(m, dict) else str(m)
+                parts.append(f"{role}: {content}")
+            return "\n".join(parts)
+
+        fn = summarizer_fn or _default_summarizer
+        new_messages, summary = compact_session(messages, strategy, fn)
+        continuation = build_continuation_message(summary, strategy.suppress_follow_up)
+        logger.info(
+            "Compaction triggered: %d messages → %d (threshold=%d tokens)",
+            len(messages),
+            len(new_messages) + 1,
+            strategy.threshold_tokens,
+        )
+        return [continuation] + new_messages
 
     # ── Shared helpers ────────────────────────────────────────────────────────
 
