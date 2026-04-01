@@ -56,7 +56,7 @@ class AutoDreamBrain:
     structured robot-memory.md updates and learning summaries.
     """
 
-    def __init__(self, provider: "BaseProvider") -> None:
+    def __init__(self, provider: BaseProvider) -> None:
         self._provider = provider
 
     def run(self, session: DreamSession) -> DreamResult:
