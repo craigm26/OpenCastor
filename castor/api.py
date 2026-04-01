@@ -648,6 +648,21 @@ async def send_command(cmd: CommandRequest, request: Request):
             update={"instruction": f"[MISSION CONTEXT] {cmd.system_context}\n\n{cmd.instruction}"}
         )
 
+    # ── $deep / $quick profile prefix routing ────────────────────────────────
+    _active_profile = None
+    try:
+        from castor.tools_ext.profiles import parse_profile_prefix
+
+        _profile_name, _stripped = parse_profile_prefix(cmd.instruction)
+        if _profile_name:
+            from castor.tools_ext.profiles import get_profile
+
+            _active_profile = get_profile(_profile_name)
+            cmd = cmd.model_copy(update={"instruction": _stripped})
+            logger.info("Profile '%s' activated for this request", _profile_name)
+    except Exception:
+        pass  # never block a command due to profile parsing failure
+
     # ── Agent Harness (when enabled in RCAN config) ──────────────────────────
     _agent_cfg = (state.config or {}).get("agent", {})
     _harness_cfg = _agent_cfg.get("harness", {})
@@ -674,6 +689,7 @@ async def send_command(cmd: CommandRequest, request: Request):
                 surface=_surface,
                 scope=getattr(cmd, "scope", "chat") or "chat",
                 consent_granted=getattr(cmd, "consent_granted", False) or False,
+                profile=_active_profile,
             )
             _hresult = await _harness.run(_hctx)
             thought = _hresult.thought

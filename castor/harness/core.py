@@ -146,6 +146,8 @@ class HarnessContext:
     mission_state: dict = field(default_factory=dict)
     # Set True after user has explicitly confirmed a physical action this turn
     consent_granted: bool = False
+    # Optional named execution profile ($deep / $quick); None = default harness config
+    profile: Optional[Any] = None
 
 
 @dataclass
@@ -651,6 +653,26 @@ class AgentHarness:
         builder = self._get_context_builder()
         built: BuiltContext = await builder.build(ctx, history=[])
 
+        # 1b. Apply execution profile overrides ($deep / $quick)
+        _profile_max_turns: Optional[int] = None
+        if ctx.profile is not None:
+            try:
+                _p = ctx.profile
+                logger.info(
+                    "Applying profile '%s': model=%s thinking=%d max_turns=%d",
+                    _p.name,
+                    _p.model,
+                    _p.thinking_budget,
+                    _p.max_turns,
+                )
+                if hasattr(self.provider, "set_model"):
+                    self.provider.set_model(_p.model)
+                elif hasattr(self.provider, "model_name"):
+                    self.provider.model_name = _p.model  # type: ignore[attr-defined]
+                _profile_max_turns = _p.max_turns
+            except Exception as _pe:
+                logger.warning("Profile override failed (non-fatal): %s", _pe)
+
         # 2. Run pre-turn hooks
         for hook in self.hooks:
             span_name = f"hook.pre_turn.{type(hook).__name__}"
@@ -662,7 +684,11 @@ class AgentHarness:
 
         # 3. Tool loop
         thought, tools_called, iterations = await self._tool_loop(
-            ctx, built, run_id=run_id, root_span=root_span
+            ctx,
+            built,
+            run_id=run_id,
+            root_span=root_span,
+            max_turns_override=_profile_max_turns,
         )
 
         # 4. Aggregate P66 fields
@@ -699,6 +725,7 @@ class AgentHarness:
         built: Any,
         run_id: str | None = None,
         root_span: Any = None,
+        max_turns_override: Optional[int] = None,
     ) -> tuple[Thought, list[ToolCallRecord], int]:
         """Run model inference + tool execution loop.
 
@@ -712,8 +739,9 @@ class AgentHarness:
         tools_schema = self._get_tools_for_scope(ctx.scope)
         tools_called: list[ToolCallRecord] = []
         consent_granted = ctx.consent_granted
+        _max_iter = max_turns_override if max_turns_override is not None else self._max_iterations
 
-        for iteration in range(self._max_iterations):
+        for iteration in range(_max_iter):
             # Call provider with tools
             raw_response = await asyncio.to_thread(
                 self._think_with_tools,
