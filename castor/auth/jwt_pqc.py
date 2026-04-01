@@ -32,9 +32,13 @@ from typing import Any
 
 logger = logging.getLogger("OpenCastor.Auth.JWTPQC")
 
-_HEADER = urlsafe_b64encode(
-    json.dumps({"alg": "ML-DSA-65", "typ": "JWT"}, separators=(",", ":")).encode()
-).rstrip(b"=").decode()
+_HEADER = (
+    urlsafe_b64encode(
+        json.dumps({"alg": "ML-DSA-65", "typ": "JWT"}, separators=(",", ":")).encode()
+    )
+    .rstrip(b"=")
+    .decode()
+)
 
 
 class JWTError(Exception):
@@ -78,9 +82,7 @@ def issue_pqc_jwt(
     claims["iat"] = now
     claims["exp"] = now + expires_in
 
-    payload_b64 = _b64url_encode(
-        json.dumps(claims, separators=(",", ":")).encode()
-    )
+    payload_b64 = _b64url_encode(json.dumps(claims, separators=(",", ":")).encode())
 
     signing_input = f"{_HEADER}.{payload_b64}".encode()
     signature = ML_DSA_65.sign(ml_dsa_private, signing_input)
