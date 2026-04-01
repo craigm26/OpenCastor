@@ -115,10 +115,40 @@ class BaseProvider(ABC):
             memory_context:  Episodic/semantic memory from the virtual filesystem.
             sensor_snapshot: Latest telemetry snapshot dict (speed, distance, etc.).
         """
-        hw = hardware or {}
+        static = cls._build_static_messaging_content(
+            robot_name=robot_name,
+            surface=surface,
+            capabilities=capabilities,
+        )
+        dynamic = cls._build_dynamic_messaging_content(
+            hardware=hardware,
+            sensor_snapshot=sensor_snapshot,
+            memory_context=memory_context,
+        )
+        if dynamic:
+            return static + "\n\n" + dynamic
+        return static
+
+    # ── Static / dynamic messaging prompt split ──────────────────────────────
+    # Used by AnthropicProvider to build cache-anchored system prompts.
+    # Static content is byte-for-byte identical across calls (same robot/surface)
+    # → Anthropic cache hit.  Dynamic content changes every turn → no cache_control.
+
+    @classmethod
+    def _build_static_messaging_content(
+        cls,
+        robot_name: str = "Bob",
+        surface: str = "whatsapp",
+        capabilities: Optional[list[str]] = None,
+    ) -> str:
+        """Return the stable parts of the messaging system prompt.
+
+        Includes robot identity, surface tone, command vocabulary, and response
+        rules — content that is identical across all turns for the same robot
+        and surface.  Suitable for Anthropic prompt cache anchoring.
+        """
         caps = capabilities or []
 
-        # ── Surface context ───────────────────────────────────────────────────
         surface_note = {
             "whatsapp": (
                 "You are communicating over WhatsApp. "
@@ -155,36 +185,6 @@ class BaseProvider(ABC):
             ),
         }.get(surface, "You are communicating with a human operator.")
 
-        # ── Hardware status block ─────────────────────────────────────────────
-        hw_lines = []
-        status_icons = {"online": "✓", "offline": "✗", "mock": "~", "unknown": "?"}
-        for subsystem, status in hw.items():
-            icon = status_icons.get(status, "?")
-            hw_lines.append(f"  {icon} {subsystem}: {status}")
-        hw_block = (
-            "HARDWARE STATUS\n" + "\n".join(hw_lines)
-            if hw_lines
-            else "HARDWARE STATUS\n  (unknown — run 'status' to check)"
-        )
-
-        # ── Sensor snapshot ───────────────────────────────────────────────────
-        sensor_block = ""
-        if sensor_snapshot:
-            lines = []
-            if "front_distance_m" in sensor_snapshot:
-                lines.append(f"  front obstacle: {sensor_snapshot['front_distance_m']:.2f} m")
-            if "battery_pct" in sensor_snapshot:
-                lines.append(f"  battery: {sensor_snapshot['battery_pct']:.0f}%")
-            if "speed_ms" in sensor_snapshot:
-                lines.append(f"  speed: {sensor_snapshot['speed_ms']:.2f} m/s")
-            if "heading_deg" in sensor_snapshot:
-                lines.append(f"  heading: {sensor_snapshot['heading_deg']:.1f}°")
-            if lines:
-                sensor_block = "\nLIVE TELEMETRY\n" + "\n".join(lines)
-
-        # ── Command vocabulary ────────────────────────────────────────────────
-        # These are the natural-language phrases humans say and what they map to.
-        # Front-loaded so the model sees them before any user message.
         command_lines = [
             '  "move forward [fast|slow]"     → {"type":"move","linear":0.5,"angular":0}',
             '  "move back / reverse"           → {"type":"move","linear":-0.5,"angular":0}',
@@ -205,15 +205,13 @@ class BaseProvider(ABC):
                 4,
                 '  "turn left/right N degrees"        → {"type":"nav_waypoint","distance_m":0,"heading_deg":±float}',
             )
-        # Only include nav/teleop commands if those caps are active
         if caps and not any(c in caps for c in ["nav", "teleop", "chat"]):
-            command_lines = command_lines[3:]  # keep stop/wait/status only
+            command_lines = command_lines[3:]
 
         cmd_block = "COMMAND VOCABULARY (users may say any of these naturally)\n" + "\n".join(
             command_lines
         )
 
-        # ── Response format rules ─────────────────────────────────────────────
         response_rules = (
             "RESPONSE FORMAT\n"
             "  - Movement/grip commands: one friendly sentence, then the action JSON "
@@ -226,19 +224,56 @@ class BaseProvider(ABC):
             "  - If hardware is offline/mock, acknowledge it — don't pretend it works."
         )
 
-        # ── Assemble ──────────────────────────────────────────────────────────
         sections = [
             f"You are {robot_name}, a robot assistant built on OpenCastor "
-            f"(Raspberry Pi 5, {', '.join(caps) or 'no capabilities loaded'}).",
+            f"({', '.join(caps) or 'no capabilities loaded'}).",
             surface_note,
-            hw_block + sensor_block,
             cmd_block,
             response_rules,
         ]
-        if memory_context:
-            sections.append(f"ROBOT MEMORY\n{memory_context}")
-
         return "\n\n".join(sections)
+
+    @classmethod
+    def _build_dynamic_messaging_content(
+        cls,
+        hardware: Optional[dict[str, str]] = None,
+        sensor_snapshot: Optional[dict] = None,
+        memory_context: str = "",
+    ) -> str:
+        """Return the per-turn dynamic parts of the messaging system prompt.
+
+        Includes hardware status, live telemetry, and memory context — content
+        that can change between calls.  Must NOT be cached (no cache_control).
+        Returns an empty string when nothing dynamic is available.
+        """
+        hw = hardware or {}
+        parts: list[str] = []
+
+        if hw:
+            status_icons = {"online": "✓", "offline": "✗", "mock": "~", "unknown": "?"}
+            hw_lines = []
+            for subsystem, status in hw.items():
+                icon = status_icons.get(status, "?")
+                hw_lines.append(f"  {icon} {subsystem}: {status}")
+            parts.append("HARDWARE STATUS\n" + "\n".join(hw_lines))
+
+        if sensor_snapshot:
+            lines = []
+            if "front_distance_m" in sensor_snapshot:
+                lines.append(f"  front obstacle: {sensor_snapshot['front_distance_m']:.2f} m")
+            if "battery_pct" in sensor_snapshot:
+                lines.append(f"  battery: {sensor_snapshot['battery_pct']:.0f}%")
+            if "speed_ms" in sensor_snapshot:
+                lines.append(f"  speed: {sensor_snapshot['speed_ms']:.2f} m/s")
+            if "heading_deg" in sensor_snapshot:
+                lines.append(f"  heading: {sensor_snapshot['heading_deg']:.1f}°")
+            if lines:
+                parts.append("LIVE TELEMETRY\n" + "\n".join(lines))
+
+        if memory_context:
+            parts.append(f"ROBOT MEMORY\n{memory_context}")
+
+        return "\n\n".join(parts)
 
     # ── Shared helpers ────────────────────────────────────────────────────────
 

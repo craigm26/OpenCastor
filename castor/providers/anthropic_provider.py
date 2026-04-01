@@ -3,7 +3,11 @@ import logging
 import os
 from collections.abc import Iterator
 
-from castor.prompt_cache import CacheStats, build_cached_system_prompt
+from castor.prompt_cache import (
+    CacheStats,
+    build_cached_messaging_blocks,
+    build_cached_system_prompt,
+)
 
 from .base import BaseProvider, Thought
 
@@ -124,12 +128,6 @@ class AnthropicProvider(BaseProvider):
         # Determine if we have a real camera frame
         is_blank = not image_bytes or image_bytes == b"\x00" * len(image_bytes)
 
-        # Use the conversational messaging prompt when there's no live camera frame
-        if is_blank:
-            system_prompt = self.build_messaging_prompt(surface=surface)
-        else:
-            system_prompt = self.system_prompt  # action-JSON vision prompt
-
         b64_image = base64.b64encode(image_bytes).decode("utf-8") if not is_blank else ""
 
         # Build message content -- include image only if it has real data
@@ -147,9 +145,20 @@ class AnthropicProvider(BaseProvider):
             )
         content.append({"type": "text", "text": instruction})
 
+        # Build system argument:
+        #   Vision/action: pre-built cached blocks (robot identity + action schema)
+        #   Messaging: static block (cached) + optional dynamic block (not cached)
+        if not is_blank:
+            system_arg = self._cached_system_blocks
+        else:
+            static_content = self._build_static_messaging_content(
+                robot_name=self._robot_name,
+                surface=surface,
+                capabilities=self._caps,
+            )
+            system_arg = build_cached_messaging_blocks(static_content)
+
         try:
-            # Use cached system blocks for vision/action mode; plain string for messaging
-            system_arg = self._cached_system_blocks if not is_blank else system_prompt
             response = self.client.messages.create(
                 model=self.model_name,
                 max_tokens=1024,
@@ -157,14 +166,20 @@ class AnthropicProvider(BaseProvider):
                 messages=[{"role": "user", "content": content}],
                 extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
             )
-            # Track cache stats
-            self._cache_stats.record(response.usage)
+            # Track cache stats and log per-call savings
+            usage = response.usage
+            self._cache_stats.record(usage)
             self._cache_stats.alert_if_low(logger=logger)
+            logger.debug(
+                "cache: read=%d created=%d input=%d",
+                getattr(usage, "cache_read_input_tokens", 0),
+                getattr(usage, "cache_creation_input_tokens", 0),
+                getattr(usage, "input_tokens", 0),
+            )
             # Track runtime stats
             try:
                 from castor.runtime_stats import record_api_call
 
-                usage = response.usage
                 _tokens_in = getattr(usage, "input_tokens", 0)
                 _tokens_out = getattr(usage, "output_tokens", 0)
                 record_api_call(
@@ -210,8 +225,8 @@ class AnthropicProvider(BaseProvider):
         if hasattr(self, "_cache_stats"):
             try:
                 cs = self._cache_stats
-                stats["cache_hits"] = getattr(cs, "hits", 0)
-                stats["cache_misses"] = getattr(cs, "misses", 0)
+                stats["cache_hits"] = cs.cache_hits
+                stats["cache_misses"] = cs.cache_misses
             except Exception:
                 pass
         return stats
@@ -271,9 +286,15 @@ class AnthropicProvider(BaseProvider):
             return
 
         is_blank = not image_bytes or image_bytes == b"\x00" * len(image_bytes)
-        system_arg = (
-            self.build_messaging_prompt(surface=surface) if is_blank else self._cached_system_blocks
-        )
+        if not is_blank:
+            system_arg = self._cached_system_blocks
+        else:
+            static_content = self._build_static_messaging_content(
+                robot_name=self._robot_name,
+                surface=surface,
+                capabilities=self._caps,
+            )
+            system_arg = build_cached_messaging_blocks(static_content)
         b64_image = base64.b64encode(image_bytes).decode("utf-8") if not is_blank else ""
 
         content = []
