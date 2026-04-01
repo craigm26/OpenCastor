@@ -1,7 +1,12 @@
 """autoDream issue filer — auto-files GitHub issues for detected problems.
 
-Called by autodream_runner when DreamResult.issues_detected is non-empty.
-Uses the `gh` CLI so no token management is needed in Python.
+**OPERATOR OPT-IN** — This module is NOT invoked by default. Issue filing must be
+explicitly enabled by the operator:
+    CASTOR_AUTODREAM_FILE_ISSUES=1
+    CASTOR_GITHUB_REPO=owner/repo   ← must be set; no default
+
+Used by autodream_runner when DreamResult.issues_detected is non-empty and filing
+is opted in. Uses the `gh` CLI so no token management is needed in Python.
 """
 
 from __future__ import annotations

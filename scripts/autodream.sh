@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
-# autodream.sh — Nightly autonomous memory consolidation and robot health loop
-# Implements the KAIROS/autoDream pattern from Claude Code research (opencastor-ops#17, OpenCastor#820)
+# autodream.sh — Reference operator script for nightly robot health + memory consolidation
 #
-# Runs at 2AM on robot.local. Consolidates session memory, prunes stale context,
-# runs health diagnostics, and can generate autonomous draft PRs for detected issues.
+# OPERATOR SCRIPT — not installed or auto-enabled by the castor package.
+# This is a reference implementation. Adapt it to your deployment.
+#
+# Required env vars before running:
+#   CASTOR_RRN              — your robot's RRN (e.g. RRN-000000000001)
+#   CASTOR_MODEL            — LLM model (default: claude-haiku-4-5-20251001)
+# Optional (issue filing — disabled by default):
+#   CASTOR_AUTODREAM_FILE_ISSUES=1
+#   CASTOR_GITHUB_REPO=owner/repo
 #
 # Usage: ./scripts/autodream.sh [--dry-run]
 

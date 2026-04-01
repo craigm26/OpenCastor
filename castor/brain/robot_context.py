@@ -3,7 +3,7 @@ import os
 import socket
 import subprocess
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger("OpenCastor.RobotContext")
 
@@ -98,7 +98,7 @@ def build_robot_context(config: dict) -> RobotContext:
         last_errors=last_errors,
         last_commands=[],
         session_memory=session_memory,
-        generated_at=datetime.now(UTC).isoformat(),
+        generated_at=datetime.now(timezone.utc).isoformat(),
     )
 
 
