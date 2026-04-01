@@ -52,6 +52,9 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "httpx>=0.26.0",
     "python-multipart>=0.0.7",
+    # Post-Quantum Cryptography
+    "cryptography>=42.0.0",
+    "dilithium-py>=1.0.0",
     # The Hub (Model Discovery & Inference)
     "huggingface-hub>=0.25.0",
     # The Dashboard
