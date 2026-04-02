@@ -6,6 +6,26 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 
 ---
 
+## [2026.4.2.0] - 2026-04-02
+
+### Added — Structured Robot Memory (KAIROS v2)
+- `castor/brain/memory_schema.py` — `MemoryEntry` + `RobotMemory` dataclasses; typed entries (`hardware_observation`, `environment_note`, `behavior_pattern`, `resolved`); confidence scoring 0.0–1.0 with 0.05/day decay; `load_memory()` / `save_memory()` (atomic); `filter_for_context()` (inject threshold 0.30); `prune_entries()` (prune threshold 0.10); `format_entries_for_context()` (🔴🟡🟢 confidence prefixes)
+- `castor memory show` CLI — display all entries with confidence bars, injection eligibility, observation counts
+- `castor memory add` CLI — manually add typed memory entries with confidence + tags
+- `castor memory prune` CLI — remove entries below threshold (with `--dry-run`)
+- `castor memory decay` CLI — apply time-based confidence decay and save
+- `castor/brain/robot_context.py` now injects structured memory at brain session start; graceful fallback to free-form text for existing files
+
+### Changed — autoDream Structured Output
+- `castor/brain/autodream.py` — `AUTODREAM_SYSTEM_PROMPT` updated to request structured `entries` JSON (type/text/confidence/tags); `DreamResult` gains `entries: list[dict]` field; `_parse_response()` supports both new structured and legacy `updated_memory` formats
+- `castor/brain/autodream_runner.py` — `_write_structured_memory()`: upserts new entries via `memory_schema`, reinforces matching existing entries (+0.1 nudge), prunes below threshold; falls back to free-form write if no structured entries returned
+- autoDream session prompt now shows existing memory in 🔴🟡🟢 context format so the LLM can reinforce or avoid duplicating observations
+
+### Fixed
+- `website/` — Astro 5→5.18.1; patches picomatch 4.0.4, h3 1.15.11, smol-toml 1.6.1 (7 Dependabot security alerts)
+
+---
+
 ## [2026.4.1.0] - 2026-04-01
 
 ### Added — Post-Quantum Cryptography

@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from castor.providers.base import BaseProvider
@@ -21,11 +21,22 @@ logger = logging.getLogger("OpenCastor.AutoDream")
 AUTODREAM_SYSTEM_PROMPT = (
     "You are the autoDream brain for an OpenCastor robot. Your job is to:\n"
     "1. Read recent session logs and health data\n"
-    "2. Distill new learnings (patterns, recurring errors, calibration notes)\n"
-    "3. Update the robot memory file with only what is NEW and USEFUL — prune stale entries\n"
+    "2. Distill new learnings (hardware patterns, environment notes, behavior adjustments)\n"
+    "3. Return ONLY new or updated observations — not a full memory rewrite\n"
     "4. Identify actionable issues that warrant a GitHub issue or PR\n"
-    "5. Be concise — robot-memory.md should stay under 200 lines\n"
-    "Format your response as JSON with keys: updated_memory, learnings, issues_detected, summary"
+    "5. Be concise — one observation per entry, max 500 chars each\n"
+    "\n"
+    "Format your response as JSON with keys:\n"
+    "  entries: list of {type, text, confidence, tags} where:\n"
+    "    type: 'hardware_observation' | 'environment_note' | 'behavior_pattern' | 'resolved'\n"
+    "    text: concise observation string (max 500 chars)\n"
+    "    confidence: float 0.0–1.0 (how certain you are)\n"
+    "    tags: list of string labels (optional)\n"
+    "  learnings: list of short learning strings (for the dream log)\n"
+    "  issues_detected: list of issue descriptions to file as GitHub issues\n"
+    "  summary: one-line summary of the dream session\n"
+    "\n"
+    "Return empty entries list if no new observations. Never repeat existing entries verbatim."
 )
 
 
@@ -43,7 +54,10 @@ class DreamSession:
 class DreamResult:
     """Output of a single autoDream run."""
 
-    updated_memory: str
+    # Legacy free-form memory (kept for backward compat; prefer entries)
+    updated_memory: str = ""
+    # Structured entries from new schema-aware prompt (preferred)
+    entries: Optional[list[dict]] = None
     learnings: list[str] = field(default_factory=list)
     issues_detected: list[str] = field(default_factory=list)
     summary: str = ""
@@ -94,6 +108,7 @@ class AutoDreamBrain:
 
         return DreamResult(
             updated_memory=session.robot_memory,
+            entries=None,
             learnings=[],
             issues_detected=[],
             summary="autoDream brain unavailable — memory unchanged.",
@@ -102,6 +117,37 @@ class AutoDreamBrain:
     def _build_session_prompt(self, session: DreamSession) -> str:
         """Build the user-turn prompt from *session* data."""
         error_lines = "\n".join(session.session_logs[-50:]) if session.session_logs else "(none)"
+
+        # Format existing memory for context — support both structured and free-form
+        existing_memory = session.robot_memory
+        try:
+            import os
+            import tempfile
+
+            from castor.brain.memory_schema import (
+                apply_confidence_decay,
+                filter_for_context,
+                format_entries_for_context,
+                load_memory,
+            )
+
+            fd, tmp = tempfile.mkstemp(suffix=".md")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    f.write(session.robot_memory)
+                mem = load_memory(tmp)
+                if mem.entries:
+                    mem = apply_confidence_decay(mem)
+                    eligible = filter_for_context(mem)
+                    existing_memory = format_entries_for_context(eligible)
+            finally:
+                try:
+                    os.unlink(tmp)
+                except Exception:
+                    pass
+        except Exception:
+            pass  # Fall back to raw text
+
         return (
             "<dream-session>\n"
             f"<date>{session.date}</date>\n"
@@ -109,12 +155,13 @@ class AutoDreamBrain:
             "<recent-errors>\n"
             f"{error_lines}\n"
             "</recent-errors>\n"
-            "<current-memory>\n"
-            f"{session.robot_memory}\n"
-            "</current-memory>\n"
+            "<existing-memory>\n"
+            f"{existing_memory}\n"
+            "</existing-memory>\n"
             "</dream-session>\n"
             "\n"
-            "Analyze the above and return updated robot memory + learnings as JSON."
+            "Return new or updated observations as structured JSON entries. "
+            "Do not repeat existing entries. Focus on what is new or changed."
         )
 
     def _parse_response(self, text: str) -> DreamResult | None:
@@ -134,8 +181,39 @@ class AutoDreamBrain:
         if not isinstance(data, dict):
             return None
 
-        updated_memory = data.get("updated_memory")
-        if not isinstance(updated_memory, str) or not updated_memory.strip():
+        # New structured format: entries list (preferred)
+        raw_entries = data.get("entries")
+        entries: list[dict] | None = None
+        if isinstance(raw_entries, list) and raw_entries:
+            validated = []
+            for e in raw_entries:
+                if not isinstance(e, dict):
+                    continue
+                text = e.get("text", "")
+                etype = e.get("type", "hardware_observation")
+                confidence = float(e.get("confidence", 0.7))
+                tags = e.get("tags", [])
+                if not isinstance(tags, list):
+                    tags = []
+                if text and isinstance(text, str):
+                    validated.append(
+                        {
+                            "type": etype,
+                            "text": str(text)[:500],
+                            "confidence": max(0.0, min(1.0, confidence)),
+                            "tags": [str(t) for t in tags if t],
+                        }
+                    )
+            if validated:
+                entries = validated
+
+        # Legacy format: updated_memory string (backward compat)
+        updated_memory = data.get("updated_memory", "")
+        if not isinstance(updated_memory, str):
+            updated_memory = ""
+
+        # Require at least one of entries or updated_memory
+        if entries is None and not updated_memory.strip():
             return None
 
         learnings = data.get("learnings", [])
@@ -152,6 +230,7 @@ class AutoDreamBrain:
 
         return DreamResult(
             updated_memory=updated_memory,
+            entries=entries,
             learnings=learnings,
             issues_detected=issues_detected,
             summary=summary,

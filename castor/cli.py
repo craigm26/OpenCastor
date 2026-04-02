@@ -1505,8 +1505,145 @@ def cmd_logs(args) -> None:
 
 
 def cmd_memory(args) -> None:
-    """castor memory — placeholder."""
-    print("castor memory: coming soon.")
+    """castor memory — show, prune, and manage robot operational memory."""
+    import os
+    from pathlib import Path
+
+    from castor.brain.memory_schema import (
+        CONFIDENCE_INJECT_MIN,
+        EntryType,
+        MemoryEntry,
+        apply_confidence_decay,
+        filter_for_context,
+        load_memory,
+        make_entry_id,
+        prune_entries,
+        save_memory,
+    )
+
+    memory_path = os.getenv(
+        "CASTOR_ROBOT_MEMORY_FILE",
+        str(Path.home() / ".opencastor" / "robot-memory.md"),
+    )
+    cmd = getattr(args, "memory_cmd", None) or "show"
+
+    if cmd == "show":
+        from datetime import datetime, timezone
+
+        mem = load_memory(memory_path)
+        mem = apply_confidence_decay(mem)
+        eligible = filter_for_context(mem)
+        all_entries = mem.entries
+
+        print(f"\n🧠 Robot Memory — {mem.rrn}")
+        print(f"   File: {memory_path}")
+        print(f"   Last updated: {mem.last_updated.strftime('%Y-%m-%d %H:%M UTC')}")
+        print(f"   Total entries: {len(all_entries)} ({len(eligible)} above inject threshold)\n")
+
+        if not all_entries:
+            print("  (no entries yet — run autoDream to populate)\n")
+            return
+
+        by_type: dict[str, list] = {}
+        for e in sorted(all_entries, key=lambda e: -e.confidence):
+            by_type.setdefault(e.type.value, []).append(e)
+
+        for type_name, entries in by_type.items():
+            print(f"  ── {type_name.upper().replace('_', ' ')} ──")
+            for e in entries:
+                conf_pct = int(e.confidence * 100)
+                if e.confidence >= 0.8:
+                    bar = "🔴"
+                elif e.confidence >= 0.5:
+                    bar = "🟡"
+                elif e.confidence >= CONFIDENCE_INJECT_MIN:
+                    bar = "🟢"
+                else:
+                    bar = "⚫"
+                days = (datetime.now(timezone.utc) - e.last_reinforced).days
+                injected = "✓" if e in eligible else "✗"
+                print(f"  {bar} [{conf_pct:3d}%] [inject:{injected}] {e.text}")
+                print(f"       id:{e.id} | obs:{e.observation_count}x | last:{days}d ago")
+            print()
+
+    elif cmd == "prune":
+        mem = load_memory(memory_path)
+        mem = apply_confidence_decay(mem)
+        threshold = float(getattr(args, "threshold", "0.10"))
+        pruned, count = prune_entries(mem, min_confidence=threshold)
+        dry = getattr(args, "dry_run", False)
+        if dry:
+            print(f"\nDRY RUN — would prune {count} entries below {threshold:.0%} confidence\n")
+            for e in mem.entries:
+                if e.confidence < threshold:
+                    print(f"  would remove: [{int(e.confidence * 100)}%] {e.text}")
+        else:
+            save_memory(pruned, memory_path)
+            print(f"✓ Pruned {count} entries below {threshold:.0%} confidence")
+
+    elif cmd == "add":
+        entry_type_str = getattr(args, "entry_type", "hardware_observation")
+        text = getattr(args, "text", "")
+        confidence = float(getattr(args, "confidence", "0.8"))
+        tags = (getattr(args, "tags", "") or "").split(",")
+        tags = [t.strip() for t in tags if t.strip()]
+
+        if not text:
+            print(
+                "\nUsage: castor memory add --text 'observation text' [--type TYPE] [--confidence 0.8]\n"
+            )
+            return
+
+        try:
+            entry_type = EntryType(entry_type_str)
+        except ValueError:
+            valid = [e.value for e in EntryType]
+            print(f"Invalid type '{entry_type_str}'. Valid: {', '.join(valid)}")
+            return
+
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        entry = MemoryEntry(
+            id=make_entry_id(text, entry_type),
+            type=entry_type,
+            text=text,
+            confidence=confidence,
+            first_seen=now,
+            last_reinforced=now,
+            observation_count=1,
+            tags=tags,
+        )
+        mem = load_memory(memory_path)
+        rrn = getattr(args, "rrn", None) or os.getenv("CASTOR_RRN", mem.rrn)
+        mem.rrn = rrn
+        mem.entries.append(entry)
+        save_memory(mem, memory_path)
+        print(f"✓ Added entry [{int(confidence * 100)}%] {entry.type.value}: {text}")
+        if tags:
+            print(f"  Tags: {', '.join(tags)}")
+
+    elif cmd == "decay":
+        mem = load_memory(memory_path)
+        original_confs = {e.id: e.confidence for e in mem.entries}
+        mem = apply_confidence_decay(mem)
+        save_memory(mem, memory_path)
+        changed = [
+            (e, original_confs[e.id])
+            for e in mem.entries
+            if abs(e.confidence - original_confs.get(e.id, e.confidence)) > 0.001
+        ]
+        print(f"✓ Applied confidence decay — {len(changed)} entries updated")
+        for e, old in changed[:10]:
+            print(f"  [{int(old * 100)}% → {int(e.confidence * 100)}%] {e.text[:60]}")
+
+    else:
+        print("\n  castor memory — robot operational memory management\n")
+        print("  Commands:")
+        print("    castor memory show              Show all entries with confidence")
+        print("    castor memory add --text '...'  Add a manual entry")
+        print("    castor memory prune             Remove entries below threshold")
+        print("    castor memory decay             Apply time-based confidence decay\n")
 
 
 def cmd_migrate(args) -> None:
@@ -6252,30 +6389,49 @@ def main() -> None:
     # castor memory
     p_memory = sub.add_parser(
         "memory",
-        help="Manage robot memory and episode consolidation",
+        help="Manage robot operational memory (robot-memory.md)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Examples:\n  castor memory replay --since 2026-01-01 --dry-run",
+        epilog=(
+            "Examples:\n"
+            "  castor memory show\n"
+            "  castor memory add --text 'left wheel encoder intermittent' --type hardware_observation\n"
+            "  castor memory prune --threshold 0.15\n"
+            "  castor memory decay\n"
+        ),
     )
     memory_sub = p_memory.add_subparsers(dest="memory_cmd")
+    memory_sub.add_parser("show", help="Show all entries with confidence scores")
+    p_mem_add = memory_sub.add_parser("add", help="Manually add a memory entry")
+    p_mem_add.add_argument("--text", required=True, help="Observation text (max 500 chars)")
+    p_mem_add.add_argument(
+        "--type",
+        dest="entry_type",
+        default="hardware_observation",
+        choices=["hardware_observation", "environment_note", "behavior_pattern", "resolved"],
+        help="Entry type (default: hardware_observation)",
+    )
+    p_mem_add.add_argument(
+        "--confidence",
+        default="0.8",
+        help="Initial confidence 0.0–1.0 (default: 0.8)",
+    )
+    p_mem_add.add_argument("--tags", default="", help="Comma-separated tags")
+    p_mem_add.add_argument("--rrn", default=None, help="Robot RRN (default: CASTOR_RRN env)")
+    p_mem_prune = memory_sub.add_parser("prune", help="Remove entries below confidence threshold")
+    p_mem_prune.add_argument(
+        "--threshold", default="0.10", help="Min confidence to keep (default: 0.10)"
+    )
+    p_mem_prune.add_argument("--dry-run", action="store_true", help="Show what would be pruned")
+    memory_sub.add_parser("decay", help="Apply time-based confidence decay and save")
+    # Legacy: replay (kept for backward compat)
     p_mem_replay = memory_sub.add_parser(
         "replay", help="Replay historical episodes through updated consolidation pipeline"
     )
-    p_mem_replay.add_argument(
-        "--since",
-        default=None,
-        metavar="DATE",
-        help="Only replay episodes on/after this date (YYYY-MM-DD)",
-    )
-    p_mem_replay.add_argument("--episode-id", default=None, help="Replay a specific episode by ID")
-    p_mem_replay.add_argument(
-        "--episodes-dir", default=None, help="Path to L0-episodic/episodes/ directory"
-    )
-    p_mem_replay.add_argument(
-        "--dry-run", action="store_true", help="Simulate without writing changes"
-    )
-    p_mem_replay.add_argument(
-        "--verbose", "-v", action="store_true", help="Show each episode being replayed"
-    )
+    p_mem_replay.add_argument("--since", default=None, metavar="DATE")
+    p_mem_replay.add_argument("--episode-id", default=None)
+    p_mem_replay.add_argument("--episodes-dir", default=None)
+    p_mem_replay.add_argument("--dry-run", action="store_true")
+    p_mem_replay.add_argument("--verbose", "-v", action="store_true")
 
     # castor fleet
     p_fleet = sub.add_parser(

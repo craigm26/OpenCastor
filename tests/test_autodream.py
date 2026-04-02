@@ -71,7 +71,7 @@ def test_build_session_prompt_includes_all_sections(sample_session):
     assert "<date>2026-04-01</date>" in prompt
     assert "<health>" in prompt
     assert "<recent-errors>" in prompt
-    assert "<current-memory>" in prompt
+    assert "<existing-memory>" in prompt
     assert "connection refused" in prompt
 
 

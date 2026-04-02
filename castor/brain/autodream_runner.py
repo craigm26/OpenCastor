@@ -88,6 +88,81 @@ def _write_memory_atomic(content: str) -> None:
         raise
 
 
+def _write_structured_memory(new_entries: list[dict], date_str: str) -> None:
+    """Upsert new entries into the structured robot-memory.md via memory_schema."""
+    from datetime import datetime, timezone
+
+    from castor.brain.memory_schema import (
+        EntryType,
+        MemoryEntry,
+        apply_confidence_decay,
+        load_memory,
+        make_entry_id,
+        prune_entries,
+        save_memory,
+    )
+
+    mem = load_memory(str(MEMORY_FILE))
+    mem = apply_confidence_decay(mem)
+    mem.rrn = RRN if RRN != "unknown" else mem.rrn
+
+    existing_ids = {e.id for e in mem.entries}
+    existing_texts = {e.text.lower()[:80]: e for e in mem.entries}
+
+    now = datetime.now(timezone.utc)
+    added, reinforced = 0, 0
+
+    for raw in new_entries:
+        try:
+            etype = EntryType(raw.get("type", "hardware_observation"))
+        except ValueError:
+            etype = EntryType.HARDWARE_OBSERVATION
+
+        text = str(raw.get("text", ""))[:500]
+        confidence = float(raw.get("confidence", 0.7))
+        tags = list(raw.get("tags", []))
+        entry_id = make_entry_id(text, etype)
+
+        # Reinforce if text is very similar to an existing entry
+        key = text.lower()[:80]
+        if entry_id in existing_ids or key in existing_texts:
+            existing = existing_texts.get(key) or next(
+                (e for e in mem.entries if e.id == entry_id), None
+            )
+            if existing:
+                idx = mem.entries.index(existing)
+                mem.entries[idx] = existing.reinforce(nudge=0.1)
+                reinforced += 1
+                continue
+
+        # New entry
+        entry = MemoryEntry(
+            id=entry_id,
+            type=etype,
+            text=text,
+            confidence=confidence,
+            first_seen=now,
+            last_reinforced=now,
+            observation_count=1,
+            tags=tags,
+        )
+        mem.entries.append(entry)
+        existing_ids.add(entry_id)
+        existing_texts[key] = entry
+        added += 1
+
+    # Prune stale entries and save
+    mem, pruned = prune_entries(mem)
+    save_memory(mem, str(MEMORY_FILE))
+    logger.info(
+        "autoDream: structured memory updated — added=%d reinforced=%d pruned=%d total=%d",
+        added,
+        reinforced,
+        pruned,
+        len(mem.entries),
+    )
+
+
 def _append_dream_log(entry: dict) -> None:
     OPENCASTOR_DIR.mkdir(parents=True, exist_ok=True)
     with open(DREAM_LOG_FILE, "a", encoding="utf-8") as f:
@@ -160,10 +235,17 @@ def main() -> None:
     brain = AutoDreamBrain(provider=provider)
     result: DreamResult = brain.run(session)
 
-    # Write memory atomically
+    # Write memory — prefer structured entries, fall back to free-form text
     try:
-        _write_memory_atomic(result.updated_memory)
-        logger.info("autoDream: memory updated (%d chars)", len(result.updated_memory))
+        if result.entries:
+            _write_structured_memory(result.entries, date_str)
+        elif result.updated_memory:
+            _write_memory_atomic(result.updated_memory)
+            logger.info(
+                "autoDream: memory updated (free-form, %d chars)", len(result.updated_memory)
+            )
+        else:
+            logger.warning("autoDream: no memory output from brain — leaving unchanged")
     except Exception as exc:
         logger.error("autoDream: failed to write memory: %s", exc)
         sys.exit(1)
