@@ -13,7 +13,11 @@ icon_svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" rol
 
 with open(os.path.join(brand_dir, "icon.svg"), "w", encoding="utf-8") as f:
     f.write(icon_svg)
-with open(os.path.join(r"c:\Users\CraigM\source\repos\OpenCastor\site\assets", "icon.svg"), "w", encoding="utf-8") as f:
+with open(
+    os.path.join(r"c:\Users\CraigM\source\repos\OpenCastor\site\assets", "icon.svg"),
+    "w",
+    encoding="utf-8",
+) as f:
     f.write(icon_svg)
 
 lockup_svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" role="img" aria-label="OpenCastor logo">
@@ -49,7 +53,11 @@ with open(os.path.join(brand_dir, "lockup.svg"), "w", encoding="utf-8") as f:
 # And a dark-background variant lockup
 lockup_white_svg = lockup_svg.replace('fill="#0a0b1e">Open', 'fill="#ffffff">Open')
 
-with open(os.path.join(r"c:\Users\CraigM\source\repos\OpenCastor\site\assets", "logo-white.svg"), "w", encoding="utf-8") as f:
+with open(
+    os.path.join(r"c:\Users\CraigM\source\repos\OpenCastor\site\assets", "logo-white.svg"),
+    "w",
+    encoding="utf-8",
+) as f:
     f.write(lockup_white_svg)
 
 print("SVGs generated!")

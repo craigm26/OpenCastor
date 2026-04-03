@@ -48,12 +48,16 @@ def _build_readme_block() -> str:
         if "macos" in stack.compatibility and "arm64" in stack.compatibility:
             requires_parts.append("macOS, Apple Silicon")
         if not requires_parts:
-            requires_parts.append("[Ollama](https://ollama.com) installed" if "ollama" in stack.id else "—")
+            requires_parts.append(
+                "[Ollama](https://ollama.com) installed" if "ollama" in stack.id else "—"
+            )
         requires = ", ".join(requires_parts)
         lines.append(f"| `{stack.id}` | {stack.desc} | {requires} |")
 
     lines.append("")
-    lines.append("**On Apple Silicon, `apple_native` is the default.** The wizard will ask which Apple model profile fits your use case:")
+    lines.append(
+        "**On Apple Silicon, `apple_native` is the default.** The wizard will ask which Apple model profile fits your use case:"
+    )
     lines.append("")
     lines.append("| Apple Profile | Use case | Guardrails |")
     lines.append("|---|---|---|")
@@ -79,7 +83,8 @@ def _build_site_block() -> str:
         f'<code style="padding:2px 5px;font-size:0.8125rem">{stack.id}</code>' for stack in stacks
     )
     apple_html = ",\n          ".join(
-        f'<code style="padding:2px 5px;font-size:0.8125rem">{profile.id}</code>' for profile in apples
+        f'<code style="padding:2px 5px;font-size:0.8125rem">{profile.id}</code>'
+        for profile in apples
     )
     return (
         '<div class="wizard-tip reveal" style="margin-bottom:20px">\n'
@@ -124,4 +129,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

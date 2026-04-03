@@ -336,8 +336,12 @@ class TestRCANv22EnvelopeFields:
 
     def test_delegation_chain_max_depth_3_raises(self):
         hops = [
-            {"robot_rrn": f"rrn://r{i}", "scope": "control",
-             "issued_at": "2026-01-01T00:00:00Z", "expires_at": "2026-01-02T00:00:00Z"}
+            {
+                "robot_rrn": f"rrn://r{i}",
+                "scope": "control",
+                "issued_at": "2026-01-01T00:00:00Z",
+                "expires_at": "2026-01-02T00:00:00Z",
+            }
             for i in range(4)
         ]
         d = {
@@ -351,8 +355,12 @@ class TestRCANv22EnvelopeFields:
 
     def test_delegation_chain_exactly_3_is_ok(self):
         hops = [
-            {"robot_rrn": f"rrn://r{i}", "scope": "control",
-             "issued_at": "2026-01-01T00:00:00Z", "expires_at": "2026-01-02T00:00:00Z"}
+            {
+                "robot_rrn": f"rrn://r{i}",
+                "scope": "control",
+                "issued_at": "2026-01-01T00:00:00Z",
+                "expires_at": "2026-01-02T00:00:00Z",
+            }
             for i in range(3)
         ]
         d = {

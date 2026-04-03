@@ -16,7 +16,6 @@ import pytest
 from castor.auth.jwt_pqc import JWTError, issue_pqc_jwt, verify_pqc_jwt
 from castor.crypto.pqc import generate_robot_keypair_v1
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -97,9 +96,7 @@ def test_tampered_payload_raises_jwt_error(robot_keypair):
     padded = payload_b64 + "=" * (-len(payload_b64) % 4)
     original = json.loads(base64.urlsafe_b64decode(padded))
     original["sub"] = "rrn://evil/robot/hacked/000"
-    tampered_payload = base64.urlsafe_b64encode(
-        json.dumps(original).encode()
-    ).rstrip(b"=").decode()
+    tampered_payload = base64.urlsafe_b64encode(json.dumps(original).encode()).rstrip(b"=").decode()
 
     tampered_token = f"{header_b64}.{tampered_payload}.{sig_b64}"
     with pytest.raises(JWTError):

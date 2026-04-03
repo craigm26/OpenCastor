@@ -15,7 +15,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -24,15 +23,20 @@ def _make_anthropic_provider(model="claude-haiku-4-5-20251001"):
 
     Patches away token file reads so no real credentials are needed.
     """
-    with patch(
-        "castor.providers.anthropic_provider.AnthropicProvider._read_stored_token",
-        return_value=None,
-    ), patch("anthropic.Anthropic") as MockAnthropic:
+    with (
+        patch(
+            "castor.providers.anthropic_provider.AnthropicProvider._read_stored_token",
+            return_value=None,
+        ),
+        patch("anthropic.Anthropic") as MockAnthropic,
+    ):
         mock_client = MagicMock()
         MockAnthropic.return_value = mock_client
 
         # Avoid CacheStats / prompt_cache imports blowing up
-        with patch("castor.providers.anthropic_provider.build_cached_system_prompt", return_value=[]):
+        with patch(
+            "castor.providers.anthropic_provider.build_cached_system_prompt", return_value=[]
+        ):
             from castor.providers.anthropic_provider import AnthropicProvider
 
             provider = AnthropicProvider({"model": model, "api_key": "sk-ant-test"})
@@ -106,9 +110,7 @@ def test_claude_proxy_subprocess_timeout_is_60():
         )
         assert mock_run.called, "subprocess.run() was not called"
         timeout_used = mock_run.call_args.kwargs.get("timeout")
-        assert timeout_used == 60, (
-            f"Expected subprocess timeout=60, got: {timeout_used!r}"
-        )
+        assert timeout_used == 60, f"Expected subprocess timeout=60, got: {timeout_used!r}"
 
 
 # ── autodream_runner TimeoutError handling ────────────────────────────────────
@@ -128,10 +130,9 @@ def test_runner_exits_1_on_timeout_error(tmp_path, monkeypatch):
     mock_brain = MagicMock()
     mock_brain.run.side_effect = TimeoutError("provider timed out")
 
-    with patch(
-        "castor.providers.anthropic_provider.AnthropicProvider", return_value=mock_provider
-    ), patch(
-        "castor.brain.autodream_runner.AutoDreamBrain", return_value=mock_brain
+    with (
+        patch("castor.providers.anthropic_provider.AnthropicProvider", return_value=mock_provider),
+        patch("castor.brain.autodream_runner.AutoDreamBrain", return_value=mock_brain),
     ):
         with pytest.raises(SystemExit) as exc_info:
             runner_mod.main()

@@ -2,7 +2,7 @@
 
 import os
 import tempfile
-from unittest.mock import mock_open, patch
+from unittest.mock import patch
 
 from castor.brain.robot_context import (
     RobotContext,
@@ -40,8 +40,9 @@ def test_format_includes_rrn():
 
 def test_format_memory_uses_structured_schema(tmp_path):
     """build_robot_context uses structured memory_schema when file is valid YAML."""
-    import yaml
     from datetime import datetime, timezone
+
+    import yaml
 
     memory_data = {
         "schema_version": "1.0",

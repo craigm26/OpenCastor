@@ -13,7 +13,6 @@ from __future__ import annotations
 from castor.prompt_cache import build_cached_messaging_blocks
 from castor.providers.base import BaseProvider
 
-
 # ── build_cached_messaging_blocks ─────────────────────────────────────────────
 
 
