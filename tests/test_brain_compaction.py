@@ -1,6 +1,5 @@
 """Tests for castor.brain.compaction — post-compaction continuation injection."""
 
-
 from castor.brain.compaction import (
     CompactionStrategy,
     build_continuation_message,

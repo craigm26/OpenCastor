@@ -1,4 +1,5 @@
 """tests/test_mcp_server.py — MCP server: auth, LoA gating, tool listing."""
+
 from __future__ import annotations
 
 import secrets
@@ -18,6 +19,7 @@ from castor.mcp_auth import (
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def rcan_yaml(tmp_path: Path) -> Path:
@@ -44,6 +46,7 @@ def rcan_yaml(tmp_path: Path) -> Path:
 # ---------------------------------------------------------------------------
 # mcp_auth tests
 # ---------------------------------------------------------------------------
+
 
 class TestMcpAuth:
     def test_resolve_loa_read_only(self, rcan_yaml):
@@ -138,11 +141,13 @@ class TestMcpAuth:
 # LoA enforcement on MCP server tools
 # ---------------------------------------------------------------------------
 
+
 class TestLoaEnforcement:
     """Test that _check_loa raises PermissionError for insufficient LoA."""
 
     def test_read_tools_pass_loa0(self):
         import castor.mcp_server as srv
+
         original = srv._CLIENT_LOA
         try:
             srv._CLIENT_LOA = 0
@@ -152,6 +157,7 @@ class TestLoaEnforcement:
 
     def test_operate_tool_blocked_at_loa0(self):
         import castor.mcp_server as srv
+
         original = srv._CLIENT_LOA
         try:
             srv._CLIENT_LOA = 0
@@ -162,6 +168,7 @@ class TestLoaEnforcement:
 
     def test_admin_tool_blocked_at_loa1(self):
         import castor.mcp_server as srv
+
         original = srv._CLIENT_LOA
         try:
             srv._CLIENT_LOA = 1
@@ -172,6 +179,7 @@ class TestLoaEnforcement:
 
     def test_admin_tool_passes_at_loa3(self):
         import castor.mcp_server as srv
+
         original = srv._CLIENT_LOA
         try:
             srv._CLIENT_LOA = 3
@@ -181,6 +189,7 @@ class TestLoaEnforcement:
 
     def test_higher_loa_covers_lower_requirements(self):
         import castor.mcp_server as srv
+
         original = srv._CLIENT_LOA
         try:
             srv._CLIENT_LOA = 3
@@ -192,6 +201,7 @@ class TestLoaEnforcement:
 
     def test_error_message_includes_required_loa(self):
         import castor.mcp_server as srv
+
         original = srv._CLIENT_LOA
         try:
             srv._CLIENT_LOA = 0
@@ -204,6 +214,7 @@ class TestLoaEnforcement:
 # ---------------------------------------------------------------------------
 # MCP tool registration
 # ---------------------------------------------------------------------------
+
 
 class TestToolRegistration:
     def _get_tool_names(self):
@@ -269,10 +280,12 @@ class TestToolRegistration:
 # Config helpers
 # ---------------------------------------------------------------------------
 
+
 class TestConfigHelpers:
     def test_default_rrn_from_env(self, monkeypatch):
         monkeypatch.setenv("CASTOR_RRN", "RRN-000000000099")
         import castor.mcp_server as srv
+
         # _default_rrn reads env at call time
         with patch.dict("os.environ", {"CASTOR_RRN": "RRN-000000000099"}):
             assert "RRN-000000000099" in srv._default_rrn()
@@ -280,6 +293,7 @@ class TestConfigHelpers:
     def test_gateway_url_default(self, monkeypatch):
         monkeypatch.delenv("CASTOR_GATEWAY_URL", raising=False)
         from castor.mcp_server import _gateway_url
+
         with patch("castor.mcp_server._load_config", return_value={}):
             assert "8001" in _gateway_url() or "127.0.0.1" in _gateway_url()
 
@@ -289,6 +303,7 @@ class TestAdditionalTools:
 
     def test_robot_ping_blocked_below_loa0(self):
         import castor.mcp_server as srv
+
         original = srv._CLIENT_LOA
         try:
             srv._CLIENT_LOA = -1

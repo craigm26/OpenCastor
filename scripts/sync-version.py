@@ -49,8 +49,7 @@ def write_version_to_pyproject(version: str) -> None:
 def get_test_count() -> str:
     try:
         result = subprocess.run(
-            ["python", "-m", "pytest", "--co", "-q"],
-            capture_output=True, text=True, cwd=ROOT
+            ["python", "-m", "pytest", "--co", "-q"], capture_output=True, text=True, cwd=ROOT
         )
         lines = result.stdout.strip().splitlines()
         for line in reversed(lines):
@@ -67,7 +66,10 @@ def get_loc() -> str:
         result = subprocess.run(
             "find . -name '*.py' -not -path './.venv/*' -not -path './build/*' "
             "-not -path './.git/*' | xargs wc -l 2>/dev/null | tail -1",
-            shell=True, capture_output=True, text=True, cwd=ROOT
+            shell=True,
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
         )
         m = re.search(r"(\d+)", result.stdout.strip())
         if m:
@@ -84,14 +86,10 @@ def replace_version_in_file(path: Path, version: str, v_version: str) -> bool:
         return False
     text = path.read_text()
     # Match versioned strings like v2026.2.19.0, v2026.2.20.3, etc.
-    new_text = re.sub(
-        r'v20\d\d\.\d+\.\d+\.\d+',
-        v_version,
-        text
-    )
+    new_text = re.sub(r"v20\d\d\.\d+\.\d+\.\d+", v_version, text)
     if new_text != text:
         path.write_text(new_text)
-        count = len(re.findall(r'v20\d\d\.\d+\.\d+\.\d+', text))
+        count = len(re.findall(r"v20\d\d\.\d+\.\d+\.\d+", text))
         rel = str(path.relative_to(ROOT))
         print(f"  {rel:<35} → {v_version}  ({count} replacement(s))")
         return True
@@ -115,29 +113,23 @@ def update_stats(loc: str, tests: str) -> None:
         original = text
 
         # LOC patterns: "49,267 lines of code", "40,287", etc.
-        text = re.sub(
-            r'[\d,]+(?:\s+lines?\s+of\s+code)',
-            f'{loc} lines of code',
-            text
-        )
+        text = re.sub(r"[\d,]+(?:\s+lines?\s+of\s+code)", f"{loc} lines of code", text)
         # Standalone LOC numbers in stat divs
         text = re.sub(
             r'(<div class="stat-number">)\s*[\d,]+\s*(</div>\s*(?:<!--.*?-->)?\s*<div class="stat-label">Lines)',
-            f'\\g<1>{loc}\\g<2>',
-            text, flags=re.DOTALL
+            f"\\g<1>{loc}\\g<2>",
+            text,
+            flags=re.DOTALL,
         )
 
         # Test count patterns: "1,998 tests", "1,444 tests"
-        text = re.sub(
-            r'[\d,]+(?:\s+tests\b)',
-            f'{tests} tests',
-            text
-        )
+        text = re.sub(r"[\d,]+(?:\s+tests\b)", f"{tests} tests", text)
         # Standalone test numbers in stat divs
         text = re.sub(
             r'(<div class="stat-number">)\s*[\d,]+\s*(</div>\s*(?:<!--.*?-->)?\s*<div class="stat-label">Tests)',
-            f'\\g<1>{tests}\\g<2>',
-            text, flags=re.DOTALL
+            f"\\g<1>{tests}\\g<2>",
+            text,
+            flags=re.DOTALL,
         )
 
         if text != original:
@@ -172,7 +164,7 @@ def main():
         text = install_sh.read_text()
         new_text = re.sub(
             r'^(VERSION=")[^"]+(")',
-            f'\\g<1>{version}\\g<2>',
+            f"\\g<1>{version}\\g<2>",
             text,
             flags=re.MULTILINE,
         )

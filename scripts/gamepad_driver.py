@@ -49,23 +49,23 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Axis / button constants (Linux evdev)
 # ---------------------------------------------------------------------------
-ABS_X   = ecodes.ABS_X
-ABS_Y   = ecodes.ABS_Y
-ABS_Z   = ecodes.ABS_Z   # right stick X on some controllers
-ABS_RX  = ecodes.ABS_RX
-ABS_RY  = ecodes.ABS_RY
+ABS_X = ecodes.ABS_X
+ABS_Y = ecodes.ABS_Y
+ABS_Z = ecodes.ABS_Z  # right stick X on some controllers
+ABS_RX = ecodes.ABS_RX
+ABS_RY = ecodes.ABS_RY
 ABS_HAT0X = ecodes.ABS_HAT0X  # D-pad left(-1)/right(+1)
 ABS_HAT0Y = ecodes.ABS_HAT0Y  # D-pad up(-1)/down(+1)
 
-BTN_SOUTH  = ecodes.BTN_SOUTH   # B / Cross
-BTN_EAST   = ecodes.BTN_EAST    # A / Circle
-BTN_NORTH  = ecodes.BTN_NORTH   # X / Triangle
-BTN_WEST   = ecodes.BTN_WEST    # Y / Square
-BTN_TL     = ecodes.BTN_TL      # L1 / L
-BTN_TR     = ecodes.BTN_TR      # R1 / R
-BTN_TL2    = ecodes.BTN_TL2     # L2 / ZL
-BTN_TR2    = ecodes.BTN_TR2     # R2 / ZR
-BTN_START  = ecodes.BTN_START   # + / Options
+BTN_SOUTH = ecodes.BTN_SOUTH  # B / Cross
+BTN_EAST = ecodes.BTN_EAST  # A / Circle
+BTN_NORTH = ecodes.BTN_NORTH  # X / Triangle
+BTN_WEST = ecodes.BTN_WEST  # Y / Square
+BTN_TL = ecodes.BTN_TL  # L1 / L
+BTN_TR = ecodes.BTN_TR  # R1 / R
+BTN_TL2 = ecodes.BTN_TL2  # L2 / ZL
+BTN_TR2 = ecodes.BTN_TR2  # R2 / ZR
+BTN_START = ecodes.BTN_START  # + / Options
 BTN_SELECT = ecodes.BTN_SELECT  # - / Share
 
 
@@ -77,8 +77,7 @@ def find_gamepad() -> Optional[str]:
         # Must have absolute axes (joystick/gamepad) or gamepad buttons
         has_abs = evdev.ecodes.EV_ABS in caps
         has_btn = evdev.ecodes.EV_KEY in caps and any(
-            c in caps[evdev.ecodes.EV_KEY]
-            for c in (BTN_SOUTH, BTN_EAST, BTN_NORTH, BTN_WEST)
+            c in caps[evdev.ecodes.EV_KEY] for c in (BTN_SOUTH, BTN_EAST, BTN_NORTH, BTN_WEST)
         )
         if has_abs and has_btn:
             log.info("Auto-detected gamepad: %s (%s)", dev.name, path)
@@ -112,12 +111,12 @@ class GamepadDriver:
         self.turn = turn
 
         # Runtime state
-        self._linear   = 0.0
-        self._angular  = 0.0
+        self._linear = 0.0
+        self._angular = 0.0
         self._boosting = False
-        self._slow     = False
-        self._zl_held  = 0.0   # timestamp when ZL was pressed
-        self._zr_held  = 0.0
+        self._slow = False
+        self._zl_held = 0.0  # timestamp when ZL was pressed
+        self._zr_held = 0.0
         self._last_send = 0.0
         self._send_interval = 0.08  # 12.5 Hz
 
@@ -159,7 +158,9 @@ class GamepadDriver:
         ang = self._angular * (1.5 if self._boosting else 0.4 if self._slow else 1.0)
         lin = max(-1.0, min(1.0, lin * self.speed))
         ang = max(-1.0, min(1.0, ang * self.turn))
-        self._post("/api/action", {"type": "move", "linear": round(lin, 3), "angular": round(ang, 3)})
+        self._post(
+            "/api/action", {"type": "move", "linear": round(lin, 3), "angular": round(ang, 3)}
+        )
 
     def run(self):
         log.info("Gamepad driver running — press Ctrl-C to stop")
@@ -181,7 +182,7 @@ class GamepadDriver:
                 self._angular = -float(event.value)  # -1=right, +1=left
                 self._maybe_send(now)
             elif code == ABS_HAT0Y:
-                self._linear = -float(event.value)   # -1=forward, +1=backward
+                self._linear = -float(event.value)  # -1=forward, +1=backward
                 self._maybe_send(now)
             # Left stick — analogue fallback
             elif code == ABS_X:
@@ -192,15 +193,15 @@ class GamepadDriver:
                 self._maybe_send(now)
 
         elif event.type == evdev.ecodes.EV_KEY:
-            code   = event.code
+            code = event.code
             pressed = event.value == 1  # 1=press, 0=release, 2=repeat
 
-            if code in (BTN_SOUTH, BTN_EAST) and pressed:   # A / B → stop
+            if code in (BTN_SOUTH, BTN_EAST) and pressed:  # A / B → stop
                 self._linear = self._angular = 0.0
                 self._post("/api/stop")
                 log.info("STOP")
 
-            elif code == BTN_NORTH and pressed:               # X → status
+            elif code == BTN_NORTH and pressed:  # X → status
                 try:
                     r = requests.post(
                         self.api + "/api/command",
@@ -212,22 +213,22 @@ class GamepadDriver:
                 except Exception:
                     pass
 
-            elif code == BTN_WEST and pressed:                # Y → e-stop
+            elif code == BTN_WEST and pressed:  # Y → e-stop
                 self._linear = self._angular = 0.0
                 self._post("/api/stop")
                 log.info("E-STOP via Y")
 
-            elif code == BTN_TL:                              # L → boost toggle
+            elif code == BTN_TL:  # L → boost toggle
                 if pressed:
                     self._boosting = not self._boosting
                     log.info("Boost: %s", self._boosting)
 
-            elif code == BTN_TR:                              # R → slow toggle
+            elif code == BTN_TR:  # R → slow toggle
                 if pressed:
                     self._slow = not self._slow
                     log.info("Slow: %s", self._slow)
 
-            elif code == BTN_TL2:                             # ZL → hold 2s reboot
+            elif code == BTN_TL2:  # ZL → hold 2s reboot
                 if pressed:
                     self._zl_held = now
                 elif self._zl_held and (now - self._zl_held) >= 2.0:
@@ -237,7 +238,7 @@ class GamepadDriver:
                 else:
                     self._zl_held = 0.0
 
-            elif code == BTN_TR2:                             # ZR → hold 2s shutdown
+            elif code == BTN_TR2:  # ZR → hold 2s shutdown
                 if pressed:
                     self._zr_held = now
                 elif self._zr_held and (now - self._zr_held) >= 2.0:
@@ -247,12 +248,12 @@ class GamepadDriver:
                 else:
                     self._zr_held = 0.0
 
-            elif code == BTN_START and pressed:               # + → e-stop
+            elif code == BTN_START and pressed:  # + → e-stop
                 self._linear = self._angular = 0.0
                 self._post("/api/stop")
                 log.info("E-STOP via +")
 
-            elif code == BTN_SELECT and pressed:              # - → clear estop
+            elif code == BTN_SELECT and pressed:  # - → clear estop
                 self._post("/api/estop/clear")
                 log.info("Clear e-stop")
 

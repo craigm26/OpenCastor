@@ -6,7 +6,6 @@ import pytest
 
 from castor.skills.rcan_skills import RCAN_SKILLS, get_skill, list_skills
 
-
 # ---------------------------------------------------------------------------
 # 1. list_skills() returns all 5 skills
 # ---------------------------------------------------------------------------
@@ -156,14 +155,18 @@ def test_rcan_audit_handler_missing_log():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("skill_name", ["rcan_status", "rcan_telemetry", "rcan_navigate", "rcan_estop", "rcan_audit"])
+@pytest.mark.parametrize(
+    "skill_name", ["rcan_status", "rcan_telemetry", "rcan_navigate", "rcan_estop", "rcan_audit"]
+)
 def test_skill_has_required_keys(skill_name):
     skill = get_skill(skill_name)
     for key in ("name", "description", "rcan_message_type", "loa_required", "version", "handler"):
         assert key in skill, f"'{key}' missing from skill '{skill_name}'"
 
 
-@pytest.mark.parametrize("skill_name", ["rcan_status", "rcan_telemetry", "rcan_navigate", "rcan_estop", "rcan_audit"])
+@pytest.mark.parametrize(
+    "skill_name", ["rcan_status", "rcan_telemetry", "rcan_navigate", "rcan_estop", "rcan_audit"]
+)
 def test_skill_handler_is_callable(skill_name):
     skill = get_skill(skill_name)
     assert callable(skill["handler"])
@@ -200,7 +203,9 @@ def test_list_skills_returns_copy():
 
 
 def test_package_exports():
-    from castor.skills import RCAN_SKILLS as _RC, get_skill as _gs, list_skills as _ls
+    from castor.skills import RCAN_SKILLS as _RC
+    from castor.skills import get_skill as _gs
+    from castor.skills import list_skills as _ls
 
     assert callable(_ls)
     assert callable(_gs)

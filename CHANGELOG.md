@@ -6,6 +6,17 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 
 ---
 
+## [2026.4.3.0] - 2026-04-02
+
+### Fixed
+- `castor/brain/autodream.py` — add 60 s timeout to autoDream LLM provider call; prevents indefinite hang on slow/stalled providers (#842)
+- `scripts/autodream.sh` — unset stale `ANTHROPIC_API_KEY` before dream loop to avoid key conflicts with the configured provider (#842)
+
+### Tests
+- `tests/test_autodream_e2e.py` — end-to-end validation: `dream-log.jsonl` schema checks + memory write round-trip (#843)
+
+---
+
 ## [2026.4.2.0] - 2026-04-02
 
 ### Added — Structured Robot Memory (KAIROS v2)

@@ -1,8 +1,9 @@
 """Tests for castor/tools_ext/permissions.py and profiles.py."""
 
-from castor.tools_ext.permissions import PermissionMode, check_permission, get_tools_for_loa
-from castor.tools_ext.profiles import parse_profile_prefix, get_profile, PROFILES
 import pytest
+
+from castor.tools_ext.permissions import PermissionMode, check_permission, get_tools_for_loa
+from castor.tools_ext.profiles import get_profile, parse_profile_prefix
 
 
 # --- permissions ---
