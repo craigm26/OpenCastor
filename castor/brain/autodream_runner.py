@@ -43,6 +43,56 @@ DREAM_LOG_FILE = OPENCASTOR_DIR / "dream-log.jsonl"
 GATEWAY_LOG = Path(os.getenv("CASTOR_GATEWAY_LOG", "/tmp/castor-gateway.log"))
 
 
+def _load_recent_commits() -> list[str]:
+    """Return last 5 git commit oneline summaries from OPENCASTOR_DIR."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(OPENCASTOR_DIR), "log", "--oneline", "-5"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        lines = result.stdout.strip().splitlines()
+        return [ln.strip() for ln in lines if ln.strip()]
+    except Exception:
+        return []
+
+
+def _load_bridge_log_tail(max_lines: int = 20) -> list[str]:
+    """Return the last *max_lines* lines of /tmp/castor-bridge.log (if it exists)."""
+    bridge_log = Path("/tmp/castor-bridge.log")
+    try:
+        lines = bridge_log.read_text(encoding="utf-8", errors="replace").splitlines()
+        return [ln.strip() for ln in lines[-max_lines:] if ln.strip()]
+    except Exception:
+        return []
+
+
+def _load_cron_outcomes(max_entries: int = 3) -> list[str]:
+    """Return the *max_entries* most recent dream-log.jsonl 'summary' values."""
+    try:
+        lines = DREAM_LOG_FILE.read_text(encoding="utf-8").splitlines()
+        summaries = []
+        for raw in reversed(lines):
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                entry = json.loads(raw)
+                summary = entry.get("summary", "")
+                if summary:
+                    summaries.append(summary)
+            except Exception:
+                continue
+            if len(summaries) >= max_entries:
+                break
+        return list(reversed(summaries))
+    except Exception:
+        return []
+
+
 def _load_health_report(date_str: str) -> dict:
     path = OPENCASTOR_DIR / f"health-{date_str.replace('-', '')}.json"
     try:
@@ -210,12 +260,18 @@ def main() -> None:
     health = _load_health_report(date_str)
     logs = _load_session_logs()
     memory = _load_memory()
+    recent_commits = _load_recent_commits()
+    bridge_log_tail = _load_bridge_log_tail()
+    cron_outcomes = _load_cron_outcomes()
 
     session = DreamSession(
         session_logs=logs,
         robot_memory=memory,
         health_report=health,
         date=date_str,
+        recent_commits=recent_commits,
+        bridge_log_tail=bridge_log_tail,
+        cron_outcomes=cron_outcomes,
     )
 
     if DRY_RUN:

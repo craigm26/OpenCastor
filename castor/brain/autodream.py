@@ -48,6 +48,9 @@ class DreamSession:
     robot_memory: str
     health_report: dict
     date: str
+    recent_commits: list[str] = field(default_factory=list)  # last 5 git commits
+    bridge_log_tail: list[str] = field(default_factory=list)  # last 20 lines of bridge log
+    cron_outcomes: list[str] = field(default_factory=list)  # last 3 dream-log.jsonl summaries
 
 
 @dataclass
@@ -148,6 +151,10 @@ class AutoDreamBrain:
         except Exception:
             pass  # Fall back to raw text
 
+        commits_text = "\n".join(session.recent_commits) if session.recent_commits else "(none)"
+        bridge_text = "\n".join(session.bridge_log_tail) if session.bridge_log_tail else "(none)"
+        outcomes_text = "\n".join(session.cron_outcomes) if session.cron_outcomes else "(none)"
+
         return (
             "<dream-session>\n"
             f"<date>{session.date}</date>\n"
@@ -155,6 +162,15 @@ class AutoDreamBrain:
             "<recent-errors>\n"
             f"{error_lines}\n"
             "</recent-errors>\n"
+            "<recent-code-changes>\n"
+            f"{commits_text}\n"
+            "</recent-code-changes>\n"
+            "<bridge-activity>\n"
+            f"{bridge_text}\n"
+            "</bridge-activity>\n"
+            "<recent-dream-outcomes>\n"
+            f"{outcomes_text}\n"
+            "</recent-dream-outcomes>\n"
             "<existing-memory>\n"
             f"{existing_memory}\n"
             "</existing-memory>\n"
