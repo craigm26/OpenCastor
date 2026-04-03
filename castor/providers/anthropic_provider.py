@@ -165,6 +165,7 @@ class AnthropicProvider(BaseProvider):
                 system=system_arg,
                 messages=[{"role": "user", "content": content}],
                 extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
+                timeout=60.0,
             )
             # Track cache stats and log per-call savings
             usage = response.usage
@@ -318,6 +319,7 @@ class AnthropicProvider(BaseProvider):
                 system=system_arg,
                 messages=[{"role": "user", "content": content}],
                 extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
+                timeout=60.0,
             ) as stream:
                 yield from stream.text_stream
         except Exception as e:

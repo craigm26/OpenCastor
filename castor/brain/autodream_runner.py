@@ -233,7 +233,11 @@ def main() -> None:
         sys.exit(1)
 
     brain = AutoDreamBrain(provider=provider)
-    result: DreamResult = brain.run(session)
+    try:
+        result: DreamResult = brain.run(session)
+    except (TimeoutError, __import__("subprocess").TimeoutExpired) as exc:
+        logger.error("autoDream: brain.run() timed out — %s", exc)
+        sys.exit(1)
 
     # Write memory — prefer structured entries, fall back to free-form text
     try:

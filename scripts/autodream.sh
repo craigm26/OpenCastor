@@ -77,6 +77,7 @@ log "Health: cpu=${CPU_TEMP}°C disk=${DISK_PCT}% mem_free=${MEM_FREE}MB gateway
 log "--- Phase 2: LLM memory consolidation ---"
 
 if [[ "$DRY_RUN" == "false" ]]; then
+  unset ANTHROPIC_API_KEY
   DREAM_SUMMARY=$(cd "$OPENCASTOR_DIR" && venv/bin/python -m castor.brain.autodream_runner 2>>"$LOG_FILE" || echo "brain unavailable — shell fallback")
   log "Dream summary: $DREAM_SUMMARY"
 else
