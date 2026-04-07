@@ -591,6 +591,15 @@ class AgentHarness:
         builder = self._get_context_builder()
         built: BuiltContext = await builder.build(ctx, history=[])
 
+        # 1a. Post-compaction continuation — prevents cold-start recap turns
+        if built.was_compacted and built.compact_summary:
+            from castor.brain.compaction import build_continuation_message
+
+            suppress = bool(ctx.mission_state.get("autonomous"))
+            built.messages.insert(
+                0, build_continuation_message(built.compact_summary, suppress_follow_up=suppress)
+            )
+
         # 2. Run pre-turn hooks
         for hook in self.hooks:
             span_name = f"hook.pre_turn.{type(hook).__name__}"

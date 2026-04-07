@@ -58,6 +58,7 @@ class BuiltContext:
     messages: list[dict]
     token_estimate: int
     was_compacted: bool = False
+    compact_summary: str = ""
     skill_injected: Optional[str] = None
     rag_chunks: int = 0
     telemetry_injected: bool = False
@@ -173,6 +174,7 @@ class ContextBuilder:
 
         # 9. Compact if needed
         was_compacted = False
+        compact_summary = ""
         if self._context_budget > 1.0:
             # Absolute token count (e.g. 8192)
             budget_tokens = int(self._context_budget)
@@ -180,7 +182,9 @@ class ContextBuilder:
             # Ratio of model context limit (e.g. 0.8)
             budget_tokens = int(self._context_limit * self._context_budget)
         if token_estimate > budget_tokens and len(messages) > 4:
-            messages, was_compacted = await self._compact_history(messages, budget_tokens)
+            messages, was_compacted, compact_summary = await self._compact_history(
+                messages, budget_tokens
+            )
             token_estimate = self._estimate_tokens(system_prompt, messages)
 
         logger.debug(
@@ -197,6 +201,7 @@ class ContextBuilder:
             messages=messages,
             token_estimate=token_estimate,
             was_compacted=was_compacted,
+            compact_summary=compact_summary,
             skill_injected=skill_injected,
             rag_chunks=rag_chunks,
             telemetry_injected=telemetry_injected,
@@ -379,11 +384,11 @@ class ContextBuilder:
 
     async def _compact_history(
         self, messages: list[dict], budget_tokens: int
-    ) -> tuple[list[dict], bool]:
+    ) -> tuple[list[dict], bool, str]:
         """Summarise the oldest 50% of messages using a cheap model.
 
-        Returns (compacted_messages, True).  Falls back to simple truncation
-        if no provider is available for summarisation.
+        Returns (compacted_messages, True, summary_text).  Falls back to
+        simple truncation if no provider is available for summarisation.
         """
         try:
             mid = len(messages) // 2
@@ -396,11 +401,11 @@ class ContextBuilder:
                 *recent_messages,
             ]
             logger.info("Context compacted: %d → %d messages", len(messages), len(compacted))
-            return compacted, True
+            return compacted, True, summary
         except Exception as exc:
             logger.warning("Compaction failed, falling back to truncation: %s", exc)
             # Simple truncation: keep last 20 messages
-            return messages[-20:], True
+            return messages[-20:], True, ""
 
     async def _summarise_messages(self, messages: list[dict]) -> str:
         """Summarise a list of messages using the configured provider."""
