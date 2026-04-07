@@ -69,6 +69,10 @@ class ProcFS:
         if config:
             budget = config.get("agent", {}).get("latency_budget_ms", 3000)
         self.ns.write("/proc/loop/budget_ms", budget)
+        self.ns.write(
+            "/proc/loop/motor_hz",
+            {"reactive_hz": 0, "fast_hz": 0, "planner_hz": 0, "overall_hz": 0},
+        )
 
         # Brain state
         provider = "none"
@@ -119,6 +123,10 @@ class ProcFS:
         self.ns.write("/proc/loop/iteration", self._iteration)
         self.ns.write("/proc/loop/latency_ms", round(latency_ms, 2))
         self.update_uptime()
+
+    def record_motor_hz(self, hz_data: dict):
+        """Record per-layer motor command frequency from TieredBrain.effective_hz()."""
+        self.ns.write("/proc/loop/motor_hz", hz_data)
 
     def record_thought(self, raw_text: str, action: Optional[dict] = None):
         """Record that the brain produced a thought."""
@@ -176,6 +184,7 @@ class ProcFS:
                 "iteration": self.ns.read("/proc/loop/iteration"),
                 "latency_ms": self.ns.read("/proc/loop/latency_ms"),
                 "budget_ms": self.ns.read("/proc/loop/budget_ms"),
+                "motor_hz": self.ns.read("/proc/loop/motor_hz"),
             },
             "brain": {
                 "provider": self.ns.read("/proc/brain/provider"),

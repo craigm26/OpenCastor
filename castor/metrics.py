@@ -490,6 +490,10 @@ class MetricsRegistry:
         self._gauges["opencastor_acb_error_flags"] = Gauge(
             "opencastor_acb_error_flags", "ACB joint error flags bitmask"
         )
+        self._gauges["opencastor_motor_command_hz"] = Gauge(
+            "opencastor_motor_command_hz",
+            "Effective motor command frequency per brain layer",
+        )
         # Histogram
         self._histograms["opencastor_loop_duration_ms"] = Histogram(
             "opencastor_loop_duration_ms",
@@ -537,6 +541,14 @@ class MetricsRegistry:
         c = self._counters.get("opencastor_commands_total")
         if c and self._enabled:
             c.inc(robot=robot, source=source)
+
+    def record_motor_hz(self, hz_data: dict, robot: str = "robot") -> None:
+        """Record per-layer motor command frequency gauges."""
+        g = self._gauges.get("opencastor_motor_command_hz")
+        if g and self._enabled:
+            for layer in ("reactive", "fast", "planner", "overall"):
+                value = hz_data.get(f"{layer}_hz", 0.0)
+                g.set(value, robot=robot, layer=layer)
 
     def record_error(self, error_type: str, robot: str = "robot") -> None:
         c = self._counters.get("opencastor_errors_total")

@@ -1553,12 +1553,19 @@ def main():
             latency = (time.time() - loop_start) * 1000
             fs.proc.record_loop_iteration(latency)
 
+            # Motor command frequency tracking
+            if tiered is not None:
+                _motor_hz = tiered.effective_hz()
+                fs.proc.record_motor_hz(_motor_hz)
+
             # Prometheus metrics (issue #99)
             try:
                 from castor.metrics import get_registry as _get_metrics_registry
 
                 _metrics_robot = config.get("metadata", {}).get("robot_name", "robot")
                 _get_metrics_registry().record_loop(latency, robot=_metrics_robot)
+                if tiered is not None:
+                    _get_metrics_registry().record_motor_hz(_motor_hz, robot=_metrics_robot)
             except Exception:
                 pass
 
