@@ -203,3 +203,60 @@ class TestAuditLogRead:
 
         entries = audit.read()
         assert entries == []
+
+
+class TestAuditLogWatermarkIndex:
+    def test_log_motor_command_stores_watermark_in_entry(self, tmp_path):
+        from castor.audit import AuditLog
+        log_file = str(tmp_path / "audit.log")
+        audit = AuditLog(log_path=log_file)
+
+        action = {"type": "move", "linear": 0.3, "angular": 0.0}
+        token = "rcan-wm-v1:" + "a" * 32
+        audit.log_motor_command(action, watermark_token=token)
+
+        import json
+        with open(log_file) as f:
+            entry = json.loads(f.readline())
+        assert entry["watermark_token"] == token
+
+    def test_watermark_index_updated_after_log(self, tmp_path):
+        from castor.audit import AuditLog
+        log_file = str(tmp_path / "audit.log")
+        audit = AuditLog(log_path=log_file)
+
+        action = {"type": "move", "linear": 0.3, "angular": 0.0}
+        token = "rcan-wm-v1:" + "b" * 32
+        audit.log_motor_command(action, watermark_token=token)
+
+        assert token in audit._watermark_index
+        assert audit._watermark_index[token]["watermark_token"] == token
+
+    def test_watermark_index_built_from_existing_log(self, tmp_path):
+        import json
+        from castor.audit import AuditLog
+
+        log_file = str(tmp_path / "audit.log")
+        token = "rcan-wm-v1:" + "c" * 32
+        entry = {
+            "ts": "2026-04-10T00:00:00",
+            "event": "motor_command",
+            "source": "brain",
+            "prev_hash": "GENESIS",
+            "watermark_token": token,
+        }
+        with open(log_file, "w") as f:
+            f.write(json.dumps(entry) + "\n")
+
+        audit = AuditLog(log_path=log_file)
+        assert token in audit._watermark_index
+
+    def test_no_watermark_token_no_index_entry(self, tmp_path):
+        from castor.audit import AuditLog
+        log_file = str(tmp_path / "audit.log")
+        audit = AuditLog(log_path=log_file)
+
+        action = {"type": "move", "linear": 0.1, "angular": 0.0}
+        audit.log_motor_command(action)  # no watermark_token
+
+        assert len(audit._watermark_index) == 0

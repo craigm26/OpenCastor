@@ -61,6 +61,28 @@ class AuditLog:
         self._path = log_path or _AUDIT_FILE
         self._lock = threading.Lock()
         self._commitment_engine: Optional[Any] = None  # CommitmentEngine | None
+        self._watermark_index: dict[str, dict] = {}
+        self._build_watermark_index()
+
+    def _build_watermark_index(self) -> None:
+        """Scan existing log file and populate _watermark_index from watermark_token fields."""
+        if not os.path.exists(self._path):
+            return
+        try:
+            with open(self._path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                        token = entry.get("watermark_token")
+                        if token:
+                            self._watermark_index[token] = entry
+                    except (json.JSONDecodeError, TypeError):
+                        continue
+        except OSError:
+            pass
 
     def attach_commitment_engine(self, engine: Optional[Any]) -> None:
         """Attach a CommitmentEngine for cryptographic audit sealing.
@@ -147,7 +169,13 @@ class AuditLog:
     # Convenience loggers
     # ------------------------------------------------------------------
 
-    def log_motor_command(self, action: dict, source: str = "brain", thought=None):
+    def log_motor_command(
+        self,
+        action: dict,
+        source: str = "brain",
+        thought=None,
+        watermark_token: str | None = None,
+    ):
         """Log a motor command.
 
         Args:
@@ -156,6 +184,8 @@ class AuditLog:
             thought: Optional :class:`~castor.providers.base.Thought` that produced
                      the action.  When provided, an ``ai`` sub-dict is included in
                      the audit entry with model identity and confidence fields.
+            watermark_token: Optional RCAN watermark token to embed in the log entry
+                             and index for fast lookup.
         """
         kwargs = dict(
             action_type=action.get("type", "?"),
@@ -174,7 +204,17 @@ class AuditLog:
                 "thought_id": getattr(thought, "id", None),
                 "escalated": getattr(thought, "escalated", False),
             }
+        if watermark_token is not None:
+            kwargs["watermark_token"] = watermark_token
         self.log("motor_command", source=source, **kwargs)
+        if watermark_token is not None:
+            index_entry = {
+                "event": "motor_command",
+                "source": source,
+                "watermark_token": watermark_token,
+            }
+            index_entry.update(kwargs)
+            self._watermark_index[watermark_token] = index_entry
 
     def log_approval(self, approval_id: int, decision: str, source: str = "cli"):
         """Log an approval decision."""
