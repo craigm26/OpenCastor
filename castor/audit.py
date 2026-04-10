@@ -214,7 +214,8 @@ class AuditLog:
                 "watermark_token": watermark_token,
             }
             index_entry.update(kwargs)
-            self._watermark_index[watermark_token] = index_entry
+            with self._lock:
+                self._watermark_index[watermark_token] = index_entry
 
     def log_approval(self, approval_id: int, decision: str, source: str = "cli"):
         """Log an approval decision."""
