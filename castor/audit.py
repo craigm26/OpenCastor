@@ -165,6 +165,13 @@ class AuditLog:
             except Exception as exc:
                 logger.debug(f"Audit write failed: {exc}")
 
+            # Update watermark index atomically with the write, using the fully-decorated
+            # entry (includes ts, prev_hash, commitment_id, etc.).  Must happen inside
+            # this lock block to avoid a race window between write and index update.
+            wm_token = entry.get("watermark_token")
+            if wm_token and hasattr(self, "_watermark_index"):
+                self._watermark_index[wm_token] = entry
+
     # ------------------------------------------------------------------
     # Convenience loggers
     # ------------------------------------------------------------------
@@ -207,15 +214,6 @@ class AuditLog:
         if watermark_token is not None:
             kwargs["watermark_token"] = watermark_token
         self.log("motor_command", source=source, **kwargs)
-        if watermark_token is not None:
-            index_entry = {
-                "event": "motor_command",
-                "source": source,
-                "watermark_token": watermark_token,
-            }
-            index_entry.update(kwargs)
-            with self._lock:
-                self._watermark_index[watermark_token] = index_entry
 
     def log_approval(self, approval_id: int, decision: str, source: str = "cli"):
         """Log an approval decision."""
