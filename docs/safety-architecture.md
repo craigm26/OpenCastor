@@ -16,7 +16,7 @@ This document maps OpenCastor's safety implementation to the RCAN protocol provi
 | HiTL gates | §16.3 | `castor/rcan/rbac.py` | `RBACManager.require_hitl()` |
 | Audit chain | §16.1 / §6 | `castor/audit.py` | `AuditChain.append()` |
 | AI block logging | §16.1 | `castor/brain/robot_context.py` | `dispatch_command()` |
-| ML-DSA-65 signing | §9 / §1.6 | `castor/rcan/pqc.py` | `sign_message()`, `verify_message()` |
+| ML-DSA-65 signing | §9 / §1.6 | `castor/rcan/message_signing.py` | `sign_message_dict()` |
 | RBAC enforcement | §2 | `castor/rcan/rbac.py` | `RBACManager.check_scope()` |
 | Geofencing | §GEOFENCE | `castor/fs/safety.py` | `GeofenceSafety.check_position()` |
 | Operational memory | robot-memory.md | `castor/brain/memory_schema.py` | `RobotMemory.load()`, `.filter_eligible()` |
@@ -106,7 +106,7 @@ If any record has been modified, the hash mismatch is reported with the record i
 
 ---
 
-## ML-DSA-65 Signing (`castor/rcan/pqc.py`)
+## ML-DSA-65 Signing (`castor/rcan/message_signing.py`)
 
 Every outbound RCAN message is signed with the robot's ML-DSA-65 private key. Key generation at first startup:
 
