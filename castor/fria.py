@@ -9,15 +9,15 @@ Provides:
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import logging
 import os
 from datetime import datetime, timezone
 from typing import Any
 
-from castor.rcan.message_signing import get_message_signer
-
 from castor.conformance import ConformanceChecker, ConformanceResult
+from castor.rcan.message_signing import get_message_signer
 
 logger = logging.getLogger("OpenCastor.FRIA")
 
@@ -208,7 +208,7 @@ def sign_fria(document: dict, config: dict) -> dict:
     key_id = getattr(signer, "_pq_key_id", "")
 
     # Build document with signing_key but without sig
-    doc = dict(document)
+    doc = copy.deepcopy(document)
     doc["signing_key"] = {
         "alg": "ml-dsa-65",
         "kid": key_id,

@@ -223,7 +223,7 @@ class TestSignFria:
             "hardware_observations": [],
         }
 
-    def _mock_signer(self, pub=b"\x01" * 32, priv=b"\x02" * 64):
+    def _mock_signer(self, pub=b"\x01" * 32):
         signer = MagicMock()
         signer.public_key_bytes.return_value = pub
         signer._pq_key_id = "test-kid"
@@ -246,6 +246,7 @@ class TestSignFria:
 
     def test_sig_value_is_base64url(self):
         import base64
+
         from castor.fria import sign_fria
         signer = self._mock_signer()
         with patch("castor.fria.get_message_signer", return_value=signer):
@@ -256,6 +257,7 @@ class TestSignFria:
 
     def test_sign_bytes_called_with_canonical_json(self):
         import json
+
         from castor.fria import sign_fria
         signer = self._mock_signer()
         with patch("castor.fria.get_message_signer", return_value=signer):
