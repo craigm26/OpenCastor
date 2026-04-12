@@ -597,3 +597,87 @@ class TestRenderFriaHtml:
         html = render_fria_html(doc)
         assert isinstance(html, str)
         assert "RRN-000000000001" in html
+
+
+class TestFriaModelProvenance:
+    """Art. 10 — model provenance block in FRIA."""
+
+    def _build(self, config=None):
+        from unittest.mock import patch
+
+        from castor.fria import build_fria_document
+
+        cfg = config or {
+            "rcan_version": "2.2",
+            "metadata": {"rrn": "RRN-000000000001"},
+            "reactive": {"min_obstacle_m": 0.3},
+            "agent": {"provider": "google", "model": "gemini-2.5-flash"},
+        }
+        with patch("castor.fria.ConformanceChecker") as MockCC:
+            MockCC.return_value.run_all.return_value = []
+            MockCC.return_value.summary.return_value = {
+                "score": 90, "pass": 5, "warn": 0, "fail": 0
+            }
+            return build_fria_document(cfg, "safety_component", "Indoor nav")
+
+    def test_model_provenance_block_present(self):
+        doc = self._build()
+        assert "model_provenance" in doc
+
+    def test_model_provenance_provider(self):
+        doc = self._build()
+        assert doc["model_provenance"]["provider"] == "google"
+
+    def test_model_provenance_model(self):
+        doc = self._build()
+        assert doc["model_provenance"]["model"] == "gemini-2.5-flash"
+
+    def test_model_provenance_art10_responsibility(self):
+        doc = self._build()
+        assert doc["model_provenance"]["art10_responsibility"] == "upstream_ai_provider"
+
+
+class TestFriaAnnexIVCoverage:
+    """Art. 11 — Annex IV coverage table in FRIA."""
+
+    def _build(self):
+        from unittest.mock import patch
+
+        from castor.fria import build_fria_document
+
+        cfg = {
+            "rcan_version": "2.2",
+            "metadata": {"rrn": "RRN-000000000001"},
+            "reactive": {"min_obstacle_m": 0.3},
+            "agent": {"provider": "google", "model": "gemini-2.5-flash"},
+        }
+        with patch("castor.fria.ConformanceChecker") as MockCC:
+            MockCC.return_value.run_all.return_value = []
+            MockCC.return_value.summary.return_value = {
+                "score": 90, "pass": 5, "warn": 0, "fail": 0
+            }
+            return build_fria_document(cfg, "safety_component", "Indoor nav")
+
+    def test_annex_iv_coverage_present(self):
+        doc = self._build()
+        assert "annex_iv_coverage" in doc
+
+    def test_annex_iv_coverage_is_list(self):
+        doc = self._build()
+        assert isinstance(doc["annex_iv_coverage"], list)
+
+    def test_annex_iv_has_9_points(self):
+        doc = self._build()
+        assert len(doc["annex_iv_coverage"]) == 9
+
+    def test_each_entry_has_point_title_status(self):
+        doc = self._build()
+        for entry in doc["annex_iv_coverage"]:
+            assert "point" in entry
+            assert "title" in entry
+            assert "status" in entry
+
+    def test_point_numbers_sequential(self):
+        doc = self._build()
+        points = [e["point"] for e in doc["annex_iv_coverage"]]
+        assert points == list(range(1, 10))

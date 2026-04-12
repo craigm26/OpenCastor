@@ -42,6 +42,63 @@ ANNEX_III_BASES = frozenset(
     }
 )
 
+ANNEX_IV_COVERAGE = [
+    {
+        "point": 1,
+        "title": "General description of the AI system",
+        "fria_field": "system",
+        "status": "covered",
+    },
+    {
+        "point": 2,
+        "title": "Detailed description of elements and development process",
+        "fria_field": "conformance",
+        "status": "covered",
+    },
+    {
+        "point": 3,
+        "title": "Monitoring, functioning, and control measures",
+        "fria_field": "human_oversight",
+        "status": "covered",
+    },
+    {
+        "point": 4,
+        "title": "Performance metrics and validation results",
+        "fria_field": "safety_benchmarks",
+        "status": "covered_when_benchmark_provided",
+    },
+    {
+        "point": 5,
+        "title": "Risk management system (Art. 9)",
+        "fria_field": "hardware_observations",
+        "status": "covered",
+    },
+    {
+        "point": 6,
+        "title": "Changes made throughout the lifecycle",
+        "fria_field": None,
+        "status": "deployer_responsibility",
+    },
+    {
+        "point": 7,
+        "title": "Applied harmonised standards",
+        "fria_field": None,
+        "status": "partial_p66_iso10218",
+    },
+    {
+        "point": 8,
+        "title": "EU declaration of conformity",
+        "fria_field": None,
+        "status": "deployer_responsibility",
+    },
+    {
+        "point": 9,
+        "title": "Instructions for use",
+        "fria_field": None,
+        "status": "requires_ifu_command",
+    },
+]
+
 
 def check_fria_prerequisite(
     config: dict,
@@ -222,6 +279,18 @@ def build_fria_document(
         },
         "human_oversight": human_oversight,
         "hardware_observations": hardware_observations,
+        "model_provenance": {
+            "provider": agent_cfg.get("provider", ""),
+            "model": agent_cfg.get("model", ""),
+            "art10_responsibility": "upstream_ai_provider",
+            "note": (
+                "EU AI Act Art. 10 data governance obligations for training data apply "
+                "to the upstream AI provider (e.g. Anthropic, Google, OpenAI), not the "
+                "OpenCastor deployer. Deployer responsibility: pin model version and "
+                "document the provider's Art. 10 compliance status."
+            ),
+        },
+        "annex_iv_coverage": ANNEX_IV_COVERAGE,
         **_load_benchmark_block(benchmark_path),
     }
 
