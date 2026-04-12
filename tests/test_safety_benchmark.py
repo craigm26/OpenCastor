@@ -310,3 +310,13 @@ class TestRunSafetyBenchmark:
         json.dumps(d)
         # Estop is skipped (no URI), but report still serializes cleanly
         assert "skipped_paths" in d
+
+    def test_minimum_iterations_floor_applied(self):
+        """Iterations below 2 are silently floored to 2 for quantile safety."""
+        report = run_safety_benchmark(config={}, iterations=1)
+        # Should not raise; all paths produce valid results
+        assert report.schema == BENCHMARK_SCHEMA_VERSION
+        d = report.to_dict()
+        import json
+
+        json.dumps(d)

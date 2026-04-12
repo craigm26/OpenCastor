@@ -64,13 +64,13 @@ castor fria generate \
 | `estop` | Time from `SafetyLayer.emergency_stop()` call to halt state confirmed | 100 ms |
 | `bounds_check` | Time to evaluate a motor command against all configured BoundsChecker limits | 5 ms |
 | `confidence_gate` | Time to evaluate a confidence value through `ConfidenceGateEnforcer.evaluate()` | 2 ms |
-| `full_pipeline` | Time from command received to safety-cleared or blocked (full SafetyLayer path) | 50 ms |
+| `full_pipeline` | Time from command received to safety-cleared or blocked (full SafetyLayer path). Always synthetic — hardware round-trip requires firmware loop (§10 out-of-scope). | 50 ms |
 
 The 100 ms ESTOP threshold matches the existing `MOTION_003` rule in `castor/safety/protocol.py`. All thresholds are overridable via config (`safety.benchmark_thresholds.*`).
 
 **Synthetic mode** (default): calls the Python code paths directly with mock inputs; no hardware or running robot required; works in CI. All four paths run in synthetic mode.
 
-**Live mode** (`--live`): affects `estop` and `full_pipeline` only — connects to a running robot via the configured RCAN URI and measures real round-trip latency. `bounds_check` and `confidence_gate` are pure computation and always run synthetic. Live paths are skipped gracefully (marked `"skipped": true` in output) if the robot is unreachable.
+**Live mode** (`--live`): affects `estop` only — connects to a running robot via the configured RCAN URI. `full_pipeline` always runs synthetic (hardware round-trip requires a firmware loop; see §10 out-of-scope). `bounds_check` and `confidence_gate` are pure computation and always run synthetic. Live paths are skipped gracefully (marked `"skipped": true` in output) if the robot is unreachable.
 
 ---
 
@@ -147,7 +147,7 @@ def _bench_confidence_gate(config: dict, iterations: int) -> SafetyBenchmarkResu
     """Benchmark ConfidenceGateEnforcer evaluation."""
 
 
-def _bench_full_pipeline(config: dict, iterations: int, live: bool) -> SafetyBenchmarkResult:
+def _bench_full_pipeline(config: dict, iterations: int) -> SafetyBenchmarkResult:
     """Benchmark full SafetyLayer pipeline."""
 ```
 

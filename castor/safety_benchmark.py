@@ -285,6 +285,10 @@ def run_safety_benchmark(
     """Run all four safety path benchmarks. Returns a SafetyBenchmarkReport."""
     from datetime import datetime, timezone
 
+    # Enforce minimum iterations for statistically meaningful quantile values.
+    # statistics.quantiles interpolates; with < 2 samples the quantile call raises.
+    iterations = max(iterations, 2)
+
     results = {
         "estop": _bench_estop(config, iterations, live),
         "bounds_check": _bench_bounds_check(config, iterations),
