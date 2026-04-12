@@ -4034,14 +4034,7 @@ def cmd_incidents(args) -> None:
 
     if incidents_cmd == "record":
         severity_str = getattr(args, "severity", "other")
-        try:
-            severity = IncidentSeverity(severity_str)
-        except ValueError:
-            print(
-                f"Error: invalid severity {severity_str!r}. Use: life_health, other",
-                file=sys.stderr,
-            )
-            raise SystemExit(1) from None
+        severity = IncidentSeverity(severity_str)
         incident_id = log.record(
             severity=severity,
             category=getattr(args, "category", "unspecified"),

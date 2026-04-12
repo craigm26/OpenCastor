@@ -66,6 +66,7 @@ class TestGenerateReport:
         assert "total_incidents" in report
         assert "incidents_by_severity" in report
         assert "incidents" in report
+        assert "art72_note" in report
 
     def test_report_counts_by_severity(self, tmp_path):
         log = IncidentLog(tmp_path / "incidents.jsonl")
