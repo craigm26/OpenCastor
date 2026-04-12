@@ -4071,6 +4071,52 @@ def cmd_incidents(args) -> None:
         raise SystemExit(1)
 
 
+def cmd_ifu(args) -> None:
+    """castor ifu — EU AI Act Art. 13 Instructions for Use document."""
+    import json as _json
+    import sys
+    from pathlib import Path
+
+    import yaml
+
+    from castor.fria import ANNEX_III_BASES
+    from castor.instructions_for_use import build_ifu_document
+
+    ifu_cmd = getattr(args, "ifu_cmd", None)
+    if ifu_cmd != "generate":
+        print(
+            ("Usage: castor ifu generate --config ... --annex-iii ... --intended-use ..."),
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+    config_path = getattr(args, "config", None) or "robot.rcan.yaml"
+    if not Path(config_path).exists():
+        print(f"Error: config not found: {config_path!r}", file=sys.stderr)
+        raise SystemExit(1)
+
+    with open(config_path) as f:
+        config = yaml.safe_load(f) or {}
+
+    annex_iii = getattr(args, "annex_iii", None)
+    if not annex_iii or annex_iii not in ANNEX_III_BASES:
+        print(
+            (f"Error: --annex-iii required. Valid: {', '.join(sorted(ANNEX_III_BASES))}"),
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+    doc = build_ifu_document(config, annex_iii, getattr(args, "intended_use", "") or "")
+
+    output = getattr(args, "output", None)
+    if output:
+        with open(output, "w") as f:
+            _json.dump(doc, f, indent=2, default=str)
+        print(f"Instructions for Use written to: {output}")
+    else:
+        print(_json.dumps(doc, indent=2, default=str))
+
+
 def cmd_validate(args) -> None:
     """castor validate — run RCAN conformance checks on a config file."""
     import json as _json
@@ -7055,6 +7101,33 @@ def main() -> None:
         "--output", metavar="FILE", help="Output JSON path (default: stdout)"
     )
 
+    # ── ifu ────────────────────────────────────────────────────────────────────────
+    p_ifu = sub.add_parser(
+        "ifu",
+        help="EU AI Act Art. 13 Instructions for Use document",
+    )
+    p_ifu_sub = p_ifu.add_subparsers(dest="ifu_cmd")
+    p_ifu.set_defaults(func=cmd_ifu)
+    p_ifu_gen = p_ifu_sub.add_parser(
+        "generate", help="Generate Art. 13 Instructions for Use document"
+    )
+    p_ifu_gen.add_argument("--config", metavar="FILE", default="robot.rcan.yaml")
+    p_ifu_gen.add_argument(
+        "--annex-iii",
+        dest="annex_iii",
+        required=True,
+        metavar="BASIS",
+        help=("EU AI Act Annex III classification (e.g. safety_component)"),
+    )
+    p_ifu_gen.add_argument(
+        "--intended-use",
+        dest="intended_use",
+        required=True,
+        metavar="TEXT",
+        help="Deployment description",
+    )
+    p_ifu_gen.add_argument("--output", metavar="FILE", help="Output JSON path (default: stdout)")
+
     # castor validate
     p_validate = sub.add_parser(
         "validate",
@@ -8657,6 +8730,7 @@ def main() -> None:
         "fria": cmd_fria,
         "eu-register": cmd_eu_register,
         "incidents": cmd_incidents,
+        "ifu": cmd_ifu,
         "rcan-check": cmd_rcan_check,
         "swarm": cmd_swarm,
         "learn": cmd_learn,

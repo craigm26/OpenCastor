@@ -2761,3 +2761,15 @@ class TestIncidentsCli:
             report = json.load(f)
         assert report["schema"] == "rcan-incidents-v1"
         assert report["total_incidents"] == 0
+
+
+class TestIfuCli:
+    def test_generate_help_exits_0(self):
+        import subprocess
+        result = subprocess.run(
+            ["python3", "-m", "castor.cli", "ifu", "generate", "--help"],
+            capture_output=True, text=True
+        )
+        assert result.returncode == 0
+        assert "--annex-iii" in result.stdout
+        assert "--intended-use" in result.stdout
