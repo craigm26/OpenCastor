@@ -309,4 +309,4 @@ class TestRunSafetyBenchmark:
         d = report.to_dict()
         json.dumps(d)
         # Estop is skipped (no URI), but report still serializes cleanly
-        assert "skipped_paths" in d or d["overall_pass"] is not None
+        assert "skipped_paths" in d
