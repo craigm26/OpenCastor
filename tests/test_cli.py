@@ -2678,3 +2678,14 @@ class TestSafetyBenchmarkCli:
         assert output_file.exists()
         data = json.loads(output_file.read_text())
         assert data["schema"] == "rcan-safety-benchmark-v1"
+
+
+class TestFriaGenerateAnnexIIIStrict:
+    def test_annex_iii_strict_flag_exists(self):
+        import subprocess
+        result = subprocess.run(
+            ["python", "-m", "castor.cli", "fria", "generate", "--help"],
+            capture_output=True, text=True
+        )
+        assert result.returncode == 0
+        assert "--annex-iii-strict" in result.stdout

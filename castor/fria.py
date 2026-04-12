@@ -45,12 +45,15 @@ ANNEX_III_BASES = frozenset(
 
 def check_fria_prerequisite(
     config: dict,
+    annex_iii_strict: bool = False,
 ) -> tuple[bool, list[ConformanceResult]]:
     """Run conformance checks and return (gate_passed, blocking_results).
 
     Gate passes when conformance score >= 80 and there are zero safety.* failures.
+    When annex_iii_strict=True, Art. 16 checks (SBOM, firmware, authority) are
+    promoted from warn to fail, raising the bar for Annex III high-risk systems.
     """
-    checker = ConformanceChecker(config)
+    checker = ConformanceChecker(config, annex_iii_strict=annex_iii_strict)
     results = checker.run_all()
     summary = checker.summary(results)
 
@@ -59,7 +62,6 @@ def check_fria_prerequisite(
     gate_passed = score_ok and len(safety_failures) == 0
 
     if not gate_passed:
-        # Return all failures when score gate failed; safety failures when score ok
         blocking = [r for r in results if r.status == "fail"] if not score_ok else safety_failures
     else:
         blocking = []
@@ -106,6 +108,7 @@ def build_fria_document(
     memory_path: str | None = None,
     prerequisite_waived: bool = False,
     benchmark_path: str | None = None,
+    annex_iii_strict: bool = False,
 ) -> dict:
     """Assemble the unsigned FRIA JSON document dict.
 
@@ -141,7 +144,7 @@ def build_fria_document(
         oc_version = "unknown"
 
     # Run conformance
-    checker = ConformanceChecker(config)
+    checker = ConformanceChecker(config, annex_iii_strict=annex_iii_strict)
     results = checker.run_all()
     summary = checker.summary(results)
 

@@ -72,9 +72,12 @@ class ConformanceResult:
 class ConformanceChecker:
     """Run RCAN behavioral conformance checks against a loaded config dict."""
 
-    def __init__(self, config: dict, config_path: str | None = None) -> None:
+    def __init__(
+        self, config: dict, config_path: str | None = None, annex_iii_strict: bool = False
+    ) -> None:
         self._cfg = config or {}
         self._config_path = config_path
+        self._annex_iii_strict = annex_iii_strict
 
     # ------------------------------------------------------------------
     # Public API
@@ -1930,7 +1933,7 @@ class ConformanceChecker:
                     return ConformanceResult(
                         check_id=cid,
                         category="rcan_v21",
-                        status="warn",
+                        status="fail" if self._annex_iii_strict else "warn",
                         detail=f"Firmware manifest exists at {p} but is UNSIGNED",
                         fix="Run: castor attest sign --key <robot-private.pem>",
                     )
@@ -1939,7 +1942,7 @@ class ConformanceChecker:
         return ConformanceResult(
             check_id=cid,
             category="rcan_v21",
-            status="warn",
+            status="fail" if self._annex_iii_strict else "warn",
             detail="No firmware manifest found (required for EU AI Act Art. 16(d) in production)",
             fix="Run: castor attest generate && castor attest sign --key <robot-private.pem>",
         )
@@ -1970,7 +1973,7 @@ class ConformanceChecker:
                     return ConformanceResult(
                         check_id=cid,
                         category="rcan_v21",
-                        status="warn",
+                        status="fail" if self._annex_iii_strict else "warn",
                         detail=f"SBOM found at {p} but not yet RRF-countersigned",
                         fix="Run: castor sbom publish --token <rrf-token>",
                     )
@@ -1979,7 +1982,7 @@ class ConformanceChecker:
         return ConformanceResult(
             check_id=cid,
             category="rcan_v21",
-            status="warn",
+            status="fail" if self._annex_iii_strict else "warn",
             detail="No SBOM found (required for EU AI Act Art. 16(a) in production)",
             fix="Run: castor sbom generate && castor sbom publish --token <rrf-token>",
         )
@@ -2010,7 +2013,7 @@ class ConformanceChecker:
             return ConformanceResult(
                 check_id=cid,
                 category="rcan_v21",
-                status="warn",
+                status="fail" if self._annex_iii_strict else "warn",
                 detail="castor.authority module available but handler not explicitly registered",
                 fix=(
                     "Add authority_handler_enabled: true to config, or register handler in "

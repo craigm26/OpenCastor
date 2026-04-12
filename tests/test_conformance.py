@@ -1303,3 +1303,52 @@ class TestISOCheck:
         src = inspect.getsource(api_mod)
         assert "iso_conformance" in src
         assert "iso_42001" in src
+
+
+class TestAnnexIIIStrictMode:
+    """Art. 16 checks promote from warn to fail in strict mode."""
+
+    base_config = {
+        "rcan_version": "2.2",
+        "metadata": {"rrn": "RRN-000000000001"},
+        "reactive": {"min_obstacle_m": 0.3},
+        "agent": {"provider": "google", "model": "gemini-2.5-flash"},
+    }
+
+    def test_sbom_warn_in_default_mode(self):
+        checker = ConformanceChecker(self.base_config)
+        results = checker.run_category("rcan_v21")
+        sbom = next(r for r in results if r.check_id == "rcan_v21.sbom_attestation")
+        assert sbom.status == "warn"
+
+    def test_sbom_fail_in_strict_mode(self):
+        checker = ConformanceChecker(self.base_config, annex_iii_strict=True)
+        results = checker.run_category("rcan_v21")
+        sbom = next(r for r in results if r.check_id == "rcan_v21.sbom_attestation")
+        assert sbom.status == "fail"
+
+    def test_firmware_fail_in_strict_mode(self):
+        checker = ConformanceChecker(self.base_config, annex_iii_strict=True)
+        results = checker.run_category("rcan_v21")
+        fw = next(r for r in results if r.check_id == "rcan_v21.firmware_manifest")
+        assert fw.status == "fail"
+
+    def test_authority_fail_in_strict_mode(self):
+        checker = ConformanceChecker(self.base_config, annex_iii_strict=True)
+        results = checker.run_category("rcan_v21")
+        auth = next(r for r in results if r.check_id == "rcan_v21.authority_handler")
+        assert auth.status == "fail"
+
+    def test_strict_mode_does_not_affect_non_art16_checks(self):
+        checker_default = ConformanceChecker(self.base_config)
+        checker_strict = ConformanceChecker(self.base_config, annex_iii_strict=True)
+        default_safety = checker_default.run_category("safety")
+        strict_safety = checker_strict.run_category("safety")
+        assert [r.status for r in default_safety] == [r.status for r in strict_safety]
+
+    def test_check_fria_prerequisite_strict_blocks_on_art16(self):
+        from castor.fria import check_fria_prerequisite
+        passed, blocking = check_fria_prerequisite(self.base_config, annex_iii_strict=True)
+        blocking_ids = [r.check_id for r in blocking]
+        assert "rcan_v21.sbom_attestation" in blocking_ids
+        assert not passed

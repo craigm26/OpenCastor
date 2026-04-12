@@ -3903,9 +3903,10 @@ def cmd_fria_generate(args) -> None:
     no_html = getattr(args, "no_html", False)
     skip_sign = getattr(args, "skip_sign", False)
 
+    annex_iii_strict = getattr(args, "annex_iii_strict", False)
     prerequisite_waived = False
     if not force:
-        gate_passed, blocking = check_fria_prerequisite(config)
+        gate_passed, blocking = check_fria_prerequisite(config, annex_iii_strict=annex_iii_strict)
         if not gate_passed:
             print("FRIA generation blocked — conformance gaps must be resolved:", file=sys.stderr)
             for r in blocking:
@@ -3939,6 +3940,7 @@ def cmd_fria_generate(args) -> None:
         memory_path=memory_path,
         prerequisite_waived=prerequisite_waived,
         benchmark_path=getattr(args, "benchmark_path", None),
+        annex_iii_strict=annex_iii_strict,
     )
 
     if not skip_sign:
@@ -6893,6 +6895,16 @@ def main() -> None:
         dest="benchmark_path",
         default=None,
         help="Path to safety-benchmark-*.json to inline in FRIA document",
+    )
+    p_fria_gen.add_argument(
+        "--annex-iii-strict",
+        dest="annex_iii_strict",
+        action="store_true",
+        default=False,
+        help=(
+            "Promote Art. 16 conformance checks (SBOM, firmware manifest, authority handler) "
+            "from warn to fail. Required for Annex III high-risk system deployments."
+        ),
     )
     p_fria_gen.set_defaults(func=cmd_fria_generate)
 
