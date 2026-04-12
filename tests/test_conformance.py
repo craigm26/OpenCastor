@@ -963,6 +963,7 @@ class TestCmdValidate:
             "local_safety_wins": True,
             "emergency_stop_distance": 0.3,
             "watchdog": {"timeout_s": 10},
+            "watermark_enforcement": True,  # Art. 50 requirement
         }
         cfg["p66"] = {"enabled": True}
         cfg["reactive"] = {"min_obstacle_m": 0.3}
@@ -1370,3 +1371,45 @@ class TestAnnexIIIStrictMode:
         blocking_ids = [r.check_id for r in blocking]
         assert "rcan_v21.sbom_attestation" in blocking_ids
         assert not passed
+
+
+class TestWatermarkEnforcedCheck:
+    """rcan_v22.watermark_enforced — Art. 50 detectability."""
+
+    def _checker(self, extra: dict | None = None):
+        config = {
+            "rcan_version": "2.2",
+            "metadata": {"rrn": "RRN-000000000001"},
+            "reactive": {"min_obstacle_m": 0.3},
+            "agent": {"provider": "google", "model": "gemini-2.5-flash"},
+        }
+        if extra:
+            config.update(extra)
+        return ConformanceChecker(config)
+
+    def test_fails_when_watermark_enforcement_absent(self):
+        results = self._checker().run_category("rcan_v21")
+        wm = next((r for r in results if r.check_id == "rcan_v22.watermark_enforced"), None)
+        assert wm is not None
+        assert wm.status == "fail"
+
+    def test_fails_when_watermark_enforcement_false(self):
+        results = self._checker({"safety": {"watermark_enforcement": False}}).run_category("rcan_v21")
+        wm = next(r for r in results if r.check_id == "rcan_v22.watermark_enforced")
+        assert wm.status == "fail"
+
+    def test_passes_when_watermark_enforcement_true(self):
+        results = self._checker({"safety": {"watermark_enforcement": True}}).run_category("rcan_v21")
+        wm = next(r for r in results if r.check_id == "rcan_v22.watermark_enforced")
+        assert wm.status == "pass"
+
+    def test_check_id_and_category(self):
+        results = self._checker().run_category("rcan_v21")
+        wm = next(r for r in results if r.check_id == "rcan_v22.watermark_enforced")
+        assert wm.category == "rcan_v22"
+
+    def test_fix_message_present_when_failing(self):
+        results = self._checker().run_category("rcan_v21")
+        wm = next(r for r in results if r.check_id == "rcan_v22.watermark_enforced")
+        assert wm.fix is not None
+        assert "watermark_enforcement" in wm.fix

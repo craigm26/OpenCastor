@@ -1788,6 +1788,7 @@ class ConformanceChecker:
             self._v21_rcan_version(),
             self._v22_pq_signing_key(),
             self._v22_firmware_pq_sig(),
+            self._v22_watermark_enforced(),
         ]
 
     def _v22_pq_signing_key(self) -> ConformanceResult:
@@ -1883,6 +1884,32 @@ class ConformanceChecker:
                 detail=f"Could not read firmware manifest: {e}",
                 fix="castor attest generate && castor attest sign",
             )
+
+    def _v22_watermark_enforced(self) -> ConformanceResult:
+        """RCAN v2.2 §16.5 — AI output watermarking MUST be enabled (EU AI Act Art. 50)."""
+        cid = "rcan_v22.watermark_enforced"
+        safety_cfg = self._cfg.get("safety", {}) or {}
+        enabled = safety_cfg.get("watermark_enforcement", False)
+        if enabled:
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v22",
+                status="pass",
+                detail="AI output watermarking enforcement enabled (Art. 50 compliant)",
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v22",
+            status="fail",
+            detail=(
+                "AI output watermark enforcement is disabled — EU AI Act Art. 50 requires "
+                "AI-generated commands to be machine-detectable"
+            ),
+            fix=(
+                "Add `safety:\\n  watermark_enforcement: true` to your RCAN config. "
+                "Requires OPENCASTOR_WATERMARK_KEY env var (see castor/watermark.py)."
+            ),
+        )
 
     def _v21_rcan_version(self) -> ConformanceResult:
         cid = "rcan_v21.rcan_version"
