@@ -56,3 +56,15 @@ class TestBuildIfuDocument:
         assert "hitl_gates" in ho
         assert "estop" in ho
         assert "confidence_gates" in ho
+        assert "override" in ho
+
+    def test_invalid_annex_iii_basis_raises(self):
+        with pytest.raises(ValueError, match="Invalid annex_iii_basis"):
+            build_ifu_document(SAMPLE_CONFIG, "not_a_real_basis", "test")
+
+    def test_art13_coverage_contains_all_fields(self):
+        from castor.instructions_for_use import ART13_FIELDS
+        doc = build_ifu_document(SAMPLE_CONFIG, "safety_component", "Navigation")
+        assert "art13_coverage" in doc
+        assert set(doc["art13_coverage"]) == set(ART13_FIELDS)
+        assert len(doc["art13_coverage"]) == len(ART13_FIELDS)

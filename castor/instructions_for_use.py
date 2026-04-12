@@ -10,6 +10,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from castor.fria import ANNEX_III_BASES
+
 IFU_SCHEMA_VERSION = "rcan-ifu-v1"
 
 # EU AI Act Art. 13(3) required fields
@@ -40,6 +42,11 @@ def build_ifu_document(
     Returns:
         IFU document dict ready for JSON serialization or HTML rendering.
     """
+    if annex_iii_basis not in ANNEX_III_BASES:
+        raise ValueError(
+            f"Invalid annex_iii_basis: {annex_iii_basis!r}. "
+            f"Must be one of: {', '.join(sorted(ANNEX_III_BASES))}"
+        )
     meta = config.get("metadata", {}) or {}
     agent_cfg = config.get("agent", {}) or {}
 

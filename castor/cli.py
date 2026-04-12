@@ -4085,7 +4085,7 @@ def cmd_ifu(args) -> None:
     ifu_cmd = getattr(args, "ifu_cmd", None)
     if ifu_cmd != "generate":
         print(
-            ("Usage: castor ifu generate --config ... --annex-iii ... --intended-use ..."),
+            ("Usage: castor ifu generate --config ... --annex-iii-basis ... --intended-use ..."),
             file=sys.stderr,
         )
         raise SystemExit(1)
@@ -4098,15 +4098,15 @@ def cmd_ifu(args) -> None:
     with open(config_path) as f:
         config = yaml.safe_load(f) or {}
 
-    annex_iii = getattr(args, "annex_iii", None)
-    if not annex_iii or annex_iii not in ANNEX_III_BASES:
+    annex_iii_basis = getattr(args, "annex_iii_basis", None)
+    if not annex_iii_basis or annex_iii_basis not in ANNEX_III_BASES:
         print(
-            (f"Error: --annex-iii required. Valid: {', '.join(sorted(ANNEX_III_BASES))}"),
+            (f"Error: --annex-iii-basis required. Valid: {', '.join(sorted(ANNEX_III_BASES))}"),
             file=sys.stderr,
         )
         raise SystemExit(1)
 
-    doc = build_ifu_document(config, annex_iii, getattr(args, "intended_use", "") or "")
+    doc = build_ifu_document(config, annex_iii_basis, getattr(args, "intended_use", "") or "")
 
     output = getattr(args, "output", None)
     if output:
@@ -7113,8 +7113,8 @@ def main() -> None:
     )
     p_ifu_gen.add_argument("--config", metavar="FILE", default="robot.rcan.yaml")
     p_ifu_gen.add_argument(
-        "--annex-iii",
-        dest="annex_iii",
+        "--annex-iii-basis",
+        dest="annex_iii_basis",
         required=True,
         metavar="BASIS",
         help=("EU AI Act Annex III classification (e.g. safety_component)"),
