@@ -6,6 +6,36 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 
 ---
 
+## [2026.4.12.0] - 2026-04-12
+
+### Added
+
+**FRIA CLI — `castor fria generate`** (craigm26/OpenCastor#858)
+- `castor/fria.py` — `build_fria_document()`, `check_fria_prerequisite()`, `sign_fria()`, `render_fria_html()`: builds a signed Fundamental Rights Impact Assessment artifact for EU AI Act Art. 29 submission
+- Prerequisites gate: blocks generation unless firmware is attested, SBOM published, authority handler enabled, and audit retention ≥ 3650 days (use `--force` to override)
+- `--annex-iii` required: selects Annex III basis (biometric, critical-infrastructure, education, employment, etc.)
+- Outputs `fria-{RRN}-{date}.json` + HTML render by default; `--no-html` suppresses HTML
+- Injects `robot-memory.md` as context if present
+- CLI: `castor fria generate --config robot.rcan.yaml --annex-iii employment --intended-use "..."`
+
+**Safety Benchmark CLI — `castor safety benchmark`** (craigm26/OpenCastor#859)
+- `SafetyBenchmarkResult` / `SafetyBenchmarkReport` dataclasses with p50/p95/p99 latency stats
+- Measures ESTOP latency, full pipeline latency (perception → safety → action), confidence gate pass rate
+- Pass/fail verdict against Protocol 66 §4.1 bounds
+- `castor fria generate --benchmark` embeds live safety benchmark results inline in the FRIA document
+- CLI: `castor safety benchmark [--iterations N] [--json] [--output file.json]`
+
+### Fixed
+- `SafetyBenchmarkResult` guard against empty `latencies_ms` (skipped paths) — prevents ZeroDivisionError
+- `build_fria_document` — deepcopy config before mutation (prevents caller-side state leak)
+- `run_safety_benchmark` — floor iterations ≥ 2; `full_pipeline` always marked synthetic
+
+### Tests
+- `tests/test_fria.py` — prerequisite gate, document build, sign round-trip, HTML render, CLI invocation
+- `tests/test_safety_benchmark.py` — bounds check, empty latencies guard, quantile computation, output-file write
+
+---
+
 ## [2026.4.10.0] - 2026-04-10
 
 ### Added
