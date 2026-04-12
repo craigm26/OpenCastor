@@ -195,6 +195,15 @@ class TestBenchEstop:
         # No URI → skipped (0 iterations) or synthetic fallback
         assert result.iterations == 0
 
+    def test_live_skipped_result_is_json_serializable(self):
+        import json
+
+        result = _bench_estop(config={}, iterations=5, live=True)
+        # No URI → skipped. to_dict() must not raise.
+        d = result.to_dict()
+        json.dumps(d)
+        assert d.get("skipped") is True
+
 
 class TestBenchFullPipeline:
     def test_returns_result_for_full_pipeline_path(self):
@@ -266,3 +275,11 @@ class TestRunSafetyBenchmark:
         }
         report = run_safety_benchmark(config=config, iterations=20)
         assert report.overall_pass is False
+
+    def test_live_mode_to_dict_does_not_crash(self):
+        import json
+
+        report = run_safety_benchmark(config={}, iterations=5, live=True)
+        # live=True with no URI → estop is skipped; overall should not crash
+        d = report.to_dict()
+        json.dumps(d)

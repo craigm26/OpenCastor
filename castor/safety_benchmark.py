@@ -36,32 +36,44 @@ class SafetyBenchmarkResult:
     threshold_p95_ms: float
 
     @property
+    def skipped(self) -> bool:
+        return len(self.latencies_ms) == 0
+
+    @property
     def min_ms(self) -> float:
-        return min(self.latencies_ms)
+        return min(self.latencies_ms) if not self.skipped else 0.0
 
     @property
     def max_ms(self) -> float:
-        return max(self.latencies_ms)
+        return max(self.latencies_ms) if not self.skipped else 0.0
 
     @property
     def mean_ms(self) -> float:
-        return statistics.mean(self.latencies_ms)
+        return statistics.mean(self.latencies_ms) if not self.skipped else 0.0
 
     @property
     def p95_ms(self) -> float:
+        if self.skipped:
+            return 0.0
         q = statistics.quantiles(self.latencies_ms, n=100)
         return q[min(94, len(q) - 1)]
 
     @property
     def p99_ms(self) -> float:
+        if self.skipped:
+            return 0.0
         q = statistics.quantiles(self.latencies_ms, n=100)
         return q[min(98, len(q) - 1)]
 
     @property
     def passed(self) -> bool:
+        if self.skipped:
+            return True  # Skipped paths don't fail the overall benchmark
         return self.p95_ms <= self.threshold_p95_ms
 
     def to_dict(self) -> dict[str, Any]:
+        if self.skipped:
+            return {"skipped": True, "pass": True}
         return {
             "min_ms": round(self.min_ms, 4),
             "mean_ms": round(self.mean_ms, 4),
