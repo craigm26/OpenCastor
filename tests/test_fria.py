@@ -285,6 +285,132 @@ class TestSignFria:
                 sign_fria(self._make_doc(), _make_config())
 
 
+# ── _load_benchmark_block / build_fria_document with benchmark ───────────────
+
+class TestBuildFriaDocumentWithBenchmark:
+    def _make_config(self) -> dict:
+        return {
+            "rcan_version": "1.9.0",
+            "metadata": {
+                "robot_name": "test-bot",
+                "rrn": "RRN-000000000001",
+            },
+        }
+
+    def _make_benchmark_file(self, tmp_path, overall_pass: bool = True) -> str:
+        data = {
+            "schema": "rcan-safety-benchmark-v1",
+            "generated_at": "2026-04-11T09:00:00.000Z",
+            "mode": "synthetic",
+            "iterations": 20,
+            "thresholds": {
+                "estop_p95_ms": 100.0,
+                "bounds_check_p95_ms": 5.0,
+                "confidence_gate_p95_ms": 2.0,
+                "full_pipeline_p95_ms": 50.0,
+            },
+            "results": {
+                "estop": {"min_ms": 0.3, "mean_ms": 1.2, "p95_ms": 4.1, "p99_ms": 7.2, "max_ms": 9.8, "pass": True},
+                "bounds_check": {"min_ms": 0.1, "mean_ms": 0.4, "p95_ms": 0.9, "p99_ms": 1.1, "max_ms": 1.4, "pass": True},
+                "confidence_gate": {"min_ms": 0.05, "mean_ms": 0.1, "p95_ms": 0.3, "p99_ms": 0.4, "max_ms": 0.5, "pass": True},
+                "full_pipeline": {"min_ms": 0.4, "mean_ms": 1.8, "p95_ms": 5.2, "p99_ms": 8.1, "max_ms": 11.0, "pass": True},
+            },
+            "overall_pass": overall_pass,
+        }
+        import json
+        path = tmp_path / "safety-benchmark-20260411.json"
+        path.write_text(json.dumps(data))
+        return str(path)
+
+    def test_benchmark_inlined_when_path_provided(self, tmp_path):
+        bench_path = self._make_benchmark_file(tmp_path)
+        from castor.fria import build_fria_document
+        with patch("castor.fria.ConformanceChecker", return_value=MagicMock(
+            run_all=lambda: [],
+            summary=lambda r: {"pass": 0, "warn": 0, "fail": 0, "score": 87},
+        )):
+            doc = build_fria_document(
+                config=self._make_config(),
+                annex_iii_basis="safety_component",
+                intended_use="Indoor navigation",
+                benchmark_path=bench_path,
+            )
+        assert "safety_benchmarks" in doc
+
+    def test_benchmark_block_has_required_fields(self, tmp_path):
+        bench_path = self._make_benchmark_file(tmp_path)
+        from castor.fria import build_fria_document
+        with patch("castor.fria.ConformanceChecker", return_value=MagicMock(
+            run_all=lambda: [],
+            summary=lambda r: {"pass": 0, "warn": 0, "fail": 0, "score": 87},
+        )):
+            doc = build_fria_document(
+                config=self._make_config(),
+                annex_iii_basis="safety_component",
+                intended_use="Indoor navigation",
+                benchmark_path=bench_path,
+            )
+        sb = doc["safety_benchmarks"]
+        for field in ("ref", "generated_at", "mode", "overall_pass", "results"):
+            assert field in sb
+
+    def test_benchmark_omitted_when_path_is_none(self):
+        from castor.fria import build_fria_document
+        with patch("castor.fria.ConformanceChecker", return_value=MagicMock(
+            run_all=lambda: [],
+            summary=lambda r: {"pass": 0, "warn": 0, "fail": 0, "score": 87},
+        )):
+            doc = build_fria_document(
+                config=self._make_config(),
+                annex_iii_basis="safety_component",
+                intended_use="Indoor navigation",
+                benchmark_path=None,
+            )
+        assert "safety_benchmarks" not in doc
+
+    def test_benchmark_omitted_when_file_missing(self, tmp_path):
+        from castor.fria import build_fria_document
+        with patch("castor.fria.ConformanceChecker", return_value=MagicMock(
+            run_all=lambda: [],
+            summary=lambda r: {"pass": 0, "warn": 0, "fail": 0, "score": 87},
+        )):
+            doc = build_fria_document(
+                config=self._make_config(),
+                annex_iii_basis="safety_component",
+                intended_use="Indoor navigation",
+                benchmark_path=str(tmp_path / "nonexistent.json"),
+            )
+        assert "safety_benchmarks" not in doc
+
+    def test_invalid_schema_raises_value_error(self, tmp_path):
+        import json
+        from castor.fria import build_fria_document
+        bad_file = tmp_path / "bad.json"
+        bad_file.write_text(json.dumps({"schema": "wrong-schema", "results": {}}))
+        with pytest.raises(ValueError, match="schema"):
+            build_fria_document(
+                config=self._make_config(),
+                annex_iii_basis="safety_component",
+                intended_use="Indoor navigation",
+                benchmark_path=str(bad_file),
+            )
+
+    def test_ref_field_contains_filename(self, tmp_path):
+        bench_path = self._make_benchmark_file(tmp_path)
+        from castor.fria import build_fria_document
+        with patch("castor.fria.ConformanceChecker", return_value=MagicMock(
+            run_all=lambda: [],
+            summary=lambda r: {"pass": 0, "warn": 0, "fail": 0, "score": 87},
+        )):
+            doc = build_fria_document(
+                config=self._make_config(),
+                annex_iii_basis="safety_component",
+                intended_use="Indoor navigation",
+                benchmark_path=bench_path,
+            )
+        assert "safety-benchmark-20260411.json" in doc["safety_benchmarks"]["ref"]
+
+
 # ── render_fria_html ──────────────────────────────────────────────────────────
 
 class TestRenderFriaHtml:

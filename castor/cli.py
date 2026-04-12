@@ -3938,6 +3938,7 @@ def cmd_fria_generate(args) -> None:
         intended_use=intended_use,
         memory_path=memory_path,
         prerequisite_waived=prerequisite_waived,
+        benchmark_path=getattr(args, "benchmark_path", None),
     )
 
     if not skip_sign:

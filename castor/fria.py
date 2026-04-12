@@ -6,6 +6,7 @@ Provides:
     sign_fria                — add ML-DSA-65 signature
     render_fria_html         — render Jinja2 HTML companion
 """
+
 from __future__ import annotations
 
 import base64
@@ -26,18 +27,20 @@ FRIA_SPEC_REF = "https://rcan.dev/spec/section-22"
 CONFORMANCE_SCORE_MIN = 80
 MEMORY_CONFIDENCE_MIN = 0.30
 
-ANNEX_III_BASES = frozenset({
-    "safety_component",
-    "biometric",
-    "critical_infrastructure",
-    "education",
-    "employment",
-    "essential_services",
-    "law_enforcement",
-    "migration",
-    "administration_of_justice",
-    "general_purpose_ai",
-})
+ANNEX_III_BASES = frozenset(
+    {
+        "safety_component",
+        "biometric",
+        "critical_infrastructure",
+        "education",
+        "employment",
+        "essential_services",
+        "law_enforcement",
+        "migration",
+        "administration_of_justice",
+        "general_purpose_ai",
+    }
+)
 
 
 def check_fria_prerequisite(
@@ -51,9 +54,7 @@ def check_fria_prerequisite(
     results = checker.run_all()
     summary = checker.summary(results)
 
-    safety_failures = [
-        r for r in results if r.category == "safety" and r.status == "fail"
-    ]
+    safety_failures = [r for r in results if r.category == "safety" and r.status == "fail"]
     score_ok = summary["score"] >= CONFORMANCE_SCORE_MIN
     gate_passed = score_ok and len(safety_failures) == 0
 
@@ -66,12 +67,45 @@ def check_fria_prerequisite(
     return gate_passed, blocking
 
 
+def _load_benchmark_block(benchmark_path: str | None) -> dict:
+    """Load and validate a safety benchmark JSON file for FRIA inlining.
+
+    Returns ``{"safety_benchmarks": {...}}`` when the file exists and has the
+    correct schema. Returns ``{}`` when path is None or file missing.
+    Raises ``ValueError`` for invalid schema.
+    """
+    if benchmark_path is None:
+        return {}
+    if not os.path.exists(benchmark_path):
+        return {}
+
+    with open(benchmark_path) as f:
+        data = json.load(f)
+
+    if data.get("schema") != "rcan-safety-benchmark-v1":
+        raise ValueError(
+            f"Invalid safety benchmark schema: {data.get('schema')!r}. "
+            "Expected 'rcan-safety-benchmark-v1'."
+        )
+
+    return {
+        "safety_benchmarks": {
+            "ref": os.path.basename(benchmark_path),
+            "generated_at": data.get("generated_at", ""),
+            "mode": data.get("mode", ""),
+            "overall_pass": data.get("overall_pass", False),
+            "results": data.get("results", {}),
+        }
+    }
+
+
 def build_fria_document(
     config: dict,
     annex_iii_basis: str,
     intended_use: str,
     memory_path: str | None = None,
     prerequisite_waived: bool = False,
+    benchmark_path: str | None = None,
 ) -> dict:
     """Assemble the unsigned FRIA JSON document dict.
 
@@ -98,6 +132,7 @@ def build_fria_document(
 
     try:
         import importlib.metadata as _imd
+
         oc_version = _imd.version("opencastor")
     except Exception:
         oc_version = "unknown"
@@ -113,8 +148,7 @@ def build_fria_document(
     def _passed(*check_ids: str) -> bool:
         # check_ids are aliases for the same gate — pass if any alias is found passing
         return any(
-            check_map.get(cid) is not None and check_map[cid].status == "pass"
-            for cid in check_ids
+            check_map.get(cid) is not None and check_map[cid].status == "pass" for cid in check_ids
         )
 
     human_oversight = {
@@ -182,6 +216,7 @@ def build_fria_document(
         },
         "human_oversight": human_oversight,
         "hardware_observations": hardware_observations,
+        **_load_benchmark_block(benchmark_path),
     }
 
 
@@ -194,15 +229,11 @@ def sign_fria(document: dict, config: dict) -> dict:
     """
     signer = get_message_signer(config)
     if signer is None:
-        raise RuntimeError(
-            "No message signer available — check robot key configuration"
-        )
+        raise RuntimeError("No message signer available — check robot key configuration")
 
     pq_pair = getattr(signer, "_pq_key_pair", None)
     if pq_pair is None:
-        raise RuntimeError(
-            "ML-DSA-65 keypair not available — cannot sign FRIA"
-        )
+        raise RuntimeError("ML-DSA-65 keypair not available — cannot sign FRIA")
 
     pub_bytes = signer.public_key_bytes()
     key_id = getattr(signer, "_pq_key_id", "")
@@ -247,9 +278,7 @@ def render_fria_html(document: dict, template_path: str | None = None) -> str:
         ) from exc
 
     if template_path is None:
-        template_path = os.path.join(
-            os.path.dirname(__file__), "templates", "fria.html.j2"
-        )
+        template_path = os.path.join(os.path.dirname(__file__), "templates", "fria.html.j2")
 
     template_dir = os.path.dirname(os.path.abspath(template_path))
     template_name = os.path.basename(template_path)
