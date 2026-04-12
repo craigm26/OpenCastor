@@ -3978,6 +3978,49 @@ def cmd_fria(args) -> None:
         raise SystemExit(1)
 
 
+def cmd_eu_register(args) -> None:
+    """castor eu-register — generate EU AI Act Art. 49 database submission package."""
+    import json as _json
+    import sys
+    from pathlib import Path
+
+    import yaml
+
+    from castor.eu_register import build_submission_package
+
+    fria_path = getattr(args, "fria", None)
+    if not fria_path or not Path(fria_path).exists():
+        print(f"Error: FRIA file not found: {fria_path!r}", file=sys.stderr)
+        print("Run `castor fria generate` first.", file=sys.stderr)
+        raise SystemExit(1)
+
+    config_path = getattr(args, "config", None) or "robot.rcan.yaml"
+    if not Path(config_path).exists():
+        print(f"Error: config file not found: {config_path!r}", file=sys.stderr)
+        raise SystemExit(1)
+
+    with open(fria_path) as f:
+        fria = _json.load(f)
+    with open(config_path) as f:
+        config = yaml.safe_load(f) or {}
+
+    try:
+        package = build_submission_package(fria, config)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+    output = getattr(args, "output", None)
+    if output:
+        with open(output, "w") as f:
+            _json.dump(package, f, indent=2, default=str)
+        print(f"Submission package written to: {output}")
+    else:
+        print(_json.dumps(package, indent=2, default=str))
+
+    print("\n" + package["submission_instructions"], file=sys.stderr)
+
+
 def cmd_validate(args) -> None:
     """castor validate — run RCAN conformance checks on a config file."""
     import json as _json
@@ -6908,6 +6951,20 @@ def main() -> None:
     )
     p_fria_gen.set_defaults(func=cmd_fria_generate)
 
+    # ── eu-register ───────────────────────────────────────────────────────────────
+    p_eu_register = sub.add_parser(
+        "eu-register",
+        help="Generate EU AI Act Art. 49 database submission package from FRIA artifact",
+    )
+    p_eu_register.add_argument("fria", metavar="FRIA_FILE", help="Signed FRIA JSON artifact")
+    p_eu_register.add_argument(
+        "--config", metavar="FILE", default="robot.rcan.yaml", help="RCAN config file"
+    )
+    p_eu_register.add_argument(
+        "--output", metavar="FILE", help="Output path (default: print to stdout)"
+    )
+    p_eu_register.set_defaults(func=cmd_eu_register)
+
     # castor validate
     p_validate = sub.add_parser(
         "validate",
@@ -8508,6 +8565,7 @@ def main() -> None:
         "lint": cmd_lint,
         "validate": cmd_validate,
         "fria": cmd_fria,
+        "eu-register": cmd_eu_register,
         "rcan-check": cmd_rcan_check,
         "swarm": cmd_swarm,
         "learn": cmd_learn,

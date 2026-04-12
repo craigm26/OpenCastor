@@ -2689,3 +2689,25 @@ class TestFriaGenerateAnnexIIIStrict:
         )
         assert result.returncode == 0
         assert "--annex-iii-strict" in result.stdout
+
+
+class TestEuRegisterCli:
+    def test_help_exits_0(self):
+        import subprocess
+        result = subprocess.run(
+            ["python3", "-m", "castor.cli", "eu-register", "--help"],
+            capture_output=True, text=True
+        )
+        assert result.returncode == 0
+        assert "FRIA" in result.stdout
+
+    def test_missing_fria_exits_1(self, tmp_path):
+        import subprocess
+        config = tmp_path / "robot.rcan.yaml"
+        config.write_text("rcan_version: '2.2'\nmetadata:\n  rrn: RRN-000000000001\n")
+        result = subprocess.run(
+            ["python3", "-m", "castor.cli", "eu-register", "nonexistent.json",
+             "--config", str(config)],
+            capture_output=True, text=True
+        )
+        assert result.returncode == 1
