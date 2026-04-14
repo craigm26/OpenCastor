@@ -47,6 +47,29 @@ logger = logging.getLogger("OpenCastor.Memory")
 _DEFAULT_DB_DIR = Path.home() / ".castor"
 _DEFAULT_DB_NAME = "memory.db"
 
+# Module-level singleton for the embedding model — avoids re-loading (and the
+# associated HuggingFace HEAD round-trips) on every _embed_text() call.
+_st_model = None
+
+
+def _get_st_model(model_name: str):
+    """Return a cached SentenceTransformer instance, loading it once per process."""
+    global _st_model
+    if _st_model is not None:
+        return _st_model
+    try:
+        from sentence_transformers import SentenceTransformer  # type: ignore[import]
+
+        try:
+            # Prefer cached version to avoid HuggingFace network HEAD checks.
+            _st_model = SentenceTransformer(model_name, local_files_only=True)
+        except Exception:
+            # Model not yet cached locally — download it once.
+            _st_model = SentenceTransformer(model_name)
+    except ImportError:
+        pass
+    return _st_model
+
 
 def _probe_pyarrow() -> bool:
     """Return True if pyarrow is importable, False otherwise."""
@@ -259,10 +282,10 @@ class EpisodeMemory:
         if not text.strip():
             return None
         try:
-            from sentence_transformers import SentenceTransformer  # type: ignore[import]
-
             model_name = os.getenv("CASTOR_MEMORY_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-            model = SentenceTransformer(model_name)
+            model = _get_st_model(model_name)
+            if model is None:
+                return None
             vec = model.encode(text, normalize_embeddings=True).tolist()
             return vec
         except Exception:

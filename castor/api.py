@@ -78,6 +78,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger("OpenCastor.Gateway")
 
+# Suppress noisy third-party INFO logs — HuggingFace HEAD/307 redirects and
+# httpx request traces are expected behaviour, not actionable signals.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
+logging.getLogger("huggingface_hub.file_download").setLevel(logging.WARNING)
+logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+
 
 # ---------------------------------------------------------------------------
 # App & state
@@ -383,6 +390,7 @@ class IntentReprioritizeRequest(BaseModel):
 # Endpoints
 # ---------------------------------------------------------------------------
 @app.get("/health")
+@app.get("/api/health")
 async def health():
     """Health check -- returns OK if the gateway is running (unauthenticated, minimal info)."""
     import castor as _castor_pkg

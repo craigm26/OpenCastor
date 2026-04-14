@@ -56,7 +56,14 @@ class EmbeddingProvider:
 
         if HAS_ST:
             try:
-                self._model = SentenceTransformer(self.model_name, device=self.device)
+                try:
+                    # Prefer locally cached model to avoid HuggingFace HEAD checks.
+                    self._model = SentenceTransformer(
+                        self.model_name, device=self.device, local_files_only=True
+                    )
+                except Exception:
+                    # Not cached yet — download once.
+                    self._model = SentenceTransformer(self.model_name, device=self.device)
                 self._mode = "hardware"
                 logger.info(
                     "EmbeddingProvider loaded model=%s device=%s",
