@@ -6131,52 +6131,72 @@ async def on_startup():
         _threading.Thread(target=_wakeup_speak, daemon=True).start()
         logger.info("Wake-up greeting queued for %s", _robot_name_wakeup)
 
-    # Auto-start wake word detection if CASTOR_HOTWORD is set or
-    # audio.wake_word_enabled: true in RCAN config.
-    # Retries once after 3 s if the mic is not yet ready.
-    _ww_enabled = bool(os.getenv("CASTOR_HOTWORD", "")) or (
-        (state.config or {}).get("audio", {}).get("wake_word_enabled", False)
-    )
-    if _ww_enabled:
+    # Auto-start full voice loop (wake word → STT → LLM → TTS) when a
+    # microphone is detected at startup.
+    #
+    # Activation rules (any of):
+    #   • CASTOR_HOTWORD env var is set (explicit wake phrase)
+    #   • audio.wake_word_enabled: true  in RCAN config
+    #   • a mic is found AND audio.wake_word_enabled is not explicitly false
+    #
+    # Wake phrase priority:
+    #   CASTOR_HOTWORD env → audio.wake_phrase config → robot_name → "hey castor".
+    # Retries once after 5 s in case the mic driver is still enumerating.
+    _audio_cfg = (state.config or {}).get("audio", {})
+    _env_phrase = os.getenv("CASTOR_HOTWORD", "")
+    _cfg_phrase = _audio_cfg.get("wake_phrase", "")
+    _robot_name_voice = (state.config or {}).get("metadata", {}).get("robot_name", "")
+    _wake_phrase = _env_phrase or _cfg_phrase or _robot_name_voice or "hey castor"
 
-        async def _start_hotword_with_retry():
-            from castor.hotword import get_detector
+    async def _start_voice_loop_with_retry():
+        from castor.voice import detect_usb_microphone
+        from castor.voice_loop import get_voice_loop
 
-            async def _on_wake():
-                if state.listener and getattr(state.listener, "enabled", False):
-                    logger.info("Wake word detected — triggering STT listen")
+        for attempt in (1, 2):
+            try:
+                # Determine whether to activate —————————————————————————————
+                _explicit_hotword = bool(_env_phrase)
+                _config_enabled = _audio_cfg.get("wake_word_enabled", None)
 
-            _env_phrase = os.getenv("CASTOR_HOTWORD", "")
-            _robot_name = (state.config or {}).get("metadata", {}).get("robot_name", "")
-            _wake_phrase = _env_phrase or _robot_name or "hey castor"
-
-            for attempt in (1, 2):
-                try:
-                    det = get_detector(wake_phrase=_wake_phrase)
-                    det.start(
-                        on_wake=lambda: asyncio.run_coroutine_threadsafe(
-                            _on_wake(), asyncio.get_event_loop()
-                        )
-                    )
-                    logger.info(
-                        "Wake word active: %r via %s (auto-started on boot)",
-                        _wake_phrase,
-                        det.status.get("engine", "unknown"),
-                    )
+                if _config_enabled is False:
+                    # User explicitly disabled wake word in config — respect it.
+                    logger.info("Wake word disabled via audio.wake_word_enabled=false")
                     return
-                except Exception as _ww_exc:
-                    if attempt == 1:
-                        logger.debug(
-                            "Wake word start attempt %d failed: %s — retrying in 3 s",
-                            attempt,
-                            _ww_exc,
-                        )
-                        await asyncio.sleep(3)
-                    else:
-                        logger.warning("Wake word auto-start failed after retry: %s", _ww_exc)
 
-        asyncio.create_task(_start_hotword_with_retry())
-        logger.debug("Wake word auto-start task queued (phrase will log on success)")
+                if not _explicit_hotword and _config_enabled is not True:
+                    # Neither env var nor explicit config opt-in — probe for a mic.
+                    mic = detect_usb_microphone()
+                    if not mic["found"]:
+                        logger.info("No audio input device found — voice loop not started")
+                        return
+                    logger.info(
+                        "Mic detected (%s, index %s) — auto-starting voice loop",
+                        mic["name"],
+                        mic["index"],
+                    )
+
+                # Start the full pipeline ————————————————————————————————————
+                vloop = get_voice_loop(brain=state.brain, hotword=_wake_phrase)
+                vloop.start()
+                logger.info(
+                    "Voice loop started: wake_phrase=%r brain=%s",
+                    _wake_phrase,
+                    type(state.brain).__name__ if state.brain else "none",
+                )
+                return
+            except Exception as _vl_exc:
+                if attempt == 1:
+                    logger.warning(
+                        "Voice loop start attempt %d failed: %s — retrying in 5 s",
+                        attempt,
+                        _vl_exc,
+                    )
+                    await asyncio.sleep(5)
+                else:
+                    logger.warning("Voice loop auto-start failed after retry: %s", _vl_exc)
+
+    asyncio.create_task(_start_voice_loop_with_retry())
+    logger.info("Voice loop auto-start scheduled (wake_phrase=%r)", _wake_phrase)
 
     provider = get_jwt_secret_provider()
     try:
