@@ -460,7 +460,9 @@ class ConformanceChecker:
     def _safety_estop_distance_configured(self) -> ConformanceResult:
         cid = "safety.estop_distance_configured"
         safety_cfg = self._cfg.get("safety", {}) or {}
-        val = safety_cfg.get("emergency_stop_distance") or safety_cfg.get("estop_distance_mm")
+        d1 = safety_cfg.get("emergency_stop_distance")
+        d2 = safety_cfg.get("estop_distance_mm")
+        val = d1 if d1 is not None else d2
         if val is None:
             return ConformanceResult(
                 check_id=cid,
@@ -1887,7 +1889,7 @@ class ConformanceChecker:
         try:
             parts = [int(x) for x in ver.split(".")[:2]]
             major, minor = parts[0], parts[1] if len(parts) > 1 else 0
-            ok = major == 2 and minor >= 1
+            ok = major > 2 or (major == 2 and minor >= 1)
         except Exception:
             ok = False
         if ok:
@@ -2029,7 +2031,9 @@ class ConformanceChecker:
     def _v21_audit_chain_retention(self) -> ConformanceResult:
         cid = "rcan_v21.audit_chain_retention"
         # Check configured retention period — EU AI Act Art. 12 requires min 10 years (3650 days)
-        retention_days = self._cfg.get("audit_retention_days", 0)
+        # Also check attestation.audit_retention_days (canonical location in RCAN 3.0 configs)
+        attestation_cfg = self._cfg.get("attestation", {}) or {}
+        retention_days = self._cfg.get("audit_retention_days") or attestation_cfg.get("audit_retention_days", 0)
         if retention_days >= 3650:
             return ConformanceResult(
                 check_id=cid,
