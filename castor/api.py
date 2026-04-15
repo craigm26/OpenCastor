@@ -42,8 +42,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from castor.audit import get_audit
 from castor.api_errors import register_error_handlers
+from castor.audit import get_audit
 from castor.auth import (
     list_available_channels,
     list_available_providers,
@@ -390,6 +390,7 @@ class IntentReprioritizeRequest(BaseModel):
 # Endpoints
 # ---------------------------------------------------------------------------
 @app.get("/health")
+@app.get("/api/health")
 async def health():
     """Health check -- returns OK if the gateway is running (unauthenticated, minimal info)."""
     import castor as _castor_pkg
@@ -401,9 +402,6 @@ async def health():
         "rcan_version": "2.2",
         "rrn": getattr(state, "ruri", "") or "",
     }
-
-
-app.add_api_route("/api/health", health, methods=["GET"])
 
 
 @app.get("/api/health/detail", dependencies=[Depends(verify_token)])
