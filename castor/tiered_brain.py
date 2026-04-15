@@ -21,6 +21,7 @@ and Layer 2 every N ticks or when Layer 1 signals uncertainty.
 
 import logging
 import time
+from collections import deque
 
 from .providers.base import Thought
 from .providers.task_router import TaskCategory, TaskRouter
@@ -233,6 +234,14 @@ class TieredBrain:
             except Exception as exc:
                 logger.warning("EmbeddingInterpreter not available: %s", exc)
 
+        # Per-layer motor command frequency tracking (sliding window)
+        self._hz_window_s = 30.0
+        self._layer_timestamps: dict[str, deque[float]] = {
+            "reactive": deque(),
+            "fast": deque(),
+            "planner": deque(),
+        }
+
         # Stats
         self.stats = {
             "reactive_count": 0,
@@ -283,6 +292,7 @@ class TieredBrain:
         # Layer 0: Reactive (instant)
         reactive_action = self.reactive.evaluate(image_bytes, sensor_data)
         if reactive_action:
+            self._layer_timestamps["reactive"].append(time.time())
             self.stats["reactive_count"] += 1
             logger.debug(
                 f"Reactive: {reactive_action['type']} ({reactive_action.get('reason', '')})"
@@ -313,6 +323,7 @@ class TieredBrain:
         thought = self.fast.think(image_bytes, instruction)
         fast_ms = (time.time() - t0) * 1000
         thought.layer = "fast"
+        self._layer_timestamps["fast"].append(time.time())
         self.stats["fast_count"] += 1
 
         if thought.action:
@@ -371,6 +382,7 @@ class TieredBrain:
                 plan_ms = (time.time() - t0) * 1000
                 plan_thought.layer = "planner"
                 plan_thought.escalated = True
+                self._layer_timestamps["planner"].append(time.time())
                 self.stats["planner_count"] += 1
                 if plan_thought.action:
                     self.last_plan = plan_thought.action
@@ -419,6 +431,26 @@ class TieredBrain:
 
         return thought
 
+    def effective_hz(self) -> dict:
+        """Return effective motor command frequency (Hz) per layer.
+
+        Uses a sliding window (default 30s) to compute the rate at which
+        each layer produces motor commands.
+        """
+        now = time.time()
+        cutoff = now - self._hz_window_s
+        result = {}
+        total_count = 0
+        for layer, timestamps in self._layer_timestamps.items():
+            while timestamps and timestamps[0] < cutoff:
+                timestamps.popleft()
+            count = len(timestamps)
+            total_count += count
+            result[f"{layer}_hz"] = round(count / self._hz_window_s, 2)
+        result["overall_hz"] = round(total_count / self._hz_window_s, 2)
+        result["window_s"] = self._hz_window_s
+        return result
+
     def get_stats(self) -> dict:
         """Return brain layer usage stats."""
         total = max(self.stats["total_ticks"], 1)
@@ -434,4 +466,5 @@ class TieredBrain:
             stats["cache"] = self.planner.cache_stats
         if self.interpreter and hasattr(self.interpreter, "status"):
             stats["interpreter"] = self.interpreter.status()
+        stats["effective_hz"] = self.effective_hz()
         return stats
