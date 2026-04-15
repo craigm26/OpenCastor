@@ -80,13 +80,41 @@ class ClaudeOAuthClient:
             if system_text:
                 prompt_parts.append(f"<system>\n{system_text}\n</system>\n")
 
+        # Track whether any message has an image — used to enable Read tool
+        _image_path = None
+
         for msg in messages:
             role = msg.get("role", "user")
             content = msg.get("content", "")
             if isinstance(content, list):
-                # Extract text parts (skip images for CLI mode)
-                text_parts = [c.get("text", "") for c in content if c.get("type") == "text"]
+                # Extract text, and save any image to a temp file for Read tool access
+                text_parts = []
+                for block in content:
+                    if block.get("type") == "text":
+                        text_parts.append(block.get("text", ""))
+                    elif block.get("type") == "image" and _image_path is None:
+                        try:
+                            src = block.get("source", {})
+                            if src.get("type") == "base64":
+                                import base64 as _b64
+                                import tempfile as _tmp
+                                ext = "jpg" if "jpeg" in src.get("media_type", "") else "png"
+                                tf = _tmp.NamedTemporaryFile(
+                                    suffix=f".{ext}", delete=False, prefix="castor_frame_"
+                                )
+                                tf.write(_b64.b64decode(src["data"]))
+                                tf.close()
+                                _image_path = tf.name
+                                logger.debug("Saved image to %s for CLI vision", _image_path)
+                        except Exception as _ie:
+                            logger.debug("Image save failed: %s", _ie)
                 content = "\n".join(text_parts)
+                # Append image reference so Claude knows to read it
+                if _image_path and role == "user":
+                    content = (
+                        f"[Camera image saved to {_image_path} — read it to see the scene.]\n\n"
+                        + content
+                    )
             prompt_parts.append(f"<{role}>\n{content}\n</{role}>\n")
 
         full_prompt = "\n".join(prompt_parts)
@@ -95,6 +123,11 @@ class ClaudeOAuthClient:
         env["CLAUDE_CODE_OAUTH_TOKEN"] = self.oauth_token
         # Remove any stale API key that would override OAuth
         env.pop("ANTHROPIC_API_KEY", None)
+
+        # Allow Read tool when there's an image file to analyse; otherwise
+        # disable all tools so Claude doesn't try to run bash or edit files.
+        allowed_tools = "Read" if _image_path else ""
+        max_turns = "3" if _image_path else "1"
 
         try:
             result = subprocess.run(
@@ -107,11 +140,13 @@ class ClaudeOAuthClient:
                     "--model",
                     model,
                     "--max-turns",
-                    "1",
+                    max_turns,
+                    "--allowedTools",
+                    allowed_tools,
                 ],
                 capture_output=True,
                 text=True,
-                timeout=60,
+                timeout=90,
                 env=env,
             )
 
@@ -128,6 +163,14 @@ class ClaudeOAuthClient:
         except Exception as e:
             logger.error("Claude CLI failed: %s", e)
             return {"content": [{"type": "text", "text": f"Error: {e}"}]}
+        finally:
+            # Clean up temp image file
+            if _image_path:
+                try:
+                    import os as _os
+                    _os.unlink(_image_path)
+                except Exception:
+                    pass
 
 
 def check_cli_auth() -> bool:
