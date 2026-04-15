@@ -193,7 +193,7 @@ jobs:
           echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           name: "OpenCastor v${{ steps.version.outputs.VERSION }}"
           body: |
@@ -252,7 +252,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: python3 .github/scripts/generate_sbom.py
       - name: Attach SBOM to release
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe  # v2
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v2
         with:
           files: opencastor-${{ github.ref_name }}-sbom.cyclonedx.json
           fail_on_unmatched_files: false
