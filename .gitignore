@@ -27,3 +27,4 @@ alex.rcan.yaml
 .worktrees/
 config/swarm.yaml
 .worktrees/
+.opencastor-commitments.jsonl
