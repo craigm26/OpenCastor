@@ -6,6 +6,25 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 
 ---
 
+## [2026.4.15.0] - 2026-04-15
+
+### Added
+- **Face page tap-to-speak**: Web Speech API integration on `/face` — tap the mic button to dictate commands; robot reply is spoken via SpeechSynthesis; gracefully hidden when browser lacks `SpeechRecognition` support
+- **RCAN strict key validation** (`security.strict_key_validation: true`): opt-in mode rejects messages with missing or unknown `key_id`; permissive default preserved (`is_strict_mode()` helper in `castor/rcan/key_rotation.py`)
+- **Delegation chain expiry**: `verify_chain()` in `castor/delegation.py` now checks `expires_at` on each hop; expired hops reject the chain immediately
+
+### Fixed
+- **SO-ARM101 `dry_run` serial port open**: `setup_motors(dry_run=True)` was opening the real serial port when `feetech_servo_sdk` is installed, causing `SerialException` in CI; now returns simulated success immediately before port open
+- **Dashboard camera hint**: Shows actionable "Set an API token in ⚙️ Settings" message instead of generic error when no camera token is configured
+
+### Changed
+- **Dashboard spacing**: Tighter CSS throughout — container padding, metric cards, section headers, HR margins, and column gaps all reduced for a denser, cleaner layout
+
+### CI/CD
+- **Cloudflare Pages deploy**: Replaced `pnpm/action-setup@v6` (corepack-based) with `npm install -g pnpm@9.15.9`; root `package.json` added to deploy trigger paths; resolves `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` and `ERR_PNPM_IGNORED_BUILDS` errors
+
+---
+
 ## [2026.4.12.0] - 2026-04-12
 
 ### Added
