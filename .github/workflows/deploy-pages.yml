@@ -30,11 +30,11 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 9.15.9
+          version: 9
           run_install: false
 
       - name: Install dependencies
-        run: cd website && pnpm install --frozen-lockfile
+        run: cd website && pnpm install --prefer-frozen-lockfile
 
       - name: Build Astro site
         run: cd website && pnpm run build
