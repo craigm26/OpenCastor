@@ -41,7 +41,7 @@ try:
     from neonize.events import ConnectedEv, DisconnectedEv, LoggedOutEv, MessageEv, PairStatusEv
 
     HAS_NEONIZE = True
-except ImportError:
+except Exception:
     HAS_NEONIZE = False
 
 # ── Pairing message sent to unknown senders ────────────────────────────────
