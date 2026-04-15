@@ -7003,6 +7003,25 @@ const RB_IDLE=114, RB_MOVE=120, RB_SPEAK=106, RB_LISTEN=102, RB_ESTOP=128, RB_OF
     transition:opacity 0.3s ease;
   }}
   #cc-bar.cc-visible{{display:block;}}
+  /* ── Mic hint ───────────────────────────────────────────────────── */
+  #mic-hint{{
+    position:fixed;bottom:56px;left:50%;transform:translateX(-50%);
+    display:flex;align-items:center;gap:10px;
+    background:rgba(0,0,0,0.18);backdrop-filter:blur(6px);
+    border:1.5px solid rgba(255,255,255,0.22);border-radius:999px;
+    padding:10px 22px;cursor:pointer;
+    color:#0d0d0d;font-size:clamp(0.85rem,3vw,1.05rem);font-weight:600;
+    letter-spacing:0.01em;transition:opacity 0.3s ease,background 0.2s;
+    white-space:nowrap;
+  }}
+  #mic-hint svg{{flex-shrink:0;}}
+  #mic-hint:hover{{background:rgba(0,87,255,0.15);}}
+  #mic-hint.hidden{{opacity:0;pointer-events:none;}}
+  #mic-hint.listening{{background:rgba(0,87,255,0.25);border-color:#0057ff;color:#0057ff;}}
+  #mic-hint.error{{background:rgba(192,0,0,0.18);border-color:#c00000;color:#c00000;}}
+  /* retro tint */
+  body.retro-mode #mic-hint{{color:#00ff41;background:rgba(0,255,65,0.1);border-color:#00ff41;}}
+  body.retro-mode #mic-hint.listening{{background:rgba(0,255,65,0.22);}}
 </style>
 </head>
 <body>
@@ -7026,6 +7045,18 @@ const RB_IDLE=114, RB_MOVE=120, RB_SPEAK=106, RB_LISTEN=102, RB_ESTOP=128, RB_OF
 
 <div id="cc-bar"></div>
 
+<!-- Tap-to-speak hint -->
+<div id="mic-hint" role="button" aria-label="Tap to speak">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+       stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="9" y="2" width="6" height="12" rx="3"/>
+    <path d="M5 10a7 7 0 0014 0"/>
+    <line x1="12" y1="21" x2="12" y2="17"/>
+    <line x1="9"  y1="21" x2="15" y2="21"/>
+  </svg>
+  <span id="mic-label">Tap to speak</span>
+</div>
+
 <script>
 const TOKEN    = "{_tok}";
 const API      = window.location.origin;
@@ -7033,6 +7064,7 @@ const DASH     = "http://" + window.location.hostname + ":8501";
 const LP_MS    = 2000;
 const LP_CIRC  = 2 * Math.PI * 155;
 const IS_RETRO = {_is_retro};
+if (IS_RETRO) document.body.classList.add("retro-mode");
 const CC_ON    = {_captions_enabled};
 
 // Per-style presets (injected by server)
@@ -7181,9 +7213,95 @@ async function poll() {{
 setInterval(poll, 500);
 poll();
 
+// ── Tap-to-speak (Web Speech API) ────────────────────────────────────────────
+const micHint  = document.getElementById("mic-hint");
+const micLabel = document.getElementById("mic-label");
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+let _srActive = false, _recog = null;
+
+if (!SpeechRec) {{
+  micHint.classList.add("hidden");  // hide hint if browser has no speech support
+}}
+
+function _micLabel(txt) {{ if (micLabel) micLabel.textContent = txt; }}
+
+function _startSpeech(e) {{
+  if (!SpeechRec || _srActive) return;
+  e.stopPropagation();
+  _srActive = true;
+  micHint.classList.add("listening");
+  _micLabel("Listening…");
+  applyState("listening");
+
+  _recog = new SpeechRec();
+  _recog.lang = "en-US";
+  _recog.interimResults = false;
+  _recog.maxAlternatives = 1;
+
+  _recog.onresult = async (ev) => {{
+    const transcript = ev.results[0][0].transcript.trim();
+    if (!transcript) return;
+    _micLabel("Sending…");
+    applyState("speaking");
+    try {{
+      const headers = {{"Content-Type": "application/json"}};
+      if (TOKEN) headers["Authorization"] = "Bearer " + TOKEN;
+      const r = await fetch(API + "/api/command", {{
+        method: "POST",
+        headers,
+        body: JSON.stringify({{instruction: transcript}}),
+        signal: AbortSignal.timeout(15000),
+      }});
+      if (r.ok) {{
+        const d = await r.json();
+        const reply = d.raw_text || d.text || "";
+        if (reply && CC_ON) {{
+          ccBar.textContent = reply;
+          ccBar.classList.add("cc-visible");
+          setTimeout(() => ccBar.classList.remove("cc-visible"), 6000);
+        }}
+        if (reply) {{
+          const u = new SpeechSynthesisUtterance(reply);
+          u.lang = "en-US";
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(u);
+        }}
+      }}
+    }} catch (err) {{
+      _micLabel("Error");
+      micHint.classList.add("error");
+      setTimeout(() => micHint.classList.remove("error"), 2000);
+    }}
+  }};
+
+  _recog.onerror = () => {{
+    _micLabel("Error");
+    micHint.classList.add("error");
+    setTimeout(() => micHint.classList.remove("error"), 2000);
+  }};
+
+  _recog.onend = () => {{
+    _srActive = false;
+    _recog = null;
+    micHint.classList.remove("listening");
+    _micLabel("Tap to speak");
+  }};
+
+  _recog.start();
+}}
+
+if (SpeechRec && micHint) {{
+  micHint.addEventListener("pointerup", (e) => {{
+    e.stopPropagation();
+    _startSpeech(e);
+  }});
+}}
+
 // ── Long-press 2s → backstage dashboard ──────────────────────────────────────
 let lpStart = 0, lpAnim = null;
 function lpBegin(e) {{
+  // Don't start long-press if user tapped the mic hint
+  if (e.target.closest && e.target.closest("#mic-hint")) return;
   e.preventDefault();
   lpStart = Date.now();
   lpRing.style.display = "block";

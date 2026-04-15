@@ -36,9 +36,9 @@ st.markdown(
   #MainMenu, footer, header { visibility: hidden; }
 
   /* ── desktop padding; tighter on mobile ── */
-  .block-container { padding: 0.75rem 1.25rem 1rem !important; max-width: 100% !important; }
+  .block-container { padding: 0.5rem 0.75rem 0.75rem !important; max-width: 100% !important; }
   @media (max-width: 768px) {
-    .block-container { padding: 0.4rem 0.4rem 0.5rem !important; }
+    .block-container { padding: 0.25rem 0.25rem 0.4rem !important; }
   }
 
   /* ── touch-friendly buttons (min 48 px tall) ── */
@@ -61,23 +61,23 @@ st.markdown(
   [data-testid="stMetric"] {
     background: #ffffff !important;
     border-radius: 8px !important;
-    padding: 14px 16px !important;
+    padding: 10px 12px !important;
     border: 1px solid #d0d5dd !important;
     border-left: 3px solid #0057ff !important;
     box-shadow: 0 1px 4px rgba(0,0,0,0.07) !important;
   }
-  [data-testid="stMetricValue"] { font-size: 1.1rem !important; font-weight: 700 !important; color: #0d0d0d !important; }
+  [data-testid="stMetricValue"] { font-size: 1rem !important; font-weight: 700 !important; color: #0d0d0d !important; }
   [data-testid="stMetricLabel"] {
-    font-size: 0.68rem !important; color: #555f6e !important;
+    font-size: 0.65rem !important; color: #555f6e !important;
     text-transform: uppercase; letter-spacing: 0.06em;
   }
 
   /* ── section headers ── */
   .sh {
-    color: #0d0d0d; font-size: 0.78rem; font-weight: 700;
+    color: #0d0d0d; font-size: 0.75rem; font-weight: 700;
     letter-spacing: 0.08em; text-transform: uppercase;
-    border-left: 3px solid #0057ff; padding-left: 9px;
-    margin: 10px 0 5px 0;
+    border-left: 3px solid #0057ff; padding-left: 8px;
+    margin: 6px 0 4px 0;
   }
   .sh.g { border-left-color: #007a2f; }
   .sh.o { border-left-color: #b35a00; }
@@ -141,7 +141,13 @@ st.markdown(
 
   /* ── misc ── */
   [data-testid="stDataFrame"] { font-size: 0.78rem; }
-  hr { margin: 0.8rem 0 !important; }
+  hr { margin: 0.4rem 0 !important; }
+  /* tighter column gaps */
+  [data-testid="stHorizontalBlock"] { gap: 0.5rem !important; }
+  /* tighter expander header */
+  [data-testid="stExpander"] summary { padding: 6px 10px !important; font-size: 0.82rem; }
+  /* tighter tab content */
+  [data-testid="stTabContent"] { padding-top: 0.4rem !important; }
 
   /* ── back-to-face link ── */
   .face-back {
@@ -425,8 +431,9 @@ with _tab_ctrl:
        onerror="document.getElementById('cam-err').style.display='flex';this.style.display='none';" />
   <div id="cam-err" style="display:none;position:absolute;inset:0;align-items:center;
        justify-content:center;flex-direction:column;color:#6b7280;font-family:monospace;
-       font-size:0.85rem;background:#ffffff;">
-    <div style="font-size:2rem;margin-bottom:8px;">📷</div><div>No camera signal</div>
+       font-size:0.82rem;background:#ffffff;text-align:center;padding:16px;">
+    <div style="font-size:2rem;margin-bottom:8px;">📷</div>
+    <div id="cam-err-msg">No camera signal</div>
   </div>
 </div>
 <script>
@@ -437,8 +444,15 @@ with _tab_ctrl:
     try{{var wh=window.location.hostname;if(wh&&wh!=="")host=wh;}}catch(e){{}}
   }}
   var base=proto+"//"+host+":"+port+"/api/stream/mjpeg";
-  var url=tok?base+"?token="+encodeURIComponent(tok):base;
   var img=document.getElementById("cam");
+  var errDiv=document.getElementById("cam-err");
+  var errMsg=document.getElementById("cam-err-msg");
+  if(!tok){{
+    if(errDiv){{errDiv.style.display="flex";}}
+    if(errMsg)errMsg.textContent="Set an API token in ⚙\ufe0f Settings to enable camera";
+    return;
+  }}
+  var url=base+"?token="+encodeURIComponent(tok);
   if(img)img.src=url;
 }})();
 </script>""",
