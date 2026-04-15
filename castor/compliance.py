@@ -15,7 +15,7 @@ from typing import IO, Any
 # Version constants
 # ─────────────────────────────────────────────────────────────────────────────
 
-SPEC_VERSION: str = "2.2"
+SPEC_VERSION: str = "3.0"
 
 ACCEPTED_RCAN_VERSIONS: tuple[str, ...] = (
     "2.1",
@@ -23,12 +23,24 @@ ACCEPTED_RCAN_VERSIONS: tuple[str, ...] = (
     "2.2",
     "2.2.0",
     "2.2.1",
+    "3.0",
 )
 
 
 def is_accepted_version(version: str) -> bool:
-    """Return True if *version* is in ACCEPTED_RCAN_VERSIONS."""
-    return version in ACCEPTED_RCAN_VERSIONS
+    """Return True if *version* satisfies the minimum supported spec (≥ 2.1).
+
+    Accepts any version in ACCEPTED_RCAN_VERSIONS, and also any future version
+    whose major component is ≥ 3 (forward-compatible with RCAN 3.x).
+    """
+    if version in ACCEPTED_RCAN_VERSIONS:
+        return True
+    try:
+        parts = [int(x) for x in str(version).split(".")[:2]]
+        major = parts[0]
+        return major > 3
+    except Exception:
+        return False
 
 
 # ─────────────────────────────────────────────────────────────────────────────

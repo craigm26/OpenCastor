@@ -291,14 +291,16 @@ class Camera:
         self.last_depth = None  # Expose depth for reactive layer
         self.last_imu = None  # Expose IMU for orientation-aware navigation (OAK-4 Pro)
 
-        cam_cfg = config.get("camera", {})
+        # Support both `camera:` (legacy flat key) and `cameras.main:` (RCAN 3.0 nested)
+        cam_cfg = config.get("camera") or config.get("cameras", {}).get("main") or {}
         cam_type = cam_cfg.get("type", "auto")
         res = cam_cfg.get("resolution", [640, 480])
         depth_enabled = cam_cfg.get("depth_enabled", False)
         imu_enabled = cam_cfg.get("imu_enabled", False)
 
         # --- Try OAK-D / OAK-4 Pro (DepthAI USB camera with depth) ---
-        if cam_type in ("oakd", "auto"):
+        # "depthai" and "oak" are accepted aliases for "oakd"
+        if cam_type in ("oakd", "auto", "depthai", "oak"):
             try:
                 import depthai as dai
 

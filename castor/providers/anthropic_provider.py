@@ -123,7 +123,7 @@ class AnthropicProvider(BaseProvider):
 
         # Route through CLI if using OAuth token
         if getattr(self, "_use_cli", False):
-            return self._think_via_cli(instruction)
+            return self._think_via_cli(instruction, image_bytes=image_bytes, surface=surface)
 
         # Determine if we have a real camera frame
         is_blank = not image_bytes or image_bytes == b"\x00" * len(image_bytes)
@@ -232,18 +232,43 @@ class AnthropicProvider(BaseProvider):
                 pass
         return stats
 
-    def _think_via_cli(self, instruction: str) -> Thought:
+    def _think_via_cli(
+        self,
+        instruction: str,
+        image_bytes: bytes = b"",
+        surface: str = "whatsapp",
+    ) -> Thought:
         """Call Claude via OAuth CLI client (uses Max/Pro subscription).
 
         Passes cache_control content blocks when available so the CLI path
         benefits from the same prompt-caching structure as the direct API path.
+        Respects surface (voice/terminal/dashboard) and includes image if provided.
         """
-        system_arg = getattr(self, "_cached_system_blocks", None) or self.system_prompt
+        # Build surface-appropriate system prompt dynamically
+        if surface != "whatsapp" or not getattr(self, "_cached_system_blocks", None):
+            system_arg = self.build_messaging_prompt(
+                robot_name=self._robot_name,
+                surface=surface,
+            )
+        else:
+            system_arg = getattr(self, "_cached_system_blocks", None) or self.system_prompt
+
+        # Build message content — include image if a real frame was provided
+        is_blank = not image_bytes or all(b == 0 for b in image_bytes[:16])
+        if not is_blank and len(image_bytes) > 100:
+            b64 = base64.b64encode(image_bytes).decode("utf-8")
+            user_content = [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
+                {"type": "text", "text": instruction},
+            ]
+        else:
+            user_content = instruction
+
         try:
             response = self._cli_client.create_message(
                 model=self.model_name,
                 system=system_arg,
-                messages=[{"role": "user", "content": instruction}],
+                messages=[{"role": "user", "content": user_content}],
                 max_tokens=1024,
             )
             text = response["content"][0]["text"]
@@ -282,7 +307,7 @@ class AnthropicProvider(BaseProvider):
 
         # CLI path doesn't support streaming — fall back to non-streaming
         if getattr(self, "_use_cli", False):
-            thought = self._think_via_cli(instruction)
+            thought = self._think_via_cli(instruction, image_bytes=image_bytes, surface=surface)
             yield thought.raw_text
             return
 
