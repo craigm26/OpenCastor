@@ -231,3 +231,36 @@ class TestDispatchPickPlaceFirestoreRead:
             with patch.object(bridge, "_wait_for_confirmation") as mock_wait:
                 bridge._dispatch_pick_place("lego", "bowl", {})
                 mock_wait.assert_not_called()
+
+
+# ── 5. Gateway phase writes ───────────────────────────────────────────────────
+
+from castor.api import _write_task_phase
+
+
+class TestGatewayPhaseWrites:
+    def test_write_task_phase_calls_firestore_update(self):
+        mock_db = MagicMock()
+        task_ref = MagicMock()
+        mock_db.collection.return_value.document.return_value \
+            .collection.return_value.document.return_value = task_ref
+
+        _write_task_phase(mock_db, "RRN-001", "task-abc", "APPROACH", "running")
+
+        task_ref.update.assert_called_once()
+        call_args = task_ref.update.call_args[0][0]
+        assert call_args["phase"] == "APPROACH"
+        assert call_args["status"] == "running"
+
+    def test_write_task_phase_swallows_error(self):
+        mock_db = MagicMock()
+        mock_db.collection.return_value.document.return_value \
+            .collection.return_value.document.return_value \
+            .update.side_effect = Exception("network timeout")
+        # Must not raise
+        _write_task_phase(mock_db, "RRN-001", "task-abc", "GRASP", "running")
+
+    def test_write_task_phase_no_op_when_no_task_id(self):
+        mock_db = MagicMock()
+        _write_task_phase(mock_db, "RRN-001", None, "APPROACH", "running")
+        mock_db.collection.assert_not_called()

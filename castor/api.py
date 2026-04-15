@@ -2801,6 +2801,35 @@ async def driver_health():
     return result
 
 
+def _write_task_phase(
+    db: Any,
+    rrn: str,
+    task_id: Optional[str],
+    phase: str,
+    status: str,
+    **extra_fields: Any,
+) -> None:
+    """Best-effort write of a task phase update to Firestore.
+
+    Never raises — Firestore errors are logged and swallowed so arm execution
+    continues regardless of telemetry connectivity.
+    """
+    if db is None or not task_id:
+        return
+    try:
+        from datetime import datetime
+        from datetime import timezone as _tz
+        fields: dict[str, Any] = {
+            "phase": phase,
+            "status": status,
+            "updated_at": datetime.now(_tz.utc).isoformat(),
+            **extra_fields,
+        }
+        db.collection("robots").document(rrn).collection("tasks").document(task_id).update(fields)
+    except Exception as exc:
+        logger.warning("_write_task_phase failed (task_id=%s phase=%s): %s", task_id, phase, exc)
+
+
 # ---------------------------------------------------------------------------
 # Vision-guided arm pick-and-place endpoint
 # ---------------------------------------------------------------------------
@@ -2810,6 +2839,9 @@ class _PickPlaceRequest(BaseModel):
     target: str = "red lego brick"
     destination: str = "bowl"
     max_vision_steps: int = 4  # max camera-guided correction cycles per phase
+    task_id: Optional[str] = None          # Firestore task doc to write progress to
+    firebase_project: Optional[str] = None  # Firebase project for task doc writes
+    rrn: Optional[str] = None              # Robot RRN for Firestore path
 
 
 @app.post("/api/arm/pick_place", dependencies=[Depends(verify_token)])
@@ -2830,6 +2862,24 @@ async def arm_pick_place(req: _PickPlaceRequest):
         raise HTTPException(status_code=503, detail="Brain not initialized")
 
     log: list[dict] = []
+
+    # ── Firestore task progress (best-effort) ─────────────────────────────────
+    _task_db: Any = None
+    if req.task_id and req.firebase_project and req.rrn:
+        try:
+            import firebase_admin
+            from firebase_admin import credentials as _fb_creds
+            from firebase_admin import firestore as _fb_store
+
+            if not firebase_admin._apps:
+                cred = _fb_creds.ApplicationDefault()
+                firebase_admin.initialize_app(cred)
+            _task_db = _fb_store.client()
+        except Exception as _exc:
+            logger.warning("arm_pick_place: Firestore init failed: %s", _exc)
+
+    # SCAN phase: write initial detection results
+    _write_task_phase(_task_db, req.rrn or "", req.task_id, "SCAN", "running")
 
     async def _vision_plan(phase: str, extra_instruction: str = "") -> list[dict] | dict | None:
         """Capture a fresh frame and ask the brain to plan the next arm_pose(s)."""
@@ -2866,8 +2916,10 @@ async def arm_pick_place(req: _PickPlaceRequest):
         f"the {req.target}. Do not grasp yet.",
     )
     if approach:
+        _write_task_phase(_task_db, req.rrn or "", req.task_id, "APPROACH", "running")
         await asyncio.to_thread(_exec, approach)
         log.append({"phase": "APPROACH", "executed": True})
+        _write_task_phase(_task_db, req.rrn or "", req.task_id, "APPROACH", "complete")
 
     # Phase 2: descend and grasp
     grasp = await _vision_plan(
@@ -2876,8 +2928,10 @@ async def arm_pick_place(req: _PickPlaceRequest):
         "onto it, then close the gripper (gripper: -1.0) to grasp it.",
     )
     if grasp:
+        _write_task_phase(_task_db, req.rrn or "", req.task_id, "GRASP", "running")
         await asyncio.to_thread(_exec, grasp)
         log.append({"phase": "GRASP", "executed": True})
+        _write_task_phase(_task_db, req.rrn or "", req.task_id, "GRASP", "complete")
 
     # Phase 3: lift, move to destination, release
     place = await _vision_plan(
@@ -2887,8 +2941,10 @@ async def arm_pick_place(req: _PickPlaceRequest):
         "to release. End with arm raised back to neutral.",
     )
     if place:
+        _write_task_phase(_task_db, req.rrn or "", req.task_id, "PLACE", "running")
         await asyncio.to_thread(_exec, place)
         log.append({"phase": "PLACE", "executed": True})
+        _write_task_phase(_task_db, req.rrn or "", req.task_id, "PLACE", "complete")
 
     return {"status": "complete", "log": log}
 
