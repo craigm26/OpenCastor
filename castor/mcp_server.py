@@ -688,7 +688,6 @@ def stream_telemetry(
 
 def _collect_ws_frames(ws_url: str, duration_s: int) -> list[dict]:
     """Connect to WebSocket and collect frames for duration_s seconds."""
-    import asyncio
     import json as _json
 
     frames: list[dict] = []
@@ -779,86 +778,3 @@ def _compute_stats(frames: list[dict], fields: list | None) -> dict:
             "samples": len(vals),
         }
     return stats
-
-
-# ── Fleet tools ──────────────────────────────────────────────────────────────
-
-
-# Avoid circular import — helpers imported lazily at call time
-
-# ── helpers ──────────────────────────────────────────────────────────────────
-
-
-def _fleet_robots() -> list[dict[str, Any]]:
-    """Return the fleet robot list from the gateway."""
-    url = f"{_gateway_url()}/api/fleet"
-    try:
-        resp = httpx.get(url, timeout=8)
-        resp.raise_for_status()
-        data = resp.json()
-        return data.get("fleet", data.get("robots", []))
-    except Exception as exc:  # noqa: BLE001
-        return [{"error": str(exc)}]
-
-
-def _robot_status_sync(base_url: str, rrn: str) -> dict[str, Any]:
-    """Fetch /api/status for a single robot gateway."""
-    try:
-        resp = httpx.get(f"{base_url}/api/status", timeout=6)
-        resp.raise_for_status()
-        return {"rrn": rrn, "ok": True, "data": resp.json()}
-    except Exception as exc:  # noqa: BLE001
-        return {"rrn": rrn, "ok": False, "error": str(exc)}
-
-
-async def _send_command_async(
-    base_url: str, rrn: str, instruction: str, scope: str
-) -> dict[str, Any]:
-    """POST /api/command asynchronously."""
-    try:
-        async with httpx.AsyncClient(timeout=8) as client:
-            resp = await client.post(
-                f"{base_url}/api/command",
-                json={"instruction": instruction, "scope": scope},
-            )
-            resp.raise_for_status()
-            return {"rrn": rrn, "ok": True, "result": resp.json()}
-    except Exception as exc:  # noqa: BLE001
-        return {"rrn": rrn, "ok": False, "error": str(exc)}
-
-
-async def _estop_async(base_url: str, rrn: str) -> dict[str, Any]:
-    """POST /api/estop asynchronously."""
-    try:
-        async with httpx.AsyncClient(timeout=6) as client:
-            resp = await client.post(f"{base_url}/api/estop", json={"rrn": rrn})
-            resp.raise_for_status()
-            return {"rrn": rrn, "ok": True}
-    except Exception as exc:  # noqa: BLE001
-        return {"rrn": rrn, "ok": False, "error": str(exc)}
-
-
-def _run(coro: Any) -> Any:
-    """Run a coroutine in a new event loop (works from sync context)."""
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-    if loop and loop.is_running():
-        import concurrent.futures
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            fut = pool.submit(asyncio.run, coro)
-            return fut.result()
-    return asyncio.run(coro)
-
-
-#
-
-
-# Register fleet tools (avoids circular import by calling after mcp is defined)
-from .mcp_fleet import register as _register_fleet  # noqa: E402
-
-fleet_status, fleet_broadcast, fleet_estop, fleet_navigate = _register_fleet(
-    mcp, _check_loa, _gateway_url
-)
