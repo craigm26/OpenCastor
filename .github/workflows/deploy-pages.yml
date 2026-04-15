@@ -33,6 +33,9 @@ jobs:
           version: 9
           run_install: false
 
+      - name: Debug pnpm version
+        run: pnpm --version && cat website/package.json | python3 -c "import sys,json; d=json.load(sys.stdin); print('onlyBuiltDeps:', d.get('pnpm',{}).get('onlyBuiltDependencies'))"
+
       - name: Install dependencies
         run: cd website && pnpm install --no-frozen-lockfile
 
