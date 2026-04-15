@@ -34,7 +34,7 @@ jobs:
           run_install: false
 
       - name: Install dependencies
-        run: cd website && pnpm install --prefer-frozen-lockfile
+        run: cd website && pnpm install --no-frozen-lockfile
 
       - name: Build Astro site
         run: cd website && pnpm run build
