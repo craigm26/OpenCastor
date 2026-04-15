@@ -42,8 +42,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from castor.audit import get_audit
 from castor.api_errors import register_error_handlers
+from castor.audit import get_audit
 from castor.auth import (
     list_available_channels,
     list_available_providers,
