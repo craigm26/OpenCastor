@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'website/**'
+      - 'package.json'
       - 'wrangler.toml'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
