@@ -322,7 +322,11 @@ class CastorBridge:
         )
         self.capabilities: list[str] = config.get("capabilities") or rcan.get("capabilities") or []
         self.version: str = meta.get("version") or config.get("opencastor_version") or "unknown"
-        self.firebase_uid: str = config.get("firebase_uid", "")
+        self.firebase_uid: str = (
+            config.get("firebase_uid")
+            or meta.get("firebase_uid")
+            or config.get("cloud", {}).get("firebase_uid", "")
+        )
         self._rcan_config: dict[str, Any] = config  # stored for identity write
 
         # v1.5: Training data consent config (GAP-10)
@@ -1181,19 +1185,9 @@ class CastorBridge:
 
         except Exception as exc:
             log.warning("Telemetry publish failed: %s", exc)
-            try:
-                self._robot_ref().set(
-                    {
-                        "status": {
-                            "online": False,
-                            "last_seen": datetime.now(timezone.utc).isoformat(),
-                            "error": str(exc),
-                        }
-                    },
-                    merge=True,
-                )
-            except Exception:
-                pass
+            # Don't mark online=False on a single telemetry write failure — the gateway
+            # may still be healthy. Offline mode is triggered after OFFLINE_THRESHOLD_S
+            # (300s) of no successful Firestore contact, not on the first timeout.
             self._check_offline_mode()
 
     def _flush_bq_buffer(self) -> None:
