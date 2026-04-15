@@ -3,7 +3,7 @@
 Covers:
   - AnthropicProvider.think() passes timeout=60.0 to messages.create()
   - AnthropicProvider.think_stream() passes timeout=60.0 to messages.stream()
-  - ClaudeOAuthClient.create_message() uses subprocess timeout=60
+  - ClaudeOAuthClient.create_message() uses subprocess timeout>=60 (90s for vision)
   - autodream_runner.main() catches TimeoutError and sys.exit(1)
   - scripts/autodream.sh unsets ANTHROPIC_API_KEY before python invocation
 """
@@ -95,8 +95,11 @@ def test_think_stream_passes_timeout_to_messages_stream():
 # ── ClaudeOAuthClient subprocess timeout ─────────────────────────────────────
 
 
-def test_claude_proxy_subprocess_timeout_is_60():
-    """subprocess.run in ClaudeOAuthClient must use timeout=60 (not 30)."""
+def test_claude_proxy_subprocess_timeout_is_sufficient():
+    """subprocess.run in ClaudeOAuthClient must use timeout>=60.
+
+    Timeout is 90s to allow vision calls (Read tool + multi-turn) to complete.
+    """
     from castor.claude_proxy import ClaudeOAuthClient
 
     client = ClaudeOAuthClient(oauth_token="sk-ant-oat01-test")
@@ -110,7 +113,7 @@ def test_claude_proxy_subprocess_timeout_is_60():
         )
         assert mock_run.called, "subprocess.run() was not called"
         timeout_used = mock_run.call_args.kwargs.get("timeout")
-        assert timeout_used == 60, f"Expected subprocess timeout=60, got: {timeout_used!r}"
+        assert timeout_used >= 60, f"Expected subprocess timeout>=60, got: {timeout_used!r}"
 
 
 # ── autodream_runner TimeoutError handling ────────────────────────────────────
