@@ -126,6 +126,10 @@ def setup_motors(
             results[m["joint"]] = True
         return results
 
+    # In dry_run mode we never open hardware — return simulated success immediately.
+    if dry_run:
+        return {m["joint"]: True for m in motor_list}
+
     print_fn(f"\n{'=' * 60}")
     print_fn(f"  SO-ARM101 Motor Setup — {arm.upper()} arm")
     print_fn(f"  Port: {port}  |  Target baud: {target_baud:,}")
