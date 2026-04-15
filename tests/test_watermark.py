@@ -1,4 +1,5 @@
 """Tests for castor.watermark — AI output watermark token."""
+
 import re
 
 from castor.watermark import (

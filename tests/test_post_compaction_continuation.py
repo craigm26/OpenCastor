@@ -52,7 +52,9 @@ async def test_compact_history_returns_summary_text():
 
     with patch.object(builder, "_summarise_messages", new=AsyncMock(return_value="test summary")):
         messages = [{"role": "user", "content": f"msg{i}"} for i in range(10)]
-        compacted, was_compacted, summary = await builder._compact_history(messages, budget_tokens=1)
+        compacted, was_compacted, summary = await builder._compact_history(
+            messages, budget_tokens=1
+        )
 
     assert was_compacted is True
     assert summary == "test summary"
@@ -73,7 +75,9 @@ async def test_compact_history_fallback_returns_empty_summary():
         new=AsyncMock(side_effect=RuntimeError("no provider")),
     ):
         messages = [{"role": "user", "content": f"msg{i}"} for i in range(10)]
-        compacted, was_compacted, summary = await builder._compact_history(messages, budget_tokens=1)
+        compacted, was_compacted, summary = await builder._compact_history(
+            messages, budget_tokens=1
+        )
 
     assert was_compacted is True
     assert summary == ""  # fallback returns empty string

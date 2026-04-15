@@ -1722,6 +1722,7 @@ class TestWatermarkInDispatch:
     def test_watermark_module_importable_from_dispatch_context(self):
         """castor.watermark must be importable and callable — the dispatch context test."""
         from castor.watermark import compute_watermark_token
+
         token = compute_watermark_token(
             "RRN-000000000001", "thought-abc", "2026-04-10T00:00:00", b"k" * 64
         )
@@ -1764,7 +1765,9 @@ class TestWatermarkVerifyEndpoint:
 
         with patch("castor.api.get_audit", return_value=fake_audit):
             client = TestClient(app)
-            resp = client.get("/api/v1/watermark/verify?token=rcan-wm-v1:" + "b" * 32 + "&rrn=RRN-1")
+            resp = client.get(
+                "/api/v1/watermark/verify?token=rcan-wm-v1:" + "b" * 32 + "&rrn=RRN-1"
+            )
 
         assert resp.status_code == 404
 

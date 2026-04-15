@@ -2564,6 +2564,7 @@ class TestFriaGenerateCli:
         """castor fria generate --help must not raise SystemExit(2)."""
         import subprocess
         import sys
+
         result = subprocess.run(
             [sys.executable, "-m", "castor.cli", "fria", "generate", "--help"],
             capture_output=True,
@@ -2641,9 +2642,13 @@ class TestSafetyBenchmarkCli:
         with patch("castor.safety_benchmark.run_safety_benchmark", return_value=mock_report):
             with pytest.raises(SystemExit) as exc_info:
                 _run_main_with_plugins_mocked(
-                    "castor", "safety", "benchmark",
-                    "--output", str(output_file),
-                    "--iterations", "5",
+                    "castor",
+                    "safety",
+                    "benchmark",
+                    "--output",
+                    str(output_file),
+                    "--iterations",
+                    "5",
                     "--fail-fast",
                 )
         assert exc_info.value.code == 1
@@ -2670,9 +2675,13 @@ class TestSafetyBenchmarkCli:
         output_file = tmp_path / "bench.json"
         with patch("castor.safety_benchmark.run_safety_benchmark", return_value=mock_report):
             _run_main_with_plugins_mocked(
-                "castor", "safety", "benchmark",
-                "--output", str(output_file),
-                "--iterations", "3",
+                "castor",
+                "safety",
+                "benchmark",
+                "--output",
+                str(output_file),
+                "--iterations",
+                "3",
                 "--json",
             )
         assert output_file.exists()

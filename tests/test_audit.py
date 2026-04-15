@@ -208,6 +208,7 @@ class TestAuditLogRead:
 class TestAuditLogWatermarkIndex:
     def test_log_motor_command_stores_watermark_in_entry(self, tmp_path):
         from castor.audit import AuditLog
+
         log_file = str(tmp_path / "audit.log")
         audit = AuditLog(log_path=log_file)
 
@@ -216,12 +217,14 @@ class TestAuditLogWatermarkIndex:
         audit.log_motor_command(action, watermark_token=token)
 
         import json
+
         with open(log_file) as f:
             entry = json.loads(f.readline())
         assert entry["watermark_token"] == token
 
     def test_watermark_index_updated_after_log(self, tmp_path):
         from castor.audit import AuditLog
+
         log_file = str(tmp_path / "audit.log")
         audit = AuditLog(log_path=log_file)
 
@@ -253,6 +256,7 @@ class TestAuditLogWatermarkIndex:
 
     def test_no_watermark_token_no_index_entry(self, tmp_path):
         from castor.audit import AuditLog
+
         log_file = str(tmp_path / "audit.log")
         audit = AuditLog(log_path=log_file)
 

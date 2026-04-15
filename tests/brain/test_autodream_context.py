@@ -205,10 +205,7 @@ def test_load_cron_outcomes_extracts_last_3_summaries(tmp_path, monkeypatch):
     import castor.brain.autodream_runner as runner_mod
 
     dream_log = tmp_path / "dream-log.jsonl"
-    entries = [
-        {"date": f"2026-04-0{i}", "summary": f"summary {i}"}
-        for i in range(1, 6)
-    ]
+    entries = [{"date": f"2026-04-0{i}", "summary": f"summary {i}"} for i in range(1, 6)]
     dream_log.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
     monkeypatch.setattr(runner_mod, "DREAM_LOG_FILE", dream_log)
 
@@ -259,21 +256,18 @@ def test_main_passes_enriched_context_to_session(tmp_path, monkeypatch):
     def fake_run(session):
         captured_session.append(session)
         from castor.brain.autodream import DreamResult
+
         return DreamResult(updated_memory="ok", summary="done")
 
     mock_brain = MagicMock()
     mock_brain.run.side_effect = fake_run
 
-    with patch(
-        "castor.providers.anthropic_provider.AnthropicProvider", return_value=MagicMock()
-    ), patch(
-        "castor.brain.autodream_runner.AutoDreamBrain", return_value=mock_brain
-    ), patch(
-        "castor.brain.autodream_runner._load_recent_commits", return_value=["abc fix"]
-    ), patch(
-        "castor.brain.autodream_runner._load_bridge_log_tail", return_value=["INFO ok"]
-    ), patch(
-        "castor.brain.autodream_runner._load_cron_outcomes", return_value=["prev summary"]
+    with (
+        patch("castor.providers.anthropic_provider.AnthropicProvider", return_value=MagicMock()),
+        patch("castor.brain.autodream_runner.AutoDreamBrain", return_value=mock_brain),
+        patch("castor.brain.autodream_runner._load_recent_commits", return_value=["abc fix"]),
+        patch("castor.brain.autodream_runner._load_bridge_log_tail", return_value=["INFO ok"]),
+        patch("castor.brain.autodream_runner._load_cron_outcomes", return_value=["prev summary"]),
     ):
         runner_mod.main()
 
