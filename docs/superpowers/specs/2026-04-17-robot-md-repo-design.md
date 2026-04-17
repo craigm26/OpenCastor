@@ -1,6 +1,6 @@
 # `robot-md` — Repository Design Spec
 
-> **⚠️ Historical. Migration landed 2026-04-17 evening.** The repo URL references throughout this doc point at `craigm26/robot-md`, which has been migrated to `continuonai/robot-md` (public spec/CLI) + `continuonai/robot-md-private` (outreach proposal). The "private at creation, flip to public later" visibility note in this doc is superseded by [`2026-04-17-robot-md-strategy.md`](./2026-04-17-robot-md-strategy.md) — read that for current truth. Body below preserved as-shipped for history.
+> **⚠️ Historical. Migration landed 2026-04-17 evening.** The repo URL references throughout this doc point at `craigm26/robot-md`, which has been migrated to `RobotRegistryFoundation/robot-md` (public spec/CLI) + `RobotRegistryFoundation/robot-md-private` (outreach proposal). The "private at creation, flip to public later" visibility note in this doc is superseded by [`2026-04-17-robot-md-strategy.md`](./2026-04-17-robot-md-strategy.md) — read that for current truth. Body below preserved as-shipped for history.
 
 **Status:** Draft for approval
 **Date:** 2026-04-17
@@ -16,7 +16,7 @@
 ## Why this belongs in its own repo
 
 - **Spec + tooling, not runtime.** OpenCastor is the runtime. RCAN is the wire protocol. RRF is the registry. `robot-md` is the declaration format that glues these into a thing Claude can read in one shot. Keeping it in a dedicated repo lets it evolve on its own cadence and (critically) makes it easy for Anthropic to adopt without pulling in OpenCastor dependencies.
-- **Vendor-neutral surface.** The repo lives at `craigm26/robot-md` today; if Anthropic adopts the convention, it can live at `Anthropic/robot-md` tomorrow with a simple transfer. If the community fragments, `continuonai/robot-md` is also viable. Naming that doesn't lock in a sponsor is deliberate.
+- **Vendor-neutral surface.** The repo lives at `craigm26/robot-md` today; if Anthropic adopts the convention, it can live at `Anthropic/robot-md` tomorrow with a simple transfer. If the community fragments, `RobotRegistryFoundation/robot-md` is also viable. Naming that doesn't lock in a sponsor is deliberate.
 - **Domain is already live.** `robotmd.dev` (acquired 2026-04-17 via Cloudflare) will host the spec site + demo. The repo is what the site points at.
 
 ## Naming (locked)
@@ -416,7 +416,7 @@ Composition is the point. Integration is the value.
 - **Owner**: `craigm26` initially
 - **License**: Apache 2.0
 - **Contribution bar (v0.1)**: small, quality PRs welcomed; major format changes require a design doc PR before any schema/code PR
-- **Path to Anthropic**: if adopted, repo transfers to `Anthropic/robot-md`; craigm26 retains committer status. If not adopted, continues under `craigm26/robot-md` or `continuonai/robot-md`.
+- **Path to Anthropic**: if adopted, repo transfers to `Anthropic/robot-md`; craigm26 retains committer status. If not adopted, continues under `craigm26/robot-md` or `RobotRegistryFoundation/robot-md`.
 
 ## Operational plan for TODAY
 

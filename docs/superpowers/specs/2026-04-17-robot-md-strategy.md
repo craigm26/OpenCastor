@@ -115,7 +115,7 @@ Three ways to execute Model B (or Model A, if that's chosen):
 
 ### Option α — Transparent, transfer as-is
 
-Transfer `craigm26/robot-md` → `continuonai/robot-md` (today) or `robotregistryfoundation/robot-md` (when that org exists) via `gh api transfer`. Keep everything public including `proposal/`. Update the 8 internal hardcoded URLs, reconfigure Cloudflare Pages GitHub integration, publish PyPI.
+Transfer `craigm26/robot-md` → `RobotRegistryFoundation/robot-md` (today) or `robotregistryfoundation/robot-md` (when that org exists) via `gh api transfer`. Keep everything public including `proposal/`. Update the 8 internal hardcoded URLs, reconfigure Cloudflare Pages GitHub integration, publish PyPI.
 
 - **Pros:** one command, reversible, preserves git history as-is, zero risk of broken clones (there are no clones).
 - **Cons:** entrenches Model A permanently; leaves `proposal/` fallback list in public history forever.
@@ -126,8 +126,8 @@ Transfer `craigm26/robot-md` → `continuonai/robot-md` (today) or `robotregistr
 Use the rare 1-hour-old-repo / no-Wayback-snapshot window to:
 
 1. Rewrite local history via `git filter-repo --path proposal --invert-paths` to remove `proposal/` from all commits.
-2. Push cleaned history to `continuonai/robot-md` (public).
-3. Push `proposal/` (with original history) to `continuonai/robot-md-private` (private).
+2. Push cleaned history to `RobotRegistryFoundation/robot-md` (public).
+3. Push `proposal/` (with original history) to `RobotRegistryFoundation/robot-md-private` (private).
 4. **Delete `craigm26/robot-md`** on GitHub (point of no return).
 5. Reconfigure Cloudflare Pages to watch the new public repo.
 6. Update hardcoded URLs in the new public repo to point at the new namespace.
@@ -139,7 +139,7 @@ Use the rare 1-hour-old-repo / no-Wayback-snapshot window to:
 
 ### Option γ — All private under a neutral org
 
-Transfer to `continuonai/robot-md` *and* flip to private. Serve the spec publicly only via `robotmd.dev` as HTML; GitHub has no public repo.
+Transfer to `RobotRegistryFoundation/robot-md` *and* flip to private. Serve the spec publicly only via `robotmd.dev` as HTML; GitHub has no public repo.
 
 - **Pros:** maximum discretion; spec still adopts via web URL.
 - **Cons:** blocks provider adoption — every agent framework wants to inspect source, schema, CLI. Contradicts the north-star "stupid easy to adopt" test. Forces operators to copy/paste the spec HTML into their own files instead of pip-installing.
@@ -147,13 +147,13 @@ Transfer to `continuonai/robot-md` *and* flip to private. Serve the spec publicl
 
 ### Recommendation
 
-**Option β, with `continuonai/robot-md` as the public home today.** Transfer to `robotregistryfoundation/robot-md` later when that GitHub org is created (it's a trivial second transfer). `continuonai` is the zero-friction, pattern-match home right now (`rcan-spec` is the exact template).
+**Option β, with `RobotRegistryFoundation/robot-md` as the public home today.** Transfer to `robotregistryfoundation/robot-md` later when that GitHub org is created (it's a trivial second transfer). `continuonai` is the zero-friction, pattern-match home right now (`rcan-spec` is the exact template).
 
 ---
 
 ## 6. Per-artifact posture matrix (Model B + Option β)
 
-| # | Artifact | Public home (`continuonai/robot-md`) | Private home (`continuonai/robot-md-private`) | Rationale |
+| # | Artifact | Public home (`RobotRegistryFoundation/robot-md`) | Private home (`RobotRegistryFoundation/robot-md-private`) | Rationale |
 |---|---|---|---|---|
 | 1 | `spec/robot-md-v1.md` | ✅ | | The standard. Must be public. |
 | 2 | `schema/v1/robot.schema.json` | ✅ | | Machine-readable contract. Public for validators. |
@@ -186,21 +186,21 @@ Every step before step 6 is reversible. Step 6 burns `craigm26/robot-md` and is 
 
 1. **Belt-and-braces backup.** `cp -r /home/craigm26/robot-md /home/craigm26/robot-md.backup.2026-04-17/` — untouched snapshot. Free rollback.
 2. **Create two fresh repos** under `continuonai` via `gh repo create`:
-   - `continuonai/robot-md` (public, no README — we'll push existing).
-   - `continuonai/robot-md-private` (private, no README).
+   - `RobotRegistryFoundation/robot-md` (public, no README — we'll push existing).
+   - `RobotRegistryFoundation/robot-md-private` (private, no README).
 3. **In a working clone**, run `git filter-repo --path proposal --invert-paths` to strip `proposal/` from all history. Verify with `git log -- proposal/` (should return nothing) and `git show HEAD -- proposal/` (nothing).
 4. **Update hardcoded URLs** in the filtered clone (8 files):
    - `cli/pyproject.toml`: `Repository`, `Issues` URLs.
-   - `README.md`, `CONTRIBUTING.md`, `docs/pypi-publish.md`, `site/README.md`, `site/index.html`, `wrangler.toml` — swap `craigm26/robot-md` → `continuonai/robot-md`.
-5. **Push filtered clone** to `continuonai/robot-md` (force-push to a clean repo; no conflicts possible).
-6. **Push `proposal/`** with original history to `continuonai/robot-md-private`:
+   - `README.md`, `CONTRIBUTING.md`, `docs/pypi-publish.md`, `site/README.md`, `site/index.html`, `wrangler.toml` — swap `craigm26/robot-md` → `RobotRegistryFoundation/robot-md`.
+5. **Push filtered clone** to `RobotRegistryFoundation/robot-md` (force-push to a clean repo; no conflicts possible).
+6. **Push `proposal/`** with original history to `RobotRegistryFoundation/robot-md-private`:
    - Fresh clone from the backup (step 1).
    - `git filter-repo --path proposal --path LICENSE` — keep only the `proposal/` tree and `LICENSE` file, discarding everything else from history.
    - Add a new `README.md` in the private repo explaining what it is and pointing at the public repo.
-   - Push to `continuonai/robot-md-private`.
+   - Push to `RobotRegistryFoundation/robot-md-private`.
 7. **Rewrite `proposal/anthropic-adoption-proposal.md`** in the private repo to drop the "drafted in public" closing paragraph. Update any repo-URL references accordingly.
 8. **Delete `craigm26/robot-md`** via `gh repo delete craigm26/robot-md --yes`. **Point of no return.**
-9. **Reconfigure Cloudflare Pages** — login to dashboard, disconnect `robotmd-dev` from `craigm26/robot-md`, reconnect to `continuonai/robot-md`. Verify deploy succeeds on next push.
+9. **Reconfigure Cloudflare Pages** — login to dashboard, disconnect `robotmd-dev` from `craigm26/robot-md`, reconnect to `RobotRegistryFoundation/robot-md`. Verify deploy succeeds on next push.
 10. **Delete April 1 blog + LinkedIn** in a single commit in `personalsite`. Don't push yet — user drives the deploy.
 11. **Rewrite 3 OpenCastor design docs** (`2026-04-17-robot-md-repo-design.md`, `2026-04-17-robot-md-v0.1-implementation.md`, `2026-04-17-robot-md-reactive-layer.md`) to reference the new URL — or leave as historical. Recommendation: add a single header note to each pointing at this strategy doc; don't rewrite bodies (history is fine).
 12. **Blog-post spec** (separate doc): lands at `docs/superpowers/specs/2026-04-17-robot-md-blog-post-design.md` once steps 1–10 are done.
@@ -210,13 +210,13 @@ Every step before step 6 is reversible. Step 6 burns `craigm26/robot-md` and is 
 | If failure at step | Recovery |
 |---|---|
 | 1 | Nothing happened. No-op. |
-| 2 | `gh repo delete continuonai/robot-md` / `continuonai/robot-md-private`. Craigm26's public repo untouched. |
+| 2 | `gh repo delete RobotRegistryFoundation/robot-md` / `RobotRegistryFoundation/robot-md-private`. Craigm26's public repo untouched. |
 | 3 | Working clone is disposable. `rm -rf` and restart. |
 | 4 | Working clone is disposable. |
 | 5 | Force-push again with fix. No external consumers. |
 | 6 | Force-push to private repo. |
 | 7 | Edit a commit; force-push private. |
-| 8 | **IRREVERSIBLE.** Before executing: verify step 5 succeeded AND `continuonai/robot-md` is correctly serving. |
+| 8 | **IRREVERSIBLE.** Before executing: verify step 5 succeeded AND `RobotRegistryFoundation/robot-md` is correctly serving. |
 | 9 | Cloudflare UI; revert to pointing at a backup repo we can push to if needed. |
 | 10 | `git reset HEAD~1` in personalsite. |
 
@@ -243,7 +243,7 @@ Once the strategy above is executed, the blog post has a clean runway:
 These gate execution. Answering them unblocks the migration.
 
 1. **Confirm Model B + Option β is the direction.** (Alternatives: Model A + Option α; Model B + Option γ.)
-2. **Confirm `continuonai/robot-md` as the public home today** — with later transfer to `robotregistryfoundation/robot-md` when that org exists. (Alternative: create RRF org now before any migration.)
+2. **Confirm `RobotRegistryFoundation/robot-md` as the public home today** — with later transfer to `robotregistryfoundation/robot-md` when that org exists. (Alternative: create RRF org now before any migration.)
 3. **Confirm `git-filter-repo` is available** (or authorize `pip install git-filter-repo`).
 4. **Confirm April 1 blog post + LinkedIn companion: delete entirely** — not retitle, not draft. (User said "yes, delete the post entirely" in response to the blog-only question; implicit for the LinkedIn companion since the collision is identical, but should be confirmed.)
 5. **The deletion → 404 window.** Accept the 404 for `craigmerry.com/blog/2026-04-01-robot-md-live-context/` until the new post lands, at which point I add an Astro redirect? Or set up the redirect at deletion time pointing at a placeholder landing on the new post's future URL? Recommendation: accept the 404; add redirect once the new post is live.

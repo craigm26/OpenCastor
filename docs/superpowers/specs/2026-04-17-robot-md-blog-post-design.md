@@ -3,7 +3,7 @@
 **Status:** Draft for approval
 **Date:** 2026-04-17
 **Author:** craigm26 (with Claude Code, Opus 4.7)
-**Depends on:** [`2026-04-17-robot-md-strategy.md`](./2026-04-17-robot-md-strategy.md) — migration to `continuonai/robot-md` (public) + `continuonai/robot-md-private` (outreach). Strategy must be executed (Cloudflare deploy green; old repo deleted) **before this post goes live.**
+**Depends on:** [`2026-04-17-robot-md-strategy.md`](./2026-04-17-robot-md-strategy.md) — migration to `RobotRegistryFoundation/robot-md` (public) + `RobotRegistryFoundation/robot-md-private` (outreach). Strategy must be executed (Cloudflare deploy green; old repo deleted) **before this post goes live.**
 
 ---
 
@@ -90,7 +90,7 @@ The point isn't that any of these need new SDKs. They don't. ROBOT.md is what th
 | What it is | Open runtime — the *workshop* | Open spec — the *passport* |
 | Who it's for | Robot builders who want a harness they can modify, run leaderboards on, experiment with models in | Any agent (Claude Code, ChatGPT, Gemini, OSS frameworks) that needs to know a robot safely |
 | Swappable? | Yes — pick your models, pick your reactive layer | Yes — works with or without OpenCastor |
-| Home | `github.com/craigm26/OpenCastor` | `github.com/continuonai/robot-md` |
+| Home | `github.com/craigm26/OpenCastor` | `github.com/RobotRegistryFoundation/robot-md` |
 
 Key sentence: *"OpenCastor is where you tune the brain. ROBOT.md is how the brain knows the body."*
 
@@ -108,7 +108,7 @@ Maybe show the ascii diagram from the repo-design doc. Keep it under 10 lines.
 
 The call to action for agent-harness authors:
 
-> *"If you ship an agent harness, ROBOT.md is a **free upgrade to your robotics story** that doesn't require you to build anything. Point your session-start primitive at the file. That's the whole integration. The spec is [at](https://robotmd.dev/spec/v1), the schema is [machine-validated](https://robotmd.dev/schema/v1/robot.schema.json), and the reference CLI is [Apache 2.0](https://github.com/continuonai/robot-md). Validator, renderer, and context-emitter are three pip-installable commands. We'd rather you fork the CLI and ship your own than wait for us to."*
+> *"If you ship an agent harness, ROBOT.md is a **free upgrade to your robotics story** that doesn't require you to build anything. Point your session-start primitive at the file. That's the whole integration. The spec is [at](https://robotmd.dev/spec/v1), the schema is [machine-validated](https://robotmd.dev/schema/v1/robot.schema.json), and the reference CLI is [Apache 2.0](https://github.com/RobotRegistryFoundation/robot-md). Validator, renderer, and context-emitter are three pip-installable commands. We'd rather you fork the CLI and ship your own than wait for us to."*
 
 Mention the three Claude surfaces explicitly:
 - Claude Code — session-start hook (v0.1 today).
@@ -121,7 +121,7 @@ Short, factual, pre-empts the "who owns this?" question:
 
 - Format spec: CC BY 4.0 (matches RCAN convention).
 - CLI + schema: Apache 2.0.
-- Stewarded by **ContinuonAI** today (`github.com/continuonai/robot-md`), intended to transfer to the **Robot Registry Foundation** when that GitHub org exists. Either way, no single planning-provider owns the standard.
+- Stewarded by the **Robot Registry Foundation** at `github.com/RobotRegistryFoundation/robot-md` — vendor-neutral, same home as the registry itself. No single planning-provider owns the standard.
 - Contribution bar: small quality PRs welcome; breaking schema changes require a design doc PR first (see `CONTRIBUTING.md`).
 
 Lead sentence: *"No provider should own the file format their competitors' agents have to read."*
@@ -159,11 +159,11 @@ Close with: *"Open `claude` in the robot's directory. The planner already knows 
 
 These are tripwires worth naming explicitly:
 
-1. **No mention of the Anthropic outreach strategy, fallback provider list, or adoption proposal specifics.** Those live in `continuonai/robot-md-private`. The post is public.
+1. **No mention of the Anthropic outreach strategy, fallback provider list, or adoption proposal specifics.** Those live in `RobotRegistryFoundation/robot-md-private`. The post is public.
 2. **No framing of Claude as a preferred provider.** The file is vendor-neutral. Name the other agent harnesses (ChatGPT, Gemini, Ollama, LangChain) in §3 specifically so the post can't be read as a Claude-only pitch.
 3. **No claim of production readiness beyond v0.1.** Bob still runs `.rcan.yaml`. MCP server + mobile bridge are documented patterns only. Say so.
 4. **No reference to the April 1 post as if it still exists.** That post is being deleted in the same deploy cycle. No internal link to it.
-5. **No direct reference to `craigm26/robot-md` as the home.** All repo URLs → `continuonai/robot-md`. The migration must finish first (see §7 of the strategy doc).
+5. **No direct reference to `craigm26/robot-md` as the home.** All repo URLs → `RobotRegistryFoundation/robot-md`. The migration must finish first (see §7 of the strategy doc).
 
 ---
 
@@ -204,7 +204,7 @@ If generating an image, prompt: *"A minimalist cover illustration in terracotta-
 
 - [ ] Migration executed (Cloudflare green, `craigm26/robot-md` deleted).
 - [ ] April 1 blog + LinkedIn deleted in personalsite; commit landed; no internal links surviving.
-- [ ] Every repo URL in the post → `continuonai/robot-md`.
+- [ ] Every repo URL in the post → `RobotRegistryFoundation/robot-md`.
 - [ ] No mention of outreach/Anthropic specifics.
 - [ ] PyPI install command adjusted to reflect actual publish state on the day of posting (if `pip install robot-md` isn't live, say "install from git" until it is).
 - [ ] LinkedIn companion matches tone and avoids the same tripwires.
