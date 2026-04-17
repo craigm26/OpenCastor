@@ -304,6 +304,7 @@ Versioning: `YYYY.MM.DD.patch` — bump patch for each commit, date when date ch
 - §21 Registry: https://rcan.dev/spec/section-21/
 - Robot Registry Foundation: https://robotregistryfoundation.org/
 - rcan-py SDK: https://github.com/continuonai/rcan-py
+- **ROBOT.md** (companion format — a single-file robot manifest any agent harness can read at session start): https://robotmd.dev · [RobotRegistryFoundation/robot-md](https://github.com/RobotRegistryFoundation/robot-md)
 
 ## Recent Features (2026-03-19)
 
