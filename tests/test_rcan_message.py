@@ -271,7 +271,7 @@ class TestRCANv12Messages:
         assert restored.type == MessageType.AUTHORIZE
 
 
-class TestRCANv22EnvelopeFields:
+class TestRCANv30EnvelopeFields:
     """RCAN v3.0 — EU AI Act compliance (§23-§27), fria_ref, mandatory pqc-hybrid-v1."""
 
     def test_spec_version_is_2_2(self):
