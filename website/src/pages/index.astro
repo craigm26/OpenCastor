@@ -419,10 +419,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       <p>
         If you're building a robot runtime, a fleet management system, or robotics hardware — <strong style="color: var(--text, #f1f5f9);">you are welcome and encouraged to implement RCAN</strong>. The spec is CC BY 4.0. The registry is open to all robots.
       </p>
+      <p style="margin-top: 1.2rem;">
+        Describing your robot? <a href="https://robotmd.dev" style="color: var(--accent); text-decoration: none; font-weight: 600;">ROBOT.md</a> is the companion one-file manifest — YAML + markdown, readable by humans and LLM agents. OpenCastor reads RCAN configs; ROBOT.md is the file an agent harness (Claude Code, Desktop, Mobile) reads to understand what the robot <em>is</em>. Use either alone, or both together.
+      </p>
     </div>
     <div class="reveal reveal-d2" style="display: flex; justify-content: center; gap: 1rem; margin-top: 2rem; flex-wrap: wrap;">
       <a href="https://rcan.dev/spec/" class="btn btn-secondary" style="font-size: 0.9rem;">Read the RCAN Spec →</a>
       <a href="https://robotregistryfoundation.org/registry/submit/" class="btn btn-secondary" style="font-size: 0.9rem;">Register Your Robot →</a>
+      <a href="https://robotmd.dev" class="btn btn-secondary" style="font-size: 0.9rem;">ROBOT.md format →</a>
       <a href="https://rcan.dev/quickstart/" class="btn btn-secondary" style="font-size: 0.9rem;">Implement RCAN →</a>
     </div>
   </div>
