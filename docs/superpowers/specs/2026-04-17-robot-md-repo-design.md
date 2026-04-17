@@ -1,5 +1,7 @@
 # `robot-md` — Repository Design Spec
 
+> **⚠️ Historical. Migration landed 2026-04-17 evening.** The repo URL references throughout this doc point at `craigm26/robot-md`, which has been migrated to `continuonai/robot-md` (public spec/CLI) + `continuonai/robot-md-private` (outreach proposal). The "private at creation, flip to public later" visibility note in this doc is superseded by [`2026-04-17-robot-md-strategy.md`](./2026-04-17-robot-md-strategy.md) — read that for current truth. Body below preserved as-shipped for history.
+
 **Status:** Draft for approval
 **Date:** 2026-04-17
 **Author:** craigm26
