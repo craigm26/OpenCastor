@@ -2130,7 +2130,7 @@ def _programmatic_register(
                     metadata={
                         "robot_name": robot_name,
                         "description": meta.get("description", ""),
-                        "rcan_version": "1.4",
+                        "rcan_version": "3.0",
                         "opencastor": True,
                     },
                 )
@@ -2495,7 +2495,7 @@ def generate_preset_config(preset_name, robot_name, agent_config, secondary_mode
             config["agent"]["apple_profile"] = agent_config["apple_profile"]
     else:
         config = {
-            "rcan_version": "1.4",
+            "rcan_version": "3.0",
             "metadata": {
                 "robot_name": robot_name,
                 "robot_uuid": str(uuid.uuid4()),
@@ -2565,7 +2565,7 @@ def generate_preset_config(preset_name, robot_name, agent_config, secondary_mode
 def generate_custom_config(robot_name, agent_config, links, drivers):
     """Generate config for custom hardware."""
     return {
-        "rcan_version": "1.4",
+        "rcan_version": "3.0",
         "metadata": {
             "robot_name": robot_name,
             "robot_uuid": str(uuid.uuid4()),

@@ -400,12 +400,12 @@ def cmd_rrf_harness(args) -> None:
         "name": "OpenCastor Dual-Brain",
         "version": firmware_version,
         "harness_type": "hybrid",
-        "rcan_version": "2.2",
+        "rcan_version": "3.0",
         "description": (
             "OpenCastor dual-brain AI harness: VLA reactive layer (OpenVLA-7B on Hailo-8 NPU) "
             "coupled with Claude planning layer. Confidence gate at 0.60 — reactive handles "
             "normal operation, planning escalates on uncertainty or destructive scope. "
-            "RCAN v2.2 compliant with ML-DSA-65 signing, LoA enforcement, and Protocol 66 safety."
+            "RCAN v3.0 compliant with ML-DSA-65 signing, LoA enforcement, and Protocol 66 safety."
         ),
         "open_source": True,
         "repo_url": "https://github.com/craigm26/OpenCastor",

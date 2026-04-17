@@ -429,7 +429,7 @@ def harness_set(
     rrn = rrn or _default_rrn()
     payload: dict[str, Any] = {
         "layers": layers,
-        "rcan_version": "2.2",
+        "rcan_version": "3.0",
         "rrn": rrn,
     }
     if flow_graph:

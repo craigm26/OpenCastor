@@ -399,7 +399,7 @@ async def health():
         "status": "ok",
         "uptime_s": round(time.time() - state.boot_time, 1),
         "version": _castor_pkg.__version__,
-        "rcan_version": "2.2",
+        "rcan_version": "3.0",
         "rrn": getattr(state, "ruri", "") or "",
     }
 
@@ -2558,7 +2558,7 @@ async def rcan_receive_message(request: Request):
             "iso_10218_2": bool(iso_cfg.get("iso_10218_2", False)),  # Industrial robots
             "iso_42001": bool(iso_cfg.get("iso_42001", True)),  # AI management systems
             "eu_ai_act": bool(iso_cfg.get("eu_ai_act", bool(cfg.get("authority_handler_enabled")))),
-            "rcan_version": "2.2",
+            "rcan_version": "3.0",
         }
 
     # MessageType.STATUS = 2 — respond with robot info
@@ -10381,7 +10381,7 @@ async def rcan_spec_endpoint():
         rcan_ver = RCAN_SPEC_VERSION
     except Exception:
         msg_types = {}
-        rcan_ver = "2.2"
+        rcan_ver = "3.0"
     try:
         gw_ver = __import__("importlib.metadata", fromlist=["version"]).version("opencastor")
     except Exception:
@@ -10418,7 +10418,7 @@ async def rcan_jwks() -> dict:
                 "alg": "ml-dsa-65",
                 "use": "sig",
                 "kty": "oct",
-                "x-rcan-version": "2.2",
+                "x-rcan-version": "3.0",
             }
         ]
         if pq_kid

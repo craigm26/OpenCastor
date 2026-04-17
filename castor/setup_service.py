@@ -878,7 +878,7 @@ def generate_preset_config(
         config["metadata"]["created_at"] = _now_iso()
     else:
         config = {
-            "rcan_version": "1.4",
+            "rcan_version": "3.0",
             "metadata": {
                 "robot_name": robot_name,
                 "robot_uuid": str(uuid.uuid4()),

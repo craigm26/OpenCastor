@@ -946,7 +946,7 @@ class CastorBridge:
                 "capabilities": self.capabilities,
                 "version": self.version,
                 "bridge_version": BRIDGE_VERSION,
-                "rcan_version": "2.2",
+                "rcan_version": "3.0",
                 "registered_at": datetime.now(timezone.utc).isoformat(),
                 "status": {
                     "online": True,
@@ -1201,7 +1201,7 @@ class CastorBridge:
                 "llmfit_status": model_rt.get("llmfit_status"),
                 "llmfit_headroom_gb": model_rt.get("llmfit_headroom_gb"),
                 "opencastor_version": oc_version,
-                "rcan_version": "2.2",
+                "rcan_version": "3.0",
                 "loa_enforcement": self._rcan_config.get("loa_enforcement", True),
                 "local_ip": telemetry.get("local_ip"),
                 "raw_json": __import__("json").dumps(live_tele),

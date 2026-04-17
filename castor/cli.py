@@ -1278,7 +1278,7 @@ def cmd_register(args) -> None:
                     device_id=device_id,
                     metadata={
                         "robot_name": meta.get("robot_name", model),
-                        "rcan_version": "1.4",
+                        "rcan_version": "3.0",
                         "opencastor": True,
                     },
                 )
@@ -1399,7 +1399,7 @@ def cmd_compliance(args) -> None:
     if output_json:
         result = {
             "config": config_path,
-            "rcan_version": "1.4",
+            "rcan_version": "3.0",
             "L1": {"pass": l1_pass, "issues": l1},
             "L2": {"pass": l2_pass, "issues": l2},
             "L3": {"pass": l3_pass, "issues": l3},
@@ -2382,6 +2382,8 @@ def cmd_iso_check(args) -> None:
     audit_days = cfg.get("audit_retention_days", 0)
     rcan_version = cfg.get("rcan_version", "?")
     pq_required = cfg.get("pq_signing_required", False)
+    _major = rcan_version.split(".")[0] if rcan_version else ""
+    _rcan_major_ge_2 = bool(_major.isdigit() and int(_major) >= 2)
 
     checks = [
         # ISO 13482 — Personal care robots safety
@@ -2405,10 +2407,10 @@ def cmd_iso_check(args) -> None:
             "standard": "ISO/IEC 42001:2023",
             "title": "AI management system",
             "declared": bool(iso_cfg.get("iso_42001", False)),
-            "notes": "RCAN v2.2 Protocol 66 aligns with AI management requirements",
+            "notes": "RCAN v3.0 Protocol 66 aligns with AI management requirements",
             "applicable": True,
             "checks": [
-                ("RCAN version ≥ 2.0", rcan_version.startswith("2.")),
+                ("RCAN version ≥ 2.0", _rcan_major_ge_2),
                 ("ML-DSA-65 signing required", pq_required),
                 ("Authority handler enabled", authority_handler),
                 ("Audit retention ≥ 1 year", audit_days >= 365),
@@ -3343,7 +3345,7 @@ def cmd_setup(args) -> None:
         "rrn": rrn,
         "owner": owner_uri,
         "name": robot_name,
-        "rcan_version": "1.6",
+        "rcan_version": "3.0",
         "firebase_uid": firebase_uid,
         "brain": brain_block,
         "cloud": {

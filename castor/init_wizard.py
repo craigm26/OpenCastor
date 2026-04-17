@@ -127,7 +127,7 @@ def generate_wizard_config(
         agent_block[_key_fields[provider]] = api_key
 
     config: dict = {
-        "rcan_version": "1.6",
+        "rcan_version": "3.0",
         "metadata": {
             "robot_name": robot_name,
             "robot_uuid": robot_uuid,
@@ -143,7 +143,7 @@ def generate_wizard_config(
         },
         "rcan_protocol": {
             "enable_mdns": True,
-            "version": "1.6",
+            "version": "3.0",
         },
         "skills": {
             "enabled": True,
