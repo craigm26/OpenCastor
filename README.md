@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://pypi.org/project/opencastor/"><img src="https://img.shields.io/pypi/v/opencastor?color=blue&label=PyPI" alt="PyPI"></a>
-  <a href="https://rcan.dev/spec/"><img src="https://img.shields.io/badge/RCAN-v1.6-brightgreen" alt="RCAN v1.6"></a>
+  <a href="https://rcan.dev/spec/"><img src="https://img.shields.io/badge/RCAN-v3.0-brightgreen" alt="RCAN v3.0"></a>
   <a href="https://rcan.dev/docs/safety/"><img src="https://img.shields.io/badge/Protocol%2066-94%25-orange" alt="Protocol 66"></a>
   <a href="https://github.com/craigm26/OpenCastor/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-green" alt="License"></a>
   <a href="https://github.com/craigm26/OpenCastor/actions"><img src="https://img.shields.io/github/actions/workflow/status/craigm26/OpenCastor/ci.yml?label=CI" alt="CI"></a>
@@ -226,18 +226,34 @@ castor gateway --config so_arm101.rcan.yaml
 
 `castor scan` counts connected Feetech boards and automatically suggests the right preset: single arm (follower or leader), or bimanual pair (ALOHA-style). Koch arms use the same detection path.
 
-## Ecosystem
+## Where this fits in the stack
 
-| Project | Version | Purpose |
+OpenCastor is the **reference runtime** — one implementation of the RCAN protocol. Everything else is independent; adopt one, or all seven.
+
+| Layer | Piece | What it is |
 |---|---|---|
-| **OpenCastor** (this) | v2026.4.17.0 | Robot runtime, RCAN reference implementation |
-| [Fleet UI](https://app.opencastor.com) | live | Web fleet dashboard |
-| [RCAN Protocol](https://rcan.dev/spec/) | v3.0 | Open robot communication standard |
-| [rcan-py](https://github.com/continuonai/rcan-py) | v2.0.0 | Python RCAN SDK |
-| [rcan-ts](https://github.com/continuonai/rcan-ts) | v2.0.0 | TypeScript RCAN SDK |
-| [ROBOT.md](https://github.com/RobotRegistryFoundation/robot-md) | v1.1 | Single-file robot manifest — YAML + prose, any planner can read |
-| [robot-md-mcp](https://github.com/RobotRegistryFoundation/robot-md-mcp) | v0.1.3 | MCP server exposing a ROBOT.md to Claude Code / any MCP-aware agent |
-| [Robot Registry Foundation](https://robotregistryfoundation.org) | v3.0 | Global robot identity registry |
+| **Declaration** | [ROBOT.md](https://github.com/RobotRegistryFoundation/robot-md) | The file a robot ships at its root. YAML frontmatter + markdown prose. Declares identity, capabilities, safety gates. Spec + Python CLI. |
+| **Agent bridge** | [robot-md-mcp](https://github.com/RobotRegistryFoundation/robot-md-mcp) | MCP server that exposes a `ROBOT.md` to Claude Code, Claude Desktop, Cursor, Zed, Gemini CLI — any MCP-aware agent. |
+| **Wire protocol** | [RCAN](https://rcan.dev/spec/) | How robots, gateways, and planners talk. Signed envelopes, LoA enforcement, PQC crypto. Think HTTP for robots. |
+| **Python SDK** | [rcan-py](https://github.com/continuonai/rcan-py) | `pip install rcan` — `RCANMessage`, `RobotURI`, `ConfidenceGate`, `HiTLGate`, `AuditChain`. |
+| **TypeScript SDK** | [rcan-ts](https://github.com/continuonai/rcan-ts) | `npm install rcan-ts` — same API surface for Node + browser. |
+| **Registry** | [Robot Registry Foundation](https://robotregistryfoundation.org) | Permanent RRN identities. Public resolver at `/r/<rrn>`. Like ICANN for robots. |
+| **Reference runtime** ← *this* | [OpenCastor](https://github.com/craigm26/OpenCastor) | **This repo.** Open-source robot runtime — connects LLM brains to hardware bodies. Implements RCAN, adds safety gates, multi-provider AI routing, 18+ hardware drivers, messaging channels, fleet management. |
+
+See also: the [`ROBOT.md` quickstart](docs/robot-md-claude-code.md) — one command puts a Bob-class robot in Claude Code via the MCP bridge.
+
+## Ecosystem (versions)
+
+| Project | Version |
+|---|---|
+| **OpenCastor** (this) | v2026.4.17.0 |
+| [Fleet UI](https://app.opencastor.com) | live |
+| [RCAN Protocol](https://rcan.dev/spec/) | v3.0 |
+| [rcan-py](https://github.com/continuonai/rcan-py) | v2.0.0 |
+| [rcan-ts](https://github.com/continuonai/rcan-ts) | v2.0.0 |
+| [ROBOT.md](https://github.com/RobotRegistryFoundation/robot-md) | v0.2.0 (schema v1.1) |
+| [robot-md-mcp](https://github.com/RobotRegistryFoundation/robot-md-mcp) | v0.1.3 |
+| [Robot Registry Foundation](https://robotregistryfoundation.org) | v3.0 |
 
 ## Contributing
 
