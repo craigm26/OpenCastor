@@ -230,12 +230,14 @@ castor gateway --config so_arm101.rcan.yaml
 
 | Project | Version | Purpose |
 |---|---|---|
-| **OpenCastor** (this) | v2026.3.17.13 | Robot runtime, RCAN reference implementation |
+| **OpenCastor** (this) | v2026.4.17.0 | Robot runtime, RCAN reference implementation |
 | [Fleet UI](https://app.opencastor.com) | live | Web fleet dashboard |
-| [RCAN Protocol](https://rcan.dev/spec/) | v1.6.0 | Open robot communication standard |
-| [rcan-py](https://github.com/continuonai/rcan-py) | v0.6.0 | Python RCAN SDK |
-| [rcan-ts](https://github.com/continuonai/rcan-ts) | v0.6.0 | TypeScript RCAN SDK |
-| [Robot Registry Foundation](https://robotregistryfoundation.org) | v1.6.0 | Global robot identity registry |
+| [RCAN Protocol](https://rcan.dev/spec/) | v3.0 | Open robot communication standard |
+| [rcan-py](https://github.com/continuonai/rcan-py) | v2.0.0 | Python RCAN SDK |
+| [rcan-ts](https://github.com/continuonai/rcan-ts) | v2.0.0 | TypeScript RCAN SDK |
+| [ROBOT.md](https://github.com/RobotRegistryFoundation/robot-md) | v1.1 | Single-file robot manifest — YAML + prose, any planner can read |
+| [robot-md-mcp](https://github.com/RobotRegistryFoundation/robot-md-mcp) | v0.1.3 | MCP server exposing a ROBOT.md to Claude Code / any MCP-aware agent |
+| [Robot Registry Foundation](https://robotregistryfoundation.org) | v3.0 | Global robot identity registry |
 
 ## Contributing
 

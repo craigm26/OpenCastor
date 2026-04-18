@@ -303,8 +303,11 @@ Versioning: `YYYY.MM.DD.patch` — bump patch for each commit, date when date ch
 - §19 Invoke: https://rcan.dev/spec/section-19/
 - §21 Registry: https://rcan.dev/spec/section-21/
 - Robot Registry Foundation: https://robotregistryfoundation.org/
-- rcan-py SDK: https://github.com/continuonai/rcan-py
-- **ROBOT.md** (companion format — a single-file robot manifest any agent harness can read at session start): https://robotmd.dev · [RobotRegistryFoundation/robot-md](https://github.com/RobotRegistryFoundation/robot-md)
+- rcan-py SDK (Python, v2.0.0+): https://github.com/continuonai/rcan-py
+- rcan-ts SDK (TypeScript, v2.0.0+): https://github.com/continuonai/rcan-ts
+- **ROBOT.md** (single-file robot manifest any agent harness can read at session start): https://robotmd.dev · [RobotRegistryFoundation/robot-md](https://github.com/RobotRegistryFoundation/robot-md)
+- **robot-md-mcp** (MCP server exposing a ROBOT.md to Claude Code / any MCP-aware agent): [RobotRegistryFoundation/robot-md-mcp](https://github.com/RobotRegistryFoundation/robot-md-mcp) · [`npm: robot-md-mcp`](https://www.npmjs.com/package/robot-md-mcp)
+- See also [`docs/robot-md-claude-code.md`](docs/robot-md-claude-code.md) — the one-command Claude Code onboarding flow
 
 ## Recent Features (2026-03-19)
 
