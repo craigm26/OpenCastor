@@ -6,6 +6,41 @@ Versions use date-based scheme: `YYYY.MM.DD.patch`.
 
 ---
 
+## [2026.4.23.0] - 2026-04-23
+
+### BREAKING — RCAN 3.0 hard-cut at ingress
+- `castor.compliance.ACCEPTED_RCAN_VERSIONS` reduced to `("3.0",)` — 2.1,
+  2.1.0, 2.2, 2.2.0, 2.2.1 removed. Federation peers sending
+  `rcan_version: "2.x"` in messages are now rejected at ingress. This
+  matches the ecosystem-wide RCAN 3.0+ policy (see
+  feedback_rcan_3_plus_policy memo).
+- `castor.compliance.is_accepted_version()` forward-compat tightened from
+  `major > 3` (accidentally accepted 4.x+) to `major == 3`. Future major
+  bumps require an explicit opencastor release.
+- Robots still running with `rcan_version: "2.x"` in their config YAML
+  will now fail startup validation. Fix: edit the config to
+  `rcan_version: "3.0"` (the `castor wizard` command already writes "3.0"
+  by default).
+
+### Changed
+- `pyproject.toml` dep floor `rcan>=1.2.1` → `rcan>=3.1.1,<4.0` (both
+  occurrences). Upper bound matches the 3.x hard-cut.
+- `castor/loa.py::get_loa_status` — replaced lexical
+  `config.get("rcan_version", "0") >= "1.6"` with unconditional `True`.
+  Under the 3.0 hard-cut LoA is always required; the `>= "1.6"` compare
+  was an artifact of the v1.6 era when LoA was first introduced.
+- `castor/compliance.py` module docstring: "RCAN v2.1 compliance
+  constants" → "RCAN 3.0 compliance constants".
+- `README.md` "RCAN v1.6 Features" section rewritten as "RCAN 3.0
+  Features" covering hybrid signing, mandatory LoA, canonical JSON,
+  §22-26 builders, ML-DSA-65.
+- `CLAUDE.md` SDK references bumped: `rcan-py v2.0.0+` → `v3.0+`,
+  `rcan-ts v2.0.0+` → `v3.0+`.
+
+### Added
+- `tests/test_compliance_version_gate.py` — 7 regression tests locking
+  the 3.0 hard-cut invariant.
+
 ## [2026.4.17.0] - 2026-04-17
 
 ### Changed — RCAN 3.0 alignment
