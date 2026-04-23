@@ -9,7 +9,7 @@ from castor.config_validation import log_validation_result, validate_rcan_config
 # ---------------------------------------------------------------------------
 
 _VALID = {
-    "rcan_version": "2.1",
+    "rcan_version": "3.0",
     "metadata": {"robot_name": "TestBot"},
     "agent": {"model": "gpt-4o"},
     "physics": {},

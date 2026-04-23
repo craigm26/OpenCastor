@@ -223,7 +223,7 @@ class TestTieredBrainNoRegression:
 # ── RCAN validation ───────────────────────────────────────────────────────────
 
 _BASE_CONFIG = {
-    "rcan_version": "2.1",
+    "rcan_version": "3.0",
     "metadata": {"robot_name": "test"},
     "agent": {"model": "gemini-2.5-flash"},
     "physics": {"wheel_circumference_m": 0.22},

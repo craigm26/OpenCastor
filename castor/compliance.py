@@ -1,7 +1,7 @@
-"""castor.compliance — RCAN v2.1 compliance constants, ComplianceReport, and report generation.
+"""castor.compliance — RCAN 3.0 compliance constants, ComplianceReport, and report generation.
 
 SPEC_VERSION: the RCAN spec version this OpenCastor build targets.
-ACCEPTED_RCAN_VERSIONS: versions accepted in inbound messages (no v1.x compat).
+ACCEPTED_RCAN_VERSIONS: versions accepted in inbound messages (hard-cut: 3.x only — 2.x no longer accepted per ecosystem policy).
 """
 
 from __future__ import annotations
@@ -17,29 +17,24 @@ from typing import IO, Any
 
 SPEC_VERSION: str = "3.0"
 
-ACCEPTED_RCAN_VERSIONS: tuple[str, ...] = (
-    "2.1",
-    "2.1.0",
-    "2.2",
-    "2.2.0",
-    "2.2.1",
-    "3.0",
-)
+ACCEPTED_RCAN_VERSIONS: tuple[str, ...] = ("3.0",)
 
 
 def is_accepted_version(version: str) -> bool:
-    """Return True if *version* satisfies the minimum supported spec (≥ 2.1).
+    """Return True if *version* is RCAN 3.x (hard-cut — 2.x rejected).
 
-    Accepts any version in ACCEPTED_RCAN_VERSIONS, and also any future version
-    whose major component is ≥ 3 (forward-compatible with RCAN 3.x).
+    Accepts any version whose major component is exactly 3 (forward-compatible
+    within RCAN 3.x). Future majors (4.x+) require an explicit opencastor bump
+    and are NOT granted a free pass here.
     """
-    if version in ACCEPTED_RCAN_VERSIONS:
-        return True
     try:
-        parts = [int(x) for x in str(version).split(".")[:2]]
-        major = parts[0]
-        return major > 3
-    except Exception:
+        parts = str(version).split(".")
+        if len(parts) < 2:
+            return False
+        major = int(parts[0])
+        int(parts[1])  # ensure minor is numeric
+        return major == 3
+    except (ValueError, AttributeError):
         return False
 
 
