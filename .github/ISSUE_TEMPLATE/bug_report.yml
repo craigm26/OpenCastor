@@ -1,21 +1,41 @@
-name: Bug Report
-description: Report a bug in OpenCastor
-labels: ["bug"]
+name: Bug report
+description: File a bug report for this repo
+title: "[bug] "
+labels: ["bug", "triage:needs-fix"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting a bug! Please fill out the sections below so we can reproduce and fix it.
-
-  - type: textarea
-    id: description
+        Thanks for reporting a bug! Before filing, check if this is the right repo — see the
+        [ecosystem CONTRIBUTING doc](https://github.com/craigm26/opencastor-ops/blob/main/CONTRIBUTING.md)
+        for a decision tree.
+  - type: input
+    id: version
     attributes:
-      label: What happened?
-      description: A clear description of the bug.
-      placeholder: "When I run `castor run`, the robot drives in circles instead of following the AI command."
+      label: Affected version
+      description: "Package version, git SHA, or `robot-md --version` output"
+      placeholder: "e.g. robot-md 1.1.0 or robot-md-mcp@0.3.0"
     validations:
       required: true
-
+  - type: input
+    id: component
+    attributes:
+      label: Affected component
+      description: Which part of this repo is broken?
+      placeholder: "e.g. CLI init, MCP server validate tool, registry resolver"
+    validations:
+      required: true
+  - type: textarea
+    id: reproducer
+    attributes:
+      label: Reproducer
+      description: Minimal steps to reproduce. Commands, inputs, expected sequence.
+      placeholder: |
+        1. Run `robot-md init bob --preset so-arm101`
+        2. Observe ...
+      render: shell
+    validations:
+      required: true
   - type: textarea
     id: expected
     attributes:
@@ -23,65 +43,28 @@ body:
       description: What did you expect to happen?
     validations:
       required: true
-
   - type: textarea
-    id: reproduce
+    id: actual
     attributes:
-      label: Steps to reproduce
-      description: How can we reproduce this?
-      placeholder: |
-        1. Run `castor wizard` and select Anthropic Claude
-        2. Run `castor run --config my_robot.rcan.yaml`
-        3. Send command "move forward"
-        4. Robot turns left instead
+      label: Actual behavior
+      description: What actually happened? Paste errors, tracebacks, or unexpected output.
+      render: shell
     validations:
       required: true
-
-  - type: dropdown
-    id: provider
+  - type: textarea
+    id: logs
     attributes:
-      label: AI Provider
-      options:
-        - Anthropic Claude
-        - Google Gemini
-        - OpenAI GPT
-        - Ollama (local)
-        - N/A
+      label: Logs / diagnostic output
+      description: "Relevant log lines, `robot-md doctor` output, or MCP server stderr. Redact secrets."
+      render: shell
     validations:
-      required: true
-
-  - type: dropdown
-    id: hardware
-    attributes:
-      label: Hardware
-      options:
-        - Raspberry Pi + PCA9685
-        - Waveshare AlphaBot
-        - Adeept RaspTank
-        - SunFounder PiCar-X
-        - Dynamixel arm
-        - Simulation (no hardware)
-        - Other
-    validations:
-      required: true
-
+      required: false
   - type: textarea
     id: environment
     attributes:
       label: Environment
-      description: Platform, Python version, OpenCastor version.
+      description: OS, shell, Python/Node version, any other relevant context.
       placeholder: |
-        - OS: Raspberry Pi OS Bookworm (64-bit)
-        - Python: 3.11.2
-        - OpenCastor: 2026.2.17.3
-    validations:
-      required: false
-
-  - type: textarea
-    id: logs
-    attributes:
-      label: Logs / error output
-      description: Paste any relevant logs or error messages.
-      render: shell
+        macOS 14.5, zsh, Python 3.11, Node 20.11
     validations:
       required: false
