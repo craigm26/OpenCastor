@@ -50,6 +50,105 @@ import sys
 import traceback
 
 # ---------------------------------------------------------------------------
+# v3.0 helpers — ROBOT.md-native dispatch
+# ---------------------------------------------------------------------------
+
+
+def _legacy_rcan_yaml_guard(path: str | None) -> bool:
+    """Emit migration guidance when given a legacy .rcan.yaml path. Returns True if legacy."""
+    if not path:
+        return False
+    if str(path).endswith(".rcan.yaml") or str(path).endswith(".rcan.yml"):
+        sys.stderr.write(
+            "castor: legacy .rcan.yaml input is no longer supported in v3.0+. "
+            "Migrate with:  castor migrate " + str(path) + " -o ROBOT.md\n"
+        )
+        return True
+    return False
+
+
+def _cmd_compliance_submit(args) -> int:
+    """v3.0 dispatcher: `castor compliance submit <artifact>` → rcan3 compliance."""
+    import asyncio
+    import json
+    from pathlib import Path
+
+    from castor.rcan3 import compliance as compliance_mod
+    from castor.rcan3.identity import load_or_generate_identity
+    from castor.rcan3.reader import read_robot_md
+    from castor.rcan3.rrf_client import RrfClient
+    from castor.rcan3.signer import CastorSigner
+
+    manifest = getattr(args, "manifest", None) or "ROBOT.md"
+    if _legacy_rcan_yaml_guard(manifest):
+        return 1
+
+    m = read_robot_md(manifest)
+    endpoint = getattr(m, "endpoint", None) or "https://rcan.dev"
+    rrn = getattr(m, "rrn", None)
+    if not rrn:
+        sys.stderr.write(
+            "castor compliance submit: manifest has no rrn — run `castor register` first\n"
+        )
+        return 1
+
+    extra: dict = {}
+    data_path = getattr(args, "data", None)
+    if data_path:
+        extra = json.loads(Path(data_path).read_text())
+
+    artifact = args.artifact
+
+    async def _run() -> int:
+        ident = load_or_generate_identity()
+        signer = CastorSigner(ident)
+        async with RrfClient(base_url=endpoint) as rrf:
+            if artifact == "fria":
+                out = await compliance_mod.submit_fria(
+                    rrf=rrf,
+                    signer=signer,
+                    rrn=rrn,
+                    conformance=extra.get("conformance", {"status": "declared"}),
+                )
+            elif artifact == "safety-benchmark":
+                out = await compliance_mod.submit_safety_benchmark(
+                    rrf=rrf,
+                    signer=signer,
+                    rrn=rrn,
+                    benchmark_id=extra.get("benchmark_id", "iso-10218-1"),
+                    passed=extra.get("passed", True),
+                    details=extra.get("details"),
+                )
+            elif artifact == "ifu":
+                out = await compliance_mod.submit_ifu(
+                    rrf=rrf, signer=signer, rrn=rrn, coverage=extra.get("coverage", {})
+                )
+            elif artifact == "incident-report":
+                out = await compliance_mod.submit_incident_report(
+                    rrf=rrf, signer=signer, rrn=rrn, incidents=extra.get("incidents", [])
+                )
+            elif artifact == "eu-register":
+                md = (m.frontmatter or {}).get("metadata") or {}
+                rmn = extra.get("rmn") or (
+                    f"{md.get('manufacturer', '')}/{md.get('model', '')}/{md.get('version', '')}"
+                )
+                out = await compliance_mod.submit_eu_register(
+                    rrf=rrf,
+                    signer=signer,
+                    rrn=rrn,
+                    rmn=rmn,
+                    extra={k: v for k, v in extra.items() if k != "rmn"},
+                )
+            else:
+                sys.stderr.write(f"unknown artifact {artifact!r}\n")
+                return 2
+        sys.stdout.write(json.dumps(out, indent=2, default=str) + "\n")
+        return 0
+
+    return asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
 # Command handlers
 # ---------------------------------------------------------------------------
 
@@ -92,6 +191,11 @@ def _launch_with_dashboard(args) -> None:
 def cmd_run(args) -> None:
     """Run the main perception-action loop."""
     import logging as _logging
+
+    # v3.0 hard-cut: reject legacy .rcan.yaml input with migration guidance
+    _target = getattr(args, "manifest", None) or getattr(args, "config", None)
+    if _legacy_rcan_yaml_guard(_target):
+        raise SystemExit(1)
 
     # Suppress noisy third-party INFO logs (HuggingFace 307 redirects, httpx traces).
     _logging.getLogger("httpx").setLevel(_logging.WARNING)
@@ -1323,9 +1427,16 @@ def cmd_register(args) -> None:
 
 
 def cmd_compliance(args) -> None:
-    """Check RCAN v1.2 conformance for a robot config."""
+    """Check RCAN v1.2 conformance for a robot config, or submit v3.0 artifacts."""
     import json as _json
     import sys
+
+    # v3.0 compliance submit — dispatch to ROBOT.md-native helper
+    if getattr(args, "compliance_action", None) == "submit":
+        rc = _cmd_compliance_submit(args)
+        if rc:
+            raise SystemExit(rc)
+        return
 
     config_path = args.config
     output_json = getattr(args, "output_json", False)
@@ -6559,10 +6670,26 @@ def main() -> None:
     # castor compliance
     p_compliance = sub.add_parser(
         "compliance",
-        help="Check RCAN v1.2 conformance (L1/L2/L3) for a robot config",
-        epilog="Example: castor compliance --config bob.rcan.yaml",
+        help="Conformance checks or submit artifacts to RRF intake",
+        epilog=(
+            "Examples:\n"
+            "  castor compliance --config bob.rcan.yaml        (legacy conformance check)\n"
+            "  castor compliance submit fria --manifest ROBOT.md\n"
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    _compliance_sub = p_compliance.add_subparsers(dest="compliance_action")
+    _p_comp_submit = _compliance_sub.add_parser(
+        "submit", help="Submit a compliance artifact to RRF v2 intake"
+    )
+    _p_comp_submit.add_argument(
+        "artifact",
+        choices=["fria", "safety-benchmark", "ifu", "incident-report", "eu-register"],
+    )
+    _p_comp_submit.add_argument(
+        "--manifest", default="ROBOT.md", help="ROBOT.md path (default: ROBOT.md)"
+    )
+    _p_comp_submit.add_argument("--data", default=None, help="Path to JSON file with artifact data")
     p_compliance.add_argument(
         "--config", default="robot.rcan.yaml", help="RCAN config file to check"
     )
@@ -6676,9 +6803,7 @@ def main() -> None:
     p_migrate.add_argument(
         "-o", "--out", default="ROBOT.md", help="Output ROBOT.md path (default: ROBOT.md)"
     )
-    p_migrate.add_argument(
-        "--config", help="[deprecated] Alias for positional <src> argument"
-    )
+    p_migrate.add_argument("--config", help="[deprecated] Alias for positional <src> argument")
 
     # castor upgrade
     p_upgrade = sub.add_parser("upgrade", help="Upgrade OpenCastor to latest version")
