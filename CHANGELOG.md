@@ -2,7 +2,90 @@
 
 All notable changes to OpenCastor are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
-Versions use date-based scheme: `YYYY.MM.DD.patch`.
+Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
+3.0.0 to signal RCAN 3.x peer-runtime alignment.
+
+---
+
+## [3.0.0] - 2026-04-24
+
+### BREAKING — ROBOT.md-native, full RCAN 3.x peer runtime
+
+**Version scheme change.** Calver (2026.4.23.0) → SemVer (3.0.0). The
+major signals peer-runtime alignment with rcan-spec 3.2 + rcan-py 3.3
++ rcan-ts 3.4 shipped earlier this week. Future patch/minor bumps
+return to SemVer cadence.
+
+**Legacy `.rcan.yaml` input removed.** Runtime + register + compliance
+commands now read ROBOT.md (v3.2 frontmatter) as the canonical source.
+The 2.x config path is rejected at ingress with a `castor migrate`
+hint. Existing users run `castor migrate old.rcan.yaml -o ROBOT.md`
+once; the `migrate` subcommand itself is deprecated-at-ship and will
+be removed in 3.1.0.
+
+**Removed** — `castor.config_validation` module (superseded by
+rcan-py's `rcan.validate` package). Any caller that imported
+`validate_rcan_config` must switch to `rcan.from_manifest` +
+`ValidationResult.ok`.
+
+**Removed** — five legacy `castor rrf` subcommands (`components`,
+`models`, `harness`, `status`, `wipe`). RRF v2 has no equivalent;
+stubs print a deprecation note and exit 1.
+
+### Added
+
+- `castor/rcan3/` — new peer-runtime integration package:
+  - `reader.py` — ROBOT.md parser with `select_runtime(id)` defaulting
+    to the `agent.runtimes[]` entry marked `default: true`.
+  - `identity.py` — ML-DSA-65 + Ed25519 hybrid keypair persistence.
+    Private keys are written with `os.open(..., 0o600)` atomically
+    (no chmod race).
+  - `signer.py` — dict-level signing bound to a `CastorIdentity`;
+    narrow verify exceptions (ImportError / ConnectionError propagate).
+  - `rrf_client.py` — async `RrfClient` context manager hitting
+    `/v2/robots/register`, `/v2/robots/{rrn}`, `/v2/compliance/{artifact}`.
+  - `compliance.py` — §22-26 facade (FRIA, safety-benchmark, IFU,
+    incident-report, EU register) with round-trip-valid envelopes.
+  - `harness_protocol.py` + `castor_harness.py` — `@runtime_checkable`
+    Harness Protocol + opencastor's native think/do implementation.
+    Located at `castor/rcan3/` (not `castor/harness/`) because that
+    package name was already a production module.
+- `castor migrate <src.rcan.yaml> -o ROBOT.md` — one-shot legacy
+  converter (deprecated-at-ship).
+- `castor compliance submit {fria,safety-benchmark,ifu,incident-report,eu-register}`
+  — ROBOT.md-native dispatcher into the rcan3 layer.
+- `tests/test_integration_rrf_roundtrip.py` — respx-mocked full
+  `init → register → compliance submit fria` round-trip.
+- `tests/test_manifest_roundtrip.py` — cross-SDK parity check:
+  `castor init` output is byte-parseable by rcan-py 3.3
+  `from_manifest` with `agent.runtimes[]` preserved.
+
+### Changed
+
+- `castor/init_wizard.py` emits a v3.2 ROBOT.md with
+  `agent.runtimes[{id: opencastor, harness: castor-default,
+  default: true, models: [...]}]`.
+- `castor/loa.py` reads the safety block from ROBOT.md frontmatter.
+- `castor/rrf_cmd.py` ports `register` + adds `get` on RRF v2;
+  other subcommands become deprecation stubs.
+- `castor/migrate.py` extended with `migrate_to_robot_md(src, dst)`
+  alongside the existing version-string migrator (kept for test
+  compat — `migrate_config`, `CURRENT_VERSION` unchanged).
+- `castor/cli.py` gets a shared `_legacy_rcan_yaml_guard` helper
+  wired into `cmd_run`, plus a `compliance submit` subparser routed
+  to `_cmd_compliance_submit`.
+- `pyproject.toml` rcan floor bumped `>=3.1.1` → `>=3.3,<4`; `respx`
+  added to `[dev]` for the round-trip test.
+
+### Migration (one-time)
+
+```bash
+pip install -U opencastor==3.0.0
+castor migrate old.rcan.yaml -o ROBOT.md
+castor validate ROBOT.md
+castor register
+castor compliance submit fria
+```
 
 ---
 
