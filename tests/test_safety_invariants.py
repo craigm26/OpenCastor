@@ -731,12 +731,21 @@ class TestV15SafetyInvariants:
     # ─────────────────────────────────────────────────────────────────
 
     def test_opencastor_version_2026_3_17(self):
-        """OpenCastor version is at least 2026.3.17.0 (now bumped to 2026.3.17.1 for v1.6)."""
+        """OpenCastor version must be calver (2026.x.y.z) or SemVer (X.Y.Z).
+
+        opencastor 3.0.0 switched from calver to SemVer to signal RCAN 3.x
+        peer-runtime alignment. Future bumps continue SemVer cadence.
+        """
+        import re
+
         import castor
 
         version = castor.__version__
-        # v1.6 bump: version is now 2026.3.17.1; accept either 2026.3.17.x or 2026.4.x
-        assert version.startswith("2026."), f"Expected version 2026.x.y.z, got {version}"
+        is_calver = version.startswith("2026.")
+        is_semver = bool(re.fullmatch(r"\d+\.\d+\.\d+", version))
+        assert is_calver or is_semver, (
+            f"Expected calver (2026.x.y.z) or SemVer (X.Y.Z), got {version}"
+        )
 
     def test_pyproject_version_2026_3_17(self):
         """pyproject.toml declares a valid version.

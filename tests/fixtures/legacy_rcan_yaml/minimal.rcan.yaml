@@ -1,0 +1,14 @@
+rcan_version: "2.2"
+metadata:
+  robot_name: bob
+  manufacturer: craigm26
+  model: so-arm101
+  version: 1.0.0
+  device_id: bob-001
+  rrn: RRN-000000000001
+agent:
+  provider: anthropic
+  model: claude-sonnet-4-6
+safety:
+  estop:
+    software: true
