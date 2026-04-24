@@ -104,11 +104,21 @@ def _cmd_compliance_submit(args) -> int:
         signer = CastorSigner(ident)
         async with RrfClient(base_url=endpoint) as rrf:
             if artifact == "fria":
+                from rcan import FriaConformance
+
+                raw = extra.get("conformance")
+                conformance_obj = (
+                    FriaConformance(**raw)
+                    if isinstance(raw, dict)
+                    and {"score", "pass_count", "warn_count", "fail_count"} <= set(raw)
+                    else None
+                )
                 out = await compliance_mod.submit_fria(
                     rrf=rrf,
                     signer=signer,
                     rrn=rrn,
-                    conformance=extra.get("conformance", {"status": "declared"}),
+                    deployment=extra.get("deployment"),
+                    conformance=conformance_obj,
                 )
             elif artifact == "safety-benchmark":
                 out = await compliance_mod.submit_safety_benchmark(
