@@ -9,6 +9,10 @@
 </p>
 
 <p align="center">
+  <b>Peer runtime:</b> opencastor and <a href="https://github.com/RobotRegistryFoundation/robot-md">robot-md</a> are first-class peer RCAN 3.x runtimes against a single <code>ROBOT.md</code> — see <a href="https://github.com/craigm26/opencastor-ops/blob/master/PEER_RUNTIMES.md">PEER_RUNTIMES.md</a> for the side-by-side.
+</p>
+
+<p align="center">
   <a href="https://pypi.org/project/opencastor/"><img src="https://img.shields.io/pypi/v/opencastor?color=blue&label=PyPI" alt="PyPI"></a>
   <a href="https://rcan.dev/spec/"><img src="https://img.shields.io/badge/RCAN-v3.0-brightgreen" alt="RCAN v3.0"></a>
   <a href="https://rcan.dev/docs/safety/"><img src="https://img.shields.io/badge/Protocol%2066-94%25-orange" alt="Protocol 66"></a>
