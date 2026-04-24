@@ -5865,10 +5865,8 @@ async def on_startup():
                 state.config = yaml.safe_load(f)
             logger.info(f"Loaded config: {state.config['metadata']['robot_name']}")
 
-            # Validate RCAN config before initialising anything
-            from castor.config_validation import log_validation_result
-
-            log_validation_result(state.config, label="Startup RCAN config")
+            # (v3.0 migration) Config validation now happens upstream via rcan-py's
+            # rcan.validate.validate_config on ROBOT.md ingress. No in-request revalidation.
 
             # Initialize virtual filesystem (use shared FS if runtime started it)
             from castor.main import get_shared_fs, set_shared_fs

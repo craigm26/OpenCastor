@@ -9,7 +9,6 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from castor.config_validation import validate_rcan_config
 from castor.embedding_interpreter import EmbeddingInterpreter, SceneContext
 from castor.providers.clip_embedding_provider import CLIPEmbeddingProvider
 from castor.providers.gemini_embedding_provider import GeminiEmbeddingProvider
@@ -234,35 +233,22 @@ _BASE_CONFIG = {
 
 
 class TestRCANValidation:
+    @pytest.mark.skip("config_validation.py removed in v3.0 — validation moved to rcan-py")
     def test_valid_interpreter_config(self):
-        config = {**_BASE_CONFIG, "interpreter": {"enabled": True, "backend": "auto"}}
-        ok, errors = validate_rcan_config(config)
-        assert ok, errors
+        pass
 
+    @pytest.mark.skip("config_validation.py removed in v3.0 — validation moved to rcan-py")
     def test_bad_backend_fails(self):
-        config = {**_BASE_CONFIG, "interpreter": {"backend": "turbo-llm"}}
-        ok, errors = validate_rcan_config(config)
-        assert not ok
-        assert any("interpreter.backend" in e for e in errors)
+        pass
 
+    @pytest.mark.skip("config_validation.py removed in v3.0 — validation moved to rcan-py")
     def test_bad_gemini_dims_fails(self):
-        config = {
-            **_BASE_CONFIG,
-            "interpreter": {"backend": "gemini", "gemini": {"dimensions": 999}},
-        }
-        ok, errors = validate_rcan_config(config)
-        assert not ok
-        assert any("dimensions" in e for e in errors)
+        pass
 
+    @pytest.mark.skip("config_validation.py removed in v3.0 — validation moved to rcan-py")
     def test_valid_gemini_dims(self):
-        for dims in (768, 1536, 3072):
-            config = {
-                **_BASE_CONFIG,
-                "interpreter": {"backend": "auto", "gemini": {"dimensions": dims}},
-            }
-            ok, errors = validate_rcan_config(config)
-            assert ok, f"dims={dims}: {errors}"
+        pass
 
+    @pytest.mark.skip("config_validation.py removed in v3.0 — validation moved to rcan-py")
     def test_no_interpreter_key_is_valid(self):
-        ok, errors = validate_rcan_config(_BASE_CONFIG)
-        assert ok, errors
+        pass
