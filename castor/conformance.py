@@ -59,7 +59,7 @@ _UUID4_RE = re.compile(
 class ConformanceResult:
     check_id: str  # e.g. "safety.estop_configured"
     category: str  # "safety" | "provider" | "protocol" | "performance" | "hardware"
-    status: str  # "pass" | "warn" | "fail"
+    status: str  # "pass" | "warn" | "fail" | "skip"
     detail: str  # human-readable explanation
     fix: str | None = field(default=None)  # suggested fix
 
@@ -96,6 +96,7 @@ class ConformanceChecker:
             "rcan_v15",
             "rcan_v16",
             "rcan_v21",
+            "rcan_v3",
         ):
             results.extend(self.run_category(category))
         return results
@@ -112,6 +113,7 @@ class ConformanceChecker:
             "rcan_v15": self._check_rcan_v15,
             "rcan_v16": self._check_rcan_v16,
             "rcan_v21": self._check_rcan_v21,
+            "rcan_v3": self._check_rcan_v3,
         }
         runner = runners.get(category)
         if runner is None:
@@ -2174,3 +2176,193 @@ class ConformanceChecker:
                 },
             ],
         }
+
+    # ------------------------------------------------------------------
+    # RCAN 3.x — structural contract for ROBOT.md manifests
+    # ------------------------------------------------------------------
+    #
+    # 3.x is a hard-cut from 2.x: signed-by-default, agent.runtimes[]
+    # replaces the single brain block, RRN is the canonical identity.
+    # Each check returns ``skip`` for non-3.x manifests so 2.x fleets
+    # don't get spurious failures from a category that doesn't apply.
+
+    _V3_RRN_PATTERN = re.compile(r"^RRN-\d{12}$")
+    _V3_ACCEPTED_SIGNING_ALGS = ("pqc-hybrid-v1", "ml-dsa-65")
+
+    def _v3_is_3x(self) -> bool:
+        ver = str(self._cfg.get("rcan_version", "")).strip()
+        try:
+            major = int(ver.split(".")[0])
+        except (ValueError, IndexError):
+            return False
+        return major == 3
+
+    def _v3_skip(self, check_id: str, reason: str) -> ConformanceResult:
+        return ConformanceResult(
+            check_id=check_id,
+            category="rcan_v3",
+            status="skip",
+            detail=reason,
+        )
+
+    def _check_rcan_v3(self) -> list[ConformanceResult]:
+        return [
+            self._v3_rcan_version(),
+            self._v3_signing_alg(),
+            self._v3_agent_runtimes(),
+            self._v3_rrn_format(),
+        ]
+
+    def _v3_rcan_version(self) -> ConformanceResult:
+        cid = "rcan_v3.rcan_version"
+        ver = str(self._cfg.get("rcan_version", "")).strip()
+        if not self._v3_is_3x():
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v3",
+                status="skip",
+                detail=f"rcan_version is '{ver}' — v3 checks apply only to 3.x manifests",
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v3",
+            status="pass",
+            detail=f"rcan_version is '{ver}' — runs the v3 structural contract",
+        )
+
+    def _v3_signing_alg(self) -> ConformanceResult:
+        cid = "rcan_v3.signing_alg"
+        if not self._v3_is_3x():
+            return self._v3_skip(cid, "skipped: not a 3.x manifest")
+        network = self._cfg.get("network") or {}
+        alg = network.get("signing_alg")
+        if alg is None:
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v3",
+                status="warn",
+                detail="network.signing_alg not declared — 3.x recommends explicit declaration",
+                fix="Set network.signing_alg: 'pqc-hybrid-v1' (or 'ml-dsa-65') in your manifest",
+            )
+        if alg in self._V3_ACCEPTED_SIGNING_ALGS:
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v3",
+                status="pass",
+                detail=f"network.signing_alg is '{alg}' — post-quantum compliant",
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v3",
+            status="fail",
+            detail=(
+                f"network.signing_alg is '{alg}' — 3.x requires a post-quantum option "
+                f"(one of {', '.join(self._V3_ACCEPTED_SIGNING_ALGS)})"
+            ),
+            fix="Set network.signing_alg: 'pqc-hybrid-v1' to retain ed25519 alongside ML-DSA-65",
+        )
+
+    def _v3_agent_runtimes(self) -> ConformanceResult:
+        cid = "rcan_v3.agent_runtimes"
+        if not self._v3_is_3x():
+            return self._v3_skip(cid, "skipped: not a 3.x manifest")
+
+        # Reject the legacy single-brain block — 3.x forbids it.
+        if self._cfg.get("brain") and not self._cfg.get("agent"):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v3",
+                status="fail",
+                detail=(
+                    "manifest has legacy 'brain' block but no 'agent.runtimes[]' — "
+                    "3.x replaces single brain with a list of runtimes"
+                ),
+                fix="Migrate brain → agent.runtimes[] (see `castor migrate` or rcan-spec §3.0)",
+            )
+
+        agent = self._cfg.get("agent")
+        if not isinstance(agent, dict):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v3",
+                status="fail",
+                detail="missing 'agent' block — 3.x requires agent.runtimes[]",
+                fix="Add agent.runtimes[] declaring at least one runtime with id+models[]",
+            )
+
+        runtimes = agent.get("runtimes")
+        if not isinstance(runtimes, list) or not runtimes:
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v3",
+                status="fail",
+                detail="agent.runtimes[] missing or empty — 3.x requires ≥1 runtime entry",
+                fix="Declare at least one runtime with id, harness, and models[]",
+            )
+
+        for i, rt in enumerate(runtimes):
+            if not isinstance(rt, dict):
+                return ConformanceResult(
+                    check_id=cid,
+                    category="rcan_v3",
+                    status="fail",
+                    detail=f"agent.runtimes[{i}] is not a mapping",
+                )
+            if not rt.get("id"):
+                return ConformanceResult(
+                    check_id=cid,
+                    category="rcan_v3",
+                    status="fail",
+                    detail=f"agent.runtimes[{i}] missing 'id' field",
+                    fix="Each runtime must declare a string 'id' (e.g., 'opencastor', 'robot-md')",
+                )
+            models = rt.get("models")
+            if not isinstance(models, list) or not models:
+                return ConformanceResult(
+                    check_id=cid,
+                    category="rcan_v3",
+                    status="fail",
+                    detail=(
+                        f"agent.runtimes[{rt['id']}].models is missing or empty — "
+                        "each runtime must declare ≥1 model"
+                    ),
+                    fix="Add models[] with provider+model+role for each runtime",
+                )
+
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v3",
+            status="pass",
+            detail=f"agent.runtimes[] declares {len(runtimes)} runtime(s)",
+        )
+
+    def _v3_rrn_format(self) -> ConformanceResult:
+        cid = "rcan_v3.rrn_format"
+        if not self._v3_is_3x():
+            return self._v3_skip(cid, "skipped: not a 3.x manifest")
+        rrn = (self._cfg.get("metadata") or {}).get("rrn")
+        if not rrn:
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v3",
+                status="fail",
+                detail="metadata.rrn missing — 3.x manifests must declare an RRN",
+                fix="Run `robot-md register` to mint an RRN and populate metadata.rrn",
+            )
+        if not self._V3_RRN_PATTERN.match(rrn):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v3",
+                status="fail",
+                detail=(
+                    f"metadata.rrn is '{rrn}' — must match RRN-NNNNNNNNNNNN "
+                    "(uppercase 'RRN-' prefix + 12 digits)"
+                ),
+                fix="Re-mint via `robot-md register` or correct the RRN to canonical shape",
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v3",
+            status="pass",
+            detail=f"metadata.rrn is '{rrn}' — canonical shape",
+        )

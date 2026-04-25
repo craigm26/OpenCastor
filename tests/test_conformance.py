@@ -170,7 +170,7 @@ class TestRunAll:
         results = checker_from(cfg).run_all()
         for r in results:
             assert isinstance(r, ConformanceResult)
-            assert r.status in ("pass", "warn", "fail")
+            assert r.status in ("pass", "warn", "fail", "skip")
 
     def test_run_unknown_category_raises(self):
         chk = checker_from(make_valid_config())

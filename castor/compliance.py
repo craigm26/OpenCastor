@@ -104,7 +104,9 @@ def print_report_text(report: ComplianceReport, file: IO[str] = sys.stdout) -> N
     )
     print(file=file)
     for check in report.checks:
-        icon = {"pass": "✅", "warn": "⚠️ ", "fail": "❌"}.get(check.get("status", ""), "❓")
+        icon = {"pass": "✅", "warn": "⚠️ ", "fail": "❌", "skip": "⏭ "}.get(
+            check.get("status", ""), "❓"
+        )
         print(f"  {icon} [{check.get('check_id', '?')}] {check.get('message', '')}", file=file)
         if check.get("detail"):
             print(f"       {check['detail']}", file=file)
