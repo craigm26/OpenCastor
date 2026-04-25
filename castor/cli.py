@@ -1477,12 +1477,12 @@ def cmd_compliance(args) -> None:
                 print_report_text(report, file=fh)
         sys.exit(0 if report.compliant else 1)
 
-    # Load config
+    # Load config — use castor.compliance._load_config so ROBOT.md
+    # markdown-frontmatter manifests load alongside legacy *.rcan.yaml.
     try:
-        import yaml
+        from castor.compliance import _load_config
 
-        with open(config_path) as f:
-            config = yaml.safe_load(f)
+        config = _load_config(config_path)
     except FileNotFoundError:
         print(f"❌ Config not found: {config_path}", file=sys.stderr)
         sys.exit(1)

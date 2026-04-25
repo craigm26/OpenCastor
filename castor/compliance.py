@@ -2,6 +2,10 @@
 
 SPEC_VERSION: the RCAN spec version this OpenCastor build targets.
 ACCEPTED_RCAN_VERSIONS: versions accepted in inbound messages (hard-cut: 3.x only — 2.x no longer accepted per ecosystem policy).
+
+_load_config dispatches by filename: *.md → markdown-frontmatter extractor,
+everything else → yaml.safe_load passthrough. Without this, ROBOT.md trips
+yaml.safe_load with "expected a single document in the stream".
 """
 
 from __future__ import annotations
@@ -139,11 +143,50 @@ def _get_opencastor_version() -> str:
         return "unknown"
 
 
+def _extract_yaml_frontmatter(text: str) -> str:
+    """Pull the YAML between the two leading `---` lines from a markdown
+    document. Returns an empty string if the input doesn't start with a
+    frontmatter block. No imports — kept dependency-free so this loader
+    works in CI environments that don't pin python-frontmatter.
+    """
+    if not text.startswith("---\n") and not text.startswith("---\r\n"):
+        return ""
+    # Skip the opening `---` line, then find the closing `---` on its own line.
+    # Accept both LF and CRLF line endings.
+    head_len = 4 if text.startswith("---\n") else 5
+    rest = text[head_len:]
+    for needle in ("\n---\n", "\n---\r\n", "\n---"):
+        end = rest.find(needle)
+        if end != -1:
+            return rest[:end]
+    # No closing delimiter found — treat whole rest as frontmatter.
+    return rest
+
+
 def _load_config(config_path: str) -> dict[str, Any]:
+    """Load a robot config file as a dict.
+
+    Two shapes supported:
+    - ``*.rcan.yaml`` (legacy) — plain YAML; passthrough to yaml.safe_load.
+    - ``ROBOT.md`` / ``*.md`` (3.x) — markdown with YAML frontmatter; the
+      frontmatter between the two leading ``---`` lines is extracted and
+      parsed. Bare yaml.safe_load fails on this shape with
+      "expected a single document in the stream".
+    """
+    import os
+
     import yaml
 
     with open(config_path) as f:
-        return yaml.safe_load(f) or {}
+        text = f.read()
+
+    if os.path.splitext(config_path)[1].lower() == ".md":
+        frontmatter = _extract_yaml_frontmatter(text)
+        if not frontmatter:
+            return {}
+        return yaml.safe_load(frontmatter) or {}
+
+    return yaml.safe_load(text) or {}
 
 
 def _run_conformance_checks(config: dict[str, Any], config_path: str) -> list[dict[str, Any]]:
