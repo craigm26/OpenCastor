@@ -2211,6 +2211,9 @@ class ConformanceChecker:
             self._v3_signing_alg(),
             self._v3_agent_runtimes(),
             self._v3_rrn_format(),
+            self._v3_estop_response_ms(),
+            self._v3_capability_namespacing(),
+            self._v3_record_url(),
         ]
 
     def _v3_rcan_version(self) -> ConformanceResult:
@@ -2365,4 +2368,156 @@ class ConformanceChecker:
             category="rcan_v3",
             status="pass",
             detail=f"metadata.rrn is '{rrn}' — canonical shape",
+        )
+
+    # ----- slice 2: reactive-safety + capability hygiene + record-URL drift
+
+    _V3_ESTOP_RESPONSE_CEILING_MS = 100  # EU AI Act Art. 9 collaborative-manipulator budget
+    _V3_CAPABILITY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$")
+    _V3_CANONICAL_RRF_HOST = "robotregistryfoundation.org"
+    _V3_LEGACY_REGISTRY_HOSTS = ("rcan.dev",)
+
+    def _v3_estop_response_ms(self) -> ConformanceResult:
+        cid = "rcan_v3.estop_response_ms"
+        if not self._v3_is_3x():
+            return self._v3_skip(cid, "skipped: not a 3.x manifest")
+        estop = (self._cfg.get("safety") or {}).get("estop") or {}
+        if not estop.get("software"):
+            return self._v3_skip(cid, "skipped: no software estop declared")
+        rms = estop.get("response_ms")
+        if rms is None:
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v3",
+                status="fail",
+                detail=(
+                    "safety.estop.software=true but response_ms not declared — "
+                    "Art. 9 reactive-safety budget undefined"
+                ),
+                fix=(
+                    "Declare safety.estop.response_ms (≤ "
+                    f"{self._V3_ESTOP_RESPONSE_CEILING_MS}ms for collaborative manipulators)"
+                ),
+            )
+        try:
+            rms_int = int(rms)
+        except (TypeError, ValueError):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v3",
+                status="fail",
+                detail=f"safety.estop.response_ms is '{rms}' — must be an integer (milliseconds)",
+            )
+        if rms_int > self._V3_ESTOP_RESPONSE_CEILING_MS:
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v3",
+                status="fail",
+                detail=(
+                    f"safety.estop.response_ms is {rms_int}ms — exceeds "
+                    f"{self._V3_ESTOP_RESPONSE_CEILING_MS}ms ceiling for collaborative "
+                    "manipulators (Art. 9 risk-management)"
+                ),
+                fix=(
+                    "Tune driver/firmware so estop dispatch lands within "
+                    f"{self._V3_ESTOP_RESPONSE_CEILING_MS}ms, then update response_ms"
+                ),
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v3",
+            status="pass",
+            detail=f"safety.estop.response_ms is {rms_int}ms — within Art. 9 budget",
+        )
+
+    def _v3_capability_namespacing(self) -> ConformanceResult:
+        cid = "rcan_v3.capability_namespacing"
+        if not self._v3_is_3x():
+            return self._v3_skip(cid, "skipped: not a 3.x manifest")
+        caps = self._cfg.get("capabilities") or []
+        if not isinstance(caps, list):
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v3",
+                status="fail",
+                detail="capabilities must be a list",
+            )
+        bad = [c for c in caps if not (isinstance(c, str) and self._V3_CAPABILITY_PATTERN.match(c))]
+        if bad:
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v3",
+                status="fail",
+                detail=(
+                    f"{len(bad)} capability name(s) violate dotted verb.noun shape: "
+                    f"{', '.join(repr(c) for c in bad[:5])}" + ("..." if len(bad) > 5 else "")
+                ),
+                fix="Rename to `verb.noun` (e.g., `pick` → `manipulate.pick`, `wave` → `manipulate.wave`)",
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v3",
+            status="pass",
+            detail=f"all {len(caps)} capability name(s) use dotted verb.noun shape",
+        )
+
+    def _v3_record_url(self) -> ConformanceResult:
+        cid = "rcan_v3.record_url"
+        if not self._v3_is_3x():
+            return self._v3_skip(cid, "skipped: not a 3.x manifest")
+        meta = self._cfg.get("metadata") or {}
+        rrn = meta.get("rrn")
+        if not rrn:
+            return self._v3_skip(
+                cid, "skipped: no rrn declared (record_url has nothing to canonicalize against)"
+            )
+        record_url = meta.get("record_url")
+        if not record_url:
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v3",
+                status="warn",
+                detail=f"metadata.record_url not declared — recommended for {rrn}",
+                fix=(
+                    f"Set metadata.record_url: 'https://{self._V3_CANONICAL_RRF_HOST}"
+                    f"/v2/robots/{rrn}'"
+                ),
+            )
+        for legacy in self._V3_LEGACY_REGISTRY_HOSTS:
+            if legacy in record_url:
+                return ConformanceResult(
+                    check_id=cid,
+                    category="rcan_v3",
+                    status="fail",
+                    detail=(
+                        f"metadata.record_url points at legacy {legacy!r} — "
+                        f"3.x ecosystem is on {self._V3_CANONICAL_RRF_HOST} (peer-runtimes "
+                        "cascade 2026-04-24)"
+                    ),
+                    fix=(
+                        f"Update metadata.record_url to 'https://{self._V3_CANONICAL_RRF_HOST}"
+                        f"/v2/robots/{rrn}'"
+                    ),
+                )
+        # Confirm rrn appears in the URL — guards against copy-paste of
+        # someone else's record_url.
+        if rrn not in record_url:
+            return ConformanceResult(
+                check_id=cid,
+                category="rcan_v3",
+                status="fail",
+                detail=(
+                    f"metadata.record_url '{record_url}' does not reference "
+                    f"metadata.rrn '{rrn}' — likely a stale copy-paste"
+                ),
+                fix=(
+                    f"Set metadata.record_url to 'https://{self._V3_CANONICAL_RRF_HOST}"
+                    f"/v2/robots/{rrn}'"
+                ),
+            )
+        return ConformanceResult(
+            check_id=cid,
+            category="rcan_v3",
+            status="pass",
+            detail=f"metadata.record_url references {rrn} on {self._V3_CANONICAL_RRF_HOST}",
         )
