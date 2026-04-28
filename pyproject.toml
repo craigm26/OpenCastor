@@ -75,19 +75,19 @@ core = []
 rpi = [
     "adafruit-circuitpython-pca9685>=3.4.0; sys_platform == 'linux'",
     "adafruit-circuitpython-motor>=3.4.0; sys_platform == 'linux'",
-    "neonize==0.3.16.post0",
+    "neonize==0.3.17.post0",
     "picamera2>=0.3; sys_platform == 'linux'",
 ]
 elevenlabs = ["elevenlabs>=1.0"]
 sdk = ["httpx>=0.27"]
-whatsapp = ["neonize==0.3.16.post0"]
+whatsapp = ["neonize==0.3.17.post0"]
 whatsapp-twilio = ["twilio>=9.0.0"]
 telegram = ["python-telegram-bot>=21.0"]
 discord = ["discord.py>=2.3.0"]
 slack = ["slack-bolt>=1.18.0"]
 mqtt = ["paho-mqtt>=2.0.0"]
 channels = [
-    "neonize==0.3.16.post0",
+    "neonize==0.3.17.post0",
     "python-telegram-bot>=21.0",
     "discord.py>=2.3.0",
     "slack-bolt>=1.18.0",
