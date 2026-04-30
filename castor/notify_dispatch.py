@@ -72,3 +72,17 @@ class NotifyDispatcher:
                 results[name] = False
         logger.info("notify dispatch result: %s", results)
         return results
+
+    async def notify_owner(self, message: str) -> bool:
+        """Send `message` to the configured owner channel.
+
+        Returns True on success, False on any failure. Never raises.
+        """
+        if not self._owner_channel:
+            logger.warning(
+                "notify_owner called but no owner_channel configured; "
+                "AUTHORITY_ACCESS notification dropped"
+            )
+            return False
+        result = await self.fan_out([self._owner_channel], message)
+        return result.get(self._owner_channel, False)

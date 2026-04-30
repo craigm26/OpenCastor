@@ -226,3 +226,55 @@ async def test_channels_ref_is_re_read_every_call():
     r2 = await dispatcher.fan_out(["whatsapp"], "second")
     assert r2 == {"whatsapp": True}
     assert wa.calls == [("+15555550100", "second")]
+
+
+@pytest.mark.asyncio
+async def test_notify_owner_happy_path():
+    from castor.notify_dispatch import NotifyDispatcher
+
+    wa = _FakeChannelNoRetry("whatsapp", returns_ok=True)
+    channels = {"whatsapp": wa}
+
+    dispatcher = NotifyDispatcher(
+        channels_ref=lambda: channels,
+        chat_ids={"whatsapp": "+15555550100"},
+        owner_channel="whatsapp",
+    )
+
+    ok = await dispatcher.notify_owner("AUTHORITY ACCESS REQUEST: …")
+
+    assert ok is True
+    assert wa.calls == [("+15555550100", "AUTHORITY ACCESS REQUEST: …")]
+
+
+@pytest.mark.asyncio
+async def test_notify_owner_no_owner_channel_returns_false_with_warning(caplog):
+    import logging
+
+    from castor.notify_dispatch import NotifyDispatcher
+
+    dispatcher = NotifyDispatcher(
+        channels_ref=lambda: {},
+        chat_ids={},
+        owner_channel=None,
+    )
+
+    with caplog.at_level(logging.WARNING, logger="OpenCastor.NotifyDispatch"):
+        ok = await dispatcher.notify_owner("anything")
+
+    assert ok is False
+    assert any("owner_channel" in r.message for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_notify_owner_owner_channel_missing_chat_id_returns_false():
+    from castor.notify_dispatch import NotifyDispatcher
+
+    dispatcher = NotifyDispatcher(
+        channels_ref=lambda: {},
+        chat_ids={},
+        owner_channel="whatsapp",  # set but no chat_ids[whatsapp] entry
+    )
+
+    ok = await dispatcher.notify_owner("anything")
+    assert ok is False
