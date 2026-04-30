@@ -160,3 +160,26 @@ async def test_fan_out_absorbs_unexpected_raise_from_channel(caplog):
         for r in caplog.records
         if r.levelname == "ERROR"
     )
+
+
+@pytest.mark.asyncio
+async def test_fan_out_missing_chat_id_skips_with_warning(caplog):
+    import logging
+
+    from castor.notify_dispatch import NotifyDispatcher
+
+    tg = _FakeChannelNoRetry("telegram", returns_ok=True)
+    channels = {"telegram": tg}
+
+    dispatcher = NotifyDispatcher(
+        channels_ref=lambda: channels,
+        chat_ids={"telegram": "12345678"},  # no 'whatsapp' entry
+    )
+
+    with caplog.at_level(logging.WARNING, logger="OpenCastor.NotifyDispatch"):
+        result = await dispatcher.fan_out(["whatsapp", "telegram"], "hello")
+
+    assert result == {"whatsapp": False, "telegram": True}
+    assert tg.calls == [("12345678", "hello")]
+    assert any("no chat_id configured for channel 'whatsapp'" in r.message
+               for r in caplog.records)
