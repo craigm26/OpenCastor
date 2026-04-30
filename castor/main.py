@@ -1088,6 +1088,11 @@ def main():
         logger.debug(f"Confidence gate enforcer skipped: {e}")
 
     # 6g-ii. HiTL GATE MANAGER (F3)
+    # NOTE: the live HiTL wiring (and NotifyDispatcher binding) is in
+    # castor/api.py::_wire_notify_dispatch — that is what `castor gateway`
+    # runs. This local in main() is preserved for legacy CLI invocation
+    # paths but is currently never read downstream and is not wired to
+    # NotifyDispatcher.
     _hitl_gate_manager = None
     try:
         from castor.configure import parse_hitl_gates
