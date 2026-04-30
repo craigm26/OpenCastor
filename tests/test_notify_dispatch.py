@@ -183,3 +183,46 @@ async def test_fan_out_missing_chat_id_skips_with_warning(caplog):
     assert tg.calls == [("12345678", "hello")]
     assert any("no chat_id configured for channel 'whatsapp'" in r.message
                for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_fan_out_inactive_channel_skips_with_warning(caplog):
+    import logging
+
+    from castor.notify_dispatch import NotifyDispatcher
+
+    channels: dict = {}  # no channels active this run
+
+    dispatcher = NotifyDispatcher(
+        channels_ref=lambda: channels,
+        chat_ids={"whatsapp": "+15555550100"},
+    )
+
+    with caplog.at_level(logging.WARNING, logger="OpenCastor.NotifyDispatch"):
+        result = await dispatcher.fan_out(["whatsapp"], "hello")
+
+    assert result == {"whatsapp": False}
+    assert any("not active this run" in r.message for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_channels_ref_is_re_read_every_call():
+    """Mutating the channel dict between calls must be visible — the
+    dispatcher must not snapshot."""
+    from castor.notify_dispatch import NotifyDispatcher
+
+    wa = _FakeChannelNoRetry("whatsapp", returns_ok=True)
+    channels: dict = {}  # initially empty
+
+    dispatcher = NotifyDispatcher(
+        channels_ref=lambda: channels,
+        chat_ids={"whatsapp": "+15555550100"},
+    )
+
+    r1 = await dispatcher.fan_out(["whatsapp"], "first")
+    assert r1 == {"whatsapp": False}  # channel not yet active
+
+    channels["whatsapp"] = wa  # now becomes active
+    r2 = await dispatcher.fan_out(["whatsapp"], "second")
+    assert r2 == {"whatsapp": True}
+    assert wa.calls == [("+15555550100", "second")]
