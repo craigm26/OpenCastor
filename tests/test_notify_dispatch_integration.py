@@ -103,15 +103,10 @@ def test_pick_place_pending_auth_pings_recorder_channel(monkeypatch):
     api_mod.state.channels = {"whatsapp": recorder}
 
     # 2. Populate config with the operator block + consent gate.
-    # NOTE: "notify": ["whatsapp"] must be present so parse_consent_gates
-    # builds the HiTLGate with gate.notify=["whatsapp"]. Without it the gate
-    # notify list is [] and fan_out iterates nothing — recorder gets no ping.
+    # Note: consent block has no explicit notify — _wire_notify_dispatch
+    # smart-defaults gate.notify to [owner_channel] when owner_channel is set.
     api_mod.state.config = {
-        "consent": {
-            "required": True,
-            "scope_threshold": "control",
-            "notify": ["whatsapp"],
-        },
+        "consent": {"required": True, "scope_threshold": "control"},
         "operator": {
             "chat_ids": {"whatsapp": "+15555550100"},
             "owner_channel": "whatsapp",

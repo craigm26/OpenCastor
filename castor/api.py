@@ -5975,6 +5975,14 @@ def _wire_notify_dispatch() -> None:
                     ch,
                 )
 
+    # Smart default: a gate with no notify list still gets the owner ping
+    # when owner_channel is configured. Without this, consent-derived gates
+    # (parse_consent_gates defaults notify=[]) would silently no-op.
+    if owner_channel:
+        for gate in hgates:
+            if not gate.notify:
+                gate.notify = [owner_channel]
+
     dispatcher = NotifyDispatcher(
         channels_ref=lambda: state.channels,
         chat_ids=chat_ids,
