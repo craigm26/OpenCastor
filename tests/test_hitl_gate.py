@@ -154,3 +154,59 @@ async def test_timeout_allows_when_on_timeout_allow():
 def test_authorize_unknown_pending_id():
     mgr = HiTLGateManager(gates=[])
     assert mgr.authorize("no-such-id", "approve") is False
+
+
+# ---------------------------------------------------------------------------
+# notify_fn injection — wires HiTL gates to the channel dispatcher
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_notify_fn_invoked_on_start_pending():
+    """When notify_fn is set, start_pending must schedule a call to it
+    with (channels, msg)."""
+    import asyncio
+
+    from castor.hitl_gate import HiTLGate, HiTLGateManager
+
+    recorded: list[tuple[list[str], str]] = []
+
+    async def recorder(channels: list[str], msg: str) -> None:
+        recorded.append((list(channels), msg))
+
+    gates = [HiTLGate(action_types=["pick_place"], notify=["whatsapp"])]
+    mgr = HiTLGateManager(gates, notify_fn=recorder)
+
+    pending_id = mgr.start_pending({"type": "pick_place"}, thought=None)
+    assert pending_id  # gate matched → non-empty
+
+    # start_pending fires _notify via asyncio.create_task; flush it
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    assert len(recorded) == 1
+    channels, msg = recorded[0]
+    assert channels == ["whatsapp"]
+    assert "pick_place" in msg
+    assert pending_id in msg
+
+
+@pytest.mark.asyncio
+async def test_notify_fn_none_falls_back_to_log(caplog):
+    """When notify_fn is None (today's behavior), _notify just logs."""
+    import asyncio
+    import logging
+
+    from castor.hitl_gate import HiTLGate, HiTLGateManager
+
+    gates = [HiTLGate(action_types=["pick_place"], notify=["whatsapp"])]
+    mgr = HiTLGateManager(gates, notify_fn=None)
+
+    with caplog.at_level(logging.INFO, logger="OpenCastor.HiTLGate"):
+        pending_id = mgr.start_pending({"type": "pick_place"}, thought=None)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+    assert pending_id
+    # The today-behavior log line must still appear
+    assert any("HiTL notify channels=" in r.message for r in caplog.records)

@@ -18,6 +18,7 @@ Config example (RCAN YAML):
 import asyncio
 import logging
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
@@ -48,9 +49,15 @@ class HiTLGateManager:
       AUTHORIZE semantics.
     """
 
-    def __init__(self, gates: list[HiTLGate], audit: Any = None):
+    def __init__(
+        self,
+        gates: list[HiTLGate],
+        audit: Any = None,
+        notify_fn: "Callable[[list[str], str], Awaitable[None]] | None" = None,
+    ):
         self._gates = gates
         self._audit = audit
+        self._notify_fn = notify_fn
         # Long-poll: pending_id -> asyncio.Future[str] ("approve"|"deny")
         self._pending: dict[str, asyncio.Future] = {}
         # Two-step: pending_ids issued via start_pending(), still unresolved
@@ -148,8 +155,13 @@ class HiTLGateManager:
             f"⚠️ Authorization required: {action_type} — "
             f"reply 'approve {pending_id}' or 'deny {pending_id}' within {timeout_s}s"
         )
-        logger.info("HiTL notify channels=%s: %s", channels, msg)
-        # Actual channel dispatch is application-layer; this logs the intent.
+        if self._notify_fn is not None:
+            try:
+                await self._notify_fn(channels, msg)
+            except Exception as exc:  # noqa: BLE001
+                logger.error("HiTL notify_fn raised (absorbed): %s", exc)
+        else:
+            logger.info("HiTL notify channels=%s: %s", channels, msg)
 
     def _audit_gate_event(self, pending_id: str, action: dict, thought: Any) -> None:
         if self._audit is not None:
