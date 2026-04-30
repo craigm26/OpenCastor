@@ -62,9 +62,7 @@ class TestNotifyOwner:
             result = handler.handle(_valid_payload())
 
         # Today's protective branch: warning is emitted
-        assert any(
-            "No notify_fn configured" in r.message for r in caplog.records
-        )
+        assert any("No notify_fn configured" in r.message for r in caplog.records)
         # ... but the response is still produced
         assert result["request_id"] == "req-test-001"
 
@@ -82,7 +80,5 @@ class TestNotifyOwner:
             result = handler.handle(_valid_payload())
 
         # Existing try/except at authority.py:287-290 absorbs it
-        assert any(
-            "Failed to notify owner" in r.message for r in caplog.records
-        )
+        assert any("Failed to notify owner" in r.message for r in caplog.records)
         assert result["request_id"] == "req-test-001"

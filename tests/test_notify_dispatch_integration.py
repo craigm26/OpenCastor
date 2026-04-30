@@ -30,9 +30,7 @@ class _RecorderChannel:
     def __init__(self) -> None:
         self.sends: list[tuple[str, str]] = []
 
-    async def send_message_with_retry(
-        self, chat_id: str, text: str, **_: object
-    ) -> bool:
+    async def send_message_with_retry(self, chat_id: str, text: str, **_: object) -> bool:
         self.sends.append((chat_id, text))
         return True
 
@@ -155,9 +153,7 @@ def test_pick_place_pending_auth_pings_recorder_channel(monkeypatch):
     assert pending_id in msg
 
 
-def test_pick_place_without_operator_block_falls_back_to_log_only(
-    monkeypatch, caplog
-):
+def test_pick_place_without_operator_block_falls_back_to_log_only(monkeypatch, caplog):
     """When operator: block is absent, _wire_notify_dispatch must log an info
     line and the recorder must NOT be pinged. Today's behavior preserved
     (Invariant C from the design spec)."""
@@ -181,12 +177,8 @@ def test_pick_place_without_operator_block_falls_back_to_log_only(
         api_mod._wire_notify_dispatch()
 
     assert any(
-        "operator.chat_ids/owner_channel not configured" in r.message
-        for r in caplog.records
-    ), (
-        f"expected fallback log line; caplog records: "
-        f"{[r.message for r in caplog.records]}"
-    )
+        "operator.chat_ids/owner_channel not configured" in r.message for r in caplog.records
+    ), f"expected fallback log line; caplog records: {[r.message for r in caplog.records]}"
 
     # Gate manager still built (Invariant A — no regression)
     assert api_mod.state.hitl_gate_manager is not None
@@ -208,6 +200,4 @@ def test_pick_place_without_operator_block_falls_back_to_log_only(
     time.sleep(0.1)
 
     # No operator block → no ping
-    assert recorder.sends == [], (
-        f"expected no pings without operator block, got {recorder.sends}"
-    )
+    assert recorder.sends == [], f"expected no pings without operator block, got {recorder.sends}"

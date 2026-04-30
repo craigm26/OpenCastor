@@ -37,9 +37,7 @@ class NotifyDispatcher:
         self._chat_ids = dict(chat_ids)
         self._owner_channel = owner_channel
 
-    async def fan_out(
-        self, channel_names: list[str], message: str
-    ) -> dict[str, bool]:
+    async def fan_out(self, channel_names: list[str], message: str) -> dict[str, bool]:
         """Send `message` to each named channel's configured chat_id.
 
         Returns {channel_name: ok}. Per-channel exceptions are absorbed.
@@ -49,9 +47,7 @@ class NotifyDispatcher:
         for name in channel_names:
             chat_id = self._chat_ids.get(name)
             if chat_id is None:
-                logger.warning(
-                    "no chat_id configured for channel '%s', skipping", name
-                )
+                logger.warning("no chat_id configured for channel '%s', skipping", name)
                 results[name] = False
                 continue
             ch = channels.get(name)
@@ -66,9 +62,7 @@ class NotifyDispatcher:
                 ok = await ch.send_message_with_retry(chat_id, message)
                 results[name] = bool(ok)
             except Exception as exc:  # noqa: BLE001 — best-effort by contract
-                logger.error(
-                    "notify dispatch failed for channel '%s': %s", name, exc
-                )
+                logger.error("notify dispatch failed for channel '%s': %s", name, exc)
                 results[name] = False
         logger.info("notify dispatch result: %s", results)
         return results

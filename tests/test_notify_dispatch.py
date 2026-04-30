@@ -7,8 +7,6 @@ per-channel exceptions are absorbed and logged, never raised.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
-
 import pytest
 
 from castor.channels.base import BaseChannel
@@ -69,9 +67,11 @@ class _FakeChannelNoRetry(BaseChannel):
         self.calls: list[tuple[str, str]] = []
         self.logger = __import__("logging").getLogger(f"OpenCastor.Channel.{name}")
 
-    async def start(self) -> None: pass  # pragma: no cover
+    async def start(self) -> None:
+        pass  # pragma: no cover
 
-    async def stop(self) -> None: pass  # pragma: no cover
+    async def stop(self) -> None:
+        pass  # pragma: no cover
 
     async def send_message(self, chat_id: str, text: str) -> None:  # pragma: no cover
         # Not exercised — dispatcher calls send_message_with_retry
@@ -118,8 +118,11 @@ class _FakeChannelRaises(BaseChannel):
         self._exc = exc
         self.logger = __import__("logging").getLogger(f"OpenCastor.Channel.{name}")
 
-    async def start(self) -> None: pass  # pragma: no cover
-    async def stop(self) -> None: pass  # pragma: no cover
+    async def start(self) -> None:
+        pass  # pragma: no cover
+
+    async def stop(self) -> None:
+        pass  # pragma: no cover
 
     async def send_message(self, chat_id: str, text: str) -> None:  # pragma: no cover
         # Not used — dispatcher calls send_message_with_retry
@@ -154,9 +157,7 @@ async def test_fan_out_absorbs_unexpected_raise_from_channel(caplog):
     assert tg.calls == [("12345678", "hello")]
     # The dispatcher's own logger.error fires for the absorbed exception
     assert any(
-        "notify dispatch failed" in r.message
-        and "whatsapp" in r.message
-        and "boom" in r.message
+        "notify dispatch failed" in r.message and "whatsapp" in r.message and "boom" in r.message
         for r in caplog.records
         if r.levelname == "ERROR"
     )
@@ -181,8 +182,7 @@ async def test_fan_out_missing_chat_id_skips_with_warning(caplog):
 
     assert result == {"whatsapp": False, "telegram": True}
     assert tg.calls == [("12345678", "hello")]
-    assert any("no chat_id configured for channel 'whatsapp'" in r.message
-               for r in caplog.records)
+    assert any("no chat_id configured for channel 'whatsapp'" in r.message for r in caplog.records)
 
 
 @pytest.mark.asyncio

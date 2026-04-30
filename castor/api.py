@@ -5945,9 +5945,7 @@ def _wire_notify_dispatch() -> None:
         )
         if hgates:
             state.hitl_gate_manager = HiTLGateManager(hgates, notify_fn=None)
-            logger.info(
-                "HiTLGateManager initialized (%d gates, log-only)", len(hgates)
-            )
+            logger.info("HiTLGateManager initialized (%d gates, log-only)", len(hgates))
         return
 
     # Validation warnings (non-fatal — fleet configs may include sibling
@@ -5992,21 +5990,15 @@ def _wire_notify_dispatch() -> None:
 
     # Invariant B: HiTL manager rebuilt with notify_fn
     if hgates:
-        state.hitl_gate_manager = HiTLGateManager(
-            hgates, notify_fn=dispatcher.fan_out
-        )
-        logger.info(
-            "HiTLGateManager initialized (%d gates, notify wired)", len(hgates)
-        )
+        state.hitl_gate_manager = HiTLGateManager(hgates, notify_fn=dispatcher.fan_out)
+        logger.info("HiTLGateManager initialized (%d gates, notify wired)", len(hgates))
 
     # Authority handler — sync→async adapter for notify_fn
     def _owner_notify(msg: str) -> None:
         try:
             asyncio.create_task(dispatcher.notify_owner(msg))
         except RuntimeError:
-            logger.warning(
-                "authority notify_fn called outside event loop; skipped"
-            )
+            logger.warning("authority notify_fn called outside event loop; skipped")
 
     rrn = (config.get("metadata") or {}).get("rrn", "RRN-UNKNOWN")
     state.authority_handler = AuthorityRequestHandler(
@@ -6382,7 +6374,6 @@ async def on_startup():
                 logger.info("ThoughtLog initialized")
             except Exception as _tl_exc:
                 logger.debug("ThoughtLog init skipped: %s", _tl_exc)
-
 
         except Exception as e:
             logger.warning(f"Config load error (gateway still operational): {e}")
