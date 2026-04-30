@@ -377,3 +377,56 @@ def parse_hitl_gates(config: dict) -> list:
                 "Skipping malformed hitl_gate entry: %s (%s)", g, exc
             )
     return gates
+
+
+# Action types covered when a robot's RCAN config sets `consent.scope_threshold`
+# to the named scope. Wider scopes (lower-trust) include narrower ones.
+#
+# RCAN scope ladder (loosest → strictest):
+#   read  →  command  →  control  →  hardware
+#
+# A robot declaring `scope_threshold: control` is asking for explicit consent
+# on any *control-or-stricter* action (arm motion, gripper close, etc.). A
+# robot declaring `scope_threshold: command` adds command-level actions on top
+# of those.
+_CONSENT_SCOPE_ACTION_TYPES: dict[str, list[str]] = {
+    "control": ["pick_place", "arm_pose", "grip", "set_joint_positions"],
+    "hardware": ["pick_place", "arm_pose", "grip", "set_joint_positions"],
+    "command": ["pick_place", "arm_pose", "grip", "set_joint_positions", "command"],
+}
+
+
+def parse_consent_gates(config: dict) -> list:
+    """Auto-derive HiTL gates from a ``consent`` block in the RCAN config.
+
+    Bridges the gap between the high-level RCAN consent declaration:
+
+        consent:
+          required: true
+          mode: explicit
+          scope_threshold: control
+
+    …and the per-action-type :class:`~castor.hitl_gate.HiTLGate` infrastructure.
+    Returns an empty list when consent is not required or the scope_threshold
+    is below ``control`` (sensor-only scopes don't gate motor action).
+    """
+    from castor.hitl_gate import HiTLGate
+
+    consent = config.get("consent") or {}
+    if not consent.get("required"):
+        return []
+
+    scope = consent.get("scope_threshold")
+    action_types = _CONSENT_SCOPE_ACTION_TYPES.get(scope, [])
+    if not action_types:
+        return []
+
+    return [
+        HiTLGate(
+            action_types=action_types,
+            require_auth=True,
+            auth_timeout_ms=int(consent.get("auth_timeout_ms", 30000)),
+            on_timeout=consent.get("on_timeout", "block"),
+            notify=list(consent.get("notify", [])),
+        )
+    ]

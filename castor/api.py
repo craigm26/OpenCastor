@@ -2862,6 +2862,23 @@ async def arm_pick_place(req: _PickPlaceRequest):
     if state.brain is None:
         raise HTTPException(status_code=503, detail="Brain not initialized")
 
+    # Consent gate (#867 Bug B). When the RCAN config declares
+    #   consent: {required: true, scope_threshold: control}
+    # parse_consent_gates() registers a HiTLGate covering "pick_place"
+    # at startup. Block here until the operator authorizes via
+    # POST /api/hitl/authorize, or the gate's timeout/on_timeout policy
+    # rejects the request. No-op when no gate covers pick_place.
+    if state.hitl_gate_manager is not None:
+        _approved = await state.hitl_gate_manager.check(
+            {"type": "pick_place", "target": req.target, "destination": req.destination},
+            thought=None,
+        )
+        if not _approved:
+            raise HTTPException(
+                status_code=403,
+                detail="Consent denied for arm motion (control-scope action)",
+            )
+
     log: list[dict] = []
 
     # ── Firestore task progress (best-effort) ─────────────────────────────────
@@ -6194,10 +6211,12 @@ async def on_startup():
 
             # Initialize HiTLGateManager (F3 — HiTL gates)
             try:
-                from castor.configure import parse_hitl_gates
+                from castor.configure import parse_consent_gates, parse_hitl_gates
                 from castor.hitl_gate import HiTLGateManager
 
                 _hgates = parse_hitl_gates(state.config)
+                # Auto-derived gates from the RCAN consent block (#867 Bug B)
+                _hgates.extend(parse_consent_gates(state.config))
                 if _hgates:
                     state.hitl_gate_manager = HiTLGateManager(_hgates)
                     logger.info("HiTLGateManager initialized (%d gates)", len(_hgates))
