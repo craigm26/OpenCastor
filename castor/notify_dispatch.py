@@ -63,8 +63,8 @@ class NotifyDispatcher:
                 results[name] = False
                 continue
             try:
-                await ch.send_message_with_retry(chat_id, message)
-                results[name] = True
+                ok = await ch.send_message_with_retry(chat_id, message)
+                results[name] = bool(ok)
             except Exception as exc:  # noqa: BLE001 — best-effort by contract
                 logger.error(
                     "notify dispatch failed for channel '%s': %s", name, exc

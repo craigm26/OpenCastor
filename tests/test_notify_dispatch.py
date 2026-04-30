@@ -56,3 +56,50 @@ async def test_fan_out_happy_path_two_channels():
     assert result == {"whatsapp": True, "telegram": True}
     assert wa.sends == [("+15555550100", "hello bob")]
     assert tg.sends == [("12345678", "hello bob")]
+
+
+class _FakeChannelNoRetry(BaseChannel):
+    """_FakeChannel variant that overrides send_message_with_retry to return
+    a configurable bool directly, skipping the real retry loop. Lets us
+    test the dispatcher's bool-capture contract without 7s sleeps."""
+
+    def __init__(self, name: str, returns_ok: bool = True):
+        self.name = name
+        self._returns_ok = returns_ok
+        self.calls: list[tuple[str, str]] = []
+        self.logger = __import__("logging").getLogger(f"OpenCastor.Channel.{name}")
+
+    async def start(self) -> None: pass  # pragma: no cover
+
+    async def stop(self) -> None: pass  # pragma: no cover
+
+    async def send_message(self, chat_id: str, text: str) -> None:  # pragma: no cover
+        # Not exercised — dispatcher calls send_message_with_retry
+        pass
+
+    async def send_message_with_retry(self, chat_id: str, text: str, **_) -> bool:
+        self.calls.append((chat_id, text))
+        return self._returns_ok
+
+
+@pytest.mark.asyncio
+async def test_fan_out_captures_send_with_retry_bool_false():
+    """When send_message_with_retry returns False (retries exhausted), the
+    dispatcher must report False — NOT True. Regression for the
+    'try/except is dead code because retry catches everything' bug."""
+    from castor.notify_dispatch import NotifyDispatcher
+
+    failing = _FakeChannelNoRetry("whatsapp", returns_ok=False)
+    succeeding = _FakeChannelNoRetry("telegram", returns_ok=True)
+    channels = {"whatsapp": failing, "telegram": succeeding}
+
+    dispatcher = NotifyDispatcher(
+        channels_ref=lambda: channels,
+        chat_ids={"whatsapp": "+15555550100", "telegram": "12345678"},
+    )
+
+    result = await dispatcher.fan_out(["whatsapp", "telegram"], "hello")
+
+    assert result == {"whatsapp": False, "telegram": True}
+    assert failing.calls == [("+15555550100", "hello")]
+    assert succeeding.calls == [("12345678", "hello")]
