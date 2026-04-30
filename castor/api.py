@@ -2904,6 +2904,14 @@ async def arm_pick_place(req: _PickPlaceRequest):
         _img_bytes = _b64.b64decode(b64)
         thought = await asyncio.to_thread(state.brain.think, _img_bytes, prompt, "terminal")
         log.append({"phase": phase, "brain_response": thought.raw_text[:200]})
+        # Brain providers signal failure via Thought(raw_text="Error [...]...", action=None)
+        # rather than raising. Surface that as 503 so callers don't see a "successful"
+        # 200 response with an empty-phase log (#867).
+        if thought.action is None and thought.raw_text.startswith("Error"):
+            raise HTTPException(
+                status_code=503,
+                detail=f"Brain unavailable during {phase}: {thought.raw_text[:200]}",
+            )
         return thought.action
 
     def _exec(actions) -> None:

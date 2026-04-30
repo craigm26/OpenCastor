@@ -208,8 +208,8 @@ class AnthropicProvider(BaseProvider):
             action = self._clean_json(text)
             return Thought(text, action)
         except Exception as e:
-            logger.error(f"Anthropic error: {e}")
-            return Thought(f"Error: {e}", None)
+            logger.error("Anthropic error [%s]: %r", type(e).__name__, e)
+            return Thought(f"Error [{type(e).__name__}]: {e!r}", None)
 
     def get_usage_stats(self) -> dict:
         """Return session-level token usage and cache stats."""
@@ -288,8 +288,8 @@ class AnthropicProvider(BaseProvider):
                 pass
             return Thought(text, action)
         except Exception as e:
-            logger.error(f"CLI error: {e}")
-            return Thought(f"Error: {e}", None)
+            logger.error("CLI error [%s]: %r", type(e).__name__, e)
+            return Thought(f"Error [{type(e).__name__}]: {e!r}", None)
 
     def think_stream(
         self,

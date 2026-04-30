@@ -152,18 +152,32 @@ class ClaudeOAuthClient:
             )
 
             if result.returncode != 0:
-                logger.error("Claude CLI error: %s", result.stderr[:200])
-                return {"content": [{"type": "text", "text": f"Error: {result.stderr[:200]}"}]}
+                # Claude CLI often writes auth/runtime errors to stdout, not stderr;
+                # fall back so the operator sees *why* the CLI failed (#867).
+                err_msg = (
+                    (result.stderr or "").strip()
+                    or (result.stdout or "").strip()
+                    or f"<no output, exit code {result.returncode}>"
+                )
+                logger.error("Claude CLI error (exit %d): %s", result.returncode, err_msg[:500])
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Error [exit {result.returncode}]: {err_msg[:200]}",
+                        }
+                    ]
+                }
 
             text = result.stdout.strip()
             return {"content": [{"type": "text", "text": text}]}
 
         except subprocess.TimeoutExpired:
             logger.error("Claude CLI timed out")
-            return {"content": [{"type": "text", "text": "Error: CLI timeout"}]}
+            return {"content": [{"type": "text", "text": "Error [TimeoutExpired]: CLI timeout"}]}
         except Exception as e:
-            logger.error("Claude CLI failed: %s", e)
-            return {"content": [{"type": "text", "text": f"Error: {e}"}]}
+            logger.error("Claude CLI failed [%s]: %s", type(e).__name__, e)
+            return {"content": [{"type": "text", "text": f"Error [{type(e).__name__}]: {e!r}"}]}
         finally:
             # Clean up temp image file
             if _image_path:
