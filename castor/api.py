@@ -2843,6 +2843,12 @@ class _PickPlaceRequest(BaseModel):
     task_id: Optional[str] = None  # Firestore task doc to write progress to
     firebase_project: Optional[str] = None  # Firebase project for task doc writes
     rrn: Optional[str] = None  # Robot RRN for Firestore path
+    # Two-step consent (#867 Bug B). When the RCAN config declares
+    # consent.required=true with scope_threshold>=control, the first call
+    # returns 202 PENDING_AUTH with a pending_id. The operator approves via
+    # POST /api/hitl/authorize, then the client retries this endpoint with
+    # consent_pending_id set to that same pending_id.
+    consent_pending_id: Optional[str] = None
 
 
 @app.post("/api/arm/pick_place", dependencies=[Depends(verify_token)])
@@ -2862,21 +2868,57 @@ async def arm_pick_place(req: _PickPlaceRequest):
     if state.brain is None:
         raise HTTPException(status_code=503, detail="Brain not initialized")
 
-    # Consent gate (#867 Bug B). When the RCAN config declares
-    #   consent: {required: true, scope_threshold: control}
-    # parse_consent_gates() registers a HiTLGate covering "pick_place"
-    # at startup. Block here until the operator authorizes via
-    # POST /api/hitl/authorize, or the gate's timeout/on_timeout policy
-    # rejects the request. No-op when no gate covers pick_place.
-    if state.hitl_gate_manager is not None:
-        _approved = await state.hitl_gate_manager.check(
-            {"type": "pick_place", "target": req.target, "destination": req.destination},
-            thought=None,
-        )
-        if not _approved:
-            raise HTTPException(
-                status_code=403,
-                detail="Consent denied for arm motion (control-scope action)",
+    # Two-step consent gate (#867 Bug B; RCAN §8 / MessageType 10 PENDING_AUTH).
+    # When parse_consent_gates() has registered a HiTLGate covering pick_place:
+    #   • first call (no consent_pending_id) → return 202 PENDING_AUTH + pending_id
+    #   • operator hits POST /api/hitl/authorize with that pending_id
+    #   • client retries with consent_pending_id=<same id> → proceeds (or 403/409)
+    if state.hitl_gate_manager is not None and state.hitl_gate_manager.requires_auth_for(
+        "pick_place"
+    ):
+        if req.consent_pending_id:
+            decision = state.hitl_gate_manager.consume_decision(req.consent_pending_id)
+            if decision == "approve":
+                pass  # fall through into planning loop
+            elif decision == "deny":
+                raise HTTPException(
+                    status_code=403,
+                    detail="Consent denied for arm motion (control-scope action)",
+                )
+            elif state.hitl_gate_manager.is_known_pending(req.consent_pending_id):
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"Consent still pending for {req.consent_pending_id}; "
+                        "operator must POST /api/hitl/authorize"
+                    ),
+                )
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unknown consent_pending_id: {req.consent_pending_id}",
+                )
+        else:
+            # Issue PENDING_AUTH; client retries with the returned id.
+            pending_id = state.hitl_gate_manager.start_pending(
+                {"type": "pick_place", "target": req.target, "destination": req.destination},
+                thought=None,
+            )
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "status": "PENDING_AUTH",
+                    "pending_id": pending_id,
+                    "scope": "control",
+                    "action_type": "pick_place",
+                    "target": req.target,
+                    "destination": req.destination,
+                    "instruction": (
+                        f"POST /api/hitl/authorize with pending_id={pending_id} "
+                        "and decision=approve, then retry this endpoint with "
+                        f"consent_pending_id={pending_id}."
+                    ),
+                },
             )
 
     log: list[dict] = []

@@ -34,19 +34,40 @@ class HiTLGate:
 
 
 class HiTLGateManager:
-    """Manages HiTL gate lifecycle: pending queue, auth futures, notifications."""
+    """Manages HiTL gate lifecycle: pending queue, auth futures, notifications.
+
+    Supports two flows:
+
+    * **Long-poll** (legacy) — :meth:`check` blocks until the gate resolves
+      via :meth:`authorize` or times out. Single async call from the caller.
+
+    * **Two-step** — :meth:`start_pending` returns a ``pending_id`` immediately
+      without blocking; the caller surfaces it (HTTP 202 body, channel
+      notification, etc.). Once :meth:`authorize` runs, :meth:`consume_decision`
+      atomically yields the resolved decision. Matches RCAN §8 PENDING_AUTH /
+      AUTHORIZE semantics.
+    """
 
     def __init__(self, gates: list[HiTLGate], audit: Any = None):
         self._gates = gates
         self._audit = audit
-        # pending_id -> asyncio.Future[str] ("approve"|"deny")
+        # Long-poll: pending_id -> asyncio.Future[str] ("approve"|"deny")
         self._pending: dict[str, asyncio.Future] = {}
+        # Two-step: pending_ids issued via start_pending(), still unresolved
+        self._known_pending: set[str] = set()
+        # Two-step: resolved decisions waiting for consume_decision()
+        self._resolved: dict[str, str] = {}
 
     def _match_gate(self, action_type: str) -> Optional[HiTLGate]:
         for gate in self._gates:
             if action_type in gate.action_types:
                 return gate
         return None
+
+    def requires_auth_for(self, action_type: str) -> bool:
+        """Return True if any registered gate requires auth for this action type."""
+        gate = self._match_gate(action_type)
+        return gate is not None and gate.require_auth
 
     def _create_pending(self, action: dict, thought: Any) -> str:
         pending_id = str(uuid.uuid4())
@@ -59,6 +80,57 @@ class HiTLGateManager:
             getattr(thought, "id", "?"),
         )
         return pending_id
+
+    def start_pending(self, action: dict, thought: Any = None) -> str:
+        """Create a pending request and return its ID without blocking.
+
+        Returns ``""`` (empty string) when no gate covers this action — caller
+        should treat that as "no consent required, proceed."
+        """
+        action_type = action.get("type", "")
+        gate = self._match_gate(action_type)
+        if gate is None or not gate.require_auth:
+            return ""
+
+        pending_id = str(uuid.uuid4())
+        self._known_pending.add(pending_id)
+        # Loud INFO log so operators tailing gateway logs can see the
+        # pending_id even when channel notify isn't wired (#867 Bug B).
+        logger.info(
+            "HiTL pending (two-step): id=%s action_type=%s notify=%s",
+            pending_id,
+            action_type,
+            gate.notify or "[none]",
+        )
+        # Best-effort channel notify; current _notify only logs but the
+        # hook is here for when channel dispatch lands.
+        try:
+            asyncio.get_event_loop().create_task(
+                self._notify(gate.notify, pending_id, action, thought)
+            )
+        except RuntimeError:
+            # No running loop (e.g. called from sync test setup) — skip notify
+            pass
+        return pending_id
+
+    def consume_decision(self, pending_id: str) -> Optional[str]:
+        """Atomically pop a resolved two-step decision.
+
+        Returns:
+            ``"approve"`` / ``"deny"`` when the operator has authorized;
+            ``None`` when still pending OR when ``pending_id`` is unknown.
+            Distinguish via :meth:`is_known_pending`.
+        """
+        if pending_id not in self._known_pending:
+            return None
+        decision = self._resolved.pop(pending_id, None)
+        if decision in ("approve", "deny"):
+            self._known_pending.discard(pending_id)
+        return decision
+
+    def is_known_pending(self, pending_id: str) -> bool:
+        """Whether this pending_id was issued by :meth:`start_pending`."""
+        return pending_id in self._known_pending
 
     async def _wait_for_auth(self, pending_id: str) -> str:
         future = self._pending.get(pending_id)
@@ -124,16 +196,30 @@ class HiTLGateManager:
     def authorize(self, pending_id: str, decision: Literal["approve", "deny"]) -> bool:
         """Resolve a pending authorization request.
 
+        Resolves whichever flow is active for ``pending_id``:
+
+        * Long-poll: sets the future awaited by :meth:`check`.
+        * Two-step:  stashes the decision for :meth:`consume_decision`.
+
         Args:
-            pending_id: UUID returned when the gate was triggered.
+            pending_id: UUID returned by :meth:`check` (long-poll) or
+                :meth:`start_pending` (two-step).
             decision:   ``"approve"`` or ``"deny"``.
 
         Returns:
-            ``True`` if the pending request was found and resolved.
+            ``True`` if the ``pending_id`` was known to either flow.
         """
+        # Long-poll path
         future = self._pending.get(pending_id)
-        if future is None or future.done():
-            return False
-        future.set_result(decision)
-        logger.info("HiTL authorized: %s -> %s", pending_id, decision)
-        return True
+        if future is not None and not future.done():
+            future.set_result(decision)
+            logger.info("HiTL authorized (long-poll): %s -> %s", pending_id, decision)
+            return True
+
+        # Two-step path
+        if pending_id in self._known_pending:
+            self._resolved[pending_id] = decision
+            logger.info("HiTL authorized (two-step): %s -> %s", pending_id, decision)
+            return True
+
+        return False

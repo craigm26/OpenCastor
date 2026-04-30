@@ -22,7 +22,6 @@ making the declared safety envelope non-load-bearing. These tests cover:
 from __future__ import annotations
 
 import collections
-import threading
 import time
 from unittest.mock import MagicMock, patch
 
@@ -169,16 +168,16 @@ def _wire_brain_that_returns_action(api_mod):
 
 
 class TestPickPlaceConsentGate:
-    def test_pick_place_blocks_when_consent_required_and_unauthorized(self, monkeypatch):
-        """With consent.required=true (gate registered for pick_place), an
-        unauthorized request must NOT proceed past the consent check."""
+    def test_first_call_returns_202_pending_auth_with_pending_id(self, monkeypatch):
+        """Two-step / RCAN §8 PENDING_AUTH: first call returns 202 with the
+        pending_id; brain is NEVER invoked at this stage."""
         client = _make_client_and_reset(monkeypatch)
 
         import castor.api as api_mod
 
         api_mod.state.driver = MagicMock(set_joint_positions=MagicMock())
         _wire_brain_that_returns_action(api_mod)
-        _wire_consent_gate(timeout_ms=300)  # short timeout so the test isn't slow
+        _wire_consent_gate()
 
         with patch(
             "castor.api._capture_live_frame",
@@ -193,71 +192,164 @@ class TestPickPlaceConsentGate:
                 },
             )
 
-        # Either 403 (denied) or 408 (timeout) — both indicate the gate fired
-        # and refused to proceed. The point is: NOT 200 with phase log.
-        assert resp.status_code in (403, 408, 503), (
-            f"gate did not block: {resp.status_code} {resp.text}"
+        assert resp.status_code == 202, (
+            f"expected 202 PENDING_AUTH, got {resp.status_code}: {resp.text}"
         )
-        # And the brain should never have been called (gate is *before* planning)
-        assert api_mod.state.brain.think.call_count == 0, "brain was called despite consent gate"
+        body = resp.json()
+        assert body["status"] == "PENDING_AUTH"
+        assert body["scope"] == "control"
+        assert body["action_type"] == "pick_place"
+        assert body["pending_id"]  # non-empty UUID
+        # Brain must not have been touched at PENDING_AUTH stage
+        assert api_mod.state.brain.think.call_count == 0, "brain was called pre-auth"
 
-    def test_pick_place_proceeds_after_authorize(self, monkeypatch):
-        """Operator authorizes via /api/hitl/authorize → blocked pick_place
-        unblocks and progresses into the planning loop."""
+    def test_retry_with_unknown_pending_id_returns_400(self, monkeypatch):
+        """Retrying with a pending_id we never issued must reject with 400."""
         client = _make_client_and_reset(monkeypatch)
 
         import castor.api as api_mod
 
         api_mod.state.driver = MagicMock(set_joint_positions=MagicMock())
         _wire_brain_that_returns_action(api_mod)
-        _wire_consent_gate(timeout_ms=5000)
+        _wire_consent_gate()
 
-        # Spawn the pick_place call in a background thread; main thread
-        # polls for the pending gate, hits /api/hitl/authorize, and the
-        # background call should finish 200.
-        result_box: dict = {}
+        resp = client.post(
+            "/api/arm/pick_place",
+            json={
+                "target": "red lego",
+                "destination": "bowl",
+                "consent_pending_id": "00000000-not-a-real-id",
+            },
+        )
+        assert resp.status_code == 400, resp.text
+        assert api_mod.state.brain.think.call_count == 0
 
-        def _run():
-            with patch(
-                "castor.api._capture_live_frame",
-                return_value=b"\xff\xd8" + b"\x00" * 1024,
-            ):
-                r = client.post(
-                    "/api/arm/pick_place",
-                    json={
-                        "target": "red lego",
-                        "destination": "bowl",
-                        "max_vision_steps": 1,
-                    },
-                )
-            result_box["status"] = r.status_code
-            result_box["body"] = r.text
+    def test_retry_before_authorize_returns_409(self, monkeypatch):
+        """First call gets pending_id; retrying with that id BEFORE the operator
+        approves must return 409 (still pending)."""
+        client = _make_client_and_reset(monkeypatch)
 
-        t = threading.Thread(target=_run, daemon=True)
-        t.start()
+        import castor.api as api_mod
 
-        # Wait for the gate manager to register a pending request (up to 1s)
-        manager = api_mod.state.hitl_gate_manager
-        deadline = time.time() + 1.0
-        pending_id = None
-        while time.time() < deadline:
-            if manager._pending:
-                pending_id = next(iter(manager._pending.keys()))
-                break
-            time.sleep(0.02)
+        api_mod.state.driver = MagicMock(set_joint_positions=MagicMock())
+        _wire_brain_that_returns_action(api_mod)
+        _wire_consent_gate()
 
-        assert pending_id is not None, "no pending HiTL request was created"
+        first = client.post(
+            "/api/arm/pick_place",
+            json={"target": "red lego", "destination": "bowl"},
+        )
+        assert first.status_code == 202
+        pending_id = first.json()["pending_id"]
 
-        # Authorize via the existing endpoint
+        # Don't authorize — retry directly
+        retry = client.post(
+            "/api/arm/pick_place",
+            json={
+                "target": "red lego",
+                "destination": "bowl",
+                "consent_pending_id": pending_id,
+            },
+        )
+        assert retry.status_code == 409, retry.text
+        assert pending_id in retry.json().get("error", retry.text)
+
+    def test_retry_after_deny_returns_403(self, monkeypatch):
+        """Operator denies via /api/hitl/authorize → retry returns 403."""
+        client = _make_client_and_reset(monkeypatch)
+
+        import castor.api as api_mod
+
+        api_mod.state.driver = MagicMock(set_joint_positions=MagicMock())
+        _wire_brain_that_returns_action(api_mod)
+        _wire_consent_gate()
+
+        first = client.post(
+            "/api/arm/pick_place",
+            json={"target": "red lego", "destination": "bowl"},
+        )
+        pending_id = first.json()["pending_id"]
+
+        ar = client.post(
+            "/api/hitl/authorize",
+            json={"pending_id": pending_id, "decision": "deny"},
+        )
+        assert ar.status_code == 200, ar.text
+
+        retry = client.post(
+            "/api/arm/pick_place",
+            json={
+                "target": "red lego",
+                "destination": "bowl",
+                "consent_pending_id": pending_id,
+            },
+        )
+        assert retry.status_code == 403, retry.text
+
+    def test_retry_after_approve_proceeds(self, monkeypatch):
+        """Two-step happy path: PENDING_AUTH → /api/hitl/authorize → retry → 200.
+
+        After the operator approves the pending_id, the client retries
+        /api/arm/pick_place with consent_pending_id=<that id> and the brain
+        is called (gate is past, planning loop runs).
+        """
+        client = _make_client_and_reset(monkeypatch)
+
+        import castor.api as api_mod
+
+        api_mod.state.driver = MagicMock(set_joint_positions=MagicMock())
+        _wire_brain_that_returns_action(api_mod)
+        _wire_consent_gate()
+
+        # Step 1: first call → 202 PENDING_AUTH with pending_id
+        first = client.post(
+            "/api/arm/pick_place",
+            json={
+                "target": "red lego",
+                "destination": "bowl",
+                "max_vision_steps": 1,
+            },
+        )
+        assert first.status_code == 202, first.text
+        pending_id = first.json()["pending_id"]
+        assert api_mod.state.brain.think.call_count == 0
+
+        # Step 2: operator approves
         ar = client.post(
             "/api/hitl/authorize",
             json={"pending_id": pending_id, "decision": "approve"},
         )
         assert ar.status_code == 200, ar.text
 
-        t.join(timeout=5.0)
-        assert "status" in result_box, "pick_place call did not return"
-        assert result_box["status"] == 200, result_box
+        # Step 3: client retries with consent_pending_id → proceeds into loop
+        with patch(
+            "castor.api._capture_live_frame",
+            return_value=b"\xff\xd8" + b"\x00" * 1024,
+        ):
+            retry = client.post(
+                "/api/arm/pick_place",
+                json={
+                    "target": "red lego",
+                    "destination": "bowl",
+                    "max_vision_steps": 1,
+                    "consent_pending_id": pending_id,
+                },
+            )
+
+        assert retry.status_code == 200, retry.text
+        # Brain WAS called now (gate is past)
+        assert api_mod.state.brain.think.call_count >= 1
+
+        # And the pending_id is single-use: replaying it should now 400
+        replay = client.post(
+            "/api/arm/pick_place",
+            json={
+                "target": "red lego",
+                "destination": "bowl",
+                "consent_pending_id": pending_id,
+            },
+        )
+        assert replay.status_code == 400, replay.text
 
     def test_pick_place_proceeds_when_no_consent_gate(self, monkeypatch):
         """No HiTLGateManager (legacy un-gated config) → endpoint behaves as before."""
