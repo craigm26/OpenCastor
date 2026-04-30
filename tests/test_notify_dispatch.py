@@ -103,3 +103,60 @@ async def test_fan_out_captures_send_with_retry_bool_false():
     assert result == {"whatsapp": False, "telegram": True}
     assert failing.calls == [("+15555550100", "hello")]
     assert succeeding.calls == [("12345678", "hello")]
+
+
+class _FakeChannelRaises(BaseChannel):
+    """Test double whose send_message_with_retry raises directly.
+
+    Exercises the dispatcher's outer try/except — the contract that
+    even if a future channel adapter violates the BaseChannel
+    no-raise convention, the dispatcher absorbs and reports False.
+    """
+
+    def __init__(self, name: str, exc: Exception):
+        self.name = name
+        self._exc = exc
+        self.logger = __import__("logging").getLogger(f"OpenCastor.Channel.{name}")
+
+    async def start(self) -> None: pass  # pragma: no cover
+    async def stop(self) -> None: pass  # pragma: no cover
+
+    async def send_message(self, chat_id: str, text: str) -> None:  # pragma: no cover
+        # Not used — dispatcher calls send_message_with_retry
+        pass
+
+    async def send_message_with_retry(self, chat_id: str, text: str, **_) -> bool:
+        raise self._exc
+
+
+@pytest.mark.asyncio
+async def test_fan_out_absorbs_unexpected_raise_from_channel(caplog):
+    """If a channel's send_message_with_retry raises (violating the
+    no-raise contract), the dispatcher must absorb it, log ERROR, and
+    continue with sibling channels."""
+    import logging
+
+    from castor.notify_dispatch import NotifyDispatcher
+
+    wa = _FakeChannelRaises("whatsapp", exc=RuntimeError("boom"))
+    tg = _FakeChannelNoRetry("telegram", returns_ok=True)
+    channels = {"whatsapp": wa, "telegram": tg}
+
+    dispatcher = NotifyDispatcher(
+        channels_ref=lambda: channels,
+        chat_ids={"whatsapp": "+15555550100", "telegram": "12345678"},
+    )
+
+    with caplog.at_level(logging.ERROR):
+        result = await dispatcher.fan_out(["whatsapp", "telegram"], "hello")
+
+    assert result == {"whatsapp": False, "telegram": True}
+    assert tg.calls == [("12345678", "hello")]
+    # The dispatcher's own logger.error fires for the absorbed exception
+    assert any(
+        "notify dispatch failed" in r.message
+        and "whatsapp" in r.message
+        and "boom" in r.message
+        for r in caplog.records
+        if r.levelname == "ERROR"
+    )
