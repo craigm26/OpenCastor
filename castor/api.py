@@ -229,6 +229,8 @@ class AppState:
     slam_mapper = None  # SLAMMapper instance (lazy-init, issue #136)
     thought_log = None  # ThoughtLog instance (F4 — AI accountability)
     hitl_gate_manager = None  # HiTLGateManager instance (F3 — HiTL gates)
+    notify_dispatcher = None  # NotifyDispatcher (cross-cutting channel fan-out)
+    authority_handler = None  # AuthorityRequestHandler (long-lived for AUTHORITY_ACCESS)
     pqc_identity: Optional[dict] = None  # pqc-hybrid-v1 public identity (issue #808)
     pqc_keypair = None  # RobotKeyPair — held for registration handshake signing
     hook_runner = None  # HookRunner — PreToolUse/PostToolUse safety gating (#817)
@@ -5897,6 +5899,120 @@ async def _stop_channels():
     state.channels.clear()
 
 
+def _wire_notify_dispatch() -> None:
+    """Wire HiTLGateManager + AuthorityRequestHandler through NotifyDispatcher.
+
+    Runs after _start_channels() so state.channels is populated. Builds:
+      - state.hitl_gate_manager (always, when gates exist) — with notify_fn
+        bound to dispatcher.fan_out if operator config present, else None.
+      - state.notify_dispatcher (only when operator.chat_ids or owner_channel
+        is configured).
+      - state.authority_handler (only when operator config present).
+
+    Idempotent — safe to call multiple times. Logs an info line when
+    operator config is absent (today's log-only fallback).
+    """
+    import asyncio
+
+    from castor.authority import AuthorityRequestHandler
+    from castor.configure import parse_consent_gates, parse_hitl_gates
+    from castor.hitl_gate import HiTLGateManager
+    from castor.notify_dispatch import NotifyDispatcher
+
+    config = state.config or {}
+    op_cfg = config.get("operator") or {}
+    chat_ids = op_cfg.get("chat_ids") or {}
+    owner_channel = op_cfg.get("owner_channel")
+    has_operator_cfg = bool(chat_ids or owner_channel)
+
+    # Compute gates first — needed for Invariant A (no-regression path).
+    try:
+        hgates = list(parse_hitl_gates(config) or [])
+    except Exception as exc:
+        logger.debug("parse_hitl_gates failed: %s", exc)
+        hgates = []
+    try:
+        hgates += list(parse_consent_gates(config) or [])
+    except Exception as exc:
+        logger.debug("parse_consent_gates failed: %s", exc)
+
+    if not has_operator_cfg:
+        # Invariant C: today's behavior — log-only HiTL, no dispatcher,
+        # no long-lived authority handler.
+        logger.info(
+            "operator.chat_ids/owner_channel not configured — "
+            "HiTL/AUTHORITY notifications log only (current behavior)"
+        )
+        if hgates:
+            state.hitl_gate_manager = HiTLGateManager(hgates, notify_fn=None)
+            logger.info(
+                "HiTLGateManager initialized (%d gates, log-only)", len(hgates)
+            )
+        return
+
+    # Validation warnings (non-fatal — fleet configs may include sibling
+    # robot destinations; channels may be lazily started)
+    for ch_name in chat_ids:
+        if ch_name not in state.channels:
+            logger.warning(
+                "operator.chat_ids[%s] configured but channel not active this run",
+                ch_name,
+            )
+    if owner_channel and owner_channel not in chat_ids:
+        logger.warning(
+            "operator.owner_channel=%s but no chat_ids[%s] entry; "
+            "AUTHORITY_ACCESS notifications will fail",
+            owner_channel,
+            owner_channel,
+        )
+    for gate in hgates:
+        for ch in gate.notify or []:
+            if ch not in chat_ids:
+                logger.warning(
+                    "HiTL gate notify=[%s] but no operator.chat_ids[%s] entry; "
+                    "this channel will be skipped",
+                    ch,
+                    ch,
+                )
+
+    dispatcher = NotifyDispatcher(
+        channels_ref=lambda: state.channels,
+        chat_ids=chat_ids,
+        owner_channel=owner_channel,
+    )
+    state.notify_dispatcher = dispatcher
+
+    # Invariant B: HiTL manager rebuilt with notify_fn
+    if hgates:
+        state.hitl_gate_manager = HiTLGateManager(
+            hgates, notify_fn=dispatcher.fan_out
+        )
+        logger.info(
+            "HiTLGateManager initialized (%d gates, notify wired)", len(hgates)
+        )
+
+    # Authority handler — sync→async adapter for notify_fn
+    def _owner_notify(msg: str) -> None:
+        try:
+            asyncio.create_task(dispatcher.notify_owner(msg))
+        except RuntimeError:
+            logger.warning(
+                "authority notify_fn called outside event loop; skipped"
+            )
+
+    rrn = (config.get("metadata") or {}).get("rrn", "RRN-UNKNOWN")
+    state.authority_handler = AuthorityRequestHandler(
+        rrn=rrn,
+        notify_fn=_owner_notify,
+    )
+
+    logger.info(
+        "NotifyDispatcher wired (%d chat_ids, owner=%s)",
+        len(chat_ids),
+        owner_channel or "none",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Lifecycle events
 # ---------------------------------------------------------------------------
@@ -6259,19 +6375,6 @@ async def on_startup():
             except Exception as _tl_exc:
                 logger.debug("ThoughtLog init skipped: %s", _tl_exc)
 
-            # Initialize HiTLGateManager (F3 — HiTL gates)
-            try:
-                from castor.configure import parse_consent_gates, parse_hitl_gates
-                from castor.hitl_gate import HiTLGateManager
-
-                _hgates = parse_hitl_gates(state.config)
-                # Auto-derived gates from the RCAN consent block (#867 Bug B)
-                _hgates.extend(parse_consent_gates(state.config))
-                if _hgates:
-                    state.hitl_gate_manager = HiTLGateManager(_hgates)
-                    logger.info("HiTLGateManager initialized (%d gates)", len(_hgates))
-            except Exception as _hg_exc:
-                logger.debug("HiTLGateManager init skipped: %s", _hg_exc)
 
         except Exception as e:
             logger.warning(f"Config load error (gateway still operational): {e}")
@@ -6346,6 +6449,7 @@ async def on_startup():
                 logger.debug("Contribute auto-start skipped: %s", _contrib_exc)
 
     await _start_channels()
+    _wire_notify_dispatch()  # bind HiTL + AUTHORITY_ACCESS to channel dispatcher
 
     host = os.getenv("OPENCASTOR_API_HOST", "127.0.0.1")
     port = os.getenv("OPENCASTOR_API_PORT", "8000")
