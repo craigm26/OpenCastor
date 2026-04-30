@@ -38,13 +38,8 @@ class _RecorderChannel:
         self.sends.append((chat_id, text))
 
 
-def _make_client_and_reset(monkeypatch):
-    """Borrowed pattern from tests/test_consent_gate.py:104."""
-    monkeypatch.delenv("OPENCASTOR_API_TOKEN", raising=False)
-    monkeypatch.delenv("OPENCASTOR_JWT_SECRET", raising=False)
-
-    import castor.api as api_mod
-
+def _reset_state(api_mod) -> None:
+    """Reset castor.api.state to a known-clean baseline."""
     api_mod.state.config = None
     api_mod.state.brain = None
     api_mod.state.driver = None
@@ -59,7 +54,25 @@ def _make_client_and_reset(monkeypatch):
     api_mod.state.hitl_gate_manager = None
     api_mod.state.notify_dispatcher = None
     api_mod.state.authority_handler = None
+
+
+def _make_client_and_reset(monkeypatch, request):
+    """Borrowed pattern from tests/test_consent_gate.py:104.
+
+    Registers a finalizer to reset state.config / hitl_gate_manager / etc.
+    after the test runs so this test does not pollute later tests that
+    read state.config (e.g. test_safety_telemetry.test_api_safety_test_bounds
+    calls BoundsChecker.from_config(state.config) and breaks if a leftover
+    config contains no bounds spec).
+    """
+    monkeypatch.delenv("OPENCASTOR_API_TOKEN", raising=False)
+    monkeypatch.delenv("OPENCASTOR_JWT_SECRET", raising=False)
+
+    import castor.api as api_mod
+
+    _reset_state(api_mod)
     api_mod.API_TOKEN = None
+    request.addfinalizer(lambda: _reset_state(api_mod))
 
     from starlette.testclient import TestClient
 
@@ -89,10 +102,10 @@ def _setup_brain_and_driver(api_mod):
     api_mod.state.brain = mock_brain
 
 
-def test_pick_place_pending_auth_pings_recorder_channel(monkeypatch):
+def test_pick_place_pending_auth_pings_recorder_channel(monkeypatch, request):
     """Full wiring: pick_place returns 202 + pending_id, AND the recorder
     channel receives a WhatsApp message containing the pending_id."""
-    client = _make_client_and_reset(monkeypatch)
+    client = _make_client_and_reset(monkeypatch, request)
 
     import castor.api as api_mod
 
@@ -153,13 +166,15 @@ def test_pick_place_pending_auth_pings_recorder_channel(monkeypatch):
     assert pending_id in msg
 
 
-def test_pick_place_without_operator_block_falls_back_to_log_only(monkeypatch, caplog):
+def test_pick_place_without_operator_block_falls_back_to_log_only(
+    monkeypatch, caplog, request
+):
     """When operator: block is absent, _wire_notify_dispatch must log an info
     line and the recorder must NOT be pinged. Today's behavior preserved
     (Invariant C from the design spec)."""
     import logging
 
-    client = _make_client_and_reset(monkeypatch)
+    client = _make_client_and_reset(monkeypatch, request)
 
     import castor.api as api_mod
 
