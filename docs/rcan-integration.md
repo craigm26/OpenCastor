@@ -1,6 +1,7 @@
 # RCAN Integration Guide
 
 OpenCastor is a productized open-core [RCAN protocol](https://rcan.dev/compatibility) runtime — gateway-as-kernel plus drivers, fleet management, cloud bridge, and commercial support. RCAN-the-protocol is implementation-independent; OpenCastor is the most fully-documented runtime that speaks it.
+
 This document covers the key integration points: how OpenCastor maps to RCAN concepts,
 and how to use the protocol's advanced features — including §19 INVOKE and §20 telemetry.
 
