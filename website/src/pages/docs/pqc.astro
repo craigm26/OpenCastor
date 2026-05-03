@@ -4,13 +4,13 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 
 <DocsLayout
   title="Post-Quantum Security (ML-DSA-65) — OpenCastor Docs"
-  description="RCAN v2.2 uses ML-DSA-65 (CRYSTALS-Dilithium) as the sole signing algorithm. Ed25519 has been fully removed."
+  description="The RCAN protocol uses ML-DSA-65 (CRYSTALS-Dilithium) as the sole signing algorithm. Ed25519 has been fully removed."
   ogUrl="https://opencastor.com/docs/pqc"
 >
   <section class="page-hero">
     <p class="section-label reveal">Security</p>
     <h1 class="reveal reveal-d1">Post-Quantum<br><span class="gradient-text">Signing (ML-DSA-65)</span></h1>
-    <p class="reveal reveal-d2">RCAN v2.2 uses ML-DSA-65 (NIST FIPS 204 / CRYSTALS-Dilithium) as the <em>sole</em> message signing algorithm. Ed25519 has been fully removed — not sunset-dated, removed.</p>
+    <p class="reveal reveal-d2">The <a href="https://rcan.dev/compatibility" style="color:var(--accent)">RCAN protocol</a> uses ML-DSA-65 (NIST FIPS 204 / CRYSTALS-Dilithium) as the <em>sole</em> message signing algorithm. Ed25519 has been fully removed — not sunset-dated, removed.</p>
   </section>
 
   <section class="section" id="overview">
@@ -84,15 +84,15 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 
     <div class="doc-section reveal" style="margin-top:32px">
       <h2 class="section-title">Wire Format</h2>
-      <p style="margin-bottom:12px">Every RCAN v2.2 message carries a single <code>signature</code> block. The legacy <code>pq_sig</code> field has been removed — there is no dual-signature period.</p>
+      <p style="margin-bottom:12px">Every <a href="https://rcan.dev/compatibility" style="color:var(--accent)">RCAN protocol</a> message carries a single <code>signature</code> block. The legacy <code>pq_sig</code> field has been removed — there is no dual-signature period.</p>
       <div class="code-block">
         <div class="code-header">
           <div class="code-dots"><span></span><span></span><span></span></div>
-          <span class="code-filename">RCAN v2.2 message signature block</span>
+          <span class="code-filename">RCAN protocol message signature block</span>
         </div>
         <div class="code-body">
 <span class="k">signature:</span><br>
-&nbsp;&nbsp;<span class="k">alg:</span> <span class="s">"ml-dsa-65"</span> <span class="cm"># the only valid value in v2.2</span><br>
+&nbsp;&nbsp;<span class="k">alg:</span> <span class="s">"ml-dsa-65"</span> <span class="cm"># required field — ML-DSA-65 is the sole signing algorithm</span><br>
 &nbsp;&nbsp;<span class="k">kid:</span> <span class="s">"7c21bf58"</span> <span class="cm"># first 8 hex chars of SHA-256(public_key)</span><br>
 &nbsp;&nbsp;<span class="k">sig:</span> <span class="s">"&lt;base64url, 3309 bytes&gt;"</span>
         </div>
@@ -147,7 +147,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <h2 class="section-title">Further Reading</h2>
       <ul style="list-style-type: disc; margin-left: 20px; line-height: 1.8;">
         <li><a href="/docs/conformance" style="color:var(--accent)">Conformance &amp; ISO</a> — how PQ status is reflected in the compliance report</li>
-        <li><a href="https://rcan.dev" style="color:var(--accent)">RCAN v2.2 Specification</a> — full wire format reference</li>
+        <li><a href="https://rcan.dev/compatibility" style="color:var(--accent)">RCAN Specification</a> — full wire format reference (live compatibility matrix)</li>
         <li><a href="https://csrc.nist.gov/pubs/fips/204/final" style="color:var(--accent)">NIST FIPS 204</a> — ML-DSA standard</li>
         <li><a href="https://github.com/continuonai/rcan-py" style="color:var(--accent)">rcan-py</a> — <code>rcan.signing.MLDSAKeyPair</code></li>
         <li><a href="https://github.com/continuonai/rcan-ts" style="color:var(--accent)">rcan-ts</a> — <code>@noble/post-quantum</code> integration</li>

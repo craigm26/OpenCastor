@@ -73,7 +73,7 @@ Tracking: craigm26/OpenCastor#859
 | Local safety wins (structural protocol invariant) | `castor validate --category safety --json` → `safety.local_safety_wins: pass` |
 | Protocol 66 safety rules conformant | `castor validate --category safety --json` → `safety.p66_conformance: pass` |
 | Audit chain is tamper-evident | `castor audit verify` → chain integrity: OK |
-| Message signing active (RCAN v1.5+) | `castor validate --category rcan_v15 --json` → `rcan_v15.message_signing: pass` |
+| Message signing active ([RCAN protocol](https://rcan.dev/compatibility)) | `castor validate --category rcan_signing --json` → `rcan_signing.message_signing: pass` |
 | L2 conformance (all safety-critical checks) | `castor validate --strict` → exit code 0 |
 
 ---

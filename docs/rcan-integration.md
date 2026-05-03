@@ -213,5 +213,5 @@ Full spec: [rcan.dev/spec/section-20/](https://rcan.dev/spec/section-20/)
 
 - [subsystems.md](claude/subsystems.md) — Provider pattern and RCAN config
 - [api-reference.md](claude/api-reference.md) — REST/WS API including telemetry endpoint
-- [RCAN spec v1.3](https://rcan.dev/spec/) — Full protocol specification
+- [RCAN specification](https://rcan.dev/spec/) — Full protocol specification (see also [live compatibility matrix](https://rcan.dev/compatibility))
 - [Robot Registry Foundation](https://robotregistryfoundation.org) — RRN registry

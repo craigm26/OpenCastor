@@ -290,7 +290,7 @@ Versioning: `YYYY.MM.DD.patch` — bump patch for each commit, date when date ch
 
 - **Hardware**: Raspberry Pi 5 16GB + Hailo-8 NPU + SO-ARM101 6-DOF follower arm + Luxonis OAK-D camera
 - **RRN**: `RRN-000000000003` / `rrn://craigm26/robot/opencastor-rpi5-hailo-soarm101/bob-001`
-- **Config**: `~/opencastor/bob.rcan.yaml` (gitignored — RCAN 3.0)
+- **Config**: `~/opencastor/bob.rcan.yaml` (gitignored — see [live protocol matrix](https://rcan.dev/compatibility))
 - **Host**: `robot.local`
 - **RURI**: `rcan://robot.local:8001/bob`
 - **Agent**: `claude-sonnet-4-6` via Claude Max/Pro (OAuth token at `~/.opencastor/anthropic-token`)

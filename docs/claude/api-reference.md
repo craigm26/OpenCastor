@@ -599,7 +599,7 @@ Update detection parameters. Body: `{confidence_threshold?, model?}`
 Supported simulation formats. Response: `{formats: ["mujoco", "gazebo", "webots"]}`
 
 ### POST /api/sim/export
-Export current RCAN config to a simulation format. Body: `{format: "mujoco"|"gazebo"|"webots"}`
+Export the active RCAN config to a simulation format. Body: `{format: "mujoco"|"gazebo"|"webots"}`
 
 ### POST /api/sim/import
 Import sim config into RCAN. Body: `{format, content}`

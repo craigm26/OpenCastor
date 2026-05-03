@@ -4,7 +4,7 @@ The fastest way to use Claude Code with an OpenCastor robot. No harness config, 
 
 ## What this is
 
-Claude Code reads a `ROBOT.md` (RCAN 3.0 frontmatter + markdown prose) through an MCP server — [`robot-md-mcp`](https://github.com/RobotRegistryFoundation/robot-md-mcp). Claude now has your robot's identity, capabilities, and safety gates as MCP resources. From there, Claude's Bash tool dispatches commands through OpenCastor's gateway (port 8001) via RCAN.
+Claude Code reads a `ROBOT.md` (RCAN protocol frontmatter + markdown prose; see [live compatibility matrix](https://rcan.dev/compatibility)) through an MCP server — [`robot-md-mcp`](https://github.com/RobotRegistryFoundation/robot-md-mcp). Claude now has your robot's identity, capabilities, and safety gates as MCP resources. From there, Claude's Bash tool dispatches commands through OpenCastor's gateway (port 8001) via RCAN.
 
 ## Prerequisites
 
@@ -53,7 +53,7 @@ Two tools:
 - `validate` — re-validates the served manifest against the v1 schema.
 - `render` — strips prose, returns canonical YAML.
 
-Dispatch tools (`invoke_skill`, `query_status`) arrive with `robot-md-mcp` v0.2, gated on the RCAN v0.2 signing decisions.
+Dispatch tools (`invoke_skill`, `query_status`) arrive with `robot-md-mcp` v0.2, gated on the signing requirements in the [RCAN protocol](https://rcan.dev/compatibility) at that version.
 
 ## Dispatching commands tonight (Path A, v0.1)
 

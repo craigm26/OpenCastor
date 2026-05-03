@@ -5,7 +5,7 @@
 <h1 align="center">OpenCastor</h1>
 
 <p align="center">
-  Open-source robot runtime — connect any AI model to any robot hardware through a single YAML config.
+  Productized open-core RCAN runtime — gateway-as-kernel, drivers, fleet, cloud bridge, UI. The most fully-documented RCAN runtime; not the only one.
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://pypi.org/project/opencastor/"><img src="https://img.shields.io/pypi/v/opencastor?color=blue&label=PyPI" alt="PyPI"></a>
-  <a href="https://rcan.dev/spec/"><img src="https://img.shields.io/badge/RCAN-v3.0-brightgreen" alt="RCAN v3.0"></a>
+  <a href="https://rcan.dev/compatibility"><img src="https://img.shields.io/badge/RCAN-live%20matrix-brightgreen" alt="RCAN compatibility matrix"></a>
   <a href="https://rcan.dev/docs/safety/"><img src="https://img.shields.io/badge/Protocol%2066-94%25-orange" alt="Protocol 66"></a>
   <a href="https://github.com/craigm26/OpenCastor/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-green" alt="License"></a>
   <a href="https://github.com/craigm26/OpenCastor/actions"><img src="https://img.shields.io/github/actions/workflow/status/craigm26/OpenCastor/ci.yml?label=CI" alt="CI"></a>
@@ -103,7 +103,7 @@ docker run -it \
 ## Features
 
 - **Protocol 66 safety** — ESTOP never blocked, local safety always wins, confidence gates run on-device
-- **RCAN 3.0** — hybrid signing (ML-DSA-65 + Ed25519), mandatory LoA, canonical JSON wire format, §22-26 compliance builders, BLE/LoRa/MQTT carriers
+- **[RCAN protocol](https://rcan.dev/compatibility)** — hybrid signing (ML-DSA-65 + Ed25519), mandatory LoA, canonical JSON wire format, §22-26 compliance builders, BLE/LoRa/MQTT carriers
 - **Multi-provider AI** — Gemini, Claude, OpenAI, Ollama, MLX (Apple Silicon), Groq, DeepSeek, and 7 more; hot-swap via YAML
 - **Fleet UI** — real-time fleet dashboard at [app.opencastor.com](https://app.opencastor.com); no port forwarding needed
 - **SO-ARM101 arm support** — auto-detected via USB, guided setup for follower/leader/bimanual configurations
@@ -135,10 +135,10 @@ docker run -it \
    [ Robot Hardware ]             Pi / Jetson / Arduino / SO-ARM101 / …
 ```
 
-## RCAN 3.0 Features
+## [RCAN Protocol](https://rcan.dev/compatibility) Features
 
 - **Replay prevention** — hybrid signatures (ML-DSA-65 + Ed25519) over canonical JSON bodies
-- **Level of Assurance (LoA)** — mandatory under 3.0+; gates control-plane operations behind HiTL authorization
+- **Level of Assurance (LoA)** — mandatory in the [RCAN protocol](https://rcan.dev/compatibility); gates control-plane operations behind HiTL authorization
 - **Canonical JSON wire format** — `rcan.canonical_json(body)` produces byte-identical serialization across Python and TypeScript SDKs
 - **§22-26 compliance artifacts** — emit §23 safety benchmarks, §24 IFU, §25 post-market incident reports, §26 EU register entries via `rcan.build_*` builders
 - **Federation + constrained transport** — BLE / LoRa / MQTT carriers; RRN-based identity resolution via rcan.dev
@@ -229,9 +229,23 @@ castor gateway --config so_arm101.rcan.yaml
 
 `castor scan` counts connected Feetech boards and automatically suggests the right preset: single arm (follower or leader), or bimanual pair (ALOHA-style). Koch arms use the same detection path.
 
-## Where this fits in the stack
+## Where OpenCastor sits
 
-OpenCastor is the **reference runtime** — one implementation of the RCAN protocol. Everything else is independent; adopt one, or all seven.
+OpenCastor is **Layer 4** of the OpenCastor stack — the productized
+robot-facing runtime. It depends on:
+
+- [`robot-md-gateway`](https://github.com/RobotRegistryFoundation/robot-md-gateway) — Layer 3, the open safety kernel. *Same code in commercial and community deployments.*
+- [`continuonai/rcan-spec`](https://github.com/continuonai/rcan-spec) — Layer 5, the wire protocol.
+- [Robot Registry Foundation](https://robotregistryfoundation.org) — Layer 6, the neutral registry.
+
+The **safety story is identical** at every tier — hobbyist running
+gateway directly, or enterprise running OpenCastor full. What you
+pay for is operational ergonomics, fleet scale, compliance prep,
+and support.
+
+OpenCastor is a productized open-core RCAN runtime — gateway-as-kernel plus drivers, fleet management, cloud bridge, and commercial support. RCAN-the-protocol is implementation-independent; OpenCastor is the most fully-documented runtime that speaks it.
+
+Everything else in the ecosystem is independent; adopt one, or all seven.
 
 | Layer | Piece | What it is |
 |---|---|---|
@@ -241,7 +255,7 @@ OpenCastor is the **reference runtime** — one implementation of the RCAN proto
 | **Python SDK** | [rcan-py](https://github.com/continuonai/rcan-py) | `pip install rcan` — `RCANMessage`, `RobotURI`, `ConfidenceGate`, `HiTLGate`, `AuditChain`. |
 | **TypeScript SDK** | [rcan-ts](https://github.com/continuonai/rcan-ts) | `npm install rcan-ts` — same API surface for Node + browser. |
 | **Registry** | [Robot Registry Foundation](https://robotregistryfoundation.org) | Permanent RRN identities. Public resolver at `/r/<rrn>`. Like ICANN for robots. |
-| **Reference runtime** ← *this* | [OpenCastor](https://github.com/craigm26/OpenCastor) | **This repo.** Open-source robot runtime — connects LLM brains to hardware bodies. Implements RCAN, adds safety gates, multi-provider AI routing, 18+ hardware drivers, messaging channels, fleet management. |
+| **Productized runtime** ← *this* | [OpenCastor](https://github.com/craigm26/OpenCastor) | **This repo.** Productized open-core RCAN runtime — connects LLM brains to hardware bodies. Safety gates, multi-provider AI routing, 18+ hardware drivers, messaging channels, fleet management. |
 
 See also: the [`ROBOT.md` quickstart](docs/robot-md-claude-code.md) — one command puts a Bob-class robot in Claude Code via the MCP bridge.
 
@@ -251,7 +265,7 @@ See also: the [`ROBOT.md` quickstart](docs/robot-md-claude-code.md) — one comm
 |---|---|
 | **OpenCastor** (this) | v2026.4.17.0 |
 | [Fleet UI](https://app.opencastor.com) | live |
-| [RCAN Protocol](https://rcan.dev/spec/) | v3.0 |
+| [RCAN Protocol](https://rcan.dev/compatibility) | [live matrix](https://rcan.dev/compatibility) |
 | [rcan-py](https://github.com/continuonai/rcan-py) | v2.0.0 |
 | [rcan-ts](https://github.com/continuonai/rcan-ts) | v2.0.0 |
 | [ROBOT.md](https://github.com/RobotRegistryFoundation/robot-md) | v0.2.0 (schema v1.1) |
@@ -266,6 +280,18 @@ OpenCastor is Apache 2.0 and community-driven.
 - **Issues**: [github.com/craigm26/OpenCastor/issues](https://github.com/craigm26/OpenCastor/issues)
 - **PRs**: See [CONTRIBUTING.md](CONTRIBUTING.md)
 - **Docs**: [`docs/claude/`](docs/claude/) — structure, API reference, env vars
+
+<!-- BEGIN: ecosystem certification disclaimer (canonical, derived from spec §10) -->
+> **Conformance is not certification.**
+>
+> Conformance to RCAN tracks (L1–L4 protocol, Gateway Authority, HIL Runtime Safety) is *self-asserted via signed bundles* and *independently replayable from those bundles*. Conformance is not certification. Certification requires audit by a qualified third-party body, which is intentionally out-of-scope for the foundation in 2026.
+<!-- END: ecosystem certification disclaimer -->
+
+<!-- BEGIN: ecosystem authority disclaimer (canonical, derived from spec §10) -->
+> **Where safety is actually enforced.**
+>
+> Physical safety is enforced at Layer 3 (`robot-md-gateway`) or Layer 4 (a runtime that embeds it, e.g., OpenCastor). Declaration alone (Layer 1) does not enforce safety. Agent host alone (Layer 2) is not the safety boundary. If a deployment lacks Layer 3, no safety claim attaches to it.
+<!-- END: ecosystem authority disclaimer -->
 
 ## License
 
