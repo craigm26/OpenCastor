@@ -7,6 +7,21 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ---
 
+## [3.0.2] - 2026-05-03
+
+### Verified
+
+Plan 6 Phase 1 (cert tracks) verification re-run — re-ran the OpenCastor
+conformance + compliance suites against the post-freeze rcan-spec from
+Plan 1. All 195 tests across `test_conformance*.py` + `test_compliance.py`
++ `test_rcan3_compliance.py` pass on current main against rcan-spec
+master `c9f2d1f`. No code changes; this release memorializes the
+verification outcome with a signed version-tuple envelope, which is
+also the first canary of the rcan-spec emit-version-tuple action's
+v3.2.3 `--repo` fix from Plan 4 Phase 0.
+
+---
+
 ## [3.0.1] - 2026-04-24
 
 ### Fixed — R6 demo-day gaps
