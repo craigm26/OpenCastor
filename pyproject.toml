@@ -67,6 +67,8 @@ dependencies = [
     "argcomplete>=3.0.0",
     # RCAN Python SDK — official protocol implementation
     "rcan>=3.3,<4",
+    # Gateway Authority enforcement (Plan 6 Track 2 / Plan 7 open-core)
+    "robot-md-gateway>=0.4.0a1",
 ]
 
 [project.optional-dependencies]
