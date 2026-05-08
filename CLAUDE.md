@@ -7,7 +7,7 @@
 OpenCastor is an open-source **productized open-core RCAN runtime** — Layer 4 of the OpenCastor stack. It connects LLM "brains" to robot "bodies" through a plug-and-play architecture and exposes them to messaging platforms for remote control.
 
 - **Version**: 2026.4.17.0 (date-based: `YYYY.MM.DD.patch`)
-- **RCAN**: v3.0 — see [rcan.dev/spec](https://rcan.dev/spec/)
+- **RCAN**: see [rcan.dev/compatibility](https://rcan.dev/compatibility) for canonical version (`rcan_spec_version` in `opencastor-ops/config/repos.json`: 3.2)
 - **License**: Apache 2.0 | **Python**: 3.10+ | **Tests**: 7804+ passing
 
 ## Quick Start
