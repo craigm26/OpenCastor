@@ -154,9 +154,11 @@ R4  cloud        OpenCastor fleet bridge                     — "from anywhere"
       <p class="reveal" style="line-height:1.8;color:var(--text-secondary);margin-bottom:20px">
         That's the whole thesis in one screen: <strong>authorized &rarr; actuates; tampered or unknown &rarr;
         rejected.</strong> We proved it with <code>read_state</code> deliberately &mdash; a telemetry read moves
-        nothing, so the trust machinery is exercised without spinning a motor. A motion command rides the
-        identical envelope through the identical two-signature check; the only thing that changes is the tool
-        name. The gating doesn't care whether the verb reads or moves.
+        nothing, so the trust machinery is exercised without spinning a motor. A motion command goes through the
+        <em>same identity check</em> &mdash; both signatures, resolved live against RRF &mdash; but the
+        authorization is deliberately <em>stricter</em>: actuation carries an <code>ACTUATE</code> scope, and
+        the gateway flatly refuses an actuation scope from a read-tier caller (a read-only key can look, but it
+        cannot move the arm). Same proof of <em>who</em>; a tighter gate on <em>what</em>.
       </p>
 
       <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">Every layer of this is free</h2>
