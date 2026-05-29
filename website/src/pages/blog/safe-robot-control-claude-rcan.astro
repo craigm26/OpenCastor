@@ -1,0 +1,215 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// Code samples are held as string consts so JSON braces don't collide with Astro's
+// JSX expression syntax. Rendered verbatim via {expr} below.
+const greenInvoke = `$ # operator-signed RCAN INVOKE  →  robot-md-gateway  →  read_state (no motion)
+HTTP 200
+{
+  "ok": true,
+  "manifest_kid": "bob-operator-2026",
+  "scope": "READ",
+  "tool_name": "read_state",
+  "actuator_name": "so-arm101",
+  "outcome_kind": "executed",
+  "telemetry": {
+    "positions": { "shoulder_pan": 0.589, "shoulder_lift": -0.568,
+                   "elbow_flex": 1.157, "wrist_flex": 0.095,
+                   "wrist_roll": 0.213, "gripper": 0.446 },
+    "motor_temps_c": { "shoulder_pan": 34.0, "shoulder_lift": 40.0,
+                       "elbow_flex": 33.0, "wrist_flex": 32.0,
+                       "wrist_roll": 31.0, "gripper": 41.0 }
+  }
+}`;
+
+const denies = `# Same command, tampered in transit (one field changed after signing):
+HTTP 403   { "deny": "envelope_signature", "reason": "signature did not verify" }
+
+# Signed by a key the registry has never seen:
+HTTP 403   { "deny": "envelope_signature", "reason": "kid rogue-operator-9999 not registered" }
+
+# Manifest with no provenance signature footer:
+HTTP 403   { "deny": "manifest_provenance", "reason": "no ROBOT-MD-SIG footer (signature absent)" }`;
+
+const ladder = `R0  raw          servos + camera, no protocol        — a plain Python loop
+R1  perception   robot-md vision_find over depthai          — "what do you see?"
+R2  authorized   signed RCAN INVOKE  →  robot-md-gateway    — "you may actuate"
+R3  identity     signature verified LIVE against RRF         — "and we know who you are"
+R4  cloud        OpenCastor fleet bridge                     — "from anywhere"`;
+---
+
+<BaseLayout
+  title="Driving a Real Robot from a Claude Code Terminal — Safely, on Free Tooling — OpenCastor Blog"
+  description="A field report: wiring a low-cost SO-ARM101 arm to a plain Claude Code terminal, and proving the loop is safe with robot-md, the RCAN protocol, and the Robot Registry Foundation. The gateway only actuates on a command whose signer it can verify against a public registry — everything else fails closed."
+  ogUrl="https://opencastor.com/blog/safe-robot-control-claude-rcan"
+>
+
+<main>
+  <!-- HERO -->
+  <section class="page-hero" style="padding-bottom:24px">
+    <p class="section-label reveal">Case Study</p>
+    <h1 class="reveal reveal-d1" style="max-width:760px;margin:0 auto">Driving a Real Robot from a Terminal —<br><span class="gradient-text">Safely, on Free and Open Tooling</span></h1>
+    <p class="reveal reveal-d2" style="font-size:0.9rem;color:var(--text-muted);margin-top:16px">May 29, 2026 &middot; Craig Merry</p>
+  </section>
+
+  <!-- ARTICLE -->
+  <section class="section" style="padding-top:0">
+    <div class="container" style="max-width:720px">
+
+      <div class="wizard-tip reveal" style="margin-bottom:32px">
+        <p style="font-style:italic;font-size:1.05rem;line-height:1.7;margin:0">The question wasn't "can an AI move a robot arm?" Of course it can. The question was: can it do that <em>safely</em> — where a tampered or unknown command is refused, not executed — using only free, open tooling a hobbyist already has?</p>
+      </div>
+
+      <p class="reveal" style="font-size:1.05rem;line-height:1.8;color:var(--text-secondary);margin-bottom:24px">
+        The robot is a hobby-grade <strong>SO-ARM101</strong>: six Feetech STS3215 servos, an OAK-D-Lite depth
+        camera overhead, the whole thing run by a Raspberry Pi. The operator is a plain
+        <strong>Claude Code terminal</strong> &mdash; no bespoke app, no SDK glue. The goal: have it see a red LEGO
+        brick and drop it in a bowl, and climb a ladder of trust while doing it, one rung at a time.
+      </p>
+
+      <div class="code-block reveal" style="margin-bottom:32px">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">the escalation ladder</span>
+        </div>
+        <div class="code-body"><pre style="margin:0;white-space:pre-wrap;font-size:0.82rem;line-height:1.65">{ladder}</pre></div>
+      </div>
+
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">R0 &mdash; Raw control, no protocol</h2>
+      <p class="reveal" style="line-height:1.8;color:var(--text-secondary);margin-bottom:20px">
+        The rawest possible path: torque off the servos, hand-pose the arm through a pick-and-place by feel,
+        record the encoder angles at each waypoint, then replay them. No inverse kinematics, no camera, no
+        cloud &mdash; about a hundred lines of Python talking straight to the serial bus. It worked: the arm
+        ran the full taught trajectory, approached the brick, closed, lifted, and swung to the bowl.
+        <strong>Honest result: it <em>almost</em> made the pick</strong> &mdash; the jaws didn't quite secure
+        the small brick and gravity sag crept into the carry, so the LEGO ended up beside the bowl rather than
+        in it. Teach-and-replay proves the arm faithfully executes a trajectory; nailing the grasp is a tuning problem.
+      </p>
+
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">R1 &mdash; Perception, and a fix worth upstreaming</h2>
+      <p class="reveal" style="line-height:1.8;color:var(--text-secondary);margin-bottom:20px">
+        The next rung asks the robot what it sees. <code>robot-md</code> exposes a <code>vision_find</code> tool
+        backed by its <code>feetech_depthai</code> driver &mdash; and it returned <code>no_backend</code> on every
+        call. The root cause turned out to be general: the perception module was written against the
+        <strong>depthai v3</strong> API, but this Pi runs
+        <strong>depthai 2.x</strong>, so camera startup raised and the backend fell over. Porting
+        <code>Perception.open()</code> back to the v2 pipeline (a <code>ColorCamera</code>, two
+        <code>MonoCamera</code>s, and an aligned <code>StereoDepth</code> node) brought it to life on this rig:
+        clean aligned depth and a solid lock on the red brick. That's a one-file fix that should unblock
+        vision on other depthai-2.x rigs, and it's headed upstream.
+      </p>
+
+      <div class="wizard-tip reveal" style="margin-bottom:24px">
+        <p style="margin:0;line-height:1.7"><strong>The honest limit.</strong> Closing the loop to a fully
+        autonomous "see brick &rarr; solve IK &rarr; pick" did <em>not</em> work on this rig &mdash; and not
+        because of a software bug. The arm's calibrated wrist range simply can't reach the gripper orientation
+        the IK solver demands for most tabletop targets. That's mechanical geometry, not a calibration miss.
+        On this body, teach-and-replay is the pragmatic path; chasing autonomy further would mean a different arm.</p>
+      </div>
+
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">R2 + R3 &mdash; A command the registry has to vouch for</h2>
+      <p class="reveal" style="line-height:1.8;color:var(--text-secondary);margin-bottom:20px">
+        This is the rung that matters. Raw control is easy; <em>safe</em> control is the hard part, and it's
+        where the RCAN protocol earns its keep. Instead of the terminal poking the serial bus directly, every
+        actuation request becomes a <strong>signed RCAN INVOKE envelope</strong> sent to the
+        <strong>robot-md-gateway</strong> &mdash; the one process that owns the hardware. The gateway runs with
+        <code>REQUIRE_ENVELOPE_SIGNATURE=1</code>, and before it will do anything it checks <em>two</em>
+        signatures, resolving each signer's public key <strong>live from the Robot Registry Foundation</strong>
+        (<a href="https://robotregistryfoundation.org" style="color:var(--accent)">robotregistryfoundation.org</a>):
+      </p>
+      <ul class="reveal" style="line-height:1.8;color:var(--text-secondary);margin:0 0 20px;padding-left:22px">
+        <li><strong>Manifest provenance</strong> &mdash; the robot's <code>ROBOT.md</code> carries a signature
+          footer, proving its declared capabilities and safety gates haven't been altered.</li>
+        <li><strong>Envelope signature</strong> &mdash; the INVOKE itself is signed by a registered
+          <em>operator</em> identity (here, <code>bob-operator-2026</code>), whose public key RRF publishes.</li>
+      </ul>
+      <p class="reveal" style="line-height:1.8;color:var(--text-secondary);margin-bottom:20px">
+        With a correctly signed envelope, a no-motion <code>read_state</code> call sails through &mdash; and the
+        gateway hands back the arm's live joint angles and motor temperatures. The identity was verified against
+        the public registry over the network, in real time:
+      </p>
+
+      <div class="code-block reveal" style="margin-bottom:24px">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">authorized &rarr; executed</span>
+        </div>
+        <div class="code-body"><pre style="margin:0;white-space:pre-wrap;font-size:0.8rem;line-height:1.6">{greenInvoke}</pre></div>
+      </div>
+
+      <p class="reveal" style="line-height:1.8;color:var(--text-secondary);margin-bottom:20px">
+        The lock is only real if it stays shut for everyone else. So we tried to force it. Change a single
+        field of the signed envelope in transit, sign with a key the registry has never seen, or strip the
+        manifest's provenance footer &mdash; each one is refused, fail-closed, with a specific reason:
+      </p>
+
+      <div class="code-block reveal" style="margin-bottom:24px">
+        <div class="code-header">
+          <div class="code-dots"><span></span><span></span><span></span></div>
+          <span class="code-filename">unverifiable &rarr; refused</span>
+        </div>
+        <div class="code-body"><pre style="margin:0;white-space:pre-wrap;font-size:0.8rem;line-height:1.6">{denies}</pre></div>
+      </div>
+
+      <p class="reveal" style="line-height:1.8;color:var(--text-secondary);margin-bottom:20px">
+        That's the whole thesis in one screen: <strong>authorized &rarr; actuates; tampered or unknown &rarr;
+        rejected.</strong> We proved it with <code>read_state</code> deliberately &mdash; a telemetry read moves
+        nothing, so the trust machinery is exercised without spinning a motor. A motion command rides the
+        identical envelope through the identical two-signature check; the only thing that changes is the tool
+        name. The gating doesn't care whether the verb reads or moves.
+      </p>
+
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">Every layer of this is free</h2>
+      <p class="reveal" style="line-height:1.8;color:var(--text-secondary);margin-bottom:20px">
+        Nothing in that ladder is behind a paywall. <code>robot-md</code> is <code>pip install</code>,
+        Apache-2.0. <a href="https://rcan.dev" style="color:var(--accent)">RCAN</a> is an open protocol &mdash;
+        an independent standard for robot identity and authorization, the way DNS is for names. An RRF
+        registration (your robot's permanent <code>RRN</code>) is free to mint. The OpenCastor runtime is
+        Apache-2.0. The operator is Claude Code. A hobbyist with a Raspberry Pi and a low-cost arm can stand
+        up this exact stack &mdash; signed, registry-anchored, fail-closed control &mdash; at zero software cost.
+        That's the point of shipping <a href="https://opencastor.com" style="color:var(--accent)">opencastor.com</a>
+        free: the safe path shouldn't be the expensive one.
+      </p>
+
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">An honest scorecard</h2>
+      <div class="reveal" style="overflow-x:auto;margin-bottom:24px">
+        <table style="width:100%;border-collapse:collapse;font-size:0.9rem">
+          <thead><tr style="text-align:left;border-bottom:1px solid var(--border)">
+            <th style="padding:8px 12px">Rung</th><th style="padding:8px 12px">Status</th></tr></thead>
+          <tbody style="color:var(--text-secondary)">
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px">R0 raw teach-and-replay</td><td style="padding:8px 12px">&#10003; ran end-to-end; grasp undershoots (tuning)</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px">R1 perception (vision_find)</td><td style="padding:8px 12px">&#10003; fixed (depthai v2 port); brick detected</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px">Full-auto IK pick</td><td style="padding:8px 12px">&#10007; blocked by the arm's mechanical envelope</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px">R2 signed INVOKE &rarr; gateway</td><td style="padding:8px 12px">&#10003; executed (HTTP 200, telemetry)</td></tr>
+            <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px">R3 RRF identity + fail-closed</td><td style="padding:8px 12px">&#10003; verified live; tamper/rogue refused</td></tr>
+            <tr><td style="padding:8px 12px">R4 OpenCastor cloud bridge</td><td style="padding:8px 12px">&mdash; not exercised in this session</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="reveal" style="line-height:1.8;color:var(--text-secondary);margin-bottom:20px">
+        Two more honest notes: the signed actuation path was proven with a read, not a physical move (by
+        choice &mdash; the arm's grasp still needs tuning, and the gating is identical either way); and the
+        depthai-v2 perception fix is committed locally, with an upstream pull request still to come.
+      </p>
+
+      <h2 class="reveal" style="font-size:1.75rem;margin-top:48px;margin-bottom:16px">Reproduce it on your robot</h2>
+      <p class="reveal" style="line-height:1.8;color:var(--text-secondary);margin-bottom:12px">The full path, from bare Pi to a registry that vouches for your commands:</p>
+      <ol class="reveal" style="line-height:1.9;color:var(--text-secondary);margin:0 0 24px;padding-left:22px">
+        <li><code>pip install robot-md</code>, then <code>robot-md init &lt;name&gt; --preset so-arm101 --register</code> to mint a free RRN.</li>
+        <li><code>robot-md install-gateway</code> &mdash; the one process that owns the hardware.</li>
+        <li>Register an <em>operator</em> identity with RRF and hold its signing key; that key is what authorizes your INVOKEs.</li>
+        <li>Sign + send: a signed RCAN INVOKE to the gateway. Verified against the registry, it actuates; tampered, it doesn't.</li>
+        <li>Point a Claude Code terminal at it. Ask "what do you see?" and "pick up the brick" &mdash; and watch the gateway insist on a signature first.</li>
+      </ol>
+
+      <div class="wizard-tip reveal" style="margin-bottom:8px">
+        <p style="margin:0;line-height:1.7">A simple terminal can drive a real robot. The interesting part is that
+        a free, open registry can stand between the terminal and the motors and refuse anything it can't verify.
+        That's the difference between a demo and a system you'd trust near your hands.</p>
+      </div>
+
+    </div>
+  </section>
+</main>
+
+</BaseLayout>
