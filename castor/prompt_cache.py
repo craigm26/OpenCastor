@@ -16,6 +16,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+def _cache_control(ttl: str | None = None) -> dict:
+    """Build an ephemeral cache_control marker.
+
+    ``ttl=None`` → the default 5-minute breakpoint (``{"type": "ephemeral"}``,
+    byte-identical to passing no ttl). ``ttl="1h"`` → a 1-hour breakpoint for
+    bursty, human-paced surfaces (messaging) that idle longer than 5 minutes
+    between turns, so the prefix isn't re-written at ~1.25x on every reply.
+    """
+    cc: dict = {"type": "ephemeral"}
+    if ttl:
+        cc["ttl"] = ttl
+    return cc
+
+
 @dataclass
 class CacheStats:
     """Tracks Anthropic prompt cache hit/miss statistics."""
@@ -45,14 +59,41 @@ class CacheStats:
         self.total_tokens_spent += created
 
     def alert_if_low(self, threshold: float = 0.5, logger=None) -> bool:
-        """Return True (and log warning) if hit rate below threshold after warmup (10+ calls)."""
+        """Return True (and log a warning) if caching is underperforming after warmup (10+ calls).
+
+        Two failure modes both surface as a low read hit-rate, but the fix is
+        different for each, so we distinguish them:
+
+        * **Silent no-op** — ``cache_creation`` and ``cache_read`` are *both* zero
+          across every call. ``cache_control`` was set but the cached prefix is
+          below this model's minimum cacheable size (Opus-class needs ~4096
+          tokens; Sonnet-class ~1024-2048), so Anthropic ignores it with no
+          error. The fix is to *enlarge the static prefix* — the prompt changing
+          between ticks is NOT the cause.
+        * **Low reuse** — the prefix IS being written (``cache_creation`` > 0) but
+          rarely read back. The prefix is changing between ticks, or the 5m TTL
+          is expiring between calls.
+        """
         if self.total_calls < 10:
             return False
+        # Silent no-op: cache_control set but the prefix never materialised.
+        if self.total_tokens_spent == 0 and self.total_tokens_saved == 0:
+            msg = (
+                f"CACHE ALERT: nothing cached in {self.total_calls} calls "
+                "(cache_creation_input_tokens stayed 0). The cached prefix is below this "
+                "model's minimum cacheable size, so cache_control is a no-op — enlarge the "
+                "static system prefix (Opus-class needs >= ~4096 tokens). The prompt is not "
+                "the problem; the prefix is simply too small to cache."
+            )
+            if logger:
+                logger.warning(msg)
+            return True
         if self.hit_rate < threshold:
             msg = (
-                f"CACHE ALERT: hit rate {self.hit_rate:.1%} below threshold {threshold:.0%} "
-                f"({self.cache_hits}/{self.total_calls} hits). "
-                "Check that system prompt is not changing between ticks."
+                f"CACHE ALERT: read hit rate {self.hit_rate:.1%} below threshold {threshold:.0%} "
+                f"({self.cache_hits}/{self.total_calls} hits) despite {self.total_tokens_spent} "
+                "tokens written to cache. The cached prefix is likely changing between ticks, "
+                "or the 5m TTL is expiring between calls."
             )
             if logger:
                 logger.warning(msg)
@@ -70,7 +111,9 @@ class CacheStats:
         }
 
 
-def build_cached_system_prompt(base_prompt: str, rcan_config: dict | None = None) -> list[dict]:
+def build_cached_system_prompt(
+    base_prompt: str, rcan_config: dict | None = None, ttl: str | None = None
+) -> list[dict]:
     """
     Build a system prompt as a list of content blocks with cache_control breakpoints.
 
@@ -92,7 +135,7 @@ def build_cached_system_prompt(base_prompt: str, rcan_config: dict | None = None
         {
             "type": "text",
             "text": base_text,
-            "cache_control": {"type": "ephemeral"},  # Cache this breakpoint
+            "cache_control": _cache_control(ttl),  # Cache this breakpoint
         }
     )
 
@@ -103,7 +146,7 @@ def build_cached_system_prompt(base_prompt: str, rcan_config: dict | None = None
             {
                 "type": "text",
                 "text": f"<robot-config>\n{rcan_summary}\n</robot-config>",
-                "cache_control": {"type": "ephemeral"},  # Cache up to here too
+                "cache_control": _cache_control(ttl),  # Cache up to here too
             }
         )
 
@@ -150,6 +193,7 @@ def build_sensor_reminder(sensor_data: dict) -> str:
 def build_cached_messaging_blocks(
     static_content: str,
     dynamic_content: str = "",
+    ttl: str | None = None,
 ) -> list[dict]:
     """
     Build a messaging system prompt as cached static + uncached dynamic blocks.
@@ -173,7 +217,7 @@ def build_cached_messaging_blocks(
         {
             "type": "text",
             "text": static_content or "You are an AI-powered robot.",
-            "cache_control": {"type": "ephemeral"},
+            "cache_control": _cache_control(ttl),
         }
     ]
     if dynamic_content and dynamic_content.strip():
@@ -182,11 +226,34 @@ def build_cached_messaging_blocks(
     return blocks
 
 
+_SECRET_HINTS = ("key", "token", "secret", "password", "credential", "auth")
+
+
+def _looks_secret(key: str) -> bool:
+    """True if a config key name suggests it holds a credential."""
+    k = key.lower()
+    return any(hint in k for hint in _SECRET_HINTS)
+
+
 def _format_rcan_summary(rcan_config: dict) -> str:
-    """Summarize RCAN config fields relevant to the AI brain."""
-    important_keys = ["robot_name", "description", "physics", "safety", "provider", "model"]
+    """Summarize RCAN config fields relevant to the AI brain.
+
+    This text is rendered into the (model-visible, cached) system prompt, so it
+    must never include credential-bearing fields. Keys whose names look secret
+    (api_key, token, ...) are dropped, and the fallback view is filtered the same
+    way — a raw ``str(config)`` dump could otherwise leak an embedded api_key.
+    """
+    important_keys = ["robot_name", "rrn", "description", "physics", "safety", "provider", "model"]
     lines = []
     for key in important_keys:
-        if key in rcan_config:
+        if key in rcan_config and not _looks_secret(key):
             lines.append(f"{key}: {rcan_config[key]}")
-    return "\n".join(lines) if lines else str(rcan_config)[:500]
+    if lines:
+        return "\n".join(lines)
+    # Fallback: secret-filtered, length-capped view of top-level scalar fields only.
+    safe = {
+        k: v
+        for k, v in rcan_config.items()
+        if not _looks_secret(k) and isinstance(v, (str, int, float, bool))
+    }
+    return str(safe)[:500] if safe else ""

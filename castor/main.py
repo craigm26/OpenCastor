@@ -853,8 +853,25 @@ def main():
         logger.debug(f"RURI construction skipped: {e}")
 
     # 2. INITIALIZE BRAIN
+    # Curated, secret-free robot identity handed to providers so cache-aware
+    # adapters (e.g. Anthropic) can anchor a stable <robot-config> cache block.
+    # We pass a hand-picked subset — NEVER the full config — so no api_key/token
+    # can leak into the model-visible, cached system prompt.
+    _meta = config.get("metadata", {})
+    _agent_cfg = config.get("agent", {})
+    rcan_summary_cfg = {
+        k: v
+        for k, v in {
+            "robot_name": _meta.get("robot_name"),
+            "rrn": _meta.get("rrn") or _meta.get("rrn_uri"),
+            "description": _meta.get("description"),
+            "provider": _agent_cfg.get("provider"),
+            "model": _agent_cfg.get("model"),
+        }.items()
+        if v
+    }
     try:
-        brain = get_provider(config["agent"])
+        brain = get_provider({**config["agent"], "rcan_config": rcan_summary_cfg})
         logger.info(f"Brain Online: {config['agent'].get('model', 'unknown')}")
         fs.proc.set_driver("none")
     except Exception as e:
@@ -872,7 +889,7 @@ def main():
             # Primary provider = fast brain (runs every tick)
             # First secondary = planner (runs periodically / on escalation)
             planner_config = secondary_models[0]
-            planner_brain = get_provider(planner_config)
+            planner_brain = get_provider({**planner_config, "rcan_config": rcan_summary_cfg})
             logger.info(
                 f"Planner Brain Online: {planner_config.get('provider', '?')}"
                 f"/{planner_config.get('model', '?')}"

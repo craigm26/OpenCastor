@@ -100,12 +100,17 @@ class ClaudeOAuthClient:
                                 import tempfile as _tmp
 
                                 ext = "jpg" if "jpeg" in src.get("media_type", "") else "png"
-                                tf = _tmp.NamedTemporaryFile(
-                                    suffix=f".{ext}", delete=False, prefix="castor_frame_"
+                                # Fixed path (not a random temp name): the
+                                # "[Camera image saved to ...]" line below must be
+                                # byte-identical across ticks, or a varying path
+                                # defeats any cross-invocation prefix caching the
+                                # CLI does. Overwritten each tick; still unlinked in
+                                # `finally` for privacy.
+                                _image_path = os.path.join(
+                                    _tmp.gettempdir(), f"castor_frame_oauth.{ext}"
                                 )
-                                tf.write(_b64.b64decode(src["data"]))
-                                tf.close()
-                                _image_path = tf.name
+                                with open(_image_path, "wb") as _imgf:
+                                    _imgf.write(_b64.b64decode(src["data"]))
                                 logger.debug("Saved image to %s for CLI vision", _image_path)
                         except Exception as _ie:
                             logger.debug("Image save failed: %s", _ie)
@@ -137,7 +142,7 @@ class ClaudeOAuthClient:
                     "-p",
                     full_prompt,
                     "--output-format",
-                    "text",
+                    "json",
                     "--model",
                     model,
                     "--max-turns",
@@ -169,8 +174,27 @@ class ClaudeOAuthClient:
                     ]
                 }
 
-            text = result.stdout.strip()
-            return {"content": [{"type": "text", "text": text}]}
+            # Parse the CLI's JSON envelope so we can surface usage (cache
+            # read/creation tokens) on the subscription path — the only way to
+            # observe whether caching helps here, since the structured
+            # cache_control API is unreachable on an OAuth token. Fall back to
+            # raw stdout if the CLI emitted plain text (older versions).
+            raw = result.stdout.strip()
+            text = raw
+            usage = None
+            try:
+                data = json.loads(raw)
+            except (json.JSONDecodeError, ValueError):
+                data = None
+            if isinstance(data, dict):
+                if isinstance(data.get("result"), str):
+                    text = data["result"]
+                if isinstance(data.get("usage"), dict):
+                    usage = data["usage"]
+            out: dict = {"content": [{"type": "text", "text": text}]}
+            if usage is not None:
+                out["usage"] = usage
+            return out
 
         except subprocess.TimeoutExpired:
             logger.error("Claude CLI timed out")

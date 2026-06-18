@@ -156,16 +156,18 @@ class AnthropicProvider(BaseProvider):
                 surface=surface,
                 capabilities=self._caps,
             )
-            system_arg = build_cached_messaging_blocks(static_content)
+            # 1h TTL: messaging is human-paced and routinely idles >5m between
+            # turns, so the default 5m breakpoint would expire and re-write the
+            # prefix at ~1.25x on the next reply. (Only matters once the prefix
+            # is large enough to cache at all — see prompt_cache.py.)
+            system_arg = build_cached_messaging_blocks(static_content, ttl="1h")
 
         try:
             response = self.client.messages.create(
                 model=self.model_name,
                 max_tokens=1024,
                 system=system_arg,
-                messages=[{"role": "user", "content": content}],
-                extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
-                timeout=60.0,
+                messages=[{"role": "user", "content": content}],                timeout=60.0,
             )
             # Track cache stats and log per-call savings
             usage = response.usage
@@ -276,10 +278,32 @@ class AnthropicProvider(BaseProvider):
             )
             text = response["content"][0]["text"]
             action = self._clean_json(text)
+            # Record cache usage when the CLI transport reports it
+            # (--output-format json). This is the only way to observe whether the
+            # subscription path benefits from caching — structured cache_control
+            # is unreachable on an OAuth token, so the CLI owns any reuse.
+            usage = response.get("usage") if isinstance(response, dict) else None
+            tokens_in = tokens_out = tokens_cached = 0
+            if isinstance(usage, dict):
+                from types import SimpleNamespace
+
+                tokens_cached = usage.get("cache_read_input_tokens", 0) or 0
+                self._cache_stats.record(
+                    SimpleNamespace(
+                        cache_read_input_tokens=tokens_cached,
+                        cache_creation_input_tokens=usage.get("cache_creation_input_tokens", 0) or 0,
+                    )
+                )
+                self._cache_stats.alert_if_low(logger=logger)
+                tokens_in = usage.get("input_tokens", 0) or 0
+                tokens_out = usage.get("output_tokens", 0) or 0
             try:
                 from castor.runtime_stats import record_api_call
 
                 record_api_call(
+                    tokens_in=tokens_in,
+                    tokens_out=tokens_out,
+                    tokens_cached=tokens_cached,
                     bytes_in=len(instruction.encode()),
                     bytes_out=len(text.encode()),
                     model=self.model_name,
@@ -323,7 +347,11 @@ class AnthropicProvider(BaseProvider):
                 surface=surface,
                 capabilities=self._caps,
             )
-            system_arg = build_cached_messaging_blocks(static_content)
+            # 1h TTL: messaging is human-paced and routinely idles >5m between
+            # turns, so the default 5m breakpoint would expire and re-write the
+            # prefix at ~1.25x on the next reply. (Only matters once the prefix
+            # is large enough to cache at all — see prompt_cache.py.)
+            system_arg = build_cached_messaging_blocks(static_content, ttl="1h")
         b64_image = base64.b64encode(image_bytes).decode("utf-8") if not is_blank else ""
 
         content = []
@@ -345,9 +373,7 @@ class AnthropicProvider(BaseProvider):
                 model=self.model_name,
                 max_tokens=1024,
                 system=system_arg,
-                messages=[{"role": "user", "content": content}],
-                extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
-                timeout=60.0,
+                messages=[{"role": "user", "content": content}],                timeout=60.0,
             ) as stream:
                 yield from stream.text_stream
         except Exception as e:

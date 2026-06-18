@@ -151,6 +151,35 @@ def test_cache_stats_alert_logs_message(caplog):
     assert any("CACHE ALERT" in rec.message for rec in caplog.records)
 
 
+def test_cache_stats_alert_detects_silent_noop(caplog):
+    """Both cache_read and cache_creation 0 → prefix is below the model minimum.
+
+    The warning must name the sub-minimum-prefix cause, not blame the prompt
+    changing between ticks (which is what the old single-branch message did).
+    """
+    import logging
+
+    cs = CacheStats()
+
+    class NoOp:
+        cache_read_input_tokens = 0
+        cache_creation_input_tokens = 0
+
+    # 12 calls where cache_control was set but nothing was ever cached.
+    for _ in range(12):
+        cs.record(NoOp())
+
+    test_logger = logging.getLogger("test_cache_noop_logger")
+    with caplog.at_level(logging.WARNING, logger="test_cache_noop_logger"):
+        result = cs.alert_if_low(threshold=0.5, logger=test_logger)
+
+    assert result is True
+    messages = [rec.message for rec in caplog.records]
+    assert any("minimum cacheable size" in m for m in messages)
+    # The low-reuse branch ("read hit rate ...") must NOT be the one that fired.
+    assert all("read hit rate" not in m for m in messages)
+
+
 def test_cache_stats_tokens_accumulated():
     cs = CacheStats()
 
