@@ -3506,6 +3506,109 @@ def cmd_setup(args) -> None:
     _print("")
 
 
+def cmd_pair(args) -> int:
+    """castor pair — print the iOS app's pairing QR + wire gateway attestation.
+
+    Generates an Ed25519 attestation identity, wires it into the gateway's env
+    config (ROBOT_MD_ATTESTATION_KEY_FILE + _KID so /v1/invoke returns signed
+    receipts), and prints a scannable QR encoding
+    {v, gateway_url, bearer, manifest_path, rrn, estop_url?}.
+    """
+    import json as _json
+    from pathlib import Path
+
+    from castor import pairing
+
+    manifest_path = Path(args.manifest_path).expanduser()
+    if not manifest_path.exists():
+        print(f"error: manifest (ROBOT.md) not found: {manifest_path}", file=sys.stderr)
+        raise SystemExit(1)
+
+    # gateway_url — explicit flag wins, else best-effort LAN URL.
+    gateway_url = args.gateway_url or pairing.default_gateway_url(port=args.port)
+
+    # bearer — explicit flag wins, else read the actuate-tier token from a
+    # bearers.yaml (flag, or one sitting next to the manifest).
+    bearer = args.bearer or ""
+    if not bearer:
+        bearers_path = Path(args.bearers).expanduser() if args.bearers else (
+            manifest_path.parent / "bearers.yaml"
+        )
+        if bearers_path.exists():
+            try:
+                bearer = pairing.read_bearer_from_bearers_yaml(bearers_path)
+            except (ValueError, OSError) as exc:
+                print(f"error: could not read bearer from {bearers_path}: {exc}", file=sys.stderr)
+                raise SystemExit(1)
+        else:
+            print(
+                "error: no bearer token. Pass --bearer TOKEN or --bearers path/to/bearers.yaml "
+                "(run `robot-md-gateway init` to create one).",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+
+    # rrn — explicit flag wins, else parse it out of the ROBOT.md frontmatter.
+    rrn = args.rrn or pairing.read_rrn_from_manifest(manifest_path)
+    if not rrn:
+        print(
+            "error: could not determine RRN. Pass --rrn RRN-... or add metadata.rrn to the "
+            "ROBOT.md.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+    # Where the attestation key + env config land.
+    key_file = (
+        Path(args.key_file).expanduser()
+        if args.key_file
+        else Path.home() / ".config" / "opencastor" / "attestation" / "gateway-attestation.pem"
+    )
+    env_file = (
+        Path(args.env_file).expanduser()
+        if args.env_file
+        else Path.home() / ".config" / "opencastor" / "gateway-attestation.env"
+    )
+
+    try:
+        result = pairing.run_pair(
+            manifest_path=manifest_path,
+            gateway_url=gateway_url,
+            bearer=bearer,
+            rrn=rrn,
+            key_file=key_file,
+            env_file=env_file,
+            kid=args.kid,
+            estop_url=args.estop_url,
+            force=args.force,
+        )
+    except FileExistsError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+
+    payload_json = _json.dumps(result.payload)
+
+    print("\nScan this QR from the OpenCastor iOS app to pair:\n")
+    _print_qr(payload_json)
+    print()
+    print("Pairing payload (decoded):")
+    print(_json.dumps(result.payload, indent=2))
+    print()
+    print("Gateway attestation wired:")
+    print(f"  key file : {result.identity.key_file}")
+    print(f"  kid      : {result.identity.kid}")
+    print(f"  env file : {result.env_file}")
+    print()
+    print("Start (or restart) the gateway with attestation enabled:")
+    print(f"  set -a; . {result.env_file}; set +a")
+    print("  robot-md-gateway serve \\")
+    print(f"    --robot-md {result.payload['manifest_path']} \\")
+    print("    --bearers /path/to/bearers.yaml --host 0.0.0.0 --port "
+          f"{args.port}")
+    print()
+    return 0
+
+
 def cmd_fleet_link(args) -> None:
     """castor fleet-link — generate Fleet UI deep links and QR codes for this robot."""
 
@@ -8679,6 +8782,61 @@ def main() -> None:
         help="Accept all defaults without prompting (for CI/Docker)",
     )
 
+    # castor pair — pairing QR for the iOS app + gateway attestation wiring
+    p_pair = sub.add_parser(
+        "pair",
+        help="Print the iOS app pairing QR and wire gateway attestation (T-002)",
+        epilog=(
+            "Examples:\n"
+            "  castor pair --manifest-path /home/pi/ROBOT.md --bearers ./bearers.yaml\n"
+            "  castor pair --manifest-path ./ROBOT.md --gateway-url http://robot.local:8080 \\\n"
+            "              --bearer $TOKEN --rrn RRN-000000000011\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_pair.add_argument(
+        "--manifest-path",
+        required=True,
+        help="Gateway-host-local path to the ROBOT.md the app actuates against (rides in the QR)",
+    )
+    p_pair.add_argument(
+        "--gateway-url",
+        default=None,
+        help="Gateway base URL (default: best-effort LAN URL http://<lan-ip>:<port>)",
+    )
+    p_pair.add_argument("--port", type=int, default=8080, help="Gateway port for the default URL")
+    p_pair.add_argument("--bearer", default=None, help="Bearer token to embed (else read --bearers)")
+    p_pair.add_argument(
+        "--bearers",
+        default=None,
+        help="Path to bearers.yaml to read the actuate token from "
+        "(default: bearers.yaml next to the ROBOT.md)",
+    )
+    p_pair.add_argument(
+        "--rrn",
+        default=None,
+        help="Robot RRN (default: parsed from the ROBOT.md metadata.rrn)",
+    )
+    p_pair.add_argument("--estop-url", default=None, help="Optional software e-stop URL for the QR")
+    p_pair.add_argument(
+        "--key-file",
+        default=None,
+        help="Where to write the Ed25519 attestation key "
+        "(default: ~/.config/opencastor/attestation/gateway-attestation.pem)",
+    )
+    p_pair.add_argument(
+        "--env-file",
+        default=None,
+        help="Env file to write ROBOT_MD_ATTESTATION_KEY_FILE/_KID into "
+        "(default: ~/.config/opencastor/gateway-attestation.env)",
+    )
+    p_pair.add_argument("--kid", default=None, help="Override the attestation kid (default: derived)")
+    p_pair.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing attestation key (rotates the identity)",
+    )
+
     # castor fleet-link — Fleet UI deep links and QR codes
     p_fleet_link = sub.add_parser(
         "fleet-link",
@@ -9013,6 +9171,8 @@ def main() -> None:
         "bridge": _cmd_bridge,
         # Fleet UI onboarding wizard
         "setup": cmd_setup,
+        # iOS app pairing QR + gateway attestation wiring (T-002)
+        "pair": cmd_pair,
         # Fleet UI deep links + QR codes
         "fleet-link": cmd_fleet_link,
         # Agent harness: skill evaluation

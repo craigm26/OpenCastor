@@ -40,7 +40,7 @@ Auto-tier selection walks from Tier 0 → Tier 1 → Tier 2 → mock. Install on
 ```bash
 pip install opencastor[clip]       # CLIP (recommended default)
 pip install opencastor[imagebind]  # ImageBind + CLAP (experimental)
-pip install opencastor             # Gemini Embedding 2 (uses existing google-genai dep)
+pip install "opencastor==3.*"     # Gemini Embedding 2 (uses existing google-genai dep)
 ```
 
 ### Tier 0 — CLIP / SigLIP2 (default)
