@@ -91,7 +91,7 @@ And you get a tested config for a PiCar-X home patrol bot. I've seeded 7 recipes
 **Quick start:**
 
 ```bash
-pip install opencastor
+pip install "opencastor==3.*"
 castor wizard   # interactive setup
 castor run --config my_robot.rcan.yaml
 ```

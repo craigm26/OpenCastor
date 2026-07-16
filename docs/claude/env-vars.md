@@ -9,7 +9,7 @@ Copy `.env.example` to `.env` and fill in what you need.
 | `GOOGLE_API_KEY` | Google Gemini | |
 | `OPENAI_API_KEY` | OpenAI GPT-4.1 | Also used for OpenRouter |
 | `ANTHROPIC_API_KEY` | Anthropic Claude | |
-| `OPENROUTER_API_KEY` | OpenRouter (100+ models) | `pip install opencastor` — same `openai` SDK, different base_url |
+| `OPENROUTER_API_KEY` | OpenRouter (100+ models) | `pip install "opencastor==3.*"` — same `openai` SDK, different base_url |
 | `GROQ_API_KEY` | Groq LPU inference | sub-100ms inference; `pip install groq` |
 | `MOONSHOT_API_KEY` | Kimi (Moonshot AI) | Chinese LLM |
 | `MINIMAX_API_KEY` | MiniMax | Chinese LLM |
