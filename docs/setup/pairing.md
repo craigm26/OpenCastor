@@ -58,6 +58,9 @@ castor pair \
 path that every `InvokeEnvelope` requires and the phone cannot guess. `estop_url`
 is optional and only present if you pass `--estop-url`.
 
+The full contract the iOS apps consume — this payload (v1) plus the eval and
+benchmark endpoint set — is frozen in [docs/ios/platatlas-ios.md](../ios/platatlas-ios.md).
+
 ## Start the gateway with attestation enabled
 
 `castor pair` prints these lines — run them to (re)start the gateway with the
