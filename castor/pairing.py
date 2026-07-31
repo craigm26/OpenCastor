@@ -194,8 +194,16 @@ def build_pair_payload(
     manifest_path: str,
     rrn: str,
     estop_url: str | None = None,
+    attest_kid: str | None = None,
+    attest_pub: str | None = None,
 ) -> dict:
-    """Build the pairing QR payload. estop_url is included only when provided."""
+    """Build the pairing QR payload. estop_url is included only when provided.
+
+    attest_kid/attest_pub (the gateway attestation kid + standard-base64 SPKI DER
+    of its Ed25519 verify key) ride along when both are provided, so clients can
+    verify this gateway's signed receipts offline. v1 parsers that predate the
+    fields ignore them (unknown keys are non-breaking by contract).
+    """
     payload = {
         "v": PAIR_PAYLOAD_VERSION,
         "gateway_url": gateway_url,
@@ -205,7 +213,26 @@ def build_pair_payload(
     }
     if estop_url:
         payload["estop_url"] = estop_url
+    if attest_kid and attest_pub:
+        payload["attest_kid"] = attest_kid
+        payload["attest_pub"] = attest_pub
     return payload
+
+
+def _attest_pub_b64(pub_file: Path) -> str | None:
+    """Standard-base64 SPKI DER of the attestation public key, for the QR."""
+    try:
+        import base64
+
+        from cryptography.hazmat.primitives import serialization
+
+        key = serialization.load_pem_public_key(pub_file.expanduser().read_bytes())
+        der = key.public_bytes(
+            serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        return base64.b64encode(der).decode("ascii")
+    except Exception:
+        return None
 
 
 def run_pair(
@@ -237,6 +264,8 @@ def run_pair(
         manifest_path=str(manifest_path.expanduser().resolve()),
         rrn=rrn,
         estop_url=estop_url,
+        attest_kid=identity.kid,
+        attest_pub=_attest_pub_b64(identity.pub_file),
     )
     return PairResult(payload=payload, identity=identity, env_file=env_file.expanduser())
 
