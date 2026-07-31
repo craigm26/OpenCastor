@@ -196,6 +196,8 @@ def build_pair_payload(
     estop_url: str | None = None,
     attest_kid: str | None = None,
     attest_pub: str | None = None,
+    console_url: str | None = None,
+    console_token: str | None = None,
 ) -> dict:
     """Build the pairing QR payload. estop_url is included only when provided.
 
@@ -216,6 +218,12 @@ def build_pair_payload(
     if attest_kid and attest_pub:
         payload["attest_kid"] = attest_kid
         payload["attest_pub"] = attest_pub
+    if console_url and console_token:
+        # Camera feeds and model settings. Carries its OWN read-only token:
+        # a feed URL ends up in image tags, screen recordings, and access logs,
+        # and the actuate bearer above can move the arm.
+        payload["console_url"] = console_url
+        payload["console_token"] = console_token
     return payload
 
 
