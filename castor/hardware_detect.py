@@ -89,6 +89,7 @@ KNOWN_ARDUINO_DEVICES: dict = {
 #: Feetech / Waveshare serial bus servo boards (SO-ARM101 candidate).
 KNOWN_FEETECH_DEVICES: dict = {
     "1a86:7523": "Waveshare Serial Bus Servo Board (CH340G) — SO-ARM101 candidate",
+    "1a86:55d3": "QinHeng CH343/CH9102 Serial Bus Servo Board — SO-ARM101 candidate",
     "0483:5740": "STM32 Servo Board variant — SO-ARM101 candidate",
     "10c4:ea60": "CP2102 USB-Serial — possible servo board",
 }
@@ -1345,7 +1346,7 @@ def suggest_extras(hw: dict) -> list[str]:
         for pkg, import_name in [
             ("gym-pusht", "gym_pusht"),
             ("gym-aloha", "gym_aloha"),
-            ("feetech-servo-sdk", "feetech_servo_sdk"),
+            ("feetech-servo-sdk", "scservo_sdk"),
         ]:
             try:
                 __import__(import_name)

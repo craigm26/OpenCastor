@@ -40,9 +40,42 @@ DEFAULT_MOTOR_ID = 1  # factory default for all new STS3215
 # Feetech USB VID:PID combos
 FEETECH_USB_IDS = {
     "1a86:7523": "Waveshare Serial Bus Servo Board (CH340G)",
+    "1a86:55d3": "QinHeng CH343/CH9102 Serial Bus Servo Board — SO-ARM101",
     "0483:5740": "STM32 Servo Board",
     "2e8a:0005": "Raspberry Pi RP2040 (Waveshare variant)",
 }
+
+#: Devices that must NEVER be opened as a servo bus, checked BEFORE any
+#: allowlist match.
+#:
+#: This is not hypothetical. Opening a serial port with pyserial asserts DTR and
+#: RTS by default, which is exactly esptool's reset-into-download-mode sequence
+#: on an ESP32-S3 native-USB CDC — so probing an ESP32 LoRa radio at 1 Mbaud
+#: does not merely fail, it can knock the device out of normal operation. A
+#: developer board sitting next to a robot arm is the common case, not the edge
+#: case.
+DENIED_USB_VIDS = {
+    "303a": "Espressif (ESP32 family)",
+    "239a": "Adafruit",
+    "2341": "Arduino",
+}
+
+#: Substrings in a USB product/manufacturer string that disqualify a port.
+DENIED_PRODUCT_SUBSTRINGS = (
+    "heltec", "lora", "meshtastic", "meshcore", "esp32", "rak", "t-beam",
+)
+
+
+def is_denied_serial(vid_pid: str, description: str = "") -> str:
+    """Reason this port must not be probed, or "" when it is fair game."""
+    vid = (vid_pid or "").split(":")[0].lower()
+    if vid in DENIED_USB_VIDS:
+        return f"{DENIED_USB_VIDS[vid]} — not a servo controller"
+    haystack = (description or "").lower()
+    for token in DENIED_PRODUCT_SUBSTRINGS:
+        if token in haystack:
+            return f"looks like a {token} radio/dev board — not a servo controller"
+    return ""
 
 # ── Assembly steps ────────────────────────────────────────────────────────────
 

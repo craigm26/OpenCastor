@@ -17,7 +17,7 @@ import os
 import time
 from typing import Optional
 
-from castor.hardware.so_arm101.constants import FEETECH_USB_IDS
+from castor.hardware.so_arm101.constants import FEETECH_USB_IDS, is_denied_serial
 
 logger = logging.getLogger("OpenCastor.SoArm101.PortFinder")
 
@@ -53,6 +53,12 @@ def detect_feetech_ports() -> list[dict]:
             if port.vid is None or port.pid is None:
                 continue
             vid_pid = f"{port.vid:04x}:{port.pid:04x}"
+            denied = is_denied_serial(
+                vid_pid, f"{port.description or ''} {port.manufacturer or ''}"
+            )
+            if denied:
+                logger.info("skipping %s: %s", port.device, denied)
+                continue
             if vid_pid in FEETECH_USB_IDS:
                 found.append(
                     {
@@ -64,12 +70,10 @@ def detect_feetech_ports() -> list[dict]:
     except ImportError:
         logger.debug("pyserial not available; falling back to /dev scan")
 
-    if not found:
-        # Coarse fallback: any ttyACM/ttyUSB
-        for p in list_serial_ports():
-            if "ACM" in p or "USB" in p:
-                found.append({"port": p, "description": "Unknown USB serial device", "vid_pid": ""})
-
+    # NO coarse fallback. Labelling every ttyACM a "controller board" is what
+    # put a green tick next to a LoRa radio and made it the default port for
+    # `castor arm verify`. Reporting nothing found is honest and safe; guessing
+    # is neither.
     return found
 
 

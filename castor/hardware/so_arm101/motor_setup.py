@@ -112,7 +112,7 @@ def setup_motors(
             return {m["joint"]: ok for m in motor_list}
 
     try:
-        from feetech_servo_sdk import PacketHandler, PortHandler  # type: ignore[import]
+        from scservo_sdk import PacketHandler, PortHandler  # type: ignore[import]
     except ImportError:
         print_fn(
             "\n⚠  feetech_servo_sdk not installed. "
@@ -241,7 +241,7 @@ def verify_motors(port: str, arm: str = "follower", baud: int = DEFAULT_BAUD) ->
     results: dict[str, bool] = {}
 
     try:
-        from feetech_servo_sdk import PacketHandler, PortHandler  # type: ignore[import]
+        from scservo_sdk import PacketHandler, PortHandler  # type: ignore[import]
     except ImportError:
         logger.warning("feetech_servo_sdk not installed")
         return {m["joint"]: False for m in motor_list}
