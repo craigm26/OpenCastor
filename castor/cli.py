@@ -3512,7 +3512,11 @@ def cmd_pair(args) -> int:
     Generates an Ed25519 attestation identity, wires it into the gateway's env
     config (ROBOT_MD_ATTESTATION_KEY_FILE + _KID so /v1/invoke returns signed
     receipts), and prints a scannable QR encoding
-    {v, gateway_url, bearer, manifest_path, rrn, estop_url?}.
+    {v, gateway_url, bearer, manifest_path, rrn, estop_url?, capability_surface?}.
+
+    capability_surface is this robot's own declared capabilities, projected out of
+    its ROBOT.md, so the phone renders THIS robot rather than whichever manifest it
+    happens to have bundled.
     """
     import json as _json
     from pathlib import Path
@@ -3586,7 +3590,11 @@ def cmd_pair(args) -> int:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(1)
 
-    payload_json = _json.dumps(result.payload)
+    # Compact separators: every byte of pretty-printing is another QR module the
+    # camera has to resolve, and it is the same JSON either way. This is also the
+    # encoding PAIR_QR_BYTE_BUDGET is measured in, so the printed QR is the one
+    # the budget was sized for.
+    payload_json = _json.dumps(result.payload, separators=(",", ":"))
 
     print("\nScan this QR from the OpenCastor iOS app to pair:\n")
     _print_qr(payload_json)

@@ -14,6 +14,11 @@ app. `castor pair`:
      ``{v, gateway_url, bearer, manifest_path, rrn, estop_url?}``. ``manifest_path``
      MUST ride in the QR: it is a gateway-host-local filesystem path the
      InvokeEnvelope requires and the client cannot guess.
+  4. Projects the robot's OWN declared capability surface out of its ROBOT.md into
+     ``capability_surface``, so a phone that has never seen this robot renders the
+     capabilities this robot declares rather than whichever manifest it shipped
+     with. The QR is already the trust root (it carries the gateway attestation
+     key), so this keeps the client from having to fetch a manifest at all.
 
 Pure logic lives here (no argparse, no printing) so it is unit-testable; the
 ``castor pair`` CLI glue in ``castor/cli.py`` calls ``run_pair`` then renders the
@@ -36,6 +41,14 @@ ATTESTATION_KID_ENV = "ROBOT_MD_ATTESTATION_KID"
 
 # QR payload schema version. The iOS app (T-012) parses on this.
 PAIR_PAYLOAD_VERSION = 1
+
+# How many bytes of encoded payload we are willing to ask a phone camera to read.
+# A byte-mode QR tops out at 2953 bytes, but that is a 177x177 module grid — the
+# kind of QR that scans off a printed page and not off a terminal at arm's length.
+# Below this ceiling the capability surface is carried whole; above it the biggest
+# and least load-bearing parts are dropped (see _fit_surface) rather than letting
+# `castor pair` emit a QR nobody can scan.
+PAIR_QR_BYTE_BUDGET = 1400
 
 
 @dataclass(frozen=True)
@@ -161,6 +174,152 @@ def read_rrn_from_manifest(manifest_path: Path) -> str:
     return str(rrn) if rrn else ""
 
 
+def capability_surface_from_manifest(manifest_path: Path) -> dict | None:
+    """Project a ROBOT.md's declared capability surface into the QR's compact form.
+
+    The client cannot read a gateway-host-local ROBOT.md and (by design) never
+    fetches one, so whatever it is going to render about *this* robot has to ride
+    in the QR. This is a lossy projection on purpose: only the fields a client
+    actually reads off a manifest travel — the declared capabilities, whether a
+    software stop is declared, the declared HiTL gates, and the per-capability
+    contracts a client validates a drafted action's SHAPE against.
+
+    Shape (all keys optional except ``capabilities``)::
+
+        {"robot_name": str,
+         "capabilities": [str],
+         "software_stop": bool,
+         "gates": [{"scope": str, "require_auth": bool}],
+         "object_descriptors": [str],
+         "contracts": {cap: {"args": {name: {"kind": str,
+                                             "required": bool,
+                                             "has_default": bool}},
+                             "preconditions": [str]}}}
+
+    ``physics.workspace`` deliberately does NOT travel: it is display prose the
+    client never decides anything with, and its free-text ``note`` has no length
+    bound — an unlucky manifest would cost the QR its scannability to say
+    something the user can read on the robot.
+
+    ``has_default`` says the contract DECLARES a default, not what the default is:
+    the client only needs it to know a missing arg is still well-formed.
+
+    Returns ``None`` when the manifest declares no capabilities at all (there is
+    then nothing to say, and an empty surface would be a claim of its own) or when
+    the file cannot be read/parsed — pairing must not fail because a manifest is
+    unusual.
+    """
+    import yaml
+
+    try:
+        text = Path(manifest_path).expanduser().read_text()
+        fm = _extract_frontmatter(text)
+        data = yaml.safe_load(fm) if fm else {}
+    except (OSError, yaml.YAMLError):
+        return None
+    if not isinstance(data, dict):
+        return None
+
+    capabilities = [c for c in (data.get("capabilities") or []) if isinstance(c, str)]
+    if not capabilities:
+        return None
+
+    metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+    safety = data.get("safety") if isinstance(data.get("safety"), dict) else {}
+    estop = safety.get("estop") if isinstance(safety.get("estop"), dict) else {}
+
+    surface: dict = {"capabilities": capabilities}
+    robot_name = metadata.get("robot_name") or data.get("robot_name")
+    if robot_name:
+        surface["robot_name"] = str(robot_name)
+    surface["software_stop"] = bool(estop.get("software"))
+
+    gates = []
+    for gate in safety.get("hitl_gates") or []:
+        if not isinstance(gate, dict) or not gate.get("scope"):
+            continue
+        gates.append(
+            {"scope": str(gate["scope"]), "require_auth": bool(gate.get("require_auth"))}
+        )
+    if gates:
+        surface["gates"] = gates
+
+    # The targets the robot declares it can SEE. Cheap, and without them a client
+    # drafting an action has no idea which object names are real.
+    vision = data.get("vision") if isinstance(data.get("vision"), dict) else {}
+    descriptors = [
+        str(entry["id"])
+        for entry in (vision.get("object_descriptors") or [])
+        if isinstance(entry, dict) and entry.get("id")
+    ]
+    if descriptors:
+        surface["object_descriptors"] = descriptors
+
+    contracts = _project_contracts(data.get("capability_contracts"))
+    if contracts:
+        surface["contracts"] = contracts
+    return surface
+
+
+def _project_contracts(raw: object) -> dict:
+    """`capability_contracts` → the compact per-capability contract map."""
+    if not isinstance(raw, dict):
+        return {}
+    out: dict = {}
+    for capability, spec in raw.items():
+        if not isinstance(spec, dict):
+            continue
+        entry: dict = {}
+        args: dict = {}
+        raw_args = spec.get("args")
+        if isinstance(raw_args, dict):
+            for name, arg in raw_args.items():
+                arg = arg if isinstance(arg, dict) else {}
+                projected: dict = {}
+                if arg.get("kind"):
+                    projected["kind"] = str(arg["kind"])
+                if arg.get("required"):
+                    projected["required"] = True
+                if "default" in arg:
+                    projected["has_default"] = True
+                args[str(name)] = projected
+        if args:
+            entry["args"] = args
+        preconditions = []
+        for pre in spec.get("preconditions") or []:
+            if not isinstance(pre, dict) or not pre.get("kind"):
+                continue
+            kind = str(pre["kind"])
+            name = pre.get("name")
+            preconditions.append(f"{kind}({name})" if name else kind)
+        if preconditions:
+            entry["preconditions"] = preconditions
+        out[str(capability)] = entry
+    return out
+
+
+def _fit_surface(payload: dict, surface: dict, budget: int) -> dict | None:
+    """Trim the capability surface until the encoded payload fits ``budget`` bytes.
+
+    Drops in order of least value per byte: the contracts (by far the largest
+    part, and only a shape check on the client), then the declared targets, then
+    the declared gates, then the surface entirely. A robot with an unusually rich
+    manifest therefore still gets a scannable QR carrying its capability list, and
+    only ever loses detail — it never gains a claim.
+    """
+    import json as _json
+
+    candidate = dict(surface)
+    for drop in (None, "contracts", "object_descriptors", "gates"):
+        if drop:
+            candidate.pop(drop, None)
+        probe = dict(payload)
+        probe["capability_surface"] = candidate
+        if len(_json.dumps(probe, separators=(",", ":")).encode("utf-8")) <= budget:
+            return candidate
+    return None
+
+
 def set_env_var(env_file: Path, key: str, value: str) -> None:
     """Idempotently set ``key=value`` in a dotenv-style file, preserving others.
 
@@ -198,6 +357,7 @@ def build_pair_payload(
     attest_pub: str | None = None,
     console_url: str | None = None,
     console_token: str | None = None,
+    capability_surface: dict | None = None,
 ) -> dict:
     """Build the pairing QR payload. estop_url is included only when provided.
 
@@ -205,6 +365,10 @@ def build_pair_payload(
     of its Ed25519 verify key) ride along when both are provided, so clients can
     verify this gateway's signed receipts offline. v1 parsers that predate the
     fields ignore them (unknown keys are non-breaking by contract).
+
+    capability_surface — this robot's own declared capabilities (see
+    ``capability_surface_from_manifest``) — rides last and is trimmed to fit
+    ``PAIR_QR_BYTE_BUDGET``, because a QR too dense to scan pairs nothing.
     """
     payload = {
         "v": PAIR_PAYLOAD_VERSION,
@@ -224,6 +388,10 @@ def build_pair_payload(
         # and the actuate bearer above can move the arm.
         payload["console_url"] = console_url
         payload["console_token"] = console_token
+    if capability_surface and capability_surface.get("capabilities"):
+        fitted = _fit_surface(payload, capability_surface, PAIR_QR_BYTE_BUDGET)
+        if fitted:
+            payload["capability_surface"] = fitted
     return payload
 
 
@@ -259,7 +427,8 @@ def run_pair(
 
     This is the testable core of ``castor pair`` — no printing, no argparse. The
     manifest_path is resolved to an absolute gateway-host-local path before it is
-    placed in the QR (the client cannot guess it).
+    placed in the QR (the client cannot guess it), and the robot's own declared
+    capability surface is projected out of that same manifest into the QR.
     """
     identity = generate_attestation_identity(key_file, kid=kid, force=force)
 
@@ -274,6 +443,7 @@ def run_pair(
         estop_url=estop_url,
         attest_kid=identity.kid,
         attest_pub=_attest_pub_b64(identity.pub_file),
+        capability_surface=capability_surface_from_manifest(manifest_path),
     )
     return PairResult(payload=payload, identity=identity, env_file=env_file.expanduser())
 

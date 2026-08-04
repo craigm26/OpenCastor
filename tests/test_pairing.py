@@ -25,11 +25,68 @@ metadata:
 A test robot manifest.
 """
 
+# A drive robot — the case the capability surface exists for. A phone that has
+# only ever seen an arm must not render this one as an arm.
+DRIVE_MANIFEST = """---
+rcan_version: "3.0"
+metadata:
+  robot_name: rover-spec-a-drive
+  rrn: RRN-000000000012
+capabilities:
+  - drive.set
+  - drive.stop
+  - status.report
+capability_contracts:
+  drive.set:
+    args:
+      throttle:
+        kind: float
+        default: 0
+      steering:
+        kind: float
+        default: 0
+    preconditions:
+      - kind: envelope_open
+      - kind: backend_resolved
+  drive.envelope.open:
+    args:
+      motion_budget_s:
+        kind: float
+        required: true
+  drive.stop:
+    returns:
+      stopped:
+        kind: bool
+vision:
+  object_descriptors:
+    - id: orange_cone
+      detector: hsv
+    - detector: hsv
+safety:
+  estop:
+    software: true
+  hitl_gates:
+    - scope: destructive
+      require_auth: true
+---
+
+# rover
+
+A test drive manifest.
+"""
+
 
 @pytest.fixture
 def manifest(tmp_path: Path) -> Path:
     p = tmp_path / "ROBOT.md"
     p.write_text(MANIFEST)
+    return p
+
+
+@pytest.fixture
+def drive_manifest(tmp_path: Path) -> Path:
+    p = tmp_path / "DRIVE.md"
+    p.write_text(DRIVE_MANIFEST)
     return p
 
 
@@ -127,3 +184,83 @@ def test_existing_key_not_clobbered_without_force(tmp_path, manifest):
     _run(tmp_path, manifest)
     with pytest.raises(FileExistsError):
         _run(tmp_path, manifest)  # same key_file, force defaults False
+
+
+# ---------------------------------------------------------------------------
+# capability_surface — the robot's OWN capabilities ride in the QR
+# ---------------------------------------------------------------------------
+
+
+def test_drive_robot_surface_carries_its_own_capabilities(drive_manifest):
+    surface = pairing.capability_surface_from_manifest(drive_manifest)
+    assert surface["robot_name"] == "rover-spec-a-drive"
+    assert surface["capabilities"] == ["drive.set", "drive.stop", "status.report"]
+    assert surface["software_stop"] is True
+    assert surface["gates"] == [{"scope": "destructive", "require_auth": True}]
+    # A descriptor with no id is skipped, not carried as a nameless target.
+    assert surface["object_descriptors"] == ["orange_cone"]
+
+
+def test_surface_contracts_project_kind_required_and_default_presence(drive_manifest):
+    contracts = pairing.capability_surface_from_manifest(drive_manifest)["contracts"]
+    # A declared default travels as `has_default` — the client needs to know a
+    # missing arg is still well-formed, not what the value would be.
+    assert contracts["drive.set"]["args"]["throttle"] == {"kind": "float", "has_default": True}
+    assert contracts["drive.set"]["preconditions"] == ["envelope_open", "backend_resolved"]
+    assert contracts["drive.envelope.open"]["args"]["motion_budget_s"] == {
+        "kind": "float",
+        "required": True,
+    }
+    # A contract with only `returns` still exists, with no declared args.
+    assert contracts["drive.stop"] == {}
+
+
+def test_surface_is_none_when_the_manifest_declares_no_capabilities(manifest):
+    # An empty surface would itself be a claim ("this robot can do nothing").
+    assert pairing.capability_surface_from_manifest(manifest) is None
+
+
+def test_surface_is_none_rather_than_raising_on_an_unreadable_manifest(tmp_path):
+    assert pairing.capability_surface_from_manifest(tmp_path / "nope.md") is None
+    bad = tmp_path / "bad.md"
+    bad.write_text("---\n:\n  - [unclosed\n---\n")
+    assert pairing.capability_surface_from_manifest(bad) is None
+
+
+def test_run_pair_puts_the_drive_surface_in_the_qr(tmp_path, drive_manifest):
+    result = _run(tmp_path, drive_manifest, rrn="RRN-000000000012")
+    surface = result.payload["capability_surface"]
+    assert surface["capabilities"] == ["drive.set", "drive.stop", "status.report"]
+    assert surface["robot_name"] == "rover-spec-a-drive"
+
+
+def test_capability_surface_absent_when_the_manifest_declares_none(tmp_path, manifest):
+    # The pre-surface QR shape, unchanged — an old robot pairs exactly as before.
+    result = _run(tmp_path, manifest)
+    assert "capability_surface" not in result.payload
+
+
+def test_surface_is_trimmed_rather_than_making_the_qr_unscannable():
+    import json
+
+    fat = {
+        "capabilities": ["arm.pick", "arm.place"],
+        "software_stop": True,
+        "gates": [{"scope": "destructive", "require_auth": True}],
+        "contracts": {
+            f"arm.step{i}": {"args": {f"arg{j}": {"kind": "float"} for j in range(20)}}
+            for i in range(20)
+        },
+    }
+    payload = pairing.build_pair_payload(
+        gateway_url="http://192.168.1.50:8080",
+        bearer="tok",
+        manifest_path="/etc/opencastor/ROBOT.md",
+        rrn="RRN-1",
+        capability_surface=fat,
+    )
+    encoded = len(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    assert encoded <= pairing.PAIR_QR_BYTE_BUDGET
+    # Detail is dropped, never invented: the capability list survives.
+    assert payload["capability_surface"]["capabilities"] == ["arm.pick", "arm.place"]
+    assert "contracts" not in payload["capability_surface"]
