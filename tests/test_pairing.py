@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import json
 import pytest
 
 from castor import pairing
@@ -222,9 +223,20 @@ def test_bearer_read_still_reports_a_file_it_genuinely_cannot_use(tmp_path):
 
 
 def test_existing_key_not_clobbered_without_force(tmp_path, manifest):
-    _run(tmp_path, manifest)
-    with pytest.raises(FileExistsError):
-        _run(tmp_path, manifest)  # same key_file, force defaults False
+    # CONTRACT CHANGED DELIBERATELY: rerun now REUSES the identity instead of
+    # refusing. Refusing pushed operators toward the two wrong paths — hand-
+    # assembling the payload (stale-IP QRs) or --force (which rotated a live
+    # signing key to change an IP address, and once destroyed the only copy of
+    # one). What this test protects is what it always protected: the key BYTES
+    # must survive a rerun untouched.
+    first = _run(tmp_path, manifest)
+    key_bytes = first.identity.key_file.read_bytes()
+    again = _run(tmp_path, manifest)  # same key_file, force defaults False
+    assert again.identity.key_file.read_bytes() == key_bytes
+    assert again.identity.kid == first.identity.kid
+    # And the payload is re-emitted with the SAME verify key, so receipts
+    # signed yesterday still verify against the QR scanned today.
+    assert again.payload["attest_pub"] == first.payload["attest_pub"]
 
 
 # ---------------------------------------------------------------------------
@@ -339,3 +351,78 @@ def test_a_second_rotation_does_not_eat_the_first_backup(tmp_path):
     pairing.generate_attestation_identity(key, kid="k2", force=True)
     pairing.generate_attestation_identity(key, kid="k3", force=True)
     assert len(sorted(tmp_path.glob("attest.pem.rotated-*"))) >= 1
+
+
+class TestWritePairArtifacts:
+    """One command puts the QR where the runbooks say it lives.
+
+    Every robot on this bench ended up with a hand-assembled payload plus a
+    qrcode two-liner pasted from session notes — and hand assembly is how the
+    rover shipped a QR pinned to a DHCP address the Pi no longer held.
+    """
+
+    PAYLOAD = {"v": 1, "gateway_url": "http://192.0.2.7:8081", "bearer": "rmg_live_x",
+               "manifest_path": "/home/pi/ROBOT.md", "rrn": "RRN-000000000012"}
+
+    def test_writes_payload_json_and_qr_png(self, tmp_path):
+        from castor.pairing import write_pair_artifacts
+
+        written = write_pair_artifacts(self.PAYLOAD, tmp_path / "robot")
+        payload_file = written["payload"]
+        assert json.loads(payload_file.read_text()) == self.PAYLOAD
+        # Owner-only: the payload carries a live actuate bearer.
+        assert (payload_file.stat().st_mode & 0o777) == 0o600
+        assert written["qr"].exists()
+        assert (written["qr"].stat().st_mode & 0o777) == 0o600
+
+    def test_the_png_decodes_back_to_the_compact_payload(self, tmp_path):
+        # The QR is only worth writing if a camera gets the same bytes back.
+        pytest.importorskip("qrcode")
+        try:
+            from PIL import Image
+            from pyzbar.pyzbar import decode
+        except ImportError:
+            pytest.skip("pyzbar not installed")
+        from castor.pairing import write_pair_artifacts
+
+        written = write_pair_artifacts(self.PAYLOAD, tmp_path)
+        got = decode(Image.open(written["qr"]))
+        assert json.loads(got[0].data) == self.PAYLOAD
+
+    def test_missing_qrcode_degrades_to_json_only(self, tmp_path, monkeypatch):
+        # A missing nicety must not block a pairing: the JSON is the payload of
+        # record and pasting it is the documented fallback.
+        import builtins
+
+        from castor import pairing
+
+        real_import = builtins.__import__
+
+        def no_qrcode(name, *a, **k):
+            if name == "qrcode":
+                raise ImportError("not installed")
+            return real_import(name, *a, **k)
+
+        monkeypatch.setattr(builtins, "__import__", no_qrcode)
+        written = pairing.write_pair_artifacts(self.PAYLOAD, tmp_path)
+        assert "payload" in written and "qr" not in written
+
+
+class TestRunPairConsoleFields:
+    def test_console_fields_ride_when_both_are_given(self, tmp_path):
+        from castor.pairing import run_pair
+
+        manifest = tmp_path / "ROBOT.md"
+        manifest.write_text("---\nmetadata:\n  rrn: RRN-000000000012\n---\n")
+        result = run_pair(
+            manifest_path=manifest,
+            gateway_url="http://192.0.2.7:8081",
+            bearer="rmg_live_x",
+            rrn="RRN-000000000012",
+            key_file=tmp_path / "attest.pem",
+            env_file=tmp_path / "attest.env",
+            console_url="http://192.0.2.7:8004",
+            console_token="rmg_view_y",
+        )
+        assert result.payload["console_url"] == "http://192.0.2.7:8004"
+        assert result.payload["console_token"] == "rmg_view_y"

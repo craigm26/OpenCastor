@@ -27,6 +27,7 @@ QR + JSON.
 
 from __future__ import annotations
 
+import json
 import hashlib
 import logging
 import os
@@ -110,10 +111,32 @@ def generate_attestation_identity(
 
     key_file = key_file.expanduser().resolve()
     if key_file.exists() and not force:
-        raise FileExistsError(
-            f"{key_file} already exists; pass force=True (or --force) to overwrite "
-            "(this rotates the attestation identity)."
-        )
+        # REUSE, DON'T REFUSE. The most common reason to re-run `castor pair`
+        # is not a new robot — it is a QR that went stale: the Pi moved DHCP
+        # leases, a console was added, a bearer changed. Refusing here left
+        # exactly two paths, both wrong: hand-assemble the payload (which is
+        # how the rover shipped a QR pinned to an address the Pi no longer
+        # held), or pass --force and ROTATE a live signing identity to change
+        # an IP address (which is how a robot on this bench lost the only copy
+        # of its attestation key). An existing key is an identity to keep, and
+        # re-emitting its public half is exactly what re-pairing means.
+        from cryptography.hazmat.primitives import serialization
+
+        priv = serialization.load_pem_private_key(key_file.read_bytes(), password=None)
+        pub_file = key_file.with_suffix(key_file.suffix + ".pub")
+        if not pub_file.exists():
+            _atomic_write_bytes(pub_file, priv.public_key().public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            ), mode=0o644)
+        if kid is None:
+            raw_pub = priv.public_key().public_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PublicFormat.Raw,
+            )
+            kid = f"gw-{hashlib.sha256(raw_pub).hexdigest()[:12]}"
+        logger.info("reusing existing attestation identity %s (kid %s)", key_file, kid)
+        return AttestationIdentity(key_file=key_file, kid=kid, pub_file=pub_file)
 
     if key_file.exists():
         # FORCE ROTATES A LIVE SIGNING IDENTITY, SO KEEP THE OLD ONE.
@@ -462,6 +485,8 @@ def run_pair(
     env_file: Path,
     kid: str | None = None,
     estop_url: str | None = None,
+    console_url: str | None = None,
+    console_token: str | None = None,
     force: bool = False,
 ) -> PairResult:
     """Generate the identity, wire the env, and build the QR payload.
@@ -482,11 +507,55 @@ def run_pair(
         manifest_path=str(manifest_path.expanduser().resolve()),
         rrn=rrn,
         estop_url=estop_url,
+        console_url=console_url,
+        console_token=console_token,
         attest_kid=identity.kid,
         attest_pub=_attest_pub_b64(identity.pub_file),
         capability_surface=capability_surface_from_manifest(manifest_path),
     )
     return PairResult(payload=payload, identity=identity, env_file=env_file.expanduser())
+
+
+def write_pair_artifacts(payload: dict, out_dir: Path) -> dict[str, Path]:
+    """Write pair-payload.json and (when possible) pair-qr.png into out_dir.
+
+    WHY THIS EXISTS AS A FUNCTION AND NOT A RUNBOOK STEP. Every robot on the
+    bench ended up with a hand-assembled pair-payload.json plus a qrcode
+    two-liner pasted from session notes — and hand assembly is exactly how the
+    rover shipped a QR pinned to a DHCP address the Pi no longer held, pointing
+    the phone at a machine that wasn't there. The payload builder always knew
+    how to include every field; what was missing was one command that put the
+    result where the runbooks already said it lives.
+
+    The JSON is always written — it is the payload of record, and pasting it is
+    the documented fallback when a screen is too small or too dim to scan. The
+    PNG needs the optional ``qrcode`` package; without it this degrades to
+    JSON-only rather than failing, because a missing nicety must not block a
+    pairing. Returned dict maps artifact name to written path.
+    """
+    out_dir = out_dir.expanduser()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written: dict[str, Path] = {}
+
+    compact = json.dumps(payload, separators=(",", ":"))
+    json_path = out_dir / "pair-payload.json"
+    # Pretty for the file (humans diff it), compact for the QR (bytes matter).
+    _atomic_write_bytes(json_path, (json.dumps(payload, indent=1) + "\n").encode(),
+                        mode=0o600)
+    written["payload"] = json_path
+
+    try:
+        import qrcode  # noqa: PLC0415 - optional dependency, degrade gracefully
+    except ImportError:
+        logger.warning("qrcode not installed — wrote %s only; "
+                       "`pip install qrcode[pil]` to also get pair-qr.png", json_path)
+        return written
+
+    png_path = out_dir / "pair-qr.png"
+    qrcode.make(compact).save(str(png_path))
+    png_path.chmod(0o600)
+    written["qr"] = png_path
+    return written
 
 
 def _extract_frontmatter(text: str) -> str:

@@ -3562,6 +3562,23 @@ def cmd_pair(args) -> int:
         )
         raise SystemExit(1)
 
+    # Console fields: the token can come from the flag or the environment (the
+    # rover's unit file already holds CONSOLE_TOKEN; retyping secrets into argv
+    # leaks them into shell history). The URL defaults to the gateway's own
+    # host, because on every deployment so far they are the same machine —
+    # anyone splitting them across hosts passes --console-url explicitly.
+    console_token = args.console_token or os.environ.get("CONSOLE_TOKEN") or None
+    console_url = args.console_url
+    if console_token and not console_url and args.console_port:
+        from urllib.parse import urlsplit
+        host = urlsplit(gateway_url).hostname
+        if host:
+            console_url = f"http://{host}:{args.console_port}"
+    if console_url and not console_token:
+        print("warning: --console-url given without a console token — leaving both "
+              "out of the QR (a URL without its token just 401s).", file=sys.stderr)
+        console_url = None
+
     # Where the attestation key + env config land.
     key_file = (
         Path(args.key_file).expanduser()
@@ -3584,6 +3601,8 @@ def cmd_pair(args) -> int:
             env_file=env_file,
             kid=args.kid,
             estop_url=args.estop_url,
+            console_url=console_url,
+            console_token=console_token,
             force=args.force,
         )
     except FileExistsError as exc:
@@ -3595,6 +3614,12 @@ def cmd_pair(args) -> int:
     # encoding PAIR_QR_BYTE_BUDGET is measured in, so the printed QR is the one
     # the budget was sized for.
     payload_json = _json.dumps(result.payload, separators=(",", ":"))
+
+    if args.out_dir:
+        written = pairing.write_pair_artifacts(result.payload, Path(args.out_dir))
+        print("\nWrote:")
+        for name, path in written.items():
+            print(f"  {name:8}: {path}")
 
     print("\nScan this QR from the OpenCastor iOS app to pair:\n")
     _print_qr(payload_json)
@@ -8826,6 +8851,32 @@ def main() -> None:
         help="Robot RRN (default: parsed from the ROBOT.md metadata.rrn)",
     )
     p_pair.add_argument("--estop-url", default=None, help="Optional software e-stop URL for the QR")
+    p_pair.add_argument(
+        "--console-url",
+        default=None,
+        help="Console base URL for the QR (default when --console-token is given: "
+        "the gateway host on --console-port)",
+    )
+    p_pair.add_argument(
+        "--console-port",
+        type=int,
+        default=None,
+        help="Derive --console-url from the gateway host on this port",
+    )
+    p_pair.add_argument(
+        "--console-token",
+        default=None,
+        help="Read-only console bearer to embed (or set CONSOLE_TOKEN in the environment). "
+        "Both console fields ride only when a token exists — a console URL without its "
+        "token is an invitation to a 401.",
+    )
+    p_pair.add_argument(
+        "--out-dir",
+        default=None,
+        help="Also write pair-payload.json and pair-qr.png here (e.g. ~/rover). "
+        "The runbooks reference these files; without this flag they had to be "
+        "assembled by hand, which is how a QR ends up pinned to a stale IP.",
+    )
     p_pair.add_argument(
         "--key-file",
         default=None,
