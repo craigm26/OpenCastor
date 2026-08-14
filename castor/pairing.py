@@ -28,11 +28,15 @@ QR + JSON.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import socket
 import tempfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+
+logger = logging.getLogger("castor.pairing")
 
 # The two env vars the gateway's attestation loader consumes. Kept as module
 # constants so the test asserts against the same strings the gateway reads.
@@ -111,6 +115,25 @@ def generate_attestation_identity(
             "(this rotates the attestation identity)."
         )
 
+    if key_file.exists():
+        # FORCE ROTATES A LIVE SIGNING IDENTITY, SO KEEP THE OLD ONE.
+        #
+        # Written after `--force` destroyed the only copy of a robot's live
+        # attestation key on this bench. Everything about that was working as
+        # documented — the docstring says force rotates the identity — and it
+        # still cost an unrecoverable key, because "rotate" and "delete the only
+        # copy of the thing that signs your receipts" are the same operation
+        # when nothing keeps a backup.
+        #
+        # The old key stays resolvable for receipts already signed with it, so
+        # a rotation becomes reversible and the existing audit trail stays
+        # verifiable. Timestamped rather than a single `.bak`, so a second
+        # rotation cannot quietly eat the first one's backup.
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        backup = key_file.with_suffix(key_file.suffix + f".rotated-{stamp}")
+        _atomic_write_bytes(backup, key_file.read_bytes(), mode=0o600)
+        logger.warning("rotating attestation identity; previous key saved to %s", backup)
+
     priv = Ed25519PrivateKey.generate()
     priv_pem = priv.private_bytes(
         encoding=serialization.Encoding.PEM,
@@ -141,12 +164,30 @@ def read_bearer_from_bearers_yaml(path: Path, *, prefer_tier: str = "actuate") -
 
     Prefers an entry whose ``tier`` is ``prefer_tier`` (default ``actuate`` — the
     tier the app needs to drive the robot); falls back to the first token.
+
+    BOTH FILE SHAPES ARE ACCEPTED, because the two tools that share this file
+    disagreed about it. ``robot-md-gateway init`` writes a MAPPING with a
+    ``bearers:`` key (and, once a robot has several actuators, an ``actuators:``
+    key beside it); this reader only ever accepted a BARE LIST. So the file the
+    gateway's own wizard generates could not be read by the pairing command that
+    is documented as the next step, and it failed with "expected a list of
+    bearer entries" about a file that plainly contains one.
+
+    Reading both is the fix rather than picking a winner: real deployments have
+    files in each shape already, and a format flag-day would break whichever
+    half was not migrated.
     """
     import yaml
 
     data = yaml.safe_load(path.expanduser().read_text()) or []
+    if isinstance(data, dict):
+        # The gateway wizard's shape. Anything else in the mapping (actuators,
+        # policy) is not this function's business.
+        data = data.get("bearers") or []
     if not isinstance(data, list):
-        raise ValueError(f"{path}: expected a list of bearer entries")
+        raise ValueError(
+            f"{path}: expected a list of bearer entries, or a mapping with a "
+            f"'bearers:' list")
     entries = [e for e in data if isinstance(e, dict) and e.get("token")]
     if not entries:
         raise ValueError(f"{path}: no bearer entries with a token found")

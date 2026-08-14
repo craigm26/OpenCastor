@@ -180,6 +180,47 @@ def test_bearer_read_prefers_actuate_tier(tmp_path):
     assert pairing.read_bearer_from_bearers_yaml(bearers) == "actuate-tok"
 
 
+def test_bearer_read_accepts_the_shape_the_GATEWAY_WIZARD_writes(tmp_path):
+    """`robot-md-gateway init` writes a mapping, not a bare list.
+
+    This reader only accepted a bare list, so the file the gateway's own wizard
+    generates could not be read by the pairing command documented as the next
+    step — it failed with "expected a list of bearer entries" about a file that
+    plainly contains one. Found on the bench trying to re-pair a live robot.
+    """
+    bearers = tmp_path / "bearers.yaml"
+    bearers.write_text(
+        "bearers:\n"
+        "  - token: read-tok\n    tier: read\n"
+        "  - token: actuate-tok\n    tier: actuate\n"
+    )
+    assert pairing.read_bearer_from_bearers_yaml(bearers) == "actuate-tok"
+
+
+def test_bearer_read_ignores_other_keys_in_the_mapping(tmp_path):
+    # A robot with several actuators has an `actuators:` list beside the
+    # bearers. That is not this function's business and must not confuse it.
+    bearers = tmp_path / "bearers.yaml"
+    bearers.write_text(
+        "bearers:\n  - token: actuate-tok\n    tier: actuate\n"
+        "actuators:\n  - name: so-arm101\n    config: {}\n"
+        "  - name: host\n    config: {}\n"
+    )
+    assert pairing.read_bearer_from_bearers_yaml(bearers) == "actuate-tok"
+
+
+def test_bearer_read_still_reports_a_file_it_genuinely_cannot_use(tmp_path):
+    bearers = tmp_path / "bearers.yaml"
+    bearers.write_text("just-a-string\n")
+    with pytest.raises(ValueError, match="bearers"):
+        pairing.read_bearer_from_bearers_yaml(bearers)
+
+    empty = tmp_path / "empty.yaml"
+    empty.write_text("bearers: []\n")
+    with pytest.raises(ValueError, match="no bearer entries"):
+        pairing.read_bearer_from_bearers_yaml(empty)
+
+
 def test_existing_key_not_clobbered_without_force(tmp_path, manifest):
     _run(tmp_path, manifest)
     with pytest.raises(FileExistsError):
@@ -264,3 +305,37 @@ def test_surface_is_trimmed_rather_than_making_the_qr_unscannable():
     # Detail is dropped, never invented: the capability list survives.
     assert payload["capability_surface"]["capabilities"] == ["arm.pick", "arm.place"]
     assert "contracts" not in payload["capability_surface"]
+
+
+def test_force_rotation_keeps_a_copy_of_the_old_key(tmp_path):
+    """`--force` rotates a LIVE signing identity, so it must not be the only copy.
+
+    Written after --force destroyed the only copy of a robot's live attestation
+    key on this bench. Everything behaved as documented; it still cost an
+    unrecoverable key, because "rotate" and "delete the only copy of the thing
+    that signs your receipts" are the same operation when nothing keeps a
+    backup. Receipts already signed with the old key stay verifiable only if the
+    key survives somewhere.
+    """
+    key = tmp_path / "attest.pem"
+    first = pairing.generate_attestation_identity(key, kid="k1")
+    original = key.read_bytes()
+
+    pairing.generate_attestation_identity(key, kid="k2", force=True)
+    assert key.read_bytes() != original, "force must actually rotate"
+
+    backups = sorted(tmp_path.glob("attest.pem.rotated-*"))
+    assert len(backups) == 1, f"expected one backup, found {backups}"
+    assert backups[0].read_bytes() == original
+    # 0600: it is still a private key, and a backup with looser permissions
+    # would be a worse outcome than no backup at all.
+    assert (backups[0].stat().st_mode & 0o777) == 0o600
+    assert first.key_file == key
+
+
+def test_a_second_rotation_does_not_eat_the_first_backup(tmp_path):
+    key = tmp_path / "attest.pem"
+    pairing.generate_attestation_identity(key, kid="k1")
+    pairing.generate_attestation_identity(key, kid="k2", force=True)
+    pairing.generate_attestation_identity(key, kid="k3", force=True)
+    assert len(sorted(tmp_path.glob("attest.pem.rotated-*"))) >= 1
