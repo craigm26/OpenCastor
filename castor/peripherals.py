@@ -272,6 +272,22 @@ _USB_DEVICES: dict[str, dict] = {
 # ---------------------------------------------------------------------------
 
 _I2C_DEVICES: dict[int, dict] = {
+    # Battery fuel gauge. 0x36 is the fixed address of the MAX1704x family,
+    # which is what sits on most UPS HATs (Geekworm X120x and friends) — so on
+    # a robot this address almost always means "there is a battery under me".
+    #
+    # Marked PROBABLE, not identified: this is recognition by address
+    # convention, not by reading a device ID register. Something else could
+    # legitimately live at 0x36, and claiming certainty about a battery gauge
+    # is how a robot ends up reporting a charge level it invented.
+    0x36: {
+        "name": "MAX1704x battery fuel gauge (common on UPS HATs)",
+        "category": "sensor",
+        "driver_hint": "max17040",
+        "rcan_type": "battery",
+        "confidence": "probable",
+        "rcan_snippet": ('sensor:\n  type: "max17040"\n  i2c_bus: 1\n  address: 0x36'),
+    },
     # PCA9685 PWM servo controllers
     0x40: {
         "name": "PCA9685 PWM servo controller",
@@ -496,6 +512,29 @@ def scan_usb() -> list[PeripheralInfo]:
     return results
 
 
+#: V4L2 drivers that create /dev/video* nodes which are NOT cameras.
+#:
+#: A Pi 5 exposes its whole imaging and codec pipeline as video nodes:
+#: `pispbe` is the ISP back-end (16 nodes on this bench alone) and
+#: `rpi-hevc-dec` is the hardware video decoder. They are memory-to-memory
+#: devices — they transform frames, they do not capture any. Reporting them as
+#: cameras turned a peripheral list into 17 phantom entries with one real
+#: device buried in them, which is worse than reporting nothing.
+#:
+#: A denylist rather than a capability probe, and worth being honest about why:
+#: the correct test is the V4L2_CAP_VIDEO_CAPTURE flag, which needs an ioctl
+#: this stdlib-only scanner cannot do. Names are matched as prefixes, so an
+#: unknown-but-real camera is never hidden — only these known internals are.
+_V4L2_NON_CAMERA_DRIVERS: tuple[str, ...] = (
+    "pispbe",          # Pi ISP back-end (Pi 5)
+    "rpi-hevc-dec",    # hardware HEVC decoder
+    "rpi-h264",        # hardware H.264 encoder/decoder
+    "bcm2835-codec",   # legacy Pi codec
+    "rpivid",          # legacy Pi video decoder
+    "rpi-isp",
+)
+
+
 def scan_v4l2() -> list[PeripheralInfo]:
     """Find /dev/video* devices via glob; enrich with v4l2-ctl if available."""
     results: list[PeripheralInfo] = []
@@ -527,6 +566,12 @@ def scan_v4l2() -> list[PeripheralInfo]:
                 is_csi = True
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
+
+        # Drop the Pi's own imaging/codec plumbing before it becomes a "camera".
+        probe = f"{driver_name} {card_name}".strip().lower()
+        if any(probe.startswith(d) or d in probe for d in _V4L2_NON_CAMERA_DRIVERS):
+            logger.debug("skipping non-capture v4l2 node %s (%s)", dev_path, probe)
+            continue
 
         name = card_name if card_name else f"Video device {dev_path}"
         interface = "csi" if is_csi else "usb"
@@ -876,6 +921,7 @@ def scan_all(i2c_buses: list[int] | None = None) -> list[PeripheralInfo]:
     seen_device_paths: set[str] = set()
     seen_usb_ids: set[str] = set()
     seen_npu_hints: set[tuple] = set()
+    seen_i2c: set[tuple] = set()
 
     # Collect USB-identified depth/npu devices to suppress v4l2 duplicates
     usb_depth_ids = {p.usb_id for p in usb_results if p.category in ("depth", "npu") and p.usb_id}
@@ -902,10 +948,26 @@ def scan_all(i2c_buses: list[int] | None = None) -> list[PeripheralInfo]:
                 if not p.name or p.name.startswith("Video device"):
                     continue
 
-        # Deduplicate serial devices
-        if p.device_path and p.category in ("serial", "lidar", "motor"):
+        # Deduplicate serial devices.
+        #
+        # I2C IS EXCLUDED, and that exclusion is the whole point. Every device
+        # on an I2C bus shares one device_path (/dev/i2c-1), so keying on it
+        # meant the FIRST i2c device found silently swallowed every later
+        # motor/lidar/serial one on the same bus. On this bench a Geekworm UPS
+        # at 0x36 sorts before the PCA9685 at 0x40 and hid it completely: the
+        # scanner that owns the config snippets could not see the servo driver
+        # that had just been wired in, while hardware_detect could.
+        #
+        # An I2C device is identified by (bus, address), never by the bus alone.
+        if (p.device_path and p.interface != "i2c"
+                and p.category in ("serial", "lidar", "motor")):
             if p.device_path in seen_device_paths:
                 continue
+        if p.interface == "i2c":
+            i2c_key = (p.device_path, p.i2c_address)
+            if i2c_key in seen_i2c:
+                continue
+            seen_i2c.add(i2c_key)
 
         # Deduplicate NPU
         npu_key = (p.driver_hint, p.interface)
@@ -917,7 +979,7 @@ def scan_all(i2c_buses: list[int] | None = None) -> list[PeripheralInfo]:
         # Track seen
         if p.usb_id:
             seen_usb_ids.add(p.usb_id)
-        if p.device_path:
+        if p.device_path and p.interface != "i2c":
             seen_device_paths.add(p.device_path)
 
         deduplicated.append(p)

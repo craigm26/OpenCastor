@@ -559,3 +559,85 @@ def test_i2c_database_has_required_entries():
     required = [0x40, 0x68, 0x28, 0x29, 0x3C, 0x77, 0x48]
     for addr in required:
         assert addr in _I2C_DEVICES, f"Missing required I2C address: 0x{addr:02X}"
+
+
+# ---------------------------------------------------------------------------
+# Regressions found on live hardware, 2026-08-14
+# ---------------------------------------------------------------------------
+
+
+def test_two_i2c_devices_on_one_bus_are_both_reported(monkeypatch):
+    """Every device on an I2C bus shares one device_path.
+
+    The dedup keyed on device_path for serial/lidar/motor, so the FIRST i2c
+    device found silently swallowed every later one on the same bus. On the
+    bench a UPS fuel gauge at 0x36 sorted before the PCA9685 at 0x40 and hid it
+    completely — the scanner that owns the config snippets could not see the
+    servo driver that had just been wired in.
+    """
+    from castor import peripherals
+
+    grid = (
+        "     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f\n"
+        "30: -- -- -- -- -- -- 36 -- -- -- -- -- -- -- -- --\n"
+        "40: 40 -- -- -- -- -- -- -- -- -- -- -- -- -- -- --\n"
+    )
+
+    class _Proc:
+        returncode = 0
+        stdout = grid
+        stderr = ""
+
+    monkeypatch.setattr(peripherals.subprocess, "run", lambda *a, **k: _Proc())
+    monkeypatch.setattr(peripherals, "scan_usb", lambda: [])
+    monkeypatch.setattr(peripherals, "scan_v4l2", lambda: [])
+    monkeypatch.setattr(peripherals, "scan_serial", lambda: [])
+    monkeypatch.setattr(peripherals, "scan_npu", lambda: [])
+    monkeypatch.setattr(peripherals, "scan_csi", lambda: [])
+
+    found = {p.i2c_address for p in peripherals.scan_all()}
+    assert 0x40 in found, "the PCA9685 must survive dedup against another i2c device"
+    assert 0x36 in found
+
+
+def test_the_pis_own_imaging_pipeline_is_not_reported_as_cameras(monkeypatch):
+    """A Pi 5 exposes its ISP and codecs as /dev/video* nodes.
+
+    16 `pispbe` nodes plus `rpi-hevc-dec` turned a peripheral list into 17
+    phantom cameras with the real hardware buried among them. They are
+    memory-to-memory devices: they transform frames, they do not capture any.
+    """
+    from castor import peripherals
+
+    nodes = [f"/dev/video{n}" for n in (19, 26, 31)]
+    monkeypatch.setattr(peripherals.glob, "glob", lambda pat: nodes)
+
+    def fake_run(cmd, **kwargs):
+        dev = next((c.split("=")[1] for c in cmd if str(c).startswith("--device=")), "")
+        driver = "rpi-hevc-dec" if dev.endswith("19") else "pispbe"
+
+        class _P:
+            returncode = 0
+            stdout = f"\tDriver name      : {driver}\n\tCard type        : {driver}-output0\n"
+            stderr = ""
+        return _P()
+
+    monkeypatch.setattr(peripherals.subprocess, "run", fake_run)
+    assert peripherals.scan_v4l2() == [], "no Pi internal video node is a camera"
+
+
+def test_a_real_camera_is_still_reported(monkeypatch):
+    # The filter is a denylist of known internals, so an unknown-but-real
+    # camera must never be hidden by it.
+    from castor import peripherals
+
+    monkeypatch.setattr(peripherals.glob, "glob", lambda pat: ["/dev/video0"])
+
+    class _P:
+        returncode = 0
+        stdout = "\tDriver name      : uvcvideo\n\tCard type        : Logitech C920\n"
+        stderr = ""
+
+    monkeypatch.setattr(peripherals.subprocess, "run", lambda *a, **k: _P())
+    found = peripherals.scan_v4l2()
+    assert len(found) == 1 and "C920" in found[0].name
