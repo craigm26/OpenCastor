@@ -162,3 +162,53 @@ def test_with_the_actuator_installed_rc_car_is_chosen():
     name, note = resolve_actuator()
     assert name == "rc-car"
     assert note is None
+
+
+# ---------------------------------------------------------------------------
+# Gaps — missing pieces as data, never self-closing
+# ---------------------------------------------------------------------------
+
+
+def test_gaps_are_written_as_structured_data(tmp_path):
+    from castor.gaps import Gap, write
+    import json
+
+    gap = Gap(id="x", kind="missing-package", evidence="e", suggestion="s")
+    path = write([gap], tmp_path)
+    data = json.loads(path.read_text())
+    assert data["gaps"][0]["kind"] == "missing-package"
+    assert data["v"] == 1
+
+
+def test_a_closed_gap_disappears_on_rewrite(tmp_path):
+    # Rewritten whole each run: plugging the missing package in must make the
+    # gap vanish, not linger as stale advice.
+    from castor.gaps import Gap, write
+    import json
+
+    write([Gap(id="x", kind="missing-package", evidence="e", suggestion="s")], tmp_path)
+    write([], tmp_path)
+    assert json.loads((tmp_path / "gaps.json").read_text())["gaps"] == []
+
+
+def test_collect_survives_a_bare_host(tmp_path, monkeypatch):
+    # No bus, no ollama, no manifest: gaps degrade to "fewer gaps", never to a
+    # crash — `up` must succeed on the barest machine.
+    from castor import gaps as gaps_mod
+
+    monkeypatch.setattr("castor.up.detect_brain", lambda: ("ollama", ""))
+    result = gaps_mod.collect(home=tmp_path / "nonexistent")
+    assert isinstance(result, list)
+    assert any(g.kind == "no-brain" for g in result)
+
+
+def test_no_gap_carries_an_imperative_to_an_ai():
+    # The suggestion field speaks to the OPERATOR. The rail's consent model
+    # (docs/SKILL-GAPS.md) has drafting happen only after a human allows it,
+    # so a gap must never be phrased as an instruction an agent should follow
+    # on sight.
+    from castor.gaps import Gap
+
+    g = Gap(id="x", kind="unclaimed-peripheral", evidence="e",
+            suggestion="declare a capability in ROBOT.md (operator-signed)")
+    assert "operator" in g.suggestion

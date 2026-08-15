@@ -365,6 +365,26 @@ def cmd_mcp(args) -> None:
     _mcp_run(token=token, config_path=config_path)
 
 
+def cmd_gaps(args) -> int:
+    """castor gaps — what this robot's hardware could do that its software can't yet."""
+    from pathlib import Path as _P
+
+    from castor.gaps import collect, write
+
+    home = _P(args.home).expanduser()
+    gaps = collect(home=home)
+    path = write(gaps, home)
+    if not gaps:
+        print("No gaps: everything detected has a driver and a brain.")
+        return 0
+    print(f"{len(gaps)} gap(s) — each one is a skill somebody could build "
+          f"(see docs/SKILL-GAPS.md). Written to {path}.\n")
+    for g in gaps:
+        print(f"  [{g.kind}] {g.evidence}")
+        print(f"      fix: {g.suggestion}")
+    return 0
+
+
 def cmd_up(args) -> int:
     """castor up — one non-interactive command from bare host to paired robot."""
     from pathlib import Path as _P
@@ -8856,6 +8876,13 @@ def main() -> None:
     p_up.add_argument("--no-start", action="store_true",
                       help="Generate everything but do not start systemd units")
 
+    p_gaps = sub.add_parser(
+        "gaps",
+        help="List capability gaps — hardware present with no driver, missing packages, no brain",
+    )
+    p_gaps.add_argument("--home", default=str(os.path.expanduser("~/robot")),
+                        help="Robot home directory (default ~/robot)")
+
     p_pair = sub.add_parser(
         "pair",
         help="Print the iOS app pairing QR and wire gateway attestation (T-002)",
@@ -9273,6 +9300,7 @@ def main() -> None:
         # iOS app pairing QR + gateway attestation wiring (T-002)
         "pair": cmd_pair,
         "up": cmd_up,
+        "gaps": cmd_gaps,
         # Fleet UI deep links + QR codes
         "fleet-link": cmd_fleet_link,
         # Agent harness: skill evaluation

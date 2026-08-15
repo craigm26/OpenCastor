@@ -428,6 +428,19 @@ def run_up(*, home: Path, name: str | None = None, archetype: str | None = None,
     )
     write_pair_artifacts(payload, home)
     _say(f"pairing QR: {home / 'pair-qr.png'}", started)
+
+    # -- gaps: what this host's hardware could do that its software can't yet.
+    # Data, not log lines — the app renders it, an AI can read it, and closing
+    # one is always an operator-gated act (docs/SKILL-GAPS.md).
+    from castor.gaps import collect, write as write_gaps
+    found_gaps = collect(home=home)
+    if found_gaps:
+        write_gaps(found_gaps, home)
+        _say(f"gaps: {len(found_gaps)} noted in gaps.json "
+             f"({', '.join(g.kind for g in found_gaps)})", started)
+    else:
+        write_gaps([], home)
+        _say("gaps: none — everything detected has a driver and a brain", started)
     print(f"\nDone in {time.monotonic() - started:.0f}s. "
           f"Scan {home / 'pair-qr.png'} with the OpenCastor app, "
           "then follow “Run your first drive”.")
