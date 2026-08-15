@@ -56,6 +56,11 @@ ARCHETYPES = ("rc-car", "sim")
 GATEWAY_OFF, RUNTIME_OFF, CONSOLE_OFF = 0, 1, 2
 RRF_STUB_PORT = 8090
 
+#: Where the console's read-only bearer lives. Its own file, not tokens.env:
+#: tokens.env is written once and never touched again, so a robot brought up
+#: before the console existed would never have received a token at all.
+CONSOLE_ENV = "console.env"
+
 
 @dataclass
 class UpPlan:
@@ -168,6 +173,30 @@ RestartSec=2
 [Install]
 WantedBy=default.target
 """
+    # EnvironmentFile LAST in this unit, unlike the two above. systemd applies
+    # these settings in the order they are written and the last assignment of a
+    # variable wins, so a file listed first is silently overridden by every
+    # Environment= line under it. console.env is the one file here whose own
+    # header invites hand edits — it is where the operator's OLLAMA_URL,
+    # CHAT_UPSTREAM, and a moved CONSOLE_PORT live — and an operator who edits a
+    # port and watches the console keep answering on the old one has no way to
+    # see why. Their edit wins.
+    units[f"{name}-console.service"] = f"""[Unit]
+Description=OpenCastor console for {name} — chat brains, /surface, /gaps
+After=network-online.target
+
+[Service]
+Environment=ROBOT_HOME={home}
+Environment=ROBOT_NAME={name}
+Environment=CONSOLE_PORT={plan.console_port}
+EnvironmentFile={home}/{CONSOLE_ENV}
+ExecStart={python} -m castor.console
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+"""
     units[f"{name}-rrf-stub.service"] = f"""[Unit]
 Description=RRF key resolver stub for {name} (loopback kid lookup)
 
@@ -181,6 +210,51 @@ Restart=on-failure
 WantedBy=default.target
 """
     return units
+
+
+def ensure_console_token(home: Path) -> tuple[str, bool]:
+    """The console's read-only bearer — generated once, NEVER rotated.
+
+    Same reuse-don't-refuse contract the gateway bearers follow, for the same
+    reason: this token rides in the pairing QR, so rotating it on a rerun
+    un-pairs every phone that ever scanned one. The most common reason to rerun
+    `up` is a stale QR, and silently invalidating the credential in the QR you
+    are regenerating is the failure that contract exists to prevent.
+
+    Returns (token, reused). Written 0600 in its own file inside the robot home:
+    tokens.env is written once and skipped forever after, so a robot brought up
+    before the console existed would otherwise never get a token at all.
+
+    THE MODE IS RE-ASSERTED ON REUSE, not just on generation. The reuse path is
+    the one a live robot takes every single rerun, and the file it finds may not
+    be the file `up` wrote: restored from a backup, copied with `cp` (which
+    takes the umask, not the source mode), or edited by an operator following
+    the invitation in its own header. A live console bearer left world-readable
+    is one `cat` away from anyone with a shell on the host, and nothing about a
+    successful `up` would have said so.
+    """
+    env_file = home / CONSOLE_ENV
+    lines = env_file.read_text().splitlines() if env_file.exists() else []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("CONSOLE_TOKEN="):
+            existing = stripped.partition("=")[2].strip().strip("\"'")
+            if existing:
+                env_file.chmod(0o600)
+                return existing, True
+
+    token = f"oc_console_{secrets.token_hex(16)}"
+    home.mkdir(parents=True, exist_ok=True)
+    # Anything else the operator put in this file stays; only an absent or empty
+    # CONSOLE_TOKEN is filled in.
+    kept = [line for line in lines if not line.strip().startswith("CONSOLE_TOKEN=")]
+    if not kept:
+        kept = ["# Read-only console bearer — generated once by `castor up`.",
+                "# It grants viewing and model management, never actuation, and it",
+                "# is never rotated: it rides in the pairing QR."]
+    env_file.write_text("\n".join([*kept, f"CONSOLE_TOKEN={token}"]) + "\n")
+    env_file.chmod(0o600)
+    return token, False
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +412,9 @@ def run_up(*, home: Path, name: str | None = None, archetype: str | None = None,
             f"ACTUATE_TOKEN={actuate}\nREAD_TOKEN={read_tok}\n"
             f"OPENCASTOR_API_TOKEN=oc_api_{secrets.token_hex(16)}\n")
         tokens.chmod(0o600)
+    console_token, console_reused = ensure_console_token(home)
+    _say("console: token reused" if console_reused
+         else "console: read-only token generated", started)
 
     # -- rrf stub key + attestation identity --------------------------------
     stub_dir = home / "keys" / "rrf"
@@ -421,6 +498,11 @@ def run_up(*, home: Path, name: str | None = None, archetype: str | None = None,
         manifest_path=str(home / "ROBOT.md"),
         rrn=rrn,
         estop_url=f"http://{host}:{plan.runtime_port}/api/stop",
+        # The console rides in the QR with its OWN read-only token, so a phone
+        # that scans this robot gets its brains and its live capability surface
+        # (GET /surface) without ever holding a credential that can move it.
+        console_url=f"http://{host}:{plan.console_port}",
+        console_token=console_token,
         attest_kid=identity.kid,
         attest_pub=base64.b64encode(
             _spki_der(identity.pub_file)).decode(),

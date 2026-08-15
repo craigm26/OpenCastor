@@ -410,6 +410,33 @@ def set_env_var(env_file: Path, key: str, value: str) -> None:
     _atomic_write_bytes(env_file, content.encode("utf-8"), mode=0o644)
 
 
+def read_env_file(env_file: Path) -> dict[str, str]:
+    """Read a dotenv-style file into a mapping. Absent or unreadable is empty.
+
+    The counterpart to :func:`set_env_var`, and deliberately as forgiving as the
+    shell that sources these files: comments and blank lines are skipped, and a
+    value's surrounding quotes come back off (they are there so a shell reads a
+    value containing ``|`` or a space as one word, not because they are part of
+    it). An absent file is an empty mapping rather than an error — every caller
+    is asking "did the operator configure this?", and "no" is an answer.
+    """
+    values: dict[str, str] = {}
+    try:
+        lines = env_file.expanduser().read_text().splitlines()
+    except OSError:
+        return values
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, val = stripped.partition("=")
+        val = val.strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in ("'", '"'):
+            val = val[1:-1]
+        values[key.strip()] = val
+    return values
+
+
 def build_pair_payload(
     *,
     gateway_url: str,

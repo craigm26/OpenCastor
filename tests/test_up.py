@@ -118,7 +118,7 @@ def test_units_reference_only_the_robots_own_home():
     units = unit_files(plan(), python="/venv/bin/python",
                        gateway_bin="/venv/bin/robot-md-gateway")
     assert set(units) == {"testbot-gateway.service", "testbot-castor.service",
-                          "testbot-rrf-stub.service"}
+                          "testbot-console.service", "testbot-rrf-stub.service"}
     for content in units.values():
         assert "/home/pi/testbot" in content
         assert "craigm26" not in content and "rover" not in content
@@ -127,6 +127,22 @@ def test_units_reference_only_the_robots_own_home():
 def test_the_gateway_binary_is_the_one_passed_not_a_guess():
     units = unit_files(plan(), python="/venv/bin/python", gateway_bin="/right/one")
     assert "ExecStart=/right/one serve" in units["testbot-gateway.service"]
+
+
+def test_THEBUG_console_env_is_applied_after_the_generated_defaults():
+    # systemd applies Environment= and EnvironmentFile= in the order they are
+    # written, last assignment winning. console.env was listed FIRST, so the
+    # generated Environment=CONSOLE_PORT overrode it — and console.env is the
+    # one file here whose own header invites hand edits. An operator who moved
+    # the port there watched the console keep answering on the old one, with
+    # nothing anywhere saying why.
+    unit = unit_files(plan(), python="/venv/bin/python",
+                      gateway_bin="/venv/bin/robot-md-gateway")["testbot-console.service"]
+    assert unit.index("Environment=CONSOLE_PORT=8082") < unit.index(
+        "EnvironmentFile=/home/pi/testbot/console.env"), (
+        "a hand-set CONSOLE_PORT in console.env must beat the generated default")
+    assert unit.index("Environment=ROBOT_HOME=/home/pi/testbot") < unit.index(
+        "EnvironmentFile=/home/pi/testbot/console.env")
 
 
 def test_port_layout_is_adjacent_and_derived():

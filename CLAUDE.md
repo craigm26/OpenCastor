@@ -34,6 +34,12 @@ OpenCastor/
 │   ├── drivers/            # Hardware drivers (see full list below)
 │   ├── channels/           # Messaging channels (WhatsApp, Telegram, Discord, ...)
 │   │   └── rcan_mqtt_transport.py  # RCAN-over-MQTT carrier (compact/minimal encoding)
+│   ├── console/            # Robot console — `python -m castor.console` (a `castor up` unit)
+│   │   ├── app.py          # FastAPI app: console bearer, /console/health, routers
+│   │   ├── models.py       # Ollama catalog, curated suggestions, /models/chat bridge
+│   │   ├── brains.py       # Claude-subscription CLI (no ANTHROPIC_API_KEY) + Gemini ER
+│   │   ├── capabilities.py # GET /surface (live capability surface), /gaps, workflows
+│   │   └── config.py       # ROBOT_HOME / CONSOLE_TOKEN / CONSOLE_PORT / CHAT_UPSTREAM
 │   ├── contribute/         # Idle compute donation skill
 │   │   ├── coordinator.py  # BOINC + simulated coordinators
 │   │   ├── runner.py       # Work unit runner with cancellation

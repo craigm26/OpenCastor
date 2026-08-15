@@ -3628,6 +3628,7 @@ def cmd_pair(args) -> int:
     from pathlib import Path
 
     from castor import pairing
+    from castor import up as up_mod
 
     manifest_path = Path(args.manifest_path).expanduser()
     if not manifest_path.exists():
@@ -3674,12 +3675,31 @@ def cmd_pair(args) -> int:
     # host, because on every deployment so far they are the same machine —
     # anyone splitting them across hosts passes --console-url explicitly.
     console_token = args.console_token or os.environ.get("CONSOLE_TOKEN") or None
+    console_port = args.console_port
+    if not console_token:
+        # …AND, failing both, the file `castor up` actually persists it in.
+        # console.env next to the ROBOT.md is the ONLY place a castor-up host
+        # keeps that token — the unit reads it from there, nothing exports it
+        # into an interactive shell. So the most ordinary rerun there is
+        # (`castor pair` after a DHCP address change) silently dropped both
+        # console fields out of the QR, and the freshly-scanned phone came back
+        # with no brains and no /surface for a reason nothing printed.
+        from_file = pairing.read_env_file(manifest_path.parent / up_mod.CONSOLE_ENV)
+        console_token = from_file.get("CONSOLE_TOKEN") or None
+        if console_token and not console_port:
+            try:
+                console_port = int(from_file["CONSOLE_PORT"])
+            except (KeyError, ValueError):
+                # `up` writes the port into the unit, not this file, so the
+                # usual case is absent — fall back to the layout `up` itself
+                # laid out: base_port + 2, the gateway's own port being base.
+                console_port = args.port + up_mod.CONSOLE_OFF
     console_url = args.console_url
-    if console_token and not console_url and args.console_port:
+    if console_token and not console_url and console_port:
         from urllib.parse import urlsplit
         host = urlsplit(gateway_url).hostname
         if host:
-            console_url = f"http://{host}:{args.console_port}"
+            console_url = f"http://{host}:{console_port}"
     if console_url and not console_token:
         print("warning: --console-url given without a console token — leaving both "
               "out of the QR (a URL without its token just 401s).", file=sys.stderr)
@@ -9039,9 +9059,10 @@ def main() -> None:
     p_pair.add_argument(
         "--console-token",
         default=None,
-        help="Read-only console bearer to embed (or set CONSOLE_TOKEN in the environment). "
-        "Both console fields ride only when a token exists — a console URL without its "
-        "token is an invitation to a 401.",
+        help="Read-only console bearer to embed (or set CONSOLE_TOKEN in the environment; "
+        "on a `castor up` host it is already in console.env next to the ROBOT.md, and is "
+        "read from there). Both console fields ride only when a token exists — a console "
+        "URL without its token is an invitation to a 401.",
     )
     p_pair.add_argument(
         "--out-dir",

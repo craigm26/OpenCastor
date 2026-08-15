@@ -46,7 +46,10 @@ dependencies = [
     "pyyaml>=6.0",
     "jsonschema>=4.20.0",
     "requests>=2.31.0",
-    # The Gateway (API & Channels)
+    # The Gateway (API & Channels) — and the robot console (`python -m
+    # castor.console`), which `castor up` installs as a unit. HARD deps, not an
+    # extra: the ten-minute path is `pip install opencastor` and done, and a
+    # host that arrives without fastapi/uvicorn arrives without chat.
     "fastapi>=0.109.0",
     "uvicorn[standard]>=0.27.0",
     "python-dotenv>=1.0.0",
