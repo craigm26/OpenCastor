@@ -132,3 +132,33 @@ def test_the_gateway_binary_is_the_one_passed_not_a_guess():
 def test_port_layout_is_adjacent_and_derived():
     p = plan(base_port=9000)
     assert (p.gateway_port, p.runtime_port, p.console_port) == (9000, 9001, 9002)
+
+
+# ---------------------------------------------------------------------------
+# Fresh-host degradation — the parts pip does not bring
+# ---------------------------------------------------------------------------
+
+
+def test_a_host_without_the_rc_car_actuator_falls_back_to_noop(monkeypatch):
+    # rc-car-actuator is a separate package and not (yet) on PyPI: a fresh
+    # `pip install opencastor` does not have it. Writing `actuator: rc-car`
+    # anyway crash-loops the gateway on an entry-point error at minute two.
+    import castor.up as up
+
+    class EP:
+        name = "noop"
+
+    monkeypatch.setattr("importlib.metadata.entry_points",
+                        lambda group: [EP()] if group == "robot_md_gateway.actuators" else [])
+    name, note = up.resolve_actuator()
+    assert name == "noop"
+    assert "pip install rc-car-actuator" in note
+
+
+def test_with_the_actuator_installed_rc_car_is_chosen():
+    # This host has it; the resolver must find it through the real registry.
+    from castor.up import resolve_actuator
+
+    name, note = resolve_actuator()
+    assert name == "rc-car"
+    assert note is None
