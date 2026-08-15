@@ -365,6 +365,75 @@ def cmd_mcp(args) -> None:
     _mcp_run(token=token, config_path=config_path)
 
 
+def cmd_capability(args) -> int:
+    """castor capability — declare or withdraw capabilities in the signed ROBOT.md."""
+    from pathlib import Path as _P
+
+    from castor import manifest
+
+    home = _P(args.home).expanduser()
+    path = _P(args.manifest).expanduser() if args.manifest else home / "ROBOT.md"
+    key_file = (_P(args.key_file).expanduser() if args.key_file
+                else home / "keys" / "manifest-ed25519-private.pem")
+
+    if args.cap_action == "list":
+        for name in manifest.capabilities(path):
+            print(name)
+        return 0
+
+    if not key_file.is_file():
+        print(f"error: manifest key not found at {key_file} — pass --key-file. "
+              "Signing happens ON the robot; the key never leaves it.", file=sys.stderr)
+        return 1
+
+    if args.cap_action == "add":
+        changed = manifest.add_capability(path, args.name, key_file=key_file,
+                                          kid=args.kid, comment=args.comment)
+        print(f"{'declared' if changed else 'already declared'}: {args.name}")
+    else:
+        changed = manifest.remove_capability(path, args.name, key_file=key_file,
+                                             kid=args.kid)
+        print(f"{'withdrawn' if changed else 'was not declared'}: {args.name}")
+    if changed:
+        print(f"re-signed {path}. Restart the gateway to pick it up "
+              "(systemctl --user restart <robot>-gateway).")
+        print("NOTE: declaring is not permitting — a tool capability still needs "
+              "the gateway's allowlist in gateway-policy.env before it can act.")
+    return 0
+
+
+def cmd_manifest(args) -> int:
+    """castor manifest — re-sign or verify a ROBOT.md."""
+    from pathlib import Path as _P
+
+    from castor import manifest
+
+    home = _P(args.home).expanduser()
+    path = _P(args.manifest).expanduser() if args.manifest else home / "ROBOT.md"
+
+    if args.manifest_action == "verify":
+        pub_file = (_P(args.pub_file).expanduser() if args.pub_file
+                    else home / "keys" / "rrf" / f"{manifest.Manifest.load(path).kid}.pem")
+        if not pub_file.is_file():
+            print(f"error: verify key not found at {pub_file}", file=sys.stderr)
+            return 1
+        ok, why = manifest.verify(path, pub_pem=pub_file.read_bytes())
+        print(("VERIFIED " if ok else "FAILED ") + why)
+        return 0 if ok else 1
+
+    key_file = (_P(args.key_file).expanduser() if args.key_file
+                else home / "keys" / "manifest-ed25519-private.pem")
+    kid = args.kid or manifest.Manifest.load(path).kid
+    if kid is None:
+        print("error: this manifest was never signed — pass --kid to name its key.",
+              file=sys.stderr)
+        return 1
+    manifest.sign(path, key_file=key_file, kid=kid)
+    print(f"re-signed {path} (kid {kid}). Hand edits are first-class; "
+          "restart the gateway to pick it up.")
+    return 0
+
+
 def cmd_gaps(args) -> int:
     """castor gaps — what this robot's hardware could do that its software can't yet."""
     from pathlib import Path as _P
@@ -8876,6 +8945,43 @@ def main() -> None:
     p_up.add_argument("--no-start", action="store_true",
                       help="Generate everything but do not start systemd units")
 
+    p_cap = sub.add_parser(
+        "capability",
+        help="Declare, withdraw, or list capabilities in the signed ROBOT.md",
+        epilog=(
+            "Examples:\n"
+            "  castor capability list --home ~/rover\n"
+            "  castor capability add sensor.battery --home ~/rover \\\n"
+            "      --comment 'MAX1704x fuel gauge, rides in status.report telemetry'\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_cap.add_argument("cap_action", choices=["add", "remove", "list"])
+    p_cap.add_argument("name", nargs="?", default=None,
+                       help="Capability name (for add/remove)")
+    p_cap.add_argument("--home", default=str(os.path.expanduser("~/robot")),
+                       help="Robot home directory (default ~/robot)")
+    p_cap.add_argument("--manifest", default=None,
+                       help="ROBOT.md path (default <home>/ROBOT.md)")
+    p_cap.add_argument("--key-file", default=None,
+                       help="Manifest signing key (default <home>/keys/manifest-ed25519-private.pem)")
+    p_cap.add_argument("--kid", default=None,
+                       help="Signing kid (default: the one already in the footer)")
+    p_cap.add_argument("--comment", default=None,
+                       help="Why this capability exists — rides as a comment above the entry")
+
+    p_manifest = sub.add_parser(
+        "manifest",
+        help="Re-sign a hand-edited ROBOT.md, or verify one the way the gateway will",
+    )
+    p_manifest.add_argument("manifest_action", choices=["sign", "verify"])
+    p_manifest.add_argument("--home", default=str(os.path.expanduser("~/robot")))
+    p_manifest.add_argument("--manifest", default=None)
+    p_manifest.add_argument("--key-file", default=None)
+    p_manifest.add_argument("--kid", default=None)
+    p_manifest.add_argument("--pub-file", default=None,
+                            help="Verify key PEM (default <home>/keys/rrf/<kid>.pem)")
+
     p_gaps = sub.add_parser(
         "gaps",
         help="List capability gaps — hardware present with no driver, missing packages, no brain",
@@ -9301,6 +9407,8 @@ def main() -> None:
         "pair": cmd_pair,
         "up": cmd_up,
         "gaps": cmd_gaps,
+        "capability": cmd_capability,
+        "manifest": cmd_manifest,
         # Fleet UI deep links + QR codes
         "fleet-link": cmd_fleet_link,
         # Agent harness: skill evaluation

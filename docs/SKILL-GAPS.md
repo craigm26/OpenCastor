@@ -44,7 +44,14 @@ detect                the robot notices, writes gaps.json
   until a human moves it.
 - **ROBOT.md is signed** precisely so nothing changes it silently. Re-signing
   is the operator's act (the manifest key stays under their control), and the
-  gateway trusts only what verifies.
+  gateway trusts only what verifies. It is also ONE COMMAND now:
+  `castor capability add <name> --home <dir> --comment '<why>'` splices the
+  declaration, re-signs with the existing key, and leaves every other byte of
+  the document — including its safety prose — untouched. `castor manifest
+  sign` blesses a hand edit; `castor manifest verify` checks the footer the
+  way the gateway will. Easy for the operator changes nothing for anyone
+  else: the key never leaves the robot, and declaring is still not
+  permitting.
 - New tools still face the **gateway's allowlist and tier policy** — a freshly
   drafted capability starts un-allowlisted, so even a signed manifest cannot
   move hardware until the operator widens policy too.

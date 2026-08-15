@@ -119,8 +119,9 @@ def _peripheral_gaps(home: Path) -> list[Gap]:
                 kind="unclaimed-peripheral",
                 evidence=f"{dev.name} ({dev.confidence}) on {where}; "
                          f"no declared capability starts with {'/'.join(wanted)}",
-                suggestion="declare a capability in ROBOT.md and wire a driver "
-                           "(operator-signed — see docs/SKILL-GAPS.md)",
+                suggestion=(f"castor capability add sensor.{dev.category} "
+                            f"--home {home} --comment '{dev.name}' "
+                            "— then wire a driver (see docs/SKILL-GAPS.md)"),
                 skill_hint=dev.rcan_snippet,
                 detail={"category": dev.category, "interface": dev.interface,
                         "driver_hint": dev.driver_hint},
