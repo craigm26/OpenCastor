@@ -69,6 +69,11 @@ dependencies = [
     "rcan>=3.3,<4",
     # Gateway Authority enforcement (Plan 6 Track 2 / Plan 7 open-core)
     "robot-md-gateway>=0.4.0a1",
+    # The rc-car actuator plugin, so `castor up` on a fresh host resolves
+    # `actuator: rc-car` instead of degrading to noop. A hard dependency on
+    # purpose: the ten-minute goal is `pip install opencastor` and done, and
+    # this package is pure Python (its hardware backends import lazily).
+    "rc-car-actuator>=0.1.0",
 ]
 
 [project.optional-dependencies]
