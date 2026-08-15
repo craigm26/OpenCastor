@@ -1,0 +1,33 @@
+# Ollama, installed from a staged tarball rather than curl | sh.
+#
+# WHY NOT THE UPSTREAM INSTALLER. `curl https://ollama.com/install.sh | sh`
+# needs network inside the chroot, downloads a different build every week, and
+# pulls ~2.2 GB of NVIDIA CUDA libraries onto a Pi that has no NVIDIA anything.
+# The build stages the same official tarball, drops the cuda_v12/cuda_v13
+# directories (1241 MiB + 936 MiB of the 2.2 GB), and writes this unit — which
+# is the upstream one, plus an explicit model path.
+#
+# THE MODEL PATH IS EXPLICIT ON PURPOSE. It defaults to $HOME/.ollama/models,
+# so it is silently correct until somebody changes the ollama user's home and
+# then silently wrong — with the symptom being a robot that reports no brain
+# while 2.7 GB of weights sit on the card, unfound.
+
+[Unit]
+Description=Ollama Service
+Documentation=https://github.com/ollama/ollama
+After=network-online.target
+
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/ollama serve
+User=ollama
+Group=ollama
+Restart=always
+RestartSec=3
+Environment="HOME=/usr/share/ollama"
+Environment="OLLAMA_MODELS=/usr/share/ollama/.ollama/models"
+Environment="OLLAMA_HOST=127.0.0.1:11434"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+
+[Install]
+WantedBy=multi-user.target

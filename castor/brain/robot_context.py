@@ -1,5 +1,4 @@
 import logging
-import os
 import socket
 import subprocess
 from dataclasses import dataclass, field
@@ -7,9 +6,25 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger("OpenCastor.RobotContext")
 
-_MEMORY_PATH = os.path.expanduser("~/.opencastor/robot-memory.md")
+#: An OVERRIDE, not the path. ``None`` means "ask the one resolver"
+#: (``castor.brain.memory_paths.memory_file``) at call time, which is what makes
+#: the file the gateway brain reads the same file `castor memory add` writes and
+#: `/memory/recall` ranks. It used to be a hardcoded
+#: ``~/.opencastor/robot-memory.md``, and on a `castor up` host that was a
+#: DIFFERENT file from the one the CLI and console meant — with nothing anywhere
+#: reporting a problem. Tests set this to point at a scratch file.
+_MEMORY_PATH: str | None = None
 _LOG_PATH = "/tmp/castor-gateway.log"
 _MEMORY_TRUNCATE = 2000
+
+
+def memory_path() -> str:
+    """The robot-memory.md this reader opens. See ``_MEMORY_PATH``."""
+    if _MEMORY_PATH is not None:
+        return _MEMORY_PATH
+    from castor.brain.memory_paths import memory_file
+
+    return str(memory_file())
 
 
 @dataclass
@@ -79,6 +94,7 @@ def build_robot_context(config: dict) -> RobotContext:
 
     # Session memory — load structured schema if possible, fall back to raw text
     session_memory = ""
+    path = memory_path()
     try:
         from castor.brain.memory_schema import (
             apply_confidence_decay,
@@ -87,14 +103,14 @@ def build_robot_context(config: dict) -> RobotContext:
             load_memory,
         )
 
-        robot_mem = load_memory(_MEMORY_PATH)
+        robot_mem = load_memory(path)
         robot_mem = apply_confidence_decay(robot_mem)
         eligible = filter_for_context(robot_mem)
         session_memory = format_entries_for_context(eligible)
     except Exception:
         # Fallback: read raw text (free-form robot-memory.md)
         try:
-            with open(_MEMORY_PATH) as f:
+            with open(path) as f:
                 session_memory = f.read()[:_MEMORY_TRUNCATE]
         except FileNotFoundError:
             pass

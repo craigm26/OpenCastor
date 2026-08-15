@@ -14,6 +14,26 @@ Environment variables:
     CASTOR_AUTODREAM_DRY_RUN=1  — Skip LLM call and issue filing (safe for testing)
     CASTOR_AUTODREAM_FILE_ISSUES=1  — Enable GitHub issue filing (opt-in, disabled by default)
     CASTOR_GITHUB_REPO    — GitHub repo for issue filing (required if filing enabled)
+
+WHERE THE MEMORY LIVES. This runner does NOT name ``robot-memory.md`` itself —
+it asks ``castor.brain.memory_paths.memory_file()``, the one resolver the CLI,
+the console and the gateway brain's reader all use, so a nightly consolidation
+cannot quietly write a file nothing else reads. ``CASTOR_OPENCASTOR_DIR`` still
+selects the STATE directory (dream-log.jsonl, health reports, the git checkout
+it reads commits from) and is still the first place that resolver looks for a
+memory store.
+
+KNOWN SEAM — autoDream DOES NOT EMBED. ``_write_structured_memory`` upserts
+entries through ``memory_schema`` and stops there; it never calls
+``memory_recall.embed_entries``. So a memory this runner wrote overnight is in
+the store, shows up in ``castor memory show``, rides into the brain's context
+block — and is NOT recallable by meaning, in ``castor memory recall``, in
+``GET /memory/recall``, or in a chat turn's grounding, until someone runs
+``castor memory reembed``. That is deliberate for now: this is an unattended
+2 a.m. cron job, and having it block on (or silently swallow) a cold Ollama is
+a bigger problem than a one-command catch-up. It is written down here rather
+than fixed here so that "why did last night's observation not recall?" has an
+answer that does not require reading the diff.
 """
 
 from __future__ import annotations
@@ -38,9 +58,23 @@ GITHUB_REPO = os.getenv("CASTOR_GITHUB_REPO", "")  # No default — must be set 
 RRN = os.getenv("CASTOR_RRN", "unknown")
 
 OPENCASTOR_DIR = Path(os.getenv("CASTOR_OPENCASTOR_DIR", str(Path.home() / ".opencastor")))
-MEMORY_FILE = OPENCASTOR_DIR / "robot-memory.md"
 DREAM_LOG_FILE = OPENCASTOR_DIR / "dream-log.jsonl"
 GATEWAY_LOG = Path(os.getenv("CASTOR_GATEWAY_LOG", "/tmp/castor-gateway.log"))
+
+#: An OVERRIDE, not the path — ``None`` means "ask the one resolver" at call
+#: time (see the module docstring). This used to be ``OPENCASTOR_DIR /
+#: "robot-memory.md"``, computed at import, which on a `castor up` host is a
+#: different file from the one the CLI and console mean. Tests set it.
+MEMORY_FILE: Path | None = None
+
+
+def memory_file_path() -> Path:
+    """The robot-memory.md this runner reads and writes. See ``MEMORY_FILE``."""
+    if MEMORY_FILE is not None:
+        return Path(MEMORY_FILE)
+    from castor.brain.memory_paths import memory_file
+
+    return memory_file()
 
 
 def _load_recent_commits() -> list[str]:
@@ -118,18 +152,22 @@ def _load_session_logs(max_lines: int = 200) -> list[str]:
 
 def _load_memory() -> str:
     try:
-        return MEMORY_FILE.read_text(encoding="utf-8")
+        return memory_file_path().read_text(encoding="utf-8")
     except FileNotFoundError:
         return ""
 
 
 def _write_memory_atomic(content: str) -> None:
-    OPENCASTOR_DIR.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=OPENCASTOR_DIR, prefix=".memory-", suffix=".tmp")
+    target = memory_file_path()
+    # The temp file goes NEXT TO the target, not in OPENCASTOR_DIR: those are
+    # the same directory on a legacy host and different ones on a `castor up`
+    # host, and os.replace across filesystems is not atomic (and may not work).
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=target.parent, prefix=".memory-", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(content)
-        Path(tmp).replace(MEMORY_FILE)
+        Path(tmp).replace(target)
     except Exception:
         try:
             os.unlink(tmp)
@@ -152,7 +190,8 @@ def _write_structured_memory(new_entries: list[dict], date_str: str) -> None:
         save_memory,
     )
 
-    mem = load_memory(str(MEMORY_FILE))
+    target = memory_file_path()
+    mem = load_memory(str(target))
     mem = apply_confidence_decay(mem)
     mem.rrn = RRN if RRN != "unknown" else mem.rrn
 
@@ -168,7 +207,13 @@ def _write_structured_memory(new_entries: list[dict], date_str: str) -> None:
         except ValueError:
             etype = EntryType.HARDWARE_OBSERVATION
 
-        text = str(raw.get("text", ""))[:500]
+        # Untrusted at the source: these entries are an LLM's summary of log
+        # lines, and a log line is whatever a stranger's HTTP request put in it.
+        # One line, printable, capped — the same contract `castor memory add`
+        # enforces, applied where the text enters the store.
+        from castor.brain.memory_recall import MEMORY_TEXT_MAX, sanitize_memory_text
+
+        text = sanitize_memory_text(str(raw.get("text", "")))[0][:MEMORY_TEXT_MAX]
         confidence = float(raw.get("confidence", 0.7))
         tags = list(raw.get("tags", []))
         entry_id = make_entry_id(text, etype)
@@ -203,7 +248,10 @@ def _write_structured_memory(new_entries: list[dict], date_str: str) -> None:
 
     # Prune stale entries and save
     mem, pruned = prune_entries(mem)
-    save_memory(mem, str(MEMORY_FILE))
+    target.parent.mkdir(parents=True, exist_ok=True)
+    save_memory(mem, str(target))
+    # KNOWN SEAM: no embedding here — see the module docstring. These entries are
+    # in the store and out of `castor memory recall` until `castor memory reembed`.
     logger.info(
         "autoDream: structured memory updated — added=%d reinforced=%d pruned=%d total=%d",
         added,

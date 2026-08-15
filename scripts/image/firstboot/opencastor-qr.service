@@ -1,0 +1,51 @@
+# The pairing page on port 80 — the only user interface this image has.
+#
+# WHY IT IS NOT ORDERED AFTER PROVISIONING. Because the operator is already
+# holding the phone. This page has to be answering while firstboot.sh is still
+# working, so the first thing they see is "setting up" rather than a browser
+# error they will read as a dead Pi. It reads state from a file on every
+# request, so it needs no restart when provisioning finishes — and it is the
+# only thing that will speak if provisioning never does.
+#
+# PORT 80 WITHOUT ROOT. AmbientCapabilities hands this process exactly one
+# privilege — bind a low port — and nothing else. Running the kiosk as root to
+# save a line would give a stdlib HTTP server on an unauthenticated LAN port
+# the run of the machine, which is a poor trade for a page that reads two files.
+#
+# Restart=always: the page is the operator's only feedback channel. A crash
+# that takes it away permanently turns a recoverable problem into a Pi with no
+# symptoms.
+
+[Unit]
+Description=OpenCastor pairing page (port 80)
+Documentation=https://github.com/craigm26/OpenCastor/blob/main/docs/IMAGE.md
+After=network.target
+
+[Service]
+Type=exec
+User=opencastor
+Group=opencastor
+Environment=OC_STATE=/var/lib/opencastor
+Environment=ROBOT_HOME=/var/lib/opencastor/robot
+Environment=OPENCASTOR_QR_PORT=80
+ExecStart=/usr/bin/python3 /opt/opencastor-image/qr_server.py
+Restart=always
+RestartSec=2
+
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+# Read-only is enough: this server never writes. ProtectSystem=strict already
+# makes the rest of the filesystem unwritable; naming the state directory here
+# documents the one path it actually needs.
+ReadOnlyPaths=/var/lib/opencastor
+
+[Install]
+WantedBy=multi-user.target

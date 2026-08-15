@@ -1740,10 +1740,10 @@ def cmd_logs(args) -> None:
 
 
 def cmd_memory(args) -> None:
-    """castor memory — show, prune, and manage robot operational memory."""
+    """castor memory — show, recall, prune, and manage robot operational memory."""
     import os
-    from pathlib import Path
 
+    from castor.brain.memory_recall import memory_file
     from castor.brain.memory_schema import (
         CONFIDENCE_INJECT_MIN,
         EntryType,
@@ -1756,10 +1756,9 @@ def cmd_memory(args) -> None:
         save_memory,
     )
 
-    memory_path = os.getenv(
-        "CASTOR_ROBOT_MEMORY_FILE",
-        str(Path.home() / ".opencastor" / "robot-memory.md"),
-    )
+    # One resolver, shared with the console, so `castor memory add` and
+    # /memory/recall can never mean two different files on the same robot.
+    memory_path = str(memory_file())
     cmd = getattr(args, "memory_cmd", None) or "show"
 
     if cmd == "show":
@@ -1815,18 +1814,50 @@ def cmd_memory(args) -> None:
         else:
             save_memory(pruned, memory_path)
             print(f"✓ Pruned {count} entries below {threshold:.0%} confidence")
+            # Prune is the operator saying "forget this". A vector left behind
+            # is never consulted again, but it is still the memory's text
+            # fingerprint and its embedding sitting on disk.
+            from castor.brain.memory_recall import forget_vectors
+
+            forgotten = forget_vectors(memory_path, [e.id for e in pruned.entries])
+            if forgotten:
+                print(f"  Dropped {forgotten} orphaned vector(s) from the sidecar")
 
     elif cmd == "add":
+        from castor.brain.memory_recall import MEMORY_TEXT_MAX, sanitize_memory_text
+
         entry_type_str = getattr(args, "entry_type", "hardware_observation")
-        text = getattr(args, "text", "")
+        raw_text = getattr(args, "text", "") or ""
         confidence = float(getattr(args, "confidence", "0.8"))
         tags = (getattr(args, "tags", "") or "").split(",")
         tags = [t.strip() for t in tags if t.strip()]
 
-        if not text:
+        if not raw_text.strip():
             print(
                 "\nUsage: castor memory add --text 'observation text' [--type TYPE] [--confidence 0.8]\n"
             )
+            return
+
+        # A memory is ONE line of printable text. It ends up inside a system
+        # prompt, and a newline in it is how "the left wheel slips" becomes a
+        # line that reads as a peer of the prompt instead of the contents of a
+        # bullet. Normalised here, and independently again at render time.
+        text, control_chars = sanitize_memory_text(raw_text)
+        if not text:
+            print("\n✗ Nothing to store — that text is entirely whitespace or "
+                  "control characters.\n")
+            return
+        if control_chars or text != raw_text.strip():
+            print(f"  Normalized {control_chars} control character(s) and collapsed "
+                  f"whitespace — a memory is one line of plain text")
+        if len(text) > MEMORY_TEXT_MAX:
+            # REFUSED, not truncated: the operator wrote this sentence and is
+            # standing right here. Silently keeping the first 500 characters of
+            # their observation is how a memory ends mid-clause and reads, six
+            # weeks later, as something the robot noticed and then forgot.
+            print(f"\n✗ Too long — {len(text)} characters, and the cap is "
+                  f"{MEMORY_TEXT_MAX}. Nothing was stored.")
+            print("  Shorten it, or split it into two observations.\n")
             return
 
         try:
@@ -1858,6 +1889,37 @@ def cmd_memory(args) -> None:
         if tags:
             print(f"  Tags: {', '.join(tags)}")
 
+        # Embed on write. The memory is ALREADY saved above: a cold embedder
+        # must cost the vector, never the memory.
+        from castor.brain.memory_recall import embed_model, store_vector
+
+        if store_vector(entry, memory_path):
+            print(f"  Embedded for recall ({embed_model()})")
+        else:
+            print("  No embedder — saved without a vector, so this memory is not "
+                  "recallable by meaning yet (`castor memory reembed`)")
+
+    elif cmd == "recall":
+        _memory_recall(args, memory_path)
+
+    elif cmd == "reembed":
+        from castor.brain.memory_recall import (
+            embed_entries,
+            embed_model,
+            load_sidecar,
+            sidecar_path,
+        )
+
+        mem = load_memory(memory_path)
+        stored = embed_entries(mem.entries, memory_path)
+        side = load_sidecar(sidecar_path(memory_path))
+        print(f"✓ Embedded {stored} entr(ies) with {embed_model()}")
+        print(f"  {len(side.vectors)} of {len(mem.entries)} memories now have a vector")
+        print(f"  Sidecar: {sidecar_path(memory_path)}")
+        if stored == 0 and len(side.vectors) < len(mem.entries):
+            print("  Nothing was embedded — is Ollama running and the embed model "
+                  "pulled? (`ollama pull nomic-embed-text`)")
+
     elif cmd == "decay":
         mem = load_memory(memory_path)
         original_confs = {e.id: e.confidence for e in mem.entries}
@@ -1876,9 +1938,75 @@ def cmd_memory(args) -> None:
         print("\n  castor memory — robot operational memory management\n")
         print("  Commands:")
         print("    castor memory show              Show all entries with confidence")
+        print("    castor memory recall '<q>'      Find the memories that MEAN that")
         print("    castor memory add --text '...'  Add a manual entry")
+        print("    castor memory reembed           Embed memories that have no vector")
         print("    castor memory prune             Remove entries below threshold")
         print("    castor memory decay             Apply time-based confidence decay\n")
+
+
+def _memory_recall(args, memory_path: str) -> None:
+    """castor memory recall — the top-k memories that bear on a question.
+
+    Prints the SCORE, the confidence, and the age of every hit, because a
+    recalled memory is a lead and not a fact: a 40%-confidence note from six
+    weeks ago and a 95% one from this morning must not look the same on the way
+    past. Ranked by
+
+        score = cosine(query, memory) * (0.5 + 0.5 * decayed_confidence)
+
+    and gated on the raw cosine, so meaning decides WHETHER a memory answers
+    and belief decides in what order. See `castor.brain.memory_recall`.
+    """
+    from castor.brain.memory_recall import recall, relevance_floor, sidecar_path
+
+    query = " ".join(getattr(args, "query", None) or []).strip()
+    k = int(getattr(args, "k", 5) or 5)
+    verbose = bool(getattr(args, "verbose", False))
+    if not query:
+        print("\nUsage: castor memory recall '<what you are looking for>' [-k 5]\n")
+        return
+
+    floor = getattr(args, "floor", None)
+    result = recall(query, k=k, memory_path=memory_path,
+                    floor=float(floor) if floor is not None else None)
+
+    print(f"\n🧠 Recall — {query!r}")
+    if verbose:
+        print(f"   File: {memory_path}")
+        print(f"   Sidecar: {sidecar_path(memory_path)}")
+        print(f"   Model: {result.model} | floor: {result.floor:.2f} "
+              f"(default {relevance_floor():.2f})")
+        print(f"   Store: {result.total_entries} entries, {result.searchable} searchable, "
+              f"{result.unvectored} without a vector")
+        if result.unvectored:
+            print("   Memories with no vector are NOT recallable by meaning — they are "
+                  "skipped here entirely (`castor memory reembed`)")
+        if result.skipped_lines:
+            print(f"   {result.skipped_lines} unreadable sidecar line(s) skipped")
+        if not result.embedder_ok:
+            print("   Embedder: unavailable — nothing was searched")
+
+    if not result.results:
+        print(f"\n  (nothing scored above {result.floor:.2f})")
+        if result.detail:
+            print(f"  {result.detail}")
+        print()
+        return
+
+    print(f"   {len(result.results)} of {result.searchable} searchable memories "
+          f"scored above {result.floor:.2f}\n")
+    for hit in result.results:
+        age = "today" if hit.age_days == 0 else f"{hit.age_days}d ago"
+        print(f"  [{hit.score:.2f}] {round(hit.entry.confidence * 100)}% · {age} · "
+              f"{hit.entry.type.value}")
+        print(f"         {hit.entry.text}")
+        if verbose:
+            print(f"         id:{hit.entry.id} | cosine:{hit.similarity:.3f} | "
+                  f"obs:{hit.entry.observation_count}x")
+    print()
+    if result.detail:
+        print(f"  {result.detail}\n")
 
 
 def cmd_migrate(args) -> None:
@@ -7203,13 +7331,36 @@ def main() -> None:
         epilog=(
             "Examples:\n"
             "  castor memory show\n"
+            "  castor memory recall 'why does it drift on tile?' -k 5\n"
             "  castor memory add --text 'left wheel encoder intermittent' --type hardware_observation\n"
+            "  castor memory reembed\n"
             "  castor memory prune --threshold 0.15\n"
             "  castor memory decay\n"
         ),
     )
     memory_sub = p_memory.add_subparsers(dest="memory_cmd")
     memory_sub.add_parser("show", help="Show all entries with confidence scores")
+    p_mem_recall = memory_sub.add_parser(
+        "recall",
+        help="Find the memories that MEAN what you asked (semantic, top-k)",
+    )
+    p_mem_recall.add_argument("query", nargs="*", help="What you are looking for")
+    p_mem_recall.add_argument("-k", dest="k", type=int, default=5,
+                              help="How many memories to return (default: 5)")
+    p_mem_recall.add_argument(
+        "--floor", type=float, default=None,
+        help="Minimum cosine to count as relevant (default: 0.55, measured for "
+             "nomic-embed-text)",
+    )
+    p_mem_recall.add_argument(
+        "--verbose", "-v", action="store_true",
+        help="Show the store's own state — including memories with no vector, "
+             "which cannot be recalled by meaning at all",
+    )
+    memory_sub.add_parser(
+        "reembed",
+        help="Embed memories that have no vector yet (or whose text changed)",
+    )
     p_mem_add = memory_sub.add_parser("add", help="Manually add a memory entry")
     p_mem_add.add_argument("--text", required=True, help="Observation text (max 500 chars)")
     p_mem_add.add_argument(

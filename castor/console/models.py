@@ -30,6 +30,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from castor.brain.memory_recall import ground_system_prompt
+
 from . import brains
 from .config import chat_upstream, ollama_url, robot_home
 
@@ -361,18 +363,42 @@ class ChatRequest(BaseModel):
     #: where the person is standing, and for a phone-driven vehicle it is the
     #: only camera there is.
     image_b64: str | None = None
+    #: Route THIS turn through a specific brain, regardless of the active one.
+    #: The privacy rail behind it: a caller whose per-robot Vision pick is a
+    #: LOCAL model must be able to force the ollama branch even while the
+    #: active provider is a cloud/subscription brain — otherwise the frame
+    #: rides off-LAN under a label that promised it would not. The active
+    #: provider is untouched; this is one turn, not a mode change.
+    provider: str | None = None
 
 
 @router.post("/models/chat")
 def chat(req: ChatRequest) -> dict:
-    """One chat turn against the robot's brain.
+    """One chat turn against the robot's brain, grounded in what it remembers.
 
-    The CALLER supplies the system prompt (the phone builds it from the robot's
-    manifest), so this endpoint stays a thin, stateless bridge and holds no
-    notion of policy or capabilities.
+    The CALLER still supplies the system prompt (the phone builds it from the
+    robot's manifest), so policy and capabilities are still not this endpoint's
+    business. The one thing it adds is the thing only the robot can add: the
+    message is embedded here and the memories that bear on it ride in as a
+    RECALLED MEMORIES appendix to the caller's prompt — provenance-framed, at
+    most five, and ABSENT entirely when nothing clears the relevance floor, so
+    an unrelated question carries zero memories and costs zero tokens. The
+    phone cannot do this itself: the vectors and the embed model live on the
+    robot, next to the memory they index.
+
+    Grounding never blocks a turn. No Ollama, no embed model, an empty or
+    corrupt sidecar — every one of them degrades to an ungrounded turn (see
+    `castor.brain.memory_recall`), because a robot that refuses to talk when its
+    memory index is cold is worse than a robot that forgets.
     """
     active = read_active()
-    provider = active.get("provider", "ollama")
+    if req.provider is not None and req.provider not in (
+            "ollama", "anthropic-sub", "gemini-er"):
+        raise HTTPException(status_code=422,
+                            detail=f"unknown provider {req.provider!r}")
+    provider = req.provider or active.get("provider", "ollama")
+    # Before the branch, so all three brains are grounded by the same rail.
+    system = ground_system_prompt(req.system, req.message)
 
     # A robot-hosted brain answers from here; Ollama is only one of them.
     if provider == "anthropic-sub":
@@ -386,7 +412,7 @@ def chat(req: ChatRequest) -> dict:
                 raise HTTPException(status_code=422,
                                     detail="image_b64 is not valid base64")
         try:
-            out = brains.anthropic_chat(req.system, req.message, req.history,
+            out = brains.anthropic_chat(system, req.message, req.history,
                                         image_jpeg=client_frame)
         except Exception as exc:  # noqa: BLE001 - upstream failure, reported as 502
             raise HTTPException(status_code=502, detail=f"claude: {exc}")
@@ -407,7 +433,7 @@ def chat(req: ChatRequest) -> dict:
                 raise HTTPException(status_code=422,
                                     detail="image_b64 is not valid base64")
         try:
-            out = brains.gemini_er(req.system + "\n\n" + req.message, image_jpeg=image)
+            out = brains.gemini_er(system + "\n\n" + req.message, image_jpeg=image)
         except Exception as exc:  # noqa: BLE001 - upstream failure, reported as 502
             raise HTTPException(status_code=502, detail=f"gemini: {exc}")
         return {"model": out.get("model", "gemini-robotics-er"),
@@ -418,8 +444,8 @@ def chat(req: ChatRequest) -> dict:
     if not model:
         raise HTTPException(status_code=409, detail="no active model set")
     messages = []
-    if req.system:
-        messages.append({"role": "system", "content": req.system})
+    if system:
+        messages.append({"role": "system", "content": system})
     for turn in req.history[-12:]:
         role = turn.get("role")
         if role in ("user", "assistant") and turn.get("content"):

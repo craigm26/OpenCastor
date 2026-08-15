@@ -409,6 +409,46 @@ def test_a_photo_reaches_the_local_model_instead_of_being_dropped(client, home, 
     assert sent["base"] == "http://127.0.0.1:11434"
 
 
+def test_THEPROMISE_a_local_vision_turn_cannot_ride_the_subscription_off_lan(
+        client, home, monkeypatch):
+    # The app's per-robot Vision pick promises "nothing leaves your network".
+    # With the ACTIVE provider set to the Claude subscription, a per-request
+    # model override alone would ride the active branch — the frame off-LAN
+    # under a local label. `provider` forces the branch for ONE turn.
+    from castor.console import brains, models
+
+    (home / "active-model.json").write_text(json.dumps(
+        {"provider": "anthropic-sub", "model": "claude"}))
+    monkeypatch.setattr(brains, "anthropic_chat", _refuse_claude)
+    sent: dict = {}
+
+    def capture(path, payload=None, timeout=15.0, base=None):
+        sent["payload"] = payload
+        return {"message": {"content": "a doorway"}}
+
+    monkeypatch.setattr(models, "_ollama", capture)
+    body = client.post("/models/chat", headers=auth(), json={
+        "message": "what is this?", "image_b64": "/9j/scratch",
+        "provider": "ollama", "model": "gemma4:12b-it-qat"}).json()
+    assert body["model"] == "gemma4:12b-it-qat"
+    assert sent["payload"]["model"] == "gemma4:12b-it-qat"
+    assert sent["payload"]["messages"][-1]["images"] == ["/9j/scratch"]
+    # One turn, not a mode change: the active brain is exactly as it was.
+    active = json.loads((home / "active-model.json").read_text())
+    assert active["provider"] == "anthropic-sub"
+
+
+def _refuse_claude(*args, **kwargs):
+    raise AssertionError("a forced-local turn must not reach the subscription brain")
+
+
+def test_an_unknown_provider_override_is_refused_not_guessed(client, home):
+    resp = client.post("/models/chat", headers=auth(),
+                       json={"message": "hi", "provider": "openai"})
+    assert resp.status_code == 422
+    assert "unknown provider" in resp.json()["detail"]
+
+
 def test_the_console_reports_configuration_never_key_material(client, home, monkeypatch):
     from castor.console import brains
 

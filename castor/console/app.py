@@ -13,7 +13,7 @@ package. This is that move: one copy, parameterized by ROBOT_HOME, shipped by
 WHAT IT DELIBERATELY IS NOT. The arm robot's bench console also served camera
 streams, perception, and calibration, because that robot is an arm with two
 cameras and a workspace. None of that is portable — a vehicle whose only eye is
-the phone on its back has no frames to serve — so the ported surface is the two
+the phone on its back has no frames to serve — so the ported surface is the
 routers every robot can honestly answer:
 
   * models       — the local Ollama catalog, the chat bridge, and the
@@ -24,6 +24,9 @@ routers every robot can honestly answer:
                    saved workflows. A macro grants no new authority: running one
                    issues ordinary signed /v1/invoke calls, each judged
                    independently by the gateway.
+  * memory       — /memory/recall, the robot's own long-term memory searched by
+                   MEANING rather than printed whole. Read-only, and the same
+                   ranker `castor memory recall` uses.
 
 ``/camera/list`` answers with an empty list rather than 404, because the app asks
 every console what it can see, and "nothing — the phone is my eye" is an answer,
@@ -38,6 +41,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 
 from .capabilities import router as capabilities_router
 from .config import console_token, robot_home
+from .memory import router as memory_router
 from .models import read_active, router as models_router
 
 
@@ -102,6 +106,7 @@ def build_app() -> FastAPI:
 
     app.include_router(models_router, dependencies=[Depends(require_console_auth)])
     app.include_router(capabilities_router, dependencies=[Depends(require_console_auth)])
+    app.include_router(memory_router, dependencies=[Depends(require_console_auth)])
     return app
 
 

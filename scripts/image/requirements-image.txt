@@ -1,0 +1,23 @@
+# What the image's /opt/opencastor venv contains. Four lines, deliberately.
+#
+# Everything else in the venv arrives as a transitive dependency and is
+# resolved once, on the build host, into scripts/image's wheelhouse — the
+# chroot has no network and must not want one.
+#
+#   opencastor        built from the working tree, not PyPI: the image ships
+#                     the code that was tested, not the code that was released.
+#   rc-car-actuator   NOT on PyPI. Without it `castor up` resolves the gateway's
+#                     `noop` actuator and the rover has no wheels — see
+#                     castor.up.resolve_actuator. The wheelhouse carries it so
+#                     the image never depends on a publish that has not happened.
+#   robot-md-gateway  pinned to the build the bench actually runs. A prerelease
+#                     pin is explicit on purpose; `>=0.4.0a1` would silently
+#                     drift the image away from the one gateway we have driven.
+#   qrcode[pil]       castor.pairing.write_pair_artifacts degrades to JSON-only
+#                     without it, and JSON-only is a robot the app cannot pair
+#                     with by pointing a camera at a screen. On this image the
+#                     QR *is* the user interface, so it is not optional here.
+opencastor
+rc-car-actuator
+robot-md-gateway==0.5.0a6
+qrcode[pil]

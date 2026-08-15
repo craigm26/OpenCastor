@@ -1,0 +1,49 @@
+# Provision the robot on the first boot after flashing, then never again.
+#
+# THE CONDITION IS THE WHOLE STATE MACHINE. ConditionPathExists=! means systemd
+# skips this unit — cleanly, not as a failure — once the stamp is there. And
+# firstboot.sh writes the stamp only when `castor up` succeeded AND a pairing
+# QR exists to scan, so a boot that failed, produced no QR, or was cut off by
+# the TimeoutStartSec below is retried on the next one. That retry is safe
+# because `up` reuses identity and regenerates only what is stale; it is the
+# same reuse-don't-refuse contract that stopped a --force from rotating a live
+# signing key on the bench.
+#
+# TimeoutStartSec EXPIRING IS A SIGTERM, AND IT REACHES THE WHOLE CGROUP.
+# firstboot.sh traps TERM/INT/HUP by name for that reason: an EXIT trap alone
+# read `$?` as 0 after the signal killed a foreground `sleep`, and a first boot
+# that systemd had just cut off wrote "ok": true. It now records an `aborted`
+# caveat, writes status.json before it logs (the `tee` is in this cgroup too),
+# and exits 143 without stamping.
+#
+# ORDERING, AND WHY network-online IS NOT OPTIONAL. castor.pairing's
+# default_gateway_url learns the LAN address by opening a UDP socket. Run it
+# before DHCP has answered and it falls back to 127.0.0.1 — which is exactly
+# how the rover once shipped a QR pointing the phone at a machine that wasn't
+# there. Waiting for the network here is the fix for a bug that already
+# happened.
+#
+# NOTHING DEPENDS ON THIS UNIT SUCCEEDING. opencastor-qr.service is not ordered
+# after it on purpose: the page has to be up and explaining itself while this
+# is still running, and especially if it fails.
+
+[Unit]
+Description=OpenCastor first boot — bring the robot up and mint its pairing QR
+Documentation=https://github.com/craigm26/OpenCastor/blob/main/docs/IMAGE.md
+ConditionPathExists=!/var/lib/opencastor/.provisioned
+Wants=network-online.target
+After=network-online.target systemd-user-sessions.service ollama.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Generous but finite. A cold Pi 5 does this in well under a minute; the
+# ceiling exists so a wedged ollama probe cannot hold multi-user.target
+# forever with the operator staring at a page that never changes.
+TimeoutStartSec=600
+ExecStart=/opt/opencastor-image/firstboot.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
