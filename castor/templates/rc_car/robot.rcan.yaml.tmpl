@@ -1,0 +1,44 @@
+rcan_version: '3.0'
+metadata:
+  robot_name: {name}
+  robot_uuid: {uuid}
+  author: craigm26
+  license: MIT
+  manufacturer: {name}
+  model: rc-car
+  version: v1
+  rrn: {rrn}
+agent:
+  provider: ollama
+  model: qwen3.5:2b
+physics:
+  type: ackermann
+  dof: 2
+# The robot-md-gateway's rc-car actuator owns the drive layer — the deadman
+# thread and the envelope budget live in THAT process. The castor runtime must
+# never open a second path to the wheels, so its own driver is the mock. When
+# the runtime needs the car stopped it asks the gateway, through the same signed
+# /v1/invoke every other command goes through.
+drivers:
+  - protocol: simulation
+    backend: mock
+network:
+  telemetry_stream: true
+safety:
+  estop_enabled: true
+rcan_protocol:
+  port: {port_runtime}
+  # Off, for the same reason it is off on Bob: castor advertises the RUNTIME
+  # port while the gateway is on another, and the TXT record carries no
+  # manifest_path/rrn — a Bonjour-found robot could never invoke. The QR is the
+  # only complete pairing path.
+  enable_mdns: false
+  capabilities:
+    - drive.set
+    - drive.stop
+    - drive.envelope.open
+    - drive.envelope.revoke
+    - status.report
+firmware_hash: null
+attestation_ref: null
+fria_ref: null

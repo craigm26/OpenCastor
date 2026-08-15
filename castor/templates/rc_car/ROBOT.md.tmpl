@@ -1,0 +1,181 @@
+---
+rcan_version: '3.0'
+schema: https://robotmd.dev/schema/v1/robot.schema.json
+metadata:
+  robot_name: {name}
+  manufacturer: {name}
+  model: rc-car
+  version: '1.0'
+  device_id: {name}
+  rrn: '{rrn}'
+  license: Apache-2.0
+  record_url: https://robotregistryfoundation.org/v2/robots/{rrn}
+  tags:
+    - ackermann
+    - rc-car
+    - raspberry-pi
+    - simulated-wheels
+network:
+  rrf_endpoint: https://robotregistryfoundation.org
+  signing_alg: ml-dsa-65
+  transports:
+    - http
+physics:
+  type: ackermann
+  dof: 2
+  chassis:
+    wheelbase_mm: 250
+    track_width_mm: 170
+    wheel_radius_mm: 45
+  controls:
+    - id: throttle
+      units: unitless
+      range:
+        - -1.0
+        - 1.0
+      neutral: 0.0
+      note: "Deliberately NOT metres per second. This vehicle has no speed sensor,
+        so a value in m/s would be a measurement the hardware cannot make."
+    - id: steering
+      units: unitless
+      range:
+        - -1.0
+        - 1.0
+      neutral: 0.0
+drivers:
+  - id: drive
+    protocol: simulation
+    backend: SimulatedDrive
+    # The wheels do not exist yet. SimulatedDrive records every command and moves
+    # nothing; PWMDrive is present in the package but UNVERIFIED and is not
+    # reachable in this deployment (no pigpio, no GPIO configured, no ESC wired).
+    hardware_present: false
+    pwm_backend_enabled: false
+capabilities:
+  - drive.set
+  - drive.stop
+  - drive.envelope.open
+  - drive.envelope.revoke
+  - status.report
+capability_contracts:
+  drive.envelope.open:
+    args:
+      motion_budget_s:
+        kind: float
+        required: true
+      window_s:
+        kind: float
+        required: true
+      max_throttle:
+        kind: float
+        required: true
+      approved_by:
+        kind: string
+        default: ''
+    returns:
+      envelope_id:
+        kind: string
+      motion_remaining_s:
+        kind: float
+    preconditions:
+      - kind: backend_resolved
+  drive.set:
+    args:
+      throttle:
+        kind: float
+        default: 0
+      steering:
+        kind: float
+        default: 0
+      duration_s:
+        kind: float
+        default: 0
+    returns:
+      throttle:
+        kind: float
+      lease_s:
+        kind: float
+      envelope_id:
+        kind: string
+    preconditions:
+      - kind: envelope_open
+      - kind: backend_resolved
+  drive.stop:
+    returns:
+      stopped:
+        kind: bool
+  drive.envelope.revoke:
+    returns:
+      revoked:
+        kind: bool
+  status.report:
+    returns:
+      throttle:
+        kind: float
+      steering:
+        kind: float
+      envelope:
+        kind: object
+safety:
+  p66_enabled: true
+  loa_enforcement: true
+  payload_kg: 0.0
+  max_throttle: 0.35
+  deadman:
+    lease_timeout_ms: 400
+    max_lease_ms: 2000
+    layers:
+      - software deadman (gateway process)
+    firmware_lease: false
+  estop:
+    hardware: false
+    software: true
+    response_ms: 100
+  hitl_gates:
+    - scope: destructive
+      require_auth: true
+    - scope: system
+      require_auth: true
+---
+
+# {name}
+
+## Identity
+
+A wire-controlled RC car chassis: one throttle channel, one steering channel,
+Ackermann geometry. **The wheels are simulated.** No ESC, no servo, and no
+vehicle have been connected to this Pi — the drive layer is `SimulatedDrive`,
+which records every command and moves nothing.
+
+## What {name} Can Do
+
+Set throttle and steering, stop, and report state — but only inside an open
+**drive envelope**: a bounded budget of motion (seconds of wheel-turn, a
+wall-clock window, and a speed ceiling) that a human approves once and every
+subsequent command draws down. With no envelope open the vehicle has no
+authority to move at all, and `drive.set` is refused.
+
+Motion is a **lease**, not a command. `duration_s` is how long the lease lasts,
+not how long the call blocks: the command returns in about a millisecond and the
+car stops when the lease expires, so the next request — the one saying "stop" —
+never queues behind the motion it was meant to cancel.
+
+## Safety Gates
+
+`drive.stop` and `drive.envelope.revoke` sit at the **lowest tier this gateway
+permits**. A stop that can be refused is not a stop, and there is no failure
+mode where declining to halt a moving vehicle is the safer choice.
+
+The deadman returns the vehicle to neutral when its lease runs out, re-asserting
+neutral every tick rather than once. A command's `duration_s` IS that lease: it
+is granted as asked, cut to a hard ceiling of 2 s for any one command and to
+whatever motion budget the envelope has left. The `lease_s` on the signed
+receipt is the lease the deadman will actually enforce — both are read from the
+watchdog itself, so they cannot disagree — and `stops_at_monotonic` says when
+the wheels stop, within one 50 ms watchdog tick and never sooner. A command that
+states no duration gets 400 ms. It is a Python thread on Linux: it covers a
+locked phone, a crashed app, dropped Wi-Fi, and a hung gateway. It does **not**
+cover the kernel stalling, the process being SIGKILLed, or the Pi browning out.
+The authoritative stop must be a lease that expires in firmware, on an MCU
+between the Pi and the ESC. Until that exists this manifest describes a vehicle
+that must run with its wheels off the ground — and here they do not exist.

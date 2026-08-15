@@ -1,0 +1,289 @@
+#!/usr/bin/env python3
+"""Rover's castor runtime: the phone-facing surface of a robot whose wheels
+live in another process.
+
+This is the OpenCastor runtime (`castor.api:app`, opencastor 3.0.2) with exactly
+two routes replaced. Everything else — /health, the 401 on an unauthenticated
+/api/health/detail that makes the app's "Secured" badge light up, the auth
+layers, uptime and identity reporting — is the stock runtime, unmodified.
+
+WHY TWO ROUTES ARE REPLACED, and not more:
+
+  POST /api/stop      The stock handler stops `state.driver`, which for Rover is
+                      the mock — it would return 200 having stopped nothing. The
+                      wheels are owned by the rc-car actuator inside
+                      the gateway, so the runtime's stop has to travel the same
+                      signed /v1/invoke path as every other command. A STOP
+                      button that answers 200 without reaching the thing that
+                      moves is worse than no button.
+
+  WS /ws/telemetry    The stock frame describes a perception loop. Rover's phone
+                      needs the DRIVE ENVELOPE: how many seconds of approved
+                      motion are left, when the approval lapses, what ceiling it
+                      carries, and who approved it. Those numbers only exist in
+                      the actuator, so this frame carries them straight through,
+                      under the key `envelope`, in the shape
+                      DriveEnvelopeState.from(telemetry:) parses.
+
+Nothing here is patched in the shared opencastor-runtime checkout: bob-castor
+runs the same editable install and must not change underneath it. The routes are
+swapped on the app object at start, in this process only.
+
+A NOTE ON SCOPE, because it looks odd on the wire. The gateway's tier gate reads
+the envelope's `scope`, which the CALLER supplies, and denies read-tier callers
+any scope in {MANIPULATE, NAVIGATE, ACTUATE, EXECUTE, COMMISSION}. This process
+holds the READ bearer on purpose — it must never be able to make the car move —
+so a stop it sends declares `scope: HALT`. That is not a way around the gate: it
+claims strictly LESS than ACTUATE and grants nothing read tier did not already
+have. What actually constrains drive.stop is the operator-controlled tool/tier
+binding in gateway-policy.env, which pins it at `read` precisely so that a stop
+can never be refused.
+"""
+from __future__ import annotations
+
+import json
+import os
+import time
+import urllib.error
+import urllib.request
+import uuid
+from pathlib import Path
+
+HOME_DIR = Path(os.environ["ROBOT_HOME"])
+
+# Must be set BEFORE castor.api is imported: it reads OPENCASTOR_API_TOKEN into a
+# module-level constant at import time, and an unset one means the runtime answers
+# every protected endpoint 200 to anybody — which the app would correctly show as
+# "unsecured".
+os.environ.setdefault("OPENCASTOR_CONFIG", str(HOME_DIR / "robot.rcan.yaml"))
+
+GATEWAY_URL = os.environ["ROBOT_GATEWAY_URL"]
+MANIFEST_PATH = os.environ.get("ROBOT_MANIFEST", str(HOME_DIR / "ROBOT.md"))
+RURI = "rcan://RRN-000000000012/robot"
+READ_TOKEN = os.environ.get("READ_TOKEN", "")
+
+if not os.environ.get("OPENCASTOR_API_TOKEN"):
+    raise SystemExit(
+        "FATAL: OPENCASTOR_API_TOKEN is unset. The runtime would answer every "
+        "protected endpoint to anybody, and the app's security probe would "
+        "report this robot as UNSECURED. Refusing to start."
+    )
+if not READ_TOKEN:
+    raise SystemExit(
+        "FATAL: READ_TOKEN is unset. The runtime could not reach the gateway, so "
+        "POST /api/stop would answer 200 without stopping anything. Refusing to "
+        "start."
+    )
+
+from fastapi import Depends, WebSocket  # noqa: E402
+from fastapi.routing import APIRoute, APIWebSocketRoute  # noqa: E402
+
+from castor.api import (  # noqa: E402
+    _build_telemetry_payload,
+    _ws_auth_ok,
+    app,
+    state,
+    verify_token,
+)
+
+import asyncio  # noqa: E402
+import logging  # noqa: E402
+
+logger = logging.getLogger("robot.runtime")
+
+
+# --------------------------------------------------------------------------
+# Talking to the gateway
+# --------------------------------------------------------------------------
+
+def _invoke(tool_name: str, scope: str, tool_args: dict | None = None,
+            timeout: float = 3.0) -> tuple[int, dict]:
+    """POST one RCAN INVOKE envelope. Returns (status, body).
+
+    Never raises: the caller is either a stop path or a telemetry frame, and
+    neither may die because the gateway was slow.
+    """
+    envelope = {
+        "msg_id": f"runtime-{uuid.uuid4().hex[:12]}",
+        "type": "rcan/v1/invoke",
+        "ruri": f"rcan://RRN-000000000012/{tool_name}",
+        "scope": scope,
+        "tool_name": tool_name,
+        "tool_args": tool_args or {},
+        "manifest_path": MANIFEST_PATH,
+        "nonce": uuid.uuid4().hex,
+        "timestamp_ms": int(time.time() * 1000),
+    }
+    req = urllib.request.Request(
+        f"{GATEWAY_URL}/v1/invoke",
+        data=json.dumps(envelope).encode(),
+        headers={"Content-Type": "application/json",
+                 "Authorization": f"Bearer {READ_TOKEN}"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, json.loads(resp.read() or b"{}")
+    except urllib.error.HTTPError as exc:
+        try:
+            return exc.code, json.loads(exc.read() or b"{}")
+        except Exception:
+            return exc.code, {}
+    except Exception as exc:  # transport, timeout, gateway down
+        return 0, {"error": f"{type(exc).__name__}: {exc}"}
+
+
+class _DriveStateCache:
+    """One status.report per telemetry frame at most, shared by every viewer.
+
+    The WS pushes at 5 Hz and there may be several sockets open. Without this,
+    every extra phone watching the budget drain would add its own poll to a
+    gateway that is also serving the commands being watched.
+    """
+
+    TTL_S = 0.2
+
+    def __init__(self) -> None:
+        self._at = 0.0
+        self._value: dict = {}
+        self._lock = asyncio.Lock()
+
+    async def get(self) -> dict:
+        async with self._lock:
+            if time.monotonic() - self._at < self.TTL_S:
+                return self._value
+            status, body = await asyncio.to_thread(
+                _invoke, "status.report", "OBSERVE", {}
+            )
+            if status == 200:
+                self._value = body.get("telemetry") or {}
+            else:
+                # An unreachable gateway must not be reported as a parked car.
+                # `envelope: null` is what "no approval" looks like, and claiming
+                # that while the truth is unknown would show a comfortable
+                # number for an approval nobody can see.
+                self._value = {"unreachable": True,
+                               "reason": body.get("error") or f"gateway HTTP {status}"}
+            self._at = time.monotonic()
+            return self._value
+
+
+_drive_state = _DriveStateCache()
+
+
+# --------------------------------------------------------------------------
+# Route surgery
+# --------------------------------------------------------------------------
+
+def _drop_routes(*paths: str) -> None:
+    keep = []
+    for route in app.routes:
+        if isinstance(route, (APIRoute, APIWebSocketRoute)) and route.path in paths:
+            continue
+        keep.append(route)
+    app.router.routes = keep
+
+
+_drop_routes("/api/stop", "/ws/telemetry")
+
+
+@app.post("/api/stop", dependencies=[Depends(verify_token)])
+async def robot_stop():
+    """Stop the car, for real, through the gateway that owns the wheels.
+
+    Returns 200 whenever the actuator confirms neutral. When the gateway cannot
+    be reached this reports `stopped: false` with the reason rather than a
+    cheerful 200 — the operator pressed STOP and deserves to know it did not
+    land.
+    """
+    status, body = await asyncio.to_thread(_invoke, "drive.stop", "HALT", {})
+    # The runtime's own mock driver and safety filesystem still get their stop,
+    # so the stock e-stop state stays coherent with what the app sees.
+    if state.driver:
+        try:
+            state.driver.stop()
+        except Exception:
+            logger.warning("mock driver stop() raised", exc_info=True)
+    if state.fs:
+        try:
+            state.fs.estop(principal="api")
+        except Exception:
+            logger.warning("safety-fs estop raised", exc_info=True)
+
+    if status == 200:
+        return {"status": "stopped", "actuator": body.get("telemetry", {}),
+                "receipt": body}
+    return {
+        "status": "stop_not_confirmed",
+        "stopped": False,
+        "gateway_status": status,
+        "reason": body.get("detail") or body.get("error") or "gateway did not confirm",
+    }
+
+
+@app.websocket("/ws/telemetry")
+async def robot_ws_telemetry(websocket: WebSocket, token: str = ""):
+    """Stock castor telemetry plus the drive envelope, pushed every 200 ms.
+
+    `envelope` is the actuator's own `describe()` dict, passed through untouched:
+    envelope_id, approved_by, motion_budget_s, motion_spent_s,
+    motion_remaining_s, window_s, window_remaining_s, max_throttle, revoked,
+    usable, unusable_because. It is `null` when no approval is open, which is a
+    real state and not a failure — it is what a parked, unauthorised vehicle
+    looks like.
+
+    The numbers are read from the ROBOT on every frame rather than counted down
+    here. A countdown in this process would drift from the one actually being
+    spent, and would keep counting after a revocation this process never heard
+    about.
+    """
+    if not _ws_auth_ok(token):
+        await websocket.close(code=1008)
+        return
+    await websocket.accept()
+
+    async def _push_loop():
+        while True:
+            try:
+                frame = await _build_telemetry_payload()
+            except Exception:
+                frame = {"ts": time.time(), "robot": os.environ.get("ROBOT_NAME", "robot")}
+            drive = await _drive_state.get()
+            frame["drive"] = drive
+            frame["envelope"] = drive.get("envelope")
+            try:
+                await websocket.send_json(frame)
+            except Exception:
+                return
+            await asyncio.sleep(0.2)
+
+    async def _recv_loop():
+        """A stop asked for over the socket goes to the same place as the button."""
+        try:
+            while True:
+                data = await websocket.receive_json()
+                if isinstance(data, dict) and data.get("cmd") == "stop":
+                    await asyncio.to_thread(_invoke, "drive.stop", "HALT", {})
+        except Exception:
+            return
+
+    push = asyncio.create_task(_push_loop())
+    recv = asyncio.create_task(_recv_loop())
+    try:
+        await asyncio.wait([push, recv], return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        for t in (push, recv):
+            if not t.done():
+                t.cancel()
+
+
+def main() -> None:
+    import uvicorn
+
+    host = os.environ.get("ROBOT_RUNTIME_HOST", "0.0.0.0")
+    port = int(os.environ["ROBOT_RUNTIME_PORT"])
+    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
+if __name__ == "__main__":
+    main()

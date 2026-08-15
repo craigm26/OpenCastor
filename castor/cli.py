@@ -365,6 +365,23 @@ def cmd_mcp(args) -> None:
     _mcp_run(token=token, config_path=config_path)
 
 
+def cmd_up(args) -> int:
+    """castor up — one non-interactive command from bare host to paired robot."""
+    from pathlib import Path as _P
+
+    from castor.up import run_up
+
+    run_up(
+        home=_P(args.home),
+        name=args.name,
+        archetype=args.archetype,
+        base_port=args.base_port,
+        python=args.python,
+        start_services=not args.no_start,
+    )
+    return 0
+
+
 def cmd_wizard(args) -> None:
     """Run the interactive setup wizard."""
     # Web-based wizard
@@ -8816,6 +8833,29 @@ def main() -> None:
     )
 
     # castor pair — pairing QR for the iOS app + gateway attestation wiring
+    p_up = sub.add_parser(
+        "up",
+        help="One command: detect hardware, generate the robot, start services, print the pairing QR",
+        epilog=(
+            "Examples:\n"
+            "  castor up                        # ~/robot, auto-detected archetype\n"
+            "  castor up --home ~/car --name car --base-port 8110\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_up.add_argument("--home", default=str(os.path.expanduser("~/robot")),
+                      help="Robot home directory (default ~/robot)")
+    p_up.add_argument("--name", default=None,
+                      help="Robot name (default: the home directory's name)")
+    p_up.add_argument("--archetype", default=None, choices=["rc-car", "sim"],
+                      help="Override hardware detection")
+    p_up.add_argument("--base-port", type=int, default=8080,
+                      help="Gateway port; runtime and console follow (+1, +2)")
+    p_up.add_argument("--python", default=None,
+                      help="Python for the services (default: this interpreter's env)")
+    p_up.add_argument("--no-start", action="store_true",
+                      help="Generate everything but do not start systemd units")
+
     p_pair = sub.add_parser(
         "pair",
         help="Print the iOS app pairing QR and wire gateway attestation (T-002)",
@@ -9232,6 +9272,7 @@ def main() -> None:
         "setup": cmd_setup,
         # iOS app pairing QR + gateway attestation wiring (T-002)
         "pair": cmd_pair,
+        "up": cmd_up,
         # Fleet UI deep links + QR codes
         "fleet-link": cmd_fleet_link,
         # Agent harness: skill evaluation
