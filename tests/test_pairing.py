@@ -353,6 +353,178 @@ def test_a_second_rotation_does_not_eat_the_first_backup(tmp_path):
     assert len(sorted(tmp_path.glob("attest.pem.rotated-*"))) >= 1
 
 
+# ---------------------------------------------------------------------------
+# The QR is a universal link — one QR, both audiences
+# ---------------------------------------------------------------------------
+
+
+#: A payload with the shape and the secrets a real one has. The tokens are
+#: fake, and named so that a grep of a failing test's output says what leaked.
+LIVE_PAYLOAD = {
+    "v": 1,
+    "gateway_url": "http://192.0.2.7:8081",
+    "bearer": "rmg_live_actuate_NEVER_IN_A_URL_PATH",
+    "manifest_path": "/home/pi/rover/ROBOT.md",
+    "rrn": "RRN-000000000012",
+    "estop_url": "http://192.0.2.7:8082/api/stop",
+    "console_token": "rmg_view_NEVER_IN_A_URL_PATH",
+    "capability_surface": {"capabilities": ["drive.set", "drive.stop"],
+                           "software_stop": True},
+}
+
+
+def _every_string_in(value) -> list[str]:
+    """Every string anywhere in the payload — what must not appear in a URL path."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [s for k, v in value.items() for s in _every_string_in(k) + _every_string_in(v)]
+    if isinstance(value, list):
+        return [s for v in value for s in _every_string_in(v)]
+    return []
+
+
+def test_the_link_prefix_is_exactly_the_pair_url():
+    # Pinned as a literal: this exact origin+path is what opencastor.com's
+    # apple-app-site-association claims for WYGG3JXWMG.com.opencastor.ios. Move
+    # it and every QR already printed and taped to a robot stops opening the app.
+    assert pairing.PAIR_LINK_BASE == "https://opencastor.com/pair"
+    assert pairing.pair_link(LIVE_PAYLOAD).startswith("https://opencastor.com/pair#")
+
+
+def test_THERULE_not_one_payload_byte_rides_before_the_hash():
+    """The payload holds a live actuate bearer, so it lives in the fragment.
+
+    Fragments are not sent to servers: no access log, no CDN cache key, no
+    analytics pixel ever sees this. A path or query segment would publish a
+    credential that can move a robot to every hop between the phone and
+    opencastor.com, and to whoever reads those logs afterwards.
+    """
+    link = pairing.pair_link(LIVE_PAYLOAD)
+    before, sep, fragment = link.partition("#")
+
+    assert sep == "#" and link.count("#") == 1
+    assert before == pairing.PAIR_LINK_BASE
+    assert "?" not in before, "a query string IS sent to the server"
+    for value in _every_string_in(LIVE_PAYLOAD):
+        assert value not in before, f"{value!r} rode in front of the '#'"
+    # All of it went into the fragment, whole.
+    assert pairing.decode_pair_link(link) == LIVE_PAYLOAD
+
+
+def test_the_fragment_carries_a_version_tag_the_app_can_parse_on():
+    fragment = pairing.encode_pair_fragment(LIVE_PAYLOAD)
+    tag, dot, body = fragment.partition(".")
+    assert (tag, dot) == ("v1", "."), fragment
+    assert body, "the tag must be followed by the encoded payload"
+    assert pairing.PAIR_LINK_SCHEMA == "v1"
+
+
+def test_the_body_is_unpadded_url_safe_base64():
+    # '+' and '/' would need percent-encoding to survive a URL, and '=' is legal
+    # but noisy in a QR and in every log line a human pastes it into.
+    body = pairing.encode_pair_fragment(LIVE_PAYLOAD).split(".", 1)[1]
+    assert set("+/=").isdisjoint(body), body
+
+
+def test_round_trip_is_byte_exact():
+    # The runtime has to be able to verify its own output, and the firmware and
+    # app parsers are written against this function.
+    payload = dict(LIVE_PAYLOAD, robot_name="rover-ünïcode", nested={"n": [1, 2, {"b": False}]})
+    link = pairing.pair_link(payload)
+    back = pairing.decode_pair_link(link)
+    assert back == payload
+    assert pairing.compact_payload_json(back) == pairing.compact_payload_json(payload)
+    assert pairing.pair_link(back) == link
+
+
+def test_an_unknown_version_tag_is_refused_rather_than_guessed_at():
+    with pytest.raises(ValueError, match="unknown pairing fragment version"):
+        pairing.decode_pair_fragment("v2.eyJ2IjoxfQ")
+    with pytest.raises(ValueError, match="unknown pairing fragment version"):
+        pairing.decode_pair_fragment("eyJ2IjoxfQ")  # no tag at all
+
+
+def test_a_link_without_a_fragment_is_not_a_pairing_link():
+    with pytest.raises(ValueError, match="no '#' fragment"):
+        pairing.decode_pair_link("https://opencastor.com/pair")
+
+
+def test_a_leading_hash_is_tolerated_because_that_is_how_a_browser_hands_it_over():
+    # `location.hash` includes the '#'; so does anything a person copies out of
+    # an address bar. Refusing it would be a parser being right and useless.
+    fragment = pairing.encode_pair_fragment(LIVE_PAYLOAD)
+    assert pairing.decode_pair_fragment("#" + fragment) == LIVE_PAYLOAD
+
+
+def test_a_self_hosted_pair_page_still_pairs():
+    # The fragment IS the pairing; what precedes the '#' only decides which
+    # explainer page a phone WITHOUT the app lands on.
+    fragment = pairing.encode_pair_fragment(LIVE_PAYLOAD)
+    assert pairing.decode_pair_link(f"https://robot.local/pair#{fragment}") == LIVE_PAYLOAD
+
+
+# ---------------------------------------------------------------------------
+# The byte budget is measured against whatever the camera actually reads
+# ---------------------------------------------------------------------------
+
+
+def _fat_surface(n_contracts: int) -> dict:
+    return {
+        "capabilities": ["arm.pick", "arm.place"],
+        "contracts": {f"arm.step{i}": {"args": {"x": {"kind": "float"}}}
+                      for i in range(n_contracts)},
+    }
+
+
+_BASE = dict(gateway_url="http://192.168.1.50:8080", bearer="rmg_live_actuate_x",
+             manifest_path="/home/pi/rover/ROBOT.md", rrn="RRN-000000000012")
+
+
+def test_THEBUG_the_fit_is_computed_on_the_link_length_in_link_mode():
+    """base64url costs ~33%, so a surface that fits the JSON can bust the QR.
+
+    A surface trimmed against the raw payload and then shipped as a link passes
+    its own fit check and still comes out as a 177-module grid nobody can scan
+    at arm's length — the fit was measured on a string that never reached a
+    camera. Same budget, longer string: link mode drops the contracts sooner.
+    """
+    surface = _fat_surface(22)
+
+    raw = pairing.build_pair_payload(**_BASE, capability_surface=surface)
+    assert "contracts" in raw["capability_surface"], "precondition: this fits as raw JSON"
+
+    linked = pairing.build_pair_payload(**_BASE, capability_surface=surface, for_link=True)
+    assert "contracts" not in linked["capability_surface"]
+    # Detail is dropped, never invented: the capability list survives.
+    assert linked["capability_surface"]["capabilities"] == ["arm.pick", "arm.place"]
+    assert len(pairing.pair_link(linked).encode("utf-8")) <= pairing.PAIR_QR_BYTE_BUDGET
+
+
+def test_link_mode_keeps_the_whole_link_under_the_budget():
+    linked = pairing.build_pair_payload(**_BASE, capability_surface=_fat_surface(40),
+                                        for_link=True)
+    assert len(pairing.pair_link(linked).encode("utf-8")) <= pairing.PAIR_QR_BYTE_BUDGET
+
+
+def test_no_link_mode_budgets_exactly_as_it_always_did():
+    # --no-link must restore today's behaviour byte for byte, including how much
+    # of the surface survives.
+    surface = _fat_surface(22)
+    default = pairing.build_pair_payload(**_BASE, capability_surface=surface)
+    explicit = pairing.build_pair_payload(**_BASE, capability_surface=surface, for_link=False)
+    assert default == explicit
+    assert len(pairing.compact_payload_json(default).encode()) <= pairing.PAIR_QR_BYTE_BUDGET
+
+
+def test_a_small_robot_pairs_with_the_same_payload_either_way():
+    # Nothing about linking changes the payload itself; only how much of a big
+    # capability surface fits. The overwhelmingly common robot is unaffected.
+    small = {"capabilities": ["drive.set", "drive.stop"]}
+    assert (pairing.build_pair_payload(**_BASE, capability_surface=small)
+            == pairing.build_pair_payload(**_BASE, capability_surface=small, for_link=True))
+
+
 class TestWritePairArtifacts:
     """One command puts the QR where the runbooks say it lives.
 
@@ -389,6 +561,62 @@ class TestWritePairArtifacts:
         got = decode(Image.open(written["qr"]))
         assert json.loads(got[0].data) == self.PAYLOAD
 
+    def test_link_mode_writes_pair_link_txt_and_points_the_qr_at_it(self, tmp_path):
+        import qrcode
+
+        from castor.pairing import decode_pair_link, pair_link, write_pair_artifacts
+
+        written = write_pair_artifacts(self.PAYLOAD, tmp_path / "robot", link=True)
+        link = pair_link(self.PAYLOAD)
+
+        assert written["link"].name == "pair-link.txt"
+        assert written["link"].read_text() == link + "\n"
+        # The fragment carries the same live bearer the JSON does.
+        assert (written["link"].stat().st_mode & 0o777) == 0o600
+        assert decode_pair_link(written["link"].read_text().strip()) == self.PAYLOAD
+
+        # The PNG is the QR of the LINK, not of the JSON. Byte-compared against
+        # the library's own output for the link: no decoder needed to prove it.
+        reference = tmp_path / "reference.png"
+        qrcode.make(link).save(str(reference))
+        assert written["qr"].read_bytes() == reference.read_bytes()
+
+        # The payload of record is unchanged — it is still what gets pasted.
+        assert json.loads(written["payload"].read_text()) == self.PAYLOAD
+
+    def test_no_link_is_byte_identical_to_the_raw_json_qr(self, tmp_path):
+        import qrcode
+
+        from castor.pairing import compact_payload_json, write_pair_artifacts
+
+        written = write_pair_artifacts(self.PAYLOAD, tmp_path / "robot", link=False)
+        reference = tmp_path / "reference.png"
+        qrcode.make(compact_payload_json(self.PAYLOAD)).save(str(reference))
+
+        assert written["qr"].read_bytes() == reference.read_bytes()
+        assert "link" not in written
+        assert not (tmp_path / "robot" / "pair-link.txt").exists()
+
+    def test_the_link_file_is_written_even_without_qrcode(self, tmp_path, monkeypatch):
+        # A link you can paste into a phone is MORE useful than the PNG when
+        # there is no qrcode package and no scannable screen, so it must not be
+        # collateral damage of the optional dependency being absent.
+        import builtins
+
+        from castor import pairing
+
+        real_import = builtins.__import__
+
+        def no_qrcode(name, *a, **k):
+            if name == "qrcode":
+                raise ImportError("not installed")
+            return real_import(name, *a, **k)
+
+        monkeypatch.setattr(builtins, "__import__", no_qrcode)
+        written = pairing.write_pair_artifacts(self.PAYLOAD, tmp_path, link=True)
+        assert set(written) == {"payload", "link"}
+        assert written["link"].read_text().startswith("https://opencastor.com/pair#v1.")
+
     def test_missing_qrcode_degrades_to_json_only(self, tmp_path, monkeypatch):
         # A missing nicety must not block a pairing: the JSON is the payload of
         # record and pasting it is the documented fallback.
@@ -406,6 +634,83 @@ class TestWritePairArtifacts:
         monkeypatch.setattr(builtins, "__import__", no_qrcode)
         written = pairing.write_pair_artifacts(self.PAYLOAD, tmp_path)
         assert "payload" in written and "qr" not in written
+
+
+class TestCastorPairLinkFlag:
+    """`castor pair` links by default; --no-link is the escape hatch.
+
+    The QR used to encode raw JSON, which only the app's in-app scanner
+    understood — a phone camera showed a wall of gibberish to someone who had no
+    way to know what it was or what to install.
+    """
+
+    def _args(self, tmp_path, out_dir, **over):
+        import types
+
+        manifest = tmp_path / "ROBOT.md"
+        manifest.write_text(MANIFEST)
+        bearers = tmp_path / "bearers.yaml"
+        bearers.write_text("- token: rmg_live_actuate_x\n  tier: actuate\n")
+        kwargs = dict(
+            manifest_path=str(manifest),
+            gateway_url="http://192.0.2.7:8081", port=8081,
+            bearer=None, bearers=str(bearers), rrn=None,
+            estop_url=None,
+            console_url=None, console_port=None, console_token=None,
+            out_dir=str(out_dir),
+            key_file=str(tmp_path / "attest.pem"),
+            env_file=str(tmp_path / "attest.env"),
+            kid=None, force=False,
+        )
+        kwargs.update(over)
+        return types.SimpleNamespace(**kwargs)
+
+    def test_the_default_qr_is_the_universal_link(self, tmp_path, monkeypatch, capsys):
+        import qrcode
+
+        from castor.cli import cmd_pair
+
+        monkeypatch.delenv("CONSOLE_TOKEN", raising=False)
+        out = tmp_path / "out"
+        assert cmd_pair(self._args(tmp_path, out, link=True)) == 0
+
+        payload = json.loads((out / "pair-payload.json").read_text())
+        link = (out / "pair-link.txt").read_text().strip()
+        assert link.startswith("https://opencastor.com/pair#v1.")
+        assert pairing.decode_pair_link(link) == payload
+
+        reference = tmp_path / "ref.png"
+        qrcode.make(link).save(str(reference))
+        assert (out / "pair-qr.png").read_bytes() == reference.read_bytes()
+        # The bearer is printed in the decoded payload as it always was, but the
+        # link the operator is told to hand around keeps it after the '#'.
+        assert "pair#v1." in capsys.readouterr().out
+
+    def test_no_link_restores_the_raw_json_qr(self, tmp_path, monkeypatch):
+        import qrcode
+
+        from castor.cli import cmd_pair
+
+        monkeypatch.delenv("CONSOLE_TOKEN", raising=False)
+        out = tmp_path / "out"
+        assert cmd_pair(self._args(tmp_path, out, link=False)) == 0
+
+        payload = json.loads((out / "pair-payload.json").read_text())
+        assert not (out / "pair-link.txt").exists()
+
+        reference = tmp_path / "ref.png"
+        qrcode.make(pairing.compact_payload_json(payload)).save(str(reference))
+        assert (out / "pair-qr.png").read_bytes() == reference.read_bytes()
+
+    def test_an_args_namespace_without_the_flag_still_links(self, tmp_path, monkeypatch):
+        # Older callers (and the hand-built namespaces in the other test modules)
+        # must land on the default, not silently opt out of it.
+        from castor.cli import cmd_pair
+
+        monkeypatch.delenv("CONSOLE_TOKEN", raising=False)
+        out = tmp_path / "out"
+        assert cmd_pair(self._args(tmp_path, out)) == 0
+        assert (out / "pair-link.txt").exists()
 
 
 class TestRunPairConsoleFields:

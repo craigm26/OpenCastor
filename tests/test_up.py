@@ -181,6 +181,80 @@ def test_with_the_actuator_installed_rc_car_is_chosen():
 
 
 # ---------------------------------------------------------------------------
+# The pairing QR — a universal link by default
+# ---------------------------------------------------------------------------
+
+
+def _stub_the_host(monkeypatch, tmp_path) -> None:
+    """Let `up` run for real without touching this machine.
+
+    HOME is redirected (so systemd units land in the scratch tree), the bus scan
+    and the port probes are stubbed out, and gaps collection is skipped. Twin of
+    the helper in test_console.py: a test must not enumerate the operator's I2C
+    bus or poke a live service to prove that a file got written.
+    """
+    import castor.up as up
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setattr(up, "detect_brain", lambda: ("ollama", ""))
+    monkeypatch.setattr(up, "_port_answers", lambda port: False)
+    monkeypatch.setattr("castor.peripherals.scan_i2c", lambda: [])
+    monkeypatch.setattr("castor.gaps.collect", lambda **kwargs: [])
+
+
+def test_the_up_qr_opens_the_app_from_any_phone_camera(tmp_path, monkeypatch):
+    """`up` ends in a QR, and the person holding the phone is often a beginner.
+
+    Encoding raw JSON meant only the app's own in-app scanner understood it — a
+    camera showed a wall of gibberish to someone with no way to know what it was
+    or what to install. `up` follows `castor pair`: the QR is a universal link.
+    """
+    import json
+    import sys
+
+    import qrcode
+
+    import castor.up as up
+    from castor.pairing import PAIR_QR_BYTE_BUDGET, decode_pair_link, pair_link
+
+    _stub_the_host(monkeypatch, tmp_path)
+    home = tmp_path / "testbot"
+    up.run_up(home=home, base_port=8300, python=sys.executable, start_services=False)
+
+    payload = json.loads((home / "pair-payload.json").read_text())
+    link = (home / "pair-link.txt").read_text().strip()
+    assert link.startswith("https://opencastor.com/pair#v1.")
+    assert decode_pair_link(link) == payload
+    # The QR is the link's, not the JSON's.
+    reference = tmp_path / "ref.png"
+    qrcode.make(pair_link(payload)).save(str(reference))
+    assert (home / "pair-qr.png").read_bytes() == reference.read_bytes()
+    # And the whole thing still fits the budget a camera can resolve.
+    assert len(link.encode("utf-8")) <= PAIR_QR_BYTE_BUDGET
+
+
+def test_up_no_link_writes_the_raw_json_qr(tmp_path, monkeypatch):
+    import json
+    import sys
+
+    import qrcode
+
+    import castor.up as up
+    from castor.pairing import compact_payload_json
+
+    _stub_the_host(monkeypatch, tmp_path)
+    home = tmp_path / "testbot"
+    up.run_up(home=home, base_port=8300, python=sys.executable, start_services=False,
+              link=False)
+
+    assert not (home / "pair-link.txt").exists()
+    payload = json.loads((home / "pair-payload.json").read_text())
+    reference = tmp_path / "ref.png"
+    qrcode.make(compact_payload_json(payload)).save(str(reference))
+    assert (home / "pair-qr.png").read_bytes() == reference.read_bytes()
+
+
+# ---------------------------------------------------------------------------
 # Gaps — missing pieces as data, never self-closing
 # ---------------------------------------------------------------------------
 

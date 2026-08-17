@@ -314,8 +314,14 @@ def _say(step: str, started: float) -> None:
 
 def run_up(*, home: Path, name: str | None = None, archetype: str | None = None,
            base_port: int = 8080, python: str | None = None,
-           start_services: bool = True) -> UpPlan:
-    """The whole bring-up. Prints progress; returns the plan for callers/tests."""
+           start_services: bool = True, link: bool = True) -> UpPlan:
+    """The whole bring-up. Prints progress; returns the plan for callers/tests.
+
+    ``link`` (default on, same as ``castor pair``) makes the pairing QR a
+    universal link — a phone camera opens the app, or the /pair explainer page
+    if it is not installed. ``link=False`` writes the raw-JSON QR only the app's
+    in-app scanner reads.
+    """
     started = time.monotonic()
     home = home.expanduser().resolve()
     name = name or home.name
@@ -507,9 +513,11 @@ def run_up(*, home: Path, name: str | None = None, archetype: str | None = None,
         attest_pub=base64.b64encode(
             _spki_der(identity.pub_file)).decode(),
         capability_surface=capability_surface_from_manifest(home / "ROBOT.md"),
+        for_link=link,
     )
-    write_pair_artifacts(payload, home)
-    _say(f"pairing QR: {home / 'pair-qr.png'}", started)
+    write_pair_artifacts(payload, home, link=link)
+    _say(f"pairing QR: {home / 'pair-qr.png'}"
+         + (" (opens the app from any phone camera)" if link else ""), started)
 
     # -- gaps: what this host's hardware could do that its software can't yet.
     # Data, not log lines — the app renders it, an AI can read it, and closing
@@ -523,8 +531,9 @@ def run_up(*, home: Path, name: str | None = None, archetype: str | None = None,
     else:
         write_gaps([], home)
         _say("gaps: none — everything detected has a driver and a brain", started)
+    scan_with = "with any phone camera" if link else "with the OpenCastor app"
     print(f"\nDone in {time.monotonic() - started:.0f}s. "
-          f"Scan {home / 'pair-qr.png'} with the OpenCastor app, "
+          f"Scan {home / 'pair-qr.png'} {scan_with}, "
           "then follow “Run your first drive”.")
     return plan
 

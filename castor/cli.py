@@ -467,6 +467,7 @@ def cmd_up(args) -> int:
         base_port=args.base_port,
         python=args.python,
         start_services=not args.no_start,
+        link=getattr(args, "link", True),
     )
     return 0
 
@@ -3745,12 +3746,19 @@ def cmd_pair(args) -> int:
 
     Generates an Ed25519 attestation identity, wires it into the gateway's env
     config (ROBOT_MD_ATTESTATION_KEY_FILE + _KID so /v1/invoke returns signed
-    receipts), and prints a scannable QR encoding
+    receipts), and prints a scannable QR carrying
     {v, gateway_url, bearer, manifest_path, rrn, estop_url?, capability_surface?}.
 
     capability_surface is this robot's own declared capabilities, projected out of
     its ROBOT.md, so the phone renders THIS robot rather than whichever manifest it
     happens to have bundled.
+
+    By default the QR encodes https://opencastor.com/pair#v1.<base64url payload>
+    — a universal link, so a phone CAMERA opens the app (or the explainer page)
+    instead of showing a wall of JSON. --no-link restores the raw-JSON QR that
+    only the app's in-app scanner reads. The payload rides in the fragment and
+    never in the path or query: fragments are not sent to servers, and this one
+    carries a live actuate bearer (see castor/pairing.py).
     """
     import json as _json
     from pathlib import Path
@@ -3762,6 +3770,10 @@ def cmd_pair(args) -> int:
     if not manifest_path.exists():
         print(f"error: manifest (ROBOT.md) not found: {manifest_path}", file=sys.stderr)
         raise SystemExit(1)
+
+    # Linking is the default; getattr keeps older callers (and tests that build
+    # an args namespace by hand) on it rather than silently opting them out.
+    link = getattr(args, "link", True)
 
     # gateway_url — explicit flag wins, else best-effort LAN URL.
     gateway_url = args.gateway_url or pairing.default_gateway_url(port=args.port)
@@ -3858,26 +3870,38 @@ def cmd_pair(args) -> int:
             console_url=console_url,
             console_token=console_token,
             force=args.force,
+            for_link=link,
         )
     except FileExistsError as exc:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(1)
 
-    # Compact separators: every byte of pretty-printing is another QR module the
-    # camera has to resolve, and it is the same JSON either way. This is also the
-    # encoding PAIR_QR_BYTE_BUDGET is measured in, so the printed QR is the one
-    # the budget was sized for.
+    # What the QR carries. In link mode it is the universal link, whose fragment
+    # holds the same payload base64url'd; otherwise the compact JSON, with every
+    # byte of pretty-printing being another module the camera has to resolve.
+    # Either way this is the string PAIR_QR_BYTE_BUDGET was measured against, so
+    # the printed QR is the one the budget was sized for.
     payload_json = _json.dumps(result.payload, separators=(",", ":"))
+    qr_content = pairing.pair_link(result.payload) if link else payload_json
 
     if args.out_dir:
-        written = pairing.write_pair_artifacts(result.payload, Path(args.out_dir))
+        written = pairing.write_pair_artifacts(result.payload, Path(args.out_dir), link=link)
         print("\nWrote:")
         for name, path in written.items():
             print(f"  {name:8}: {path}")
 
-    print("\nScan this QR from the OpenCastor iOS app to pair:\n")
-    _print_qr(payload_json)
+    if link:
+        print("\nScan this QR with any phone camera — with the OpenCastor app "
+              "installed it\nopens straight into pairing; without it, "
+              "opencastor.com/pair explains what\nit is and where to get the app:\n")
+    else:
+        print("\nScan this QR from the OpenCastor iOS app to pair:\n")
+    _print_qr(qr_content)
     print()
+    if link:
+        print("Pairing link (the payload rides in the fragment — never sent to a server):")
+        print(f"  {qr_content}")
+        print()
     print("Pairing payload (decoded):")
     print(_json.dumps(result.payload, indent=2))
     print()
@@ -9115,6 +9139,10 @@ def main() -> None:
                       help="Python for the services (default: this interpreter's env)")
     p_up.add_argument("--no-start", action="store_true",
                       help="Generate everything but do not start systemd units")
+    p_up.add_argument("--no-link", dest="link", action="store_false", default=True,
+                      help="Make the pairing QR the raw payload JSON instead of the "
+                           "https://opencastor.com/pair universal link (default: the "
+                           "link, which any phone camera can open)")
 
     p_cap = sub.add_parser(
         "capability",
@@ -9218,9 +9246,26 @@ def main() -> None:
     p_pair.add_argument(
         "--out-dir",
         default=None,
-        help="Also write pair-payload.json and pair-qr.png here (e.g. ~/rover). "
-        "The runbooks reference these files; without this flag they had to be "
-        "assembled by hand, which is how a QR ends up pinned to a stale IP.",
+        help="Also write pair-payload.json, pair-link.txt and pair-qr.png here "
+        "(e.g. ~/rover). The runbooks reference these files; without this flag "
+        "they had to be assembled by hand, which is how a QR ends up pinned to "
+        "a stale IP.",
+    )
+    p_pair.add_argument(
+        "--link",
+        dest="link",
+        action="store_true",
+        default=True,
+        help="Encode the QR as https://opencastor.com/pair#<payload> so a phone "
+        "camera opens the app — or the explainer page if it is not installed "
+        "(default).",
+    )
+    p_pair.add_argument(
+        "--no-link",
+        dest="link",
+        action="store_false",
+        help="Encode the raw payload JSON instead. Only the OpenCastor app's "
+        "in-app scanner reads that; a phone camera shows gibberish.",
     )
     p_pair.add_argument(
         "--key-file",

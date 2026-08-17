@@ -61,6 +61,37 @@ is optional and only present if you pass `--estop-url`.
 The full contract the iOS apps consume — this payload (v1) plus the eval and
 benchmark endpoint set — is frozen in [docs/ios/platatlas-ios.md](../ios/platatlas-ios.md).
 
+### The QR is a universal link
+
+By default the QR does not encode that JSON directly. It encodes a link:
+
+```
+https://opencastor.com/pair#v1.<base64url of the compact payload JSON>
+```
+
+One QR, both audiences:
+
+- **App installed** — opencastor.com serves an `apple-app-site-association`
+  covering `/pair` for the OpenCastor iOS app, so the phone opens the app
+  straight into pairing. Nothing is fetched; the app reads the fragment it was
+  handed.
+- **App not installed** — the phone's browser lands on
+  [opencastor.com/pair](https://opencastor.com/pair), which explains what the QR
+  is and ends in an App Store button.
+
+The old behaviour — a QR encoding the raw JSON, which only the app's own in-app
+scanner understood — is still available with `--no-link`.
+
+**The payload rides in the fragment, and only there.** It carries a live
+actuate-tier bearer and a console token. Everything after a `#` is stripped by
+the browser before the request goes out: it never reaches a server, an access
+log, a CDN cache key or an analytics pixel. Nothing may move a payload field
+into the path or the query, however convenient it looks.
+
+With `--out-dir`, `castor pair` writes the link to `pair-link.txt` (mode `0600`,
+same as `pair-payload.json` — it holds the same credentials). `castor up` does
+the same in the robot home, and takes the same `--no-link`.
+
 ## Start the gateway with attestation enabled
 
 `castor pair` prints these lines — run them to (re)start the gateway with the

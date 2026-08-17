@@ -31,6 +31,30 @@ Built by `castor.pairing.build_pair_payload` (`castor/pairing.py`;
 Change policy: any breaking change bumps `PAIR_PAYLOAD_VERSION`; additive
 optional fields are allowed within `v: 1`.
 
+### How the payload reaches the app — frozen
+
+The QR encodes a **universal link**, not the JSON:
+
+```
+https://opencastor.com/pair#v1.<unpadded base64url of the compact payload JSON>
+```
+
+- `v1.` is the **envelope** version (`castor.pairing.PAIR_LINK_SCHEMA`), separate
+  from the payload's own `v`: it versions the encoding, so a client knows what it
+  was handed before it parses. Clients MUST reject an unrecognised tag.
+- The base64url body is unpadded; add `=` back to a multiple of 4 before
+  decoding. Reference implementation:
+  `castor.pairing.encode_pair_fragment` / `decode_pair_fragment`.
+- The payload is **only ever** in the fragment. It carries a live actuate bearer,
+  and fragments are not sent to servers. Nothing may put a payload field in the
+  path or the query.
+- The origin in front of the `#` is not load-bearing for pairing — it only
+  decides which explainer page a phone WITHOUT the app lands on. A self-hosted
+  `/pair` still pairs.
+- `castor pair --no-link` / `castor up --no-link` fall back to a QR containing
+  the raw compact JSON, which is what shipped before universal links. Clients
+  should keep accepting both.
+
 ## 2. Two auth domains — do not conflate them
 
 - The QR `bearer` authenticates **robot-md-gateway** (`gateway_url`) only.

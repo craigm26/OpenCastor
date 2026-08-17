@@ -23,10 +23,47 @@ app. `castor pair`:
 Pure logic lives here (no argparse, no printing) so it is unit-testable; the
 ``castor pair`` CLI glue in ``castor/cli.py`` calls ``run_pair`` then renders the
 QR + JSON.
+
+THE QR IS A UNIVERSAL LINK
+--------------------------
+
+The QR used to encode the raw payload JSON, which only the OpenCastor app's own
+in-app scanner understood — a phone camera pointed at it showed a wall of
+gibberish, and the person holding the phone had no idea what they were looking
+at or what to install. So the QR now encodes a link instead::
+
+    https://opencastor.com/pair#v1.<base64url of the compact payload JSON>
+
+One QR, both audiences:
+
+  * **App installed** — opencastor.com serves an ``apple-app-site-association``
+    covering ``/pair`` for ``WYGG3JXWMG.com.opencastor.ios``, so iOS opens the
+    app straight into pairing (once the app ships its associated-domains
+    entitlement). Nothing is fetched; the app reads the fragment it was handed.
+  * **App not installed** — the phone's browser lands on the /pair explainer
+    page, which says what this is and ends in an App Store button.
+
+THE PAYLOAD RIDES IN THE FRAGMENT, AND ONLY THERE
+-------------------------------------------------
+
+The payload carries live credentials: an actuate-tier gateway bearer that can
+move the robot, and a console token. It goes after the ``#`` because **URL
+fragments are never sent to the server**. Not in the request line, so not in an
+access log; not to a CDN, so not in a cache key; not to an analytics pixel, so
+not in someone's funnel dashboard. Putting one byte of it in the path or the
+query would publish a live bearer to every hop between the phone and
+opencastor.com — and to whoever reads those logs later. ``test_pairing.py`` pins
+this: nothing before the ``#`` may contain payload bytes.
+
+The ``v1.`` tag in front of the base64url is a parsing version, separate from
+the payload's own ``v``: it lets the app evolve the *envelope* (a different
+encoding, a compressed body) without guessing at what it was handed.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import hashlib
 import logging
@@ -53,7 +90,22 @@ PAIR_PAYLOAD_VERSION = 1
 # Below this ceiling the capability surface is carried whole; above it the biggest
 # and least load-bearing parts are dropped (see _fit_surface) rather than letting
 # `castor pair` emit a QR nobody can scan.
+#
+# In LINK MODE the budget is measured against the LINK, not the JSON: base64url
+# costs ~33% over the raw bytes and the prefix costs another 34, and it is the
+# link the camera has to resolve. Measuring the wrong string is how a QR that
+# passes its own fit check still fails at arm's length.
 PAIR_QR_BYTE_BUDGET = 1400
+
+# The universal link the QR encodes. opencastor.com serves an
+# apple-app-site-association covering /pair for WYGG3JXWMG.com.opencastor.ios,
+# and /pair is a live explainer page for phones that do not have the app.
+PAIR_LINK_BASE = "https://opencastor.com/pair"
+
+# Fragment envelope tag — `v1.<base64url>`. Deliberately NOT the same number as
+# PAIR_PAYLOAD_VERSION: this versions how the fragment is *encoded*, so the app
+# can be handed a different encoding some day and know it before it parses.
+PAIR_LINK_SCHEMA = "v1"
 
 
 @dataclass(frozen=True)
@@ -362,7 +414,84 @@ def _project_contracts(raw: object) -> dict:
     return out
 
 
-def _fit_surface(payload: dict, surface: dict, budget: int) -> dict | None:
+def compact_payload_json(payload: dict) -> str:
+    """The payload's canonical compact JSON — the one form everything encodes.
+
+    Compact separators, key order as built. The QR, the byte budget and the link
+    fragment all measure and encode THIS string, so a payload that fits is the
+    payload that ships.
+    """
+    return json.dumps(payload, separators=(",", ":"))
+
+
+def encode_pair_fragment(payload: dict) -> str:
+    """``v1.<unpadded base64url of the compact payload JSON>``.
+
+    Unpadded because ``=`` is legal in a fragment but ugly in a QR and in every
+    log line a human ever pastes it into; the decoder puts the padding back.
+    """
+    compact = compact_payload_json(payload).encode("utf-8")
+    encoded = base64.urlsafe_b64encode(compact).decode("ascii").rstrip("=")
+    return f"{PAIR_LINK_SCHEMA}.{encoded}"
+
+
+def decode_pair_fragment(fragment: str) -> dict:
+    """The inverse of :func:`encode_pair_fragment`. Raises ValueError if it isn't one.
+
+    This is the reference implementation: the runtime verifies its own QR with
+    it, and the firmware and app parsers are written against it.
+    """
+    fragment = fragment.lstrip("#")
+    tag, dot, encoded = fragment.partition(".")
+    if not dot or tag != PAIR_LINK_SCHEMA:
+        raise ValueError(
+            f"unknown pairing fragment version {tag!r} (this runtime writes "
+            f"{PAIR_LINK_SCHEMA!r})")
+    try:
+        raw = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError(f"pairing fragment is not base64url: {exc}") from exc
+    payload = json.loads(raw.decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("pairing fragment did not decode to a JSON object")
+    return payload
+
+
+def pair_link(payload: dict) -> str:
+    """The full universal link: ``https://opencastor.com/pair#v1.<base64url>``.
+
+    EVERY byte of the payload is after the ``#``. Fragments are not sent to
+    servers, and this payload holds a live actuate bearer — see the module
+    docstring. Nothing here may ever move a payload field into the path or the
+    query, however convenient it looks.
+    """
+    return f"{PAIR_LINK_BASE}#{encode_pair_fragment(payload)}"
+
+
+def decode_pair_link(link: str) -> dict:
+    """Read a payload back out of a pairing link. Raises ValueError if it isn't one.
+
+    Deliberately indifferent to what precedes the ``#``: the fragment *is* the
+    pairing, and the origin in front of it only decides which explainer page a
+    phone without the app lands on. A self-hosted /pair page still pairs.
+    """
+    _, sep, fragment = link.partition("#")
+    if not sep:
+        # The input is not echoed: a pairing link is a credential, and error
+        # text ends up in bug reports.
+        raise ValueError("not a pairing link: no '#' fragment")
+    return decode_pair_fragment(fragment)
+
+
+def _encoded_size(payload: dict, *, for_link: bool) -> int:
+    """Bytes the QR actually has to carry for this payload."""
+    if for_link:
+        return len(pair_link(payload).encode("utf-8"))
+    return len(compact_payload_json(payload).encode("utf-8"))
+
+
+def _fit_surface(payload: dict, surface: dict, budget: int, *,
+                 for_link: bool = False) -> dict | None:
     """Trim the capability surface until the encoded payload fits ``budget`` bytes.
 
     Drops in order of least value per byte: the contracts (by far the largest
@@ -370,16 +499,18 @@ def _fit_surface(payload: dict, surface: dict, budget: int) -> dict | None:
     the declared gates, then the surface entirely. A robot with an unusually rich
     manifest therefore still gets a scannable QR carrying its capability list, and
     only ever loses detail — it never gains a claim.
-    """
-    import json as _json
 
+    ``for_link`` measures the LINK the QR will carry rather than the raw JSON,
+    because that is the string the camera resolves. Same budget, longer string:
+    a rich manifest loses its contracts one step sooner in link mode.
+    """
     candidate = dict(surface)
     for drop in (None, "contracts", "object_descriptors", "gates"):
         if drop:
             candidate.pop(drop, None)
         probe = dict(payload)
         probe["capability_surface"] = candidate
-        if len(_json.dumps(probe, separators=(",", ":")).encode("utf-8")) <= budget:
+        if _encoded_size(probe, for_link=for_link) <= budget:
             return candidate
     return None
 
@@ -449,6 +580,7 @@ def build_pair_payload(
     console_url: str | None = None,
     console_token: str | None = None,
     capability_surface: dict | None = None,
+    for_link: bool = False,
 ) -> dict:
     """Build the pairing QR payload. estop_url is included only when provided.
 
@@ -460,6 +592,12 @@ def build_pair_payload(
     capability_surface — this robot's own declared capabilities (see
     ``capability_surface_from_manifest``) — rides last and is trimmed to fit
     ``PAIR_QR_BYTE_BUDGET``, because a QR too dense to scan pairs nothing.
+
+    for_link budgets that trim against the universal LINK (:func:`pair_link`)
+    rather than the raw JSON — base64url costs ~33% and the prefix another 34,
+    and it is the link the camera resolves. It defaults False so every existing
+    caller and every ``--no-link`` run produces byte-identical output to before;
+    ``castor pair`` and ``castor up`` pass True.
     """
     payload = {
         "v": PAIR_PAYLOAD_VERSION,
@@ -480,7 +618,8 @@ def build_pair_payload(
         payload["console_url"] = console_url
         payload["console_token"] = console_token
     if capability_surface and capability_surface.get("capabilities"):
-        fitted = _fit_surface(payload, capability_surface, PAIR_QR_BYTE_BUDGET)
+        fitted = _fit_surface(payload, capability_surface, PAIR_QR_BYTE_BUDGET,
+                              for_link=for_link)
         if fitted:
             payload["capability_surface"] = fitted
     return payload
@@ -489,8 +628,6 @@ def build_pair_payload(
 def _attest_pub_b64(pub_file: Path) -> str | None:
     """Standard-base64 SPKI DER of the attestation public key, for the QR."""
     try:
-        import base64
-
         from cryptography.hazmat.primitives import serialization
 
         key = serialization.load_pem_public_key(pub_file.expanduser().read_bytes())
@@ -515,6 +652,7 @@ def run_pair(
     console_url: str | None = None,
     console_token: str | None = None,
     force: bool = False,
+    for_link: bool = False,
 ) -> PairResult:
     """Generate the identity, wire the env, and build the QR payload.
 
@@ -522,6 +660,9 @@ def run_pair(
     manifest_path is resolved to an absolute gateway-host-local path before it is
     placed in the QR (the client cannot guess it), and the robot's own declared
     capability surface is projected out of that same manifest into the QR.
+
+    for_link budgets the capability surface against the universal link the QR
+    will carry rather than the raw JSON (see :func:`build_pair_payload`).
     """
     identity = generate_attestation_identity(key_file, kid=kid, force=force)
 
@@ -539,11 +680,12 @@ def run_pair(
         attest_kid=identity.kid,
         attest_pub=_attest_pub_b64(identity.pub_file),
         capability_surface=capability_surface_from_manifest(manifest_path),
+        for_link=for_link,
     )
     return PairResult(payload=payload, identity=identity, env_file=env_file.expanduser())
 
 
-def write_pair_artifacts(payload: dict, out_dir: Path) -> dict[str, Path]:
+def write_pair_artifacts(payload: dict, out_dir: Path, *, link: bool = False) -> dict[str, Path]:
     """Write pair-payload.json and (when possible) pair-qr.png into out_dir.
 
     WHY THIS EXISTS AS A FUNCTION AND NOT A RUNBOOK STEP. Every robot on the
@@ -559,17 +701,31 @@ def write_pair_artifacts(payload: dict, out_dir: Path) -> dict[str, Path]:
     PNG needs the optional ``qrcode`` package; without it this degrades to
     JSON-only rather than failing, because a missing nicety must not block a
     pairing. Returned dict maps artifact name to written path.
+
+    ``link=True`` also writes pair-link.txt and points the PNG at that link
+    instead of the raw JSON, so a phone CAMERA — not just the app's in-app
+    scanner — does something useful with the QR. pair-link.txt is written before
+    the PNG is attempted and is 0600 like the JSON: its fragment carries the same
+    live bearer, and it is the artifact you can paste into a phone when there is
+    no qrcode package and no scannable screen.
     """
     out_dir = out_dir.expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
     written: dict[str, Path] = {}
 
-    compact = json.dumps(payload, separators=(",", ":"))
+    compact = compact_payload_json(payload)
     json_path = out_dir / "pair-payload.json"
     # Pretty for the file (humans diff it), compact for the QR (bytes matter).
     _atomic_write_bytes(json_path, (json.dumps(payload, indent=1) + "\n").encode(),
                         mode=0o600)
     written["payload"] = json_path
+
+    qr_content = compact
+    if link:
+        qr_content = pair_link(payload)
+        link_path = out_dir / "pair-link.txt"
+        _atomic_write_bytes(link_path, (qr_content + "\n").encode(), mode=0o600)
+        written["link"] = link_path
 
     try:
         import qrcode  # noqa: PLC0415 - optional dependency, degrade gracefully
@@ -579,7 +735,7 @@ def write_pair_artifacts(payload: dict, out_dir: Path) -> dict[str, Path]:
         return written
 
     png_path = out_dir / "pair-qr.png"
-    qrcode.make(compact).save(str(png_path))
+    qrcode.make(qr_content).save(str(png_path))
     png_path.chmod(0o600)
     written["qr"] = png_path
     return written
