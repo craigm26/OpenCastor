@@ -2,103 +2,100 @@
 /**
  * The quiet header. One Docs door, GitHub, the App Store. Nothing else.
  *
- * Self-contained on purpose: it carries its own palette tokens so it can sit
- * on top of the new home page (home.css) and on top of the older doc pages
- * (global.css) without either stylesheet having to know about it.
+ * The five-dropdown nav it replaced is not coming back, but its LOOK is the
+ * site's own and does: the brand mark, the link scale and the App Store pill
+ * are global.css's `.nav-logo` / `.nav-logo-img` / `.nav-logo-text` /
+ * `.btn-nav`, so this header is the site's header with fewer doors rather than
+ * a different site's header.
+ *
+ * The one thing not borrowed is `.nav-links`: below 768px global.css turns that
+ * class into a fixed drawer that only appears with `.open`, which needs a
+ * hamburger to open it. Three links do not need a drawer, so the row here keeps
+ * its own class and copies `.nav-links a`'s scale and hover instead. That is
+ * why a phone still shows all three doors.
  */
 ---
 
 <header class="oc-head">
-  <div class="oc-head-inner">
-    <a class="oc-mark" href="/">OpenCastor</a>
+  <div class="oc-head-inner container">
+    <a class="nav-logo" href="/">
+      <img
+        src="/assets/icon-64.png"
+        alt=""
+        class="nav-logo-img"
+        width="26"
+        height="26"
+        aria-hidden="true"
+      />
+      <span class="nav-logo-text">OpenCastor</span>
+    </a>
     <nav class="oc-nav" aria-label="Primary">
       <a href="/docs">Docs</a>
       <a href="https://github.com/craigm26/OpenCastor" rel="noopener">GitHub</a>
-      <a href="https://apps.apple.com/us/app/opencastor/id6791719005">App Store</a>
+      <a class="btn-nav" href="https://apps.apple.com/us/app/opencastor/id6791719005">
+        App Store
+      </a>
     </nav>
   </div>
 </header>
 
 <style>
+  /* Sticky, glass and blurred, which is what global.css's `.site-nav` does when
+     it scrolls. Every colour is a global.css token so light mode follows. */
   .oc-head {
-    /* complete light palette, on the component root */
-    --h-bg: #edeee6;
-    --h-ink: #143028;
-    --h-slate: #5d6c73;
-    --h-hair: rgba(20, 48, 40, 0.12);
-    --h-focus: #c0761c;
-
-    background: var(--h-bg);
-    color: var(--h-ink);
-    border-bottom: 1px solid var(--h-hair);
-    font-family:
-      'Atkinson Hyperlegible Next', system-ui, -apple-system, 'Segoe UI', Roboto,
-      Helvetica, Arial, sans-serif;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
   }
-
-  @media (prefers-color-scheme: dark) {
-    :global(:root:not([data-theme='light'])) .oc-head {
-      --h-bg: #0e1412;
-      --h-ink: #e6e8df;
-      --h-slate: #93a3a8;
-      --h-hair: rgba(230, 232, 223, 0.14);
-      --h-focus: #e39b4a;
-    }
-  }
-  :global(:root[data-theme='dark']) .oc-head {
-    --h-bg: #0e1412;
-    --h-ink: #e6e8df;
-    --h-slate: #93a3a8;
-    --h-hair: rgba(230, 232, 223, 0.14);
-    --h-focus: #e39b4a;
-  }
-
   .oc-head-inner {
-    width: 100%;
-    max-width: 74rem;
-    margin: 0 auto;
-    padding: 0 1.5rem;
-    min-height: 3.75rem;
+    min-height: 60px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 1.25rem;
-    box-sizing: border-box;
   }
-
-  .oc-mark {
-    font-family: 'Newsreader', 'Iowan Old Style', 'Palatino Linotype', Palatino,
-      Georgia, serif;
-    font-weight: 400;
-    font-size: 1.0625rem;
-    color: var(--h-ink);
-    text-decoration: none;
-  }
-
   .oc-nav {
     display: flex;
     align-items: center;
-    gap: 1.35rem;
-    font-size: 0.875rem;
+    gap: 6px;
   }
+  /* .nav-links a, restated: same scale, same weight, same hover wash. */
   .oc-nav a {
-    color: var(--h-slate);
+    font-size: 0.8375rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    padding: 6px 11px;
+    border-radius: 8px;
     text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.15s ease, background 0.15s ease;
   }
   .oc-nav a:hover {
-    color: var(--h-ink);
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.05);
+  }
+  :global([data-theme='light']) .oc-nav a:hover {
+    background: rgba(0, 0, 0, 0.04);
+  }
+  /* The App Store pill keeps global.css's .btn-nav, so it overrides the row. */
+  .oc-nav a.btn-nav {
+    color: var(--text);
+    margin-left: 4px;
   }
   .oc-head :focus-visible {
-    outline: 2px solid var(--h-focus);
+    outline: 2px solid var(--accent);
     outline-offset: 3px;
   }
-
   @media (max-width: 30rem) {
-    .oc-head-inner {
-      padding: 0 1.15rem;
-    }
     .oc-nav {
-      gap: 1rem;
+      gap: 2px;
+    }
+    .oc-nav a {
+      padding: 6px 8px;
       font-size: 0.8125rem;
     }
   }

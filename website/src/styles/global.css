@@ -38,12 +38,14 @@
   --code-str: #f97316;
   --code-num: #a855f7;
 
-  /* Self-hosted OFL faces (see src/styles/fonts.css). The Google Fonts link
-     these tokens used to depend on is gone: the site now makes zero
-     third-party requests. */
-  --font-display: 'Atkinson Hyperlegible Next', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-body: 'Atkinson Hyperlegible Next', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* The site's own stacks, unchanged in intent. The Google Fonts <link> these
+     names used to arrive through is gone and has not come back: the site makes
+     zero third-party requests, so each family is a preference and the system
+     face after it is what most visitors actually get. Nothing is self-hosted
+     either: a web font is not worth a 170 KB download on this page. */
+  --font-display: 'Inter', 'Bricolage Grotesque', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-body: 'Inter', 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
 
   --section-py: 100px;
   --container: 1140px;

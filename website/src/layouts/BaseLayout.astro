@@ -7,25 +7,24 @@
  * own content and keep returning 200. What changed is only the shell:
  *
  *   1. The old five-dropdown nav is gone, replaced by the shared quiet header
- *      (one Docs door, GitHub, TestFlight).
- *   2. The Google Fonts <link> is gone. The site now makes zero third-party
- *      requests, so the same self-hosted OFL faces serve these pages too.
+ *      (one Docs door, GitHub, the App Store).
+ *   2. The Google Fonts <link> is gone. The site makes zero third-party
+ *      requests; global.css's stacks resolve to the visitor's system faces.
  *   3. A footer, which this shell did not have at all. Replacing the old
  *      five-dropdown nav with a three-link header left 84 pages with NO
  *      navigation to each other: the changelog, the tutorials, the beginner
  *      path, the hardware guides, the hub, the config explorer, the blog and
  *      the about page were reachable only from the home page's own footer.
- *      The same list now sits at the bottom of every page that uses this
- *      shell, which is what makes the home page's claim that they all still
- *      work an honest one.
+ *      SiteFooter now sits at the bottom of every page that uses this shell,
+ *      which is what makes the home page's claim that they all still work an
+ *      honest one.
  *
- * global.css is otherwise untouched. The footer below carries its own scoped
- * styles and its own palette fallbacks so it does not depend on which tokens
- * global.css happens to define.
+ * global.css is otherwise untouched, and the footer is now the shared component
+ * rather than a second copy of the same links with its own private palette.
  */
-import "../styles/fonts.css";
 import "../styles/global.css";
 import SiteHeader from "../components/SiteHeader.astro";
+import SiteFooter from "../components/SiteFooter.astro";
 
 export interface Props {
   title: string;
@@ -62,8 +61,6 @@ const {
   {canonical && <link rel="canonical" href={canonical} />}
   <!-- favicon.png, not favicon.svg: the svg in public/ is 359 KB. -->
   <link rel="icon" type="image/png" href="/favicon.png" />
-  <link rel="preload" as="font" type="font/woff2"
-        href="/fonts/atkinson-hyperlegible-next-latin-wght-normal.woff2" crossorigin />
 
   <!-- Theme init: must run before render to prevent flash -->
   <script is:inline>
@@ -82,102 +79,7 @@ const {
 
 <slot />
 
-<footer class="oc-foot">
-  <div class="oc-foot-inner">
-    <nav class="oc-foot-links" aria-label="Footer">
-      <a href="/">Home</a>
-      <a href="/docs">Docs</a>
-      <a href="https://github.com/craigm26/OpenCastor" rel="noopener">GitHub</a>
-      <a href="https://robotmd.dev" rel="noopener">robotmd.dev</a>
-      <a href="https://rcan.dev" rel="noopener">rcan.dev</a>
-      <a href="https://apps.apple.com/us/app/opencastor/id6791719005">App Store</a>
-    </nav>
-
-    <!-- The rest of this site. This is the whole of these pages'
-         navigation to each other, so the list is complete on purpose and is
-         kept identical to the one in HomeLayout. -->
-    <nav class="oc-foot-links oc-foot-quiet" aria-label="The rest of this site">
-      <a href="/changelog">Changelog</a>
-      <a href="/tutorials">Tutorials</a>
-      <a href="/beginners">Beginners</a>
-      <a href="/hardware">Hardware</a>
-      <a href="/hub">Hub</a>
-      <a href="/explore">Explore configs</a>
-      <a href="/blog">Blog</a>
-      <a href="/about">About</a>
-      <a href="/pair">Pairing QRs</a>
-    </nav>
-
-    <p class="oc-foot-note">Apache 2.0. The documentation lives at docs.opencastor.com.</p>
-  </div>
-</footer>
-
-<style>
-  .oc-foot {
-    --f-bg: #edeee6;
-    --f-ink: #143028;
-    --f-slate: #5d6c73;
-    --f-hair: rgba(20, 48, 40, 0.12);
-
-    background: var(--f-bg);
-    color: var(--f-ink);
-    border-top: 1px solid var(--f-hair);
-    margin-top: 4rem;
-    padding: 2.5rem 0 3rem;
-    font-family:
-      'Atkinson Hyperlegible Next', system-ui, -apple-system, 'Segoe UI', Roboto,
-      Helvetica, Arial, sans-serif;
-  }
-  @media (prefers-color-scheme: dark) {
-    :global(:root:not([data-theme='light'])) .oc-foot {
-      --f-bg: #0e1412;
-      --f-ink: #e6e8df;
-      --f-slate: #93a3a8;
-      --f-hair: rgba(230, 232, 223, 0.14);
-    }
-  }
-  :global(:root[data-theme='dark']) .oc-foot {
-    --f-bg: #0e1412;
-    --f-ink: #e6e8df;
-    --f-slate: #93a3a8;
-    --f-hair: rgba(230, 232, 223, 0.14);
-  }
-
-  .oc-foot-inner {
-    width: 100%;
-    max-width: 74rem;
-    margin: 0 auto;
-    padding: 0 1.5rem;
-    box-sizing: border-box;
-  }
-  .oc-foot-links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem 1.5rem;
-    font-size: 0.875rem;
-  }
-  .oc-foot-links a {
-    color: var(--f-slate);
-    text-decoration: none;
-  }
-  .oc-foot-links a:hover {
-    color: var(--f-ink);
-  }
-  .oc-foot-quiet {
-    margin-top: 0.75rem;
-    font-size: 0.8125rem;
-    gap: 0.3rem 1.1rem;
-  }
-  .oc-foot-note {
-    margin: 1.5rem 0 0;
-    color: var(--f-slate);
-    font-size: 0.8125rem;
-  }
-  .oc-foot :focus-visible {
-    outline: 2px solid #c0761c;
-    outline-offset: 3px;
-  }
-</style>
+<SiteFooter />
 
 <script is:inline>
 (function () {

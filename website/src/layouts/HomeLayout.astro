@@ -1,16 +1,22 @@
 ---
 /**
- * HomeLayout — the "Speech Score" shell.
+ * HomeLayout — the shell for the three speech-score pages (/, /pair,
+ * /testflight).
  *
- * Deliberately NOT BaseLayout: BaseLayout imports global.css, whose navy /
- * Inter / gradient system fights this page. This layout imports home.css and
- * nothing else, and it makes zero third-party requests: the four woff2 files
- * are served from /fonts/.
+ * It is a thin wrapper now. It used to import home.css AND NOTHING ELSE, on the
+ * grounds that global.css's navy palette "fought" this page; the answer was to
+ * stop fighting it. Both stylesheets load here, in this order: global.css is the
+ * site's design system and home.css is only the layer of objects these pages
+ * add to it (the speech score, the receipt, the plan card, the ink bars).
+ *
+ * The one thing this shell still has that BaseLayout does not is the script at
+ * the end of the body: the section settle, the log stagger, the copy buttons and
+ * the press-and-hold stop demo. Those belong to these pages, not to the site.
  */
+import '../styles/global.css';
 import '../styles/home.css';
 import SiteHeader from '../components/SiteHeader.astro';
-import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import SiteFooter from '../components/SiteFooter.astro';
 
 export interface Props {
   title: string;
@@ -23,52 +29,18 @@ const {
   description = 'OpenCastor is the open source runtime that connects AI brains to robot bodies. Speak or type one sentence, a local model drafts a bounded plan, you sign it, and the wheels turn.',
   canonical,
 } = Astro.props;
-
-/* ------------------------------------------------------------------------
-   Real build stamp. Every value below is read at build time from a real
-   source. Nothing here is authored by hand, and there is no signature line:
-   a fabricated envelope signature on a web page is exactly the artifact
-   this product exists to make impossible.
-   ------------------------------------------------------------------------ */
-
-function pkgVersion(): string {
-  try {
-    const toml = readFileSync(new URL('../../../pyproject.toml', import.meta.url), 'utf8');
-    return toml.match(/^version\s*=\s*"([^"]+)"/m)?.[1] ?? 'unknown';
-  } catch {
-    return 'unknown';
-  }
-}
-
-function commitSha(): string {
-  const fromCI = process.env.CF_PAGES_COMMIT_SHA ?? process.env.GIT_COMMIT_SHA;
-  if (fromCI) return fromCI.slice(0, 7);
-  try {
-    return execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-  } catch {
-    return 'unknown';
-  }
-}
-
-const build = {
-  version: pkgVersion(),
-  commit: commitSha(),
-  at: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
-};
 ---
 
 <!--
-  No `no-js` class and no script in the head. The old arrangement hid every
-  section with `.settle { opacity: 0 }` and depended on a head script plus a
-  script at the end of the body to give the content back, which made a
-  decoration load-bearing. It is inverted now: the content ships visible, and
-  the settle animation exists only inside the `js-anim` class that the script
-  at the end of this file adds as its first act. If that script never runs, the
-  page is simply still.
+  There is no `no-js` class and no content-revealing script in the head. The old
+  arrangement hid every section with `.settle { opacity: 0 }` and depended on a
+  head script plus a script at the end of the body to give the content back,
+  which made a decoration load-bearing. It is inverted now: the content ships
+  visible, and the settle animation exists only inside the `js-anim` class that
+  the script at the end of this file adds as its first act. If that script never
+  runs, the page is simply still.
 -->
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -79,39 +51,26 @@ const build = {
     <meta property="og:type" content="website" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
+    <meta name="twitter:card" content="summary_large_image" />
     {canonical && <link rel="canonical" href={canonical} />}
     <!-- favicon.png, not favicon.svg: the svg in public/ is 359 KB, which is
          larger than this entire page. -->
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
-    <link
-      rel="preload"
-      as="font"
-      type="font/woff2"
-      href="/fonts/atkinson-hyperlegible-next-latin-wght-normal.woff2"
-      crossorigin
-    />
-    <link
-      rel="preload"
-      as="font"
-      type="font/woff2"
-      href="/fonts/newsreader-latin-wght-normal.woff2"
-      crossorigin
-    />
-    <link
-      rel="preload"
-      as="font"
-      type="font/woff2"
-      href="/fonts/newsreader-latin-wght-italic.woff2"
-      crossorigin
-    />
-    <link
-      rel="preload"
-      as="font"
-      type="font/woff2"
-      href="/fonts/ibm-plex-mono-latin-400-normal.woff2"
-      crossorigin
-    />
+
+    <!-- Theme init, the same one BaseLayout runs, so a stored preference holds
+         across the whole site. This is not load-bearing: with no script at all,
+         global.css's tokens already follow prefers-color-scheme. -->
+    <script is:inline>
+      (function () {
+        var t = localStorage.getItem('oc-theme');
+        if (t) {
+          document.documentElement.setAttribute('data-theme', t);
+        } else if (!window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
   </head>
 
   <body>
@@ -120,48 +79,9 @@ const build = {
     <main id="main">
       <slot />
     </main>
+    <SiteFooter stamp={true} />
 
-    <footer class="site-foot">
-      <div class="wrap">
-        <div class="foot-stamp mono">
-          <dl>
-            <dt>package</dt>
-            <dd>opencastor {build.version}</dd>
-            <dt>commit</dt>
-            <dd>{build.commit}</dd>
-            <dt>built</dt>
-            <dd>{build.at}</dd>
-            <dt>license</dt>
-            <dd>Apache 2.0</dd>
-          </dl>
-        </div>
-        <nav class="foot-links" aria-label="Footer">
-          <a href="/docs">Docs</a>
-          <a href="https://github.com/craigm26/OpenCastor" rel="noopener">GitHub</a>
-          <a href="https://robotmd.dev" rel="noopener">robotmd.dev</a>
-          <a href="https://rcan.dev" rel="noopener">rcan.dev</a>
-          <a href="https://apps.apple.com/us/app/opencastor/id6791719005">App Store</a>
-        </nav>
-
-        <!-- The rest of this site. These routes all still return 200 and none of
-             them appear in the header, so the footer is the whole of their
-             navigation: nothing that used to work became unreachable. The same
-             list is in BaseLayout, which is the shell those pages use. -->
-        <nav class="foot-links foot-quiet" aria-label="The rest of this site">
-          <a href="/changelog">Changelog</a>
-          <a href="/tutorials">Tutorials</a>
-          <a href="/beginners">Beginners</a>
-          <a href="/hardware">Hardware</a>
-          <a href="/hub">Hub</a>
-          <a href="/explore">Explore configs</a>
-          <a href="/blog">Blog</a>
-          <a href="/about">About</a>
-          <a href="/pair">Pairing QRs</a>
-        </nav>
-      </div>
-    </footer>
-
-    <!-- The page's only script: the section settle, the log stagger, the
+    <!-- These pages' only script: the section settle, the log stagger, the
          install copy button, and the press-and-hold stop demo. Every
          transcript, log and receipt is already complete in the HTML above;
          this file only animates their arrival, and it can fail without taking

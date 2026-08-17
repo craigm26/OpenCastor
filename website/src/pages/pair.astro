@@ -44,8 +44,8 @@ const payloadFields = [
   description="A robot hands itself to you by showing you a code. What that code carries, and what the demo QR on the ESP32-C6 bench board does not."
 >
   <!-- =============================================== 1. YOU SCANNED IT === -->
-  <section aria-labelledby="pair-h">
-    <div class="wrap two-col">
+  <section class="section" aria-labelledby="pair-h">
+    <div class="container two-col">
       <div class="body-copy">
         <h1 class="chapter" id="pair-h">You just scanned a robot's face.</h1>
         <p class="lede" style="margin-bottom:2rem">
@@ -93,8 +93,8 @@ const payloadFields = [
   </section>
 
   <!-- ============================================ 2. THE REAL PAYLOAD ==== -->
-  <section class="settle" aria-labelledby="real-h">
-    <div class="wrap two-col">
+  <section class="section settle" aria-labelledby="real-h">
+    <div class="container two-col">
       <div class="body-copy">
         <h2 class="plain" id="real-h">What a real pairing QR carries.</h2>
         <p>
@@ -108,7 +108,7 @@ const payloadFields = [
           stay checkable against the key that arrived in the same scan.
         </p>
         <p style="margin-top:1.5rem">
-          <a class="btn" href="/">Back to the runtime</a>
+          <a class="btn btn-secondary" href="/">Back to the runtime</a>
         </p>
       </div>
 
@@ -133,8 +133,8 @@ const payloadFields = [
   </section>
 
   <!-- ============================================== 3. WHERE IT GOES ===== -->
-  <section class="settle" aria-labelledby="next-h">
-    <div class="wrap">
+  <section class="section settle" aria-labelledby="next-h">
+    <div class="container">
       <h2 class="plain" id="next-h">What is not built yet.</h2>
       <div class="two-col">
         <div class="body-copy">
@@ -156,12 +156,12 @@ const payloadFields = [
         <div class="cta-row" style="margin-top:0">
           <div>
             <a
-              class="btn"
+              class="btn btn-secondary"
               href="https://github.com/craigm26/OpenCastor/issues/941"
               rel="noopener">Issue 941, the MCU host work</a>
           </div>
           <div class="cta-tf">
-            <a class="btn" href="https://apps.apple.com/us/app/opencastor/id6791719005">Get the iOS app on the App Store</a>
+            <a class="btn btn-primary" href="https://apps.apple.com/us/app/opencastor/id6791719005">Get the iOS app on the App Store</a>
             <p class="beta">
               Public beta, and we mean beta. Builds change most weeks, some
               things are rough, and the release notes tell you which.
