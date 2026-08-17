@@ -21,3 +21,6 @@
 
 /install
   Content-Type: text/plain
+
+/.well-known/apple-app-site-association
+  Content-Type: application/json

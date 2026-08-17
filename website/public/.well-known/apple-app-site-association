@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["WYGG3JXWMG.com.opencastor.ios"],
+        "components": [
+          { "/": "/pair", "comment": "pairing universal link - the robot's QR opens the app" },
+          { "/": "/pair/*", "comment": "pairing with payload path segments" }
+        ],
+        "paths": ["/pair", "/pair/*"]
+      }
+    ]
+  }
+}
