@@ -1,81 +1,40 @@
 ---
 /* =========================================================================
-   /testflight  ·  the honest TestFlight door.
+   /testflight  ·  a door that outlived its hallway, kept so old links work.
 
-   WHY THIS PAGE EXISTS: the home page needs a TestFlight destination in three
-   places (header, hero CTA, section 7 and the closing CTA). There is no public
-   TestFlight join link for the OpenCastor iOS app in this repo or anywhere on
-   this machine, and inventing one would ship a dead link, so the link is a
-   marked slot instead of a guess.
-
-   TO FILL IT: replace the `joinUrl = null` line below with the real public
-   link, e.g. `const joinUrl = 'https://testflight.apple.com/join/XXXXXXXX';`.
-   Nothing else on this page or on the home page has to change.
+   HISTORY: this page was the honest TestFlight slot while the app was in
+   beta. On 2026-08-17 the operator confirmed OpenCastor 1.0 is live on the
+   App Store (verified via the iTunes lookup API, id 6791719005), so every
+   CTA on the site now points at the store. This route stays because links
+   to /testflight exist in the wild; it says the good news and points on.
    ========================================================================= */
 import HomeLayout from '../layouts/HomeLayout.astro';
 
-const joinUrl: string | null = null;
+const appStoreUrl = 'https://apps.apple.com/us/app/opencastor/id6791719005';
 ---
 
 <HomeLayout
-  title="OpenCastor TestFlight beta"
+  title="OpenCastor on the App Store"
   canonical="https://opencastor.com/testflight"
-  description="The OpenCastor iOS app is in public TestFlight beta. It is the robot's face, and on a vehicle its eye."
+  description="OpenCastor for iOS is out of beta and on the App Store. It is the robot's face, and on a vehicle its eye."
 >
   <section aria-labelledby="tf-h">
     <div class="wrap">
-      <h1 class="chapter" id="tf-h">The app is in beta, and we mean beta.</h1>
-      <div class="two-col">
-        <div class="body-copy">
-          <p>
-            The iOS app is the robot's face, and on a vehicle it is also its
-            eye. Wake word, per robot brain assignment, and an autonomy grant
-            you hand over on purpose. Autonomy is tiered by what the camera can
-            actually see: with LiDAR it runs full, with sparse depth it creeps
-            only, and blind it refuses and tells you why.
-          </p>
-          <p>
-            Builds change most weeks, some things are rough, and the release
-            notes tell you which. If that is the deal you want, the join link
-            is on this page.
-          </p>
-          <p style="margin-top:1.75rem">
-            <a class="btn" href="/">Back to the runtime</a>
-          </p>
-        </div>
-
-        <div>
-          {
-            joinUrl ? (
-              <p><a class="btn" href={joinUrl} rel="noopener">Join the TestFlight beta</a></p>
-            ) : (
-              <>
-                <!-- OPERATOR SLOT: the public TestFlight join link. Set
-                     `joinUrl` at the top of this file. -->
-                <p class="tf-slot">Join the TestFlight beta</p>
-                <p class="meta" style="margin-top:0.6rem">
-                  operator TestFlight join link pending
-                </p>
-                <p class="hairline" style="margin-top:1.25rem;max-width:34ch">
-                  We would rather show you an empty slot than a link that goes
-                  nowhere. Until it lands, the runtime itself is a
-                  <code>pip install</code> away.
-                </p>
-              </>
-            )
-          }
-
-          <div class="foot-stamp mono" style="margin-top:2rem">
-            <dl>
-              <dt>platform</dt>
-              <dd>iOS, TestFlight public beta</dd>
-              <dt>channel</dt>
-              <dd>beta only</dd>
-              <dt>license</dt>
-              <dd>Apache 2.0</dd>
-            </dl>
-          </div>
-        </div>
+      <h1 class="chapter" id="tf-h">The beta ended the good way.</h1>
+      <div class="body-copy">
+        <p>
+          OpenCastor for iOS is on the App Store now, version 1.0, free. This
+          page used to be the TestFlight door. It kept its address so old
+          links keep working.
+        </p>
+        <p>
+          <a class="btn" href={appStoreUrl}>Get OpenCastor on the App Store</a>
+        </p>
+        <p>
+          It is the robot's face, and on a vehicle its eye: pairing by QR,
+          driving inside signed approvals, a chat that drafts and never runs,
+          and a stop that always wins.
+        </p>
       </div>
     </div>
   </section>
