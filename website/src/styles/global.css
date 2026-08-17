@@ -38,9 +38,12 @@
   --code-str: #f97316;
   --code-num: #a855f7;
 
-  --font-display: 'Inter', 'Bricolage Grotesque', Georgia, serif;
-  --font-body: 'Inter', 'DM Sans', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  /* Self-hosted OFL faces (see src/styles/fonts.css). The Google Fonts link
+     these tokens used to depend on is gone: the site now makes zero
+     third-party requests. */
+  --font-display: 'Atkinson Hyperlegible Next', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-body: 'Atkinson Hyperlegible Next', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   --section-py: 100px;
   --container: 1140px;

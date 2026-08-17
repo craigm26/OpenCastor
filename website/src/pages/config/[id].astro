@@ -128,8 +128,16 @@ const installCmd = `castor install opencastor.com/config/${id}`;
   </section>
 </main>
 
-<!-- QR code generation (qrcode.js from CDN) -->
-<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+<!--
+  QR code generation. The library is SELF-HOSTED at /vendor/qrcode.min.js:
+  qrcode 1.5.1, MIT licence, copyright (c) 2012 Ryan Day, taken unmodified from
+  the published npm tarball (see the header of that file for the sha256 of the
+  bytes and the provenance note). It used to load from a third-party host on
+  all 30 of these pages, which meant every visitor's browser announced itself
+  to someone else's server to draw a QR code. This site now makes no
+  third-party requests at all.
+-->
+<script src="/vendor/qrcode.min.js" is:inline></script>
 <script define:vars={{ installCmd, id }}>
   // Generate QR code
   document.addEventListener('DOMContentLoaded', () => {

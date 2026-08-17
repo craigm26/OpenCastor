@@ -132,12 +132,18 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         <p class="section-desc">The contribute lifecycle &mdash; from idle detection to result submission.</p>
       </div>
 
+      <!--
+        This used to be rendered by mermaid, imported at runtime from a
+        third-party CDN. The site makes no third-party requests, so the diagram
+        SOURCE is what ships: it is readable as text, it needs no JavaScript,
+        and it is still copy-pasteable into anything that does render mermaid.
+      -->
       <div class="mermaid-card reveal">
         <div class="mermaid-header">
           <span class="mermaid-label">castor/contribute.py &middot; contribute scheduler</span>
-          <span class="mermaid-version">v2026.3.20+</span>
+          <span class="mermaid-version">mermaid flowchart source &middot; v2026.3.20+</span>
         </div>
-        <div class="mermaid">
+        <pre class="diagram-src">
 flowchart TD
     IDLE["Robot idle > threshold"] --> CHECK&#123;"Active command?"&#125;
     CHECK -->|YES| WAIT["Wait &mdash; robot busy"]
@@ -154,7 +160,7 @@ flowchart TD
     style WAIT fill:#f97316,color:#fff,stroke:#ea580c
     style RUN fill:#22c55e,color:#fff,stroke:#16a34a
     style SUBMIT fill:#22c55e,color:#fff,stroke:#16a34a
-        </div>
+        </pre>
       </div>
 
       <div class="reveal" style="max-width:760px;margin:32px auto 0">
@@ -490,27 +496,11 @@ flowchart TD
 
 </main>
 
-<!-- Mermaid.js (CDN, no build dep) -->
-<script type="module">
-  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-  mermaid.initialize({
-    startOnLoad: true,
-    theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default',
-    themeVariables: {
-      fontFamily: 'inherit',
-      fontSize: '14px',
-    },
-    flowchart: { curve: 'basis', padding: 20 },
-  });
-
-  // Re-render on theme toggle
-  const observer = new MutationObserver(() => {
-    const theme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default';
-    mermaid.initialize({ startOnLoad: false, theme });
-    mermaid.run();
-  });
-  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-</script>
+<!--
+  The mermaid runtime import that used to live here is gone. It pulled a
+  multi-megabyte ES module from a third-party CDN on every visit, which is a
+  request this site does not make, and the diagram above now ships as source.
+-->
 
 <style>
   .mermaid-card {
@@ -539,7 +529,16 @@ flowchart TD
     font-size: 0.75rem;
     font-weight: 600;
   }
-  .mermaid { padding: 24px; overflow-x: auto; }
+  .diagram-src {
+    margin: 0;
+    padding: 24px;
+    overflow-x: auto;
+    white-space: pre;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    color: var(--text-secondary, inherit);
+  }
   .arch-table {
     width: 100%;
     border-collapse: collapse;
@@ -559,8 +558,6 @@ flowchart TD
   }
   .arch-table tr:last-child td { border-bottom: none; }
 
-  /* Make mermaid diagrams respect dark theme */
-  :root[data-theme="dark"] .mermaid svg { filter: invert(0.05) hue-rotate(180deg) brightness(0.95); }
 </style>
 
 </BaseLayout>

@@ -1,0 +1,105 @@
+---
+/**
+ * The quiet header. One Docs door, GitHub, TestFlight. Nothing else.
+ *
+ * Self-contained on purpose: it carries its own palette tokens so it can sit
+ * on top of the new home page (home.css) and on top of the older doc pages
+ * (global.css) without either stylesheet having to know about it.
+ */
+---
+
+<header class="oc-head">
+  <div class="oc-head-inner">
+    <a class="oc-mark" href="/">OpenCastor</a>
+    <nav class="oc-nav" aria-label="Primary">
+      <a href="/docs">Docs</a>
+      <a href="https://github.com/craigm26/OpenCastor" rel="noopener">GitHub</a>
+      <a href="/testflight">TestFlight</a>
+    </nav>
+  </div>
+</header>
+
+<style>
+  .oc-head {
+    /* complete light palette, on the component root */
+    --h-bg: #edeee6;
+    --h-ink: #143028;
+    --h-slate: #5d6c73;
+    --h-hair: rgba(20, 48, 40, 0.12);
+    --h-focus: #c0761c;
+
+    background: var(--h-bg);
+    color: var(--h-ink);
+    border-bottom: 1px solid var(--h-hair);
+    font-family:
+      'Atkinson Hyperlegible Next', system-ui, -apple-system, 'Segoe UI', Roboto,
+      Helvetica, Arial, sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :global(:root:not([data-theme='light'])) .oc-head {
+      --h-bg: #0e1412;
+      --h-ink: #e6e8df;
+      --h-slate: #93a3a8;
+      --h-hair: rgba(230, 232, 223, 0.14);
+      --h-focus: #e39b4a;
+    }
+  }
+  :global(:root[data-theme='dark']) .oc-head {
+    --h-bg: #0e1412;
+    --h-ink: #e6e8df;
+    --h-slate: #93a3a8;
+    --h-hair: rgba(230, 232, 223, 0.14);
+    --h-focus: #e39b4a;
+  }
+
+  .oc-head-inner {
+    width: 100%;
+    max-width: 74rem;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+    min-height: 3.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.25rem;
+    box-sizing: border-box;
+  }
+
+  .oc-mark {
+    font-family: 'Newsreader', 'Iowan Old Style', 'Palatino Linotype', Palatino,
+      Georgia, serif;
+    font-weight: 400;
+    font-size: 1.0625rem;
+    color: var(--h-ink);
+    text-decoration: none;
+  }
+
+  .oc-nav {
+    display: flex;
+    align-items: center;
+    gap: 1.35rem;
+    font-size: 0.875rem;
+  }
+  .oc-nav a {
+    color: var(--h-slate);
+    text-decoration: none;
+  }
+  .oc-nav a:hover {
+    color: var(--h-ink);
+  }
+  .oc-head :focus-visible {
+    outline: 2px solid var(--h-focus);
+    outline-offset: 3px;
+  }
+
+  @media (max-width: 30rem) {
+    .oc-head-inner {
+      padding: 0 1.15rem;
+    }
+    .oc-nav {
+      gap: 1rem;
+      font-size: 0.8125rem;
+    }
+  }
+</style>

@@ -1,0 +1,42 @@
+---
+/**
+ * A marked footage slot.
+ *
+ * There is no fake footage and no fake still anywhere on this site. Every
+ * place a real capture belongs ships as an empty well with a hairline border
+ * and a mono caption. An empty well is a feature: it proves the rest of the
+ * page is real.
+ *
+ * Filling one is a one-line change: drop a <video> (or <img>) in the default
+ * slot and delete the caption prop.
+ */
+export interface Props {
+  /** What the operator has to shoot. Rendered as an HTML comment. */
+  clip: string;
+  caption?: string;
+  aspect?: '16x9' | '3x4';
+  /** 'small' caps the width so a slot does not become a 700px hole. */
+  size?: 'full' | 'small';
+}
+
+const {
+  clip,
+  caption = 'operator bench capture pending',
+  aspect = '16x9',
+  size = 'full',
+} = Astro.props;
+
+const comment = `<!-- OPERATOR SLOT: ${clip} -->`;
+const portrait = aspect === '3x4';
+const cls = ['well', portrait && 'is-portrait', size === 'small' && 'is-small']
+  .filter(Boolean)
+  .join(' ');
+---
+
+<figure class={cls}>
+  <Fragment set:html={comment} />
+  <div class={`well-frame${portrait ? ' portrait' : ''}`}>
+    <slot />
+  </div>
+  <figcaption class="well-cap">{caption}</figcaption>
+</figure>

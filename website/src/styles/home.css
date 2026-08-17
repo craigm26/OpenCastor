@@ -1,0 +1,1215 @@
+/* ==========================================================================
+   opencastor.com home page  ·  "Speech Score"
+   Self-contained. Nothing here is shared with global.css, and nothing here
+   loads from a third party: the four woff2 files are served from /fonts/.
+   Two accents, each with exactly one job:
+     brass  = authorized
+     red    = stop
+   There is deliberately no success green.
+   ========================================================================== */
+
+/* ---- 1. Fonts ---------------------------------------------------------- */
+
+@font-face {
+  font-family: 'Newsreader';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('/fonts/newsreader-latin-wght-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Newsreader';
+  font-style: italic;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('/fonts/newsreader-latin-wght-italic.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Atkinson Hyperlegible Next';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('/fonts/atkinson-hyperlegible-next-latin-wght-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-latin-400-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ---- 2. Tokens. Complete light palette on bare :root ------------------- */
+
+:root {
+  --ground: #edeee6;
+  --panel: #f7f6f0;
+  --ink: #143028;
+  --slate: #5d6c73;
+  --brass: #c0761c;
+  --brass-text: #8a5411;
+  --brass-wash: rgba(192, 118, 28, 0.09);
+  --red: #a9302a;
+  --red-wash: rgba(169, 48, 42, 0.08);
+  --hair: rgba(20, 48, 40, 0.12);
+  --hair-strong: rgba(20, 48, 40, 0.26);
+  --screen: #101a17;
+  --screen-ink: #d7ded8;
+  --well: rgba(20, 48, 40, 0.02);
+
+  --f-voice: 'Newsreader', 'Iowan Old Style', 'Palatino Linotype', Palatino,
+    Georgia, 'Times New Roman', serif;
+  --f-ui: 'Atkinson Hyperlegible Next', system-ui, -apple-system, 'Segoe UI',
+    Roboto, Helvetica, Arial, sans-serif;
+  --f-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo,
+    Consolas, 'Liberation Mono', monospace;
+
+  --measure: 34rem;
+  --page: 74rem;
+  --pad: 1.5rem;
+  --r: 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --ground: #0e1412;
+    --panel: #18221f;
+    --ink: #e6e8df;
+    --slate: #93a3a8;
+    --brass: #e39b4a;
+    --brass-text: #e39b4a;
+    --brass-wash: rgba(227, 155, 74, 0.11);
+    --red: #e0736b;
+    --red-wash: rgba(224, 115, 107, 0.11);
+    --hair: rgba(230, 232, 223, 0.14);
+    --hair-strong: rgba(230, 232, 223, 0.3);
+    --screen: #060a09;
+    --screen-ink: #cdd6cf;
+    --well: rgba(230, 232, 223, 0.02);
+  }
+}
+
+:root[data-theme='dark'] {
+  --ground: #0e1412;
+  --panel: #18221f;
+  --ink: #e6e8df;
+  --slate: #93a3a8;
+  --brass: #e39b4a;
+  --brass-text: #e39b4a;
+  --brass-wash: rgba(227, 155, 74, 0.11);
+  --red: #e0736b;
+  --red-wash: rgba(224, 115, 107, 0.11);
+  --hair: rgba(230, 232, 223, 0.14);
+  --hair-strong: rgba(230, 232, 223, 0.3);
+  --screen: #060a09;
+  --screen-ink: #cdd6cf;
+  --well: rgba(230, 232, 223, 0.02);
+}
+
+/* ---- 3. Reset ---------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--f-ui);
+  font-size: 1rem;
+  line-height: 1.62;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+img,
+svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+h1,
+h2,
+h3,
+h4,
+p,
+ul,
+ol,
+figure,
+blockquote {
+  margin: 0;
+}
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+a {
+  color: inherit;
+  text-decoration-color: var(--hair-strong);
+  text-underline-offset: 0.22em;
+}
+a:hover {
+  text-decoration-color: currentColor;
+}
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 3px;
+}
+.vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 50;
+  background: var(--panel);
+  color: var(--ink);
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--hair-strong);
+}
+.skip:focus {
+  left: 1rem;
+  top: 1rem;
+}
+
+/* ---- 4. Type roles ----------------------------------------------------- */
+
+/* Mono means a machine wrote it. It appears nowhere else on this page. */
+.mono,
+.log,
+.receipt,
+.plan-line,
+.screen,
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--f-mono);
+  font-size: 0.8125rem;
+  line-height: 1.72;
+  letter-spacing: 0.012em;
+  font-variant-numeric: tabular-nums;
+  font-variant-ligatures: none;
+}
+pre {
+  margin: 0;
+}
+.meta {
+  font-family: var(--f-mono);
+  font-size: 0.6875rem;
+  line-height: 1.6;
+  letter-spacing: 0.05em;
+  text-transform: none;
+  color: var(--slate);
+  font-variant-numeric: tabular-nums;
+}
+.said {
+  font-family: var(--f-voice);
+  font-style: italic;
+  font-weight: 300;
+}
+.replied {
+  font-family: var(--f-voice);
+  font-style: normal;
+  font-weight: 400;
+}
+.hairline {
+  color: var(--slate);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+
+/* ---- 5. Page frame ----------------------------------------------------- */
+
+.wrap {
+  width: 100%;
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 0 var(--pad);
+}
+main > section {
+  padding: 4.5rem 0;
+  border-top: 1px solid var(--hair);
+}
+main > section:first-child {
+  border-top: 0;
+  padding-top: 2.5rem;
+}
+.lede {
+  font-family: var(--f-voice);
+  font-weight: 400;
+  font-size: clamp(1.125rem, 1.6vw, 1.3125rem);
+  line-height: 1.55;
+  max-width: 33ch;
+}
+.lede + .lede {
+  margin-top: 1.1rem;
+}
+.body-copy {
+  max-width: 46ch;
+}
+.body-copy p + p {
+  margin-top: 1rem;
+}
+.eyebrow {
+  font-family: var(--f-ui);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--slate);
+  margin-bottom: 1.6rem;
+}
+
+/* Chapter titles: sections 2 and 3 only. The runtime's own words. */
+.chapter {
+  font-family: var(--f-voice);
+  font-weight: 300;
+  font-size: clamp(2rem, 5.2vw, 3.375rem);
+  line-height: 1.06;
+  letter-spacing: -0.014em;
+  margin: 0 0 2.5rem;
+  max-width: 24ch;
+}
+.chapter.is-stop {
+  color: var(--red);
+}
+h2.plain {
+  font-family: var(--f-voice);
+  font-weight: 400;
+  font-size: clamp(1.5rem, 2.6vw, 2rem);
+  line-height: 1.14;
+  letter-spacing: -0.01em;
+  margin: 0 0 1.75rem;
+  max-width: 26ch;
+}
+h3.sub {
+  font-family: var(--f-ui);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  margin: 0 0 0.55rem;
+}
+
+/* minmax(0, 1fr), not 1fr, in the stacked case too. A bare `1fr` track is
+   minmax(auto, 1fr): its floor is the widest thing inside it, so one verbatim
+   log line or receipt row set in white-space: pre stretched the whole column
+   past the viewport, and body { overflow-x: hidden } then quietly clipped the
+   prose next to it. Measured at 390px before this line: the document was 976px
+   wide and sentences lost their right-hand ends. Every mono block on this page
+   is already its own horizontal scroller, which is what should scroll. */
+.two-col {
+  display: grid;
+  gap: 3rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 62rem) {
+  .two-col {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 4rem;
+  }
+  .two-col.narrow-left {
+    grid-template-columns: minmax(0, 21rem) minmax(0, 1fr);
+  }
+  /* The hero leans left so the plan row fits without a scrollbar. */
+  .two-col.hero-cols {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  }
+}
+
+/* ---- 5b. The hero stack, and the order it takes on a phone -------------
+   At the designed width the stack is ordinary block flow: headline, lede,
+   speech score, call to action. Below 62rem the hero is one column and that
+   order costs too much: the score is five rows of evidence, and on a 390px
+   phone it pushed the install block past the fold. So below 62rem the stack
+   becomes a flex column and the CTA row moves ahead of the score, which
+   becomes the reward for the first scroll. Nothing in the score is focusable,
+   so visual order and focus order still agree.
+   Margins live here rather than in style attributes precisely so the narrow
+   layout can restate them: flex items do not collapse adjoining margins. */
+.hero-stack > .hero-h {
+  margin-bottom: 1.5rem;
+}
+.hero-stack > .hero-lede {
+  margin-bottom: 2.25rem;
+}
+.hero-stack > .hero-note {
+  margin-top: 2rem;
+}
+@media (max-width: 61.99rem) {
+  .hero-stack {
+    display: flex;
+    flex-direction: column;
+  }
+  .hero-stack > .hero-h {
+    order: 1;
+  }
+  .hero-stack > .hero-lede {
+    order: 2;
+    margin-bottom: 0;
+  }
+  .hero-stack > .cta-row {
+    order: 3;
+    margin-top: 2.25rem;
+  }
+  .hero-stack > .hero-score {
+    order: 4;
+    margin-top: 2.75rem;
+  }
+  .hero-stack > .hero-note {
+    order: 5;
+    margin-top: 2rem;
+  }
+}
+
+/* ---- 6. Header and footer --------------------------------------------- */
+
+.site-head {
+  border-bottom: 1px solid var(--hair);
+  background: var(--ground);
+}
+.site-head .wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  min-height: 3.75rem;
+}
+.wordmark {
+  font-family: var(--f-voice);
+  font-weight: 400;
+  font-size: 1.0625rem;
+  letter-spacing: 0.005em;
+  text-decoration: none;
+}
+.head-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.35rem;
+  font-size: 0.875rem;
+}
+.head-nav a {
+  text-decoration: none;
+  color: var(--slate);
+}
+.head-nav a:hover,
+.head-nav a:focus-visible {
+  color: var(--ink);
+}
+.head-nav .pending {
+  color: var(--slate);
+  font-family: var(--f-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+}
+@media (max-width: 34rem) {
+  .head-nav {
+    gap: 0.9rem;
+    font-size: 0.8125rem;
+  }
+  .head-nav .pending {
+    display: none;
+  }
+}
+
+.site-foot {
+  border-top: 1px solid var(--hair);
+  padding: 2.75rem 0 3.5rem;
+}
+/* Receipt geometry, real values only. No signature line: a fabricated
+   envelope signature on a web page is the exact artifact this product
+   exists to make impossible. */
+.foot-stamp {
+  max-width: 34ch;
+  border-top: 1px solid var(--hair-strong);
+  border-bottom: 1px solid var(--hair-strong);
+  padding: 0.85rem 0;
+}
+.foot-stamp dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 11ch minmax(0, 1fr);
+  gap: 0 1ch;
+}
+.foot-stamp dt {
+  color: var(--slate);
+}
+.foot-stamp dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.foot-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.5rem;
+  margin-top: 1.5rem;
+  font-size: 0.875rem;
+}
+.foot-links a {
+  color: var(--slate);
+  text-decoration: none;
+}
+.foot-links a:hover {
+  color: var(--ink);
+}
+/* Sans, not mono: these are authored words, and mono means a machine wrote it. */
+.foot-quiet {
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  gap: 0.3rem 1.1rem;
+}
+
+/* ---- 7. The speech score --------------------------------------------- */
+
+.score {
+  background: var(--panel);
+  border: 1px solid var(--hair);
+  border-radius: var(--r);
+  padding: 1.5rem 1.35rem 1.35rem 2.6rem;
+  max-width: 40rem;
+}
+.score-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr);
+  gap: 0 0.75rem;
+  padding: 0.42rem 0;
+}
+.score-slug {
+  font-family: var(--f-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--slate);
+  padding-top: 0.42em;
+  font-variant-numeric: tabular-nums;
+}
+.score-turn {
+  min-width: 0;
+}
+.score-turn.said {
+  font-size: clamp(1.125rem, 2vw, 1.4375rem);
+  line-height: 1.34;
+}
+.score-turn.replied {
+  font-size: clamp(1rem, 1.5vw, 1.125rem);
+  line-height: 1.44;
+}
+.score-turn.mono {
+  overflow-x: auto;
+  white-space: pre;
+  padding-bottom: 0.2rem;
+  scrollbar-width: thin;
+  font-size: 0.75rem;
+}
+
+/* The signature gutter. Dotted until the signature lands, solid brass after.
+   This states "a plan is inert until signed" structurally, before any
+   security copy is read. */
+.score-row::before {
+  content: '';
+  position: absolute;
+  left: -1.25rem;
+  top: -0.02rem;
+  bottom: -0.02rem;
+  border-left: 1px dotted var(--hair-strong);
+}
+.score-row.is-signed::after {
+  content: '';
+  position: absolute;
+  left: -1.25rem;
+  top: -0.02rem;
+  bottom: -0.02rem;
+  border-left: 1px solid var(--brass);
+}
+/* The robot's last turn is a real string off its own mounted screen, so it is
+   set in the device frame rather than as dialogue. Inline-grid keeps the frame
+   the width of the string instead of the width of the column. */
+.score-screen {
+  display: inline-grid;
+  padding: 0.5rem 0.7rem;
+  max-width: 100%;
+}
+.score-cap {
+  color: var(--slate);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  max-width: 42ch;
+  margin-top: 1.1rem;
+}
+
+/* ---- 8. Chips, ink bars, wells, devices ------------------------------- */
+
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5ch;
+  font-family: var(--f-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--r);
+  border: 1px solid var(--hair-strong);
+}
+.chip-signed {
+  color: var(--brass-text);
+  border-color: var(--brass);
+  background: var(--brass-wash);
+}
+.chip-stop {
+  color: var(--red);
+  border-color: var(--red);
+  background: var(--red-wash);
+}
+
+.evidence {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr;
+  margin-bottom: 1.25rem;
+}
+@media (min-width: 30rem) {
+  .evidence {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.evidence-card {
+  border: 1px solid var(--hair);
+  border-radius: var(--r);
+  padding: 0.85rem 0.9rem;
+  background: var(--panel);
+}
+.evidence-card .meta {
+  display: block;
+  margin-top: 0.55rem;
+  overflow-wrap: anywhere;
+}
+.evidence-card.is-signed {
+  border-color: var(--brass);
+}
+.evidence-card.is-stop {
+  border-color: var(--red);
+}
+
+/* The ink bar is the design mark for anything redacted or not yet real.
+   Rows of x characters are not allowed anywhere on this page. */
+.inkbar {
+  display: inline-block;
+  vertical-align: -0.12em;
+  height: 0.72em;
+  width: 12ch;
+  border-radius: 1px;
+  background: var(--ink);
+  opacity: 0.82;
+}
+.inkbar.w6 {
+  width: 6ch;
+}
+.inkbar.w12 {
+  width: 12ch;
+}
+.inkbar.w5 {
+  width: 5ch;
+}
+.inkbar.w20 {
+  width: 20ch;
+}
+.inkbar.w26 {
+  width: 26ch;
+  max-width: 100%;
+}
+
+/* Every place real footage belongs ships as an empty well. An empty well is
+   a feature: it proves the rest of the page is real. */
+.well {
+  margin: 0;
+  border: 1px solid var(--hair);
+  border-radius: var(--r);
+  background: var(--well);
+}
+.well-frame {
+  aspect-ratio: 16 / 9;
+}
+.well-frame.portrait {
+  aspect-ratio: 3 / 4;
+}
+/* A portrait well at full column width becomes a 700px hole. Cap both the
+   portrait wells and the ones the brief calls small. */
+.well.is-small {
+  max-width: 26rem;
+}
+/* after is-small on purpose: a portrait well is capped tighter than a
+   landscape one, whichever size it also asks for. */
+.well.is-portrait {
+  max-width: 17rem;
+}
+.well-cap {
+  border-top: 1px solid var(--hair);
+  padding: 0.5rem 0.65rem;
+  color: var(--slate);
+  font-family: var(--f-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.05em;
+}
+
+/* Mounted screen strings, at the real screen's aspect, so they read as
+   device output rather than authored copy. */
+.screen {
+  background: var(--screen);
+  color: var(--screen-ink);
+  border-radius: var(--r);
+  padding: 0.9rem 0.95rem;
+  display: grid;
+  gap: 0.3rem;
+  border: 1px solid var(--hair-strong);
+}
+.screen span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+/* ---- 9. Install block and CTAs --------------------------------------- */
+
+/* Flex, not grid: three CTAs never fit one row inside a half-page column, and
+   an auto-sized grid track squeezes the install block to nothing. */
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem 1.75rem;
+  margin-top: 2.5rem;
+  align-items: flex-start;
+}
+.cta-row > * {
+  min-width: 0;
+}
+.cta-install {
+  flex: 1 1 17rem;
+  max-width: 22rem;
+}
+.cta-tf {
+  flex: 1 1 15rem;
+  max-width: 22rem;
+}
+/* One primary call to action, and it is the install block: the page's whole
+   argument is that one command takes a bare host to a paired robot. It gets
+   the strong border and the filled panel; GitHub and TestFlight are hairline
+   buttons beside it. Ink, not brass: brass on this page means authorized, and
+   a marketing button has authorized nothing. */
+.install {
+  border: 2px solid var(--ink);
+  border-radius: var(--r);
+  background: var(--panel);
+}
+.install-lines {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.75rem;
+}
+.install pre {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.copy {
+  flex: none;
+  font-family: var(--f-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.05em;
+  color: var(--slate);
+  border: 1px solid var(--hair);
+  border-radius: var(--r);
+  padding: 0.2rem 0.5rem;
+}
+.copy:hover {
+  color: var(--ink);
+  border-color: var(--hair-strong);
+}
+/* Secondary: a hairline border, full-strength text. The hierarchy is carried by
+   the border, never by dimming the label, so both stay legible. */
+.btn {
+  display: inline-block;
+  border: 1px solid var(--hair);
+  border-radius: var(--r);
+  padding: 0.62rem 1rem;
+  font-size: 0.9375rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.btn:hover {
+  border-color: var(--hair-strong);
+}
+.beta {
+  color: var(--slate);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  max-width: 30ch;
+  margin-top: 0.6rem;
+}
+.tf-slot {
+  display: inline-block;
+  border: 1px dashed var(--hair-strong);
+  border-radius: var(--r);
+  padding: 0.62rem 1rem;
+  font-size: 0.9375rem;
+  color: var(--slate);
+}
+
+/* ---- 10. Fact lists --------------------------------------------------- */
+
+.facts {
+  display: grid;
+  gap: 0.7rem;
+  align-content: start;
+}
+.facts li {
+  font-family: var(--f-mono);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--ink);
+  padding-left: 1.1rem;
+  position: relative;
+  overflow-wrap: anywhere;
+}
+.facts li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.72em;
+  width: 0.35rem;
+  border-top: 1px solid var(--hair-strong);
+}
+
+/* ---- 11. The stop demo (the page's single interaction) ---------------- */
+
+.stopdemo {
+  margin-top: 2.5rem;
+  border: 1px solid var(--hair);
+  border-radius: var(--r);
+  padding: 1.25rem;
+  background: var(--panel);
+  max-width: 30rem;
+}
+.stopdemo .screen {
+  margin-bottom: 0.85rem;
+}
+.stopdemo-line {
+  transition: opacity 160ms linear;
+}
+.stopdemo-state {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 1.85rem;
+  flex-wrap: wrap;
+}
+.stopdemo-chip {
+  opacity: 0;
+  transform: scale(0.98);
+  transition: opacity 120ms linear, transform 120ms linear;
+}
+.stopdemo-latency {
+  color: var(--slate);
+  opacity: 0;
+  transition: opacity 200ms linear 90ms;
+}
+.stopdemo.is-stopped .stopdemo-chip,
+.stopdemo.is-stopped .stopdemo-latency {
+  opacity: 1;
+  transform: none;
+}
+.stopdemo.is-stopped .stopdemo-line {
+  opacity: 0.45;
+}
+.stopdemo.is-stopped .stopdemo-btn {
+  color: var(--red);
+  border-color: var(--red);
+  background: var(--red-wash);
+}
+/* Red is reserved for stop, so the button is neutral at rest and only turns
+   red while it is actually stopping the robot. */
+.stopdemo-btn {
+  margin-top: 0.6rem;
+  border: 1px solid var(--hair-strong);
+  border-radius: var(--r);
+  color: var(--ink);
+  background: transparent;
+  transition: color 120ms linear, border-color 120ms linear,
+    background-color 120ms linear;
+  font-family: var(--f-mono);
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+  padding: 0.55rem 0.95rem;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.stopdemo-hint {
+  margin-top: 0.7rem;
+}
+
+/* ---- 12. The castor up log ------------------------------------------- */
+
+.logwrap.is-cmd {
+  max-width: 34rem;
+}
+.logwrap.is-cmd pre {
+  font-size: 0.75rem;
+  white-space: pre;
+}
+.logwrap {
+  border-top: 1px solid var(--hair-strong);
+  border-bottom: 1px solid var(--hair-strong);
+  padding: 0.9rem 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.log {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0 0.75rem;
+  min-width: max-content;
+}
+.log dt {
+  color: var(--slate);
+  white-space: pre;
+}
+.log dd {
+  margin: 0;
+  white-space: pre;
+}
+.log-legend {
+  margin-bottom: 0.9rem;
+  color: var(--slate);
+}
+.log-note {
+  margin-top: 0.9rem;
+  color: var(--slate);
+}
+
+/* ---- 13. The receipt ------------------------------------------------- */
+
+.receipt {
+  max-width: 40rem;
+  border-top: 1px solid var(--hair-strong);
+  border-bottom: 1px solid var(--hair-strong);
+  padding: 0.9rem 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.receipt pre {
+  min-width: 34ch;
+  white-space: pre;
+}
+.receipt .k {
+  color: var(--slate);
+}
+.receipt-note {
+  color: var(--slate);
+  margin-top: 1rem;
+  max-width: 46ch;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+
+/* ---- 14. The plan card ----------------------------------------------- */
+
+.plan {
+  border: 1px solid var(--hair);
+  border-radius: var(--r);
+  background: var(--panel);
+  padding: 1.15rem 1.2rem;
+  max-width: 30rem;
+}
+.plan-line {
+  overflow-x: auto;
+  white-space: pre;
+  scrollbar-width: thin;
+  padding-bottom: 0.25rem;
+  font-size: 0.75rem;
+}
+.plan-annos {
+  margin-top: 1rem;
+  border-top: 1px solid var(--hair);
+  padding-top: 0.85rem;
+  display: grid;
+  gap: 0.55rem;
+}
+.plan-anno {
+  display: grid;
+  grid-template-columns: minmax(8ch, 12ch) minmax(0, 1fr);
+  gap: 0 1ch;
+  font-family: var(--f-mono);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+.plan-anno b {
+  font-weight: 400;
+  color: var(--slate);
+}
+.plan-sig {
+  margin-top: 1rem;
+  border-top: 1px solid var(--brass);
+  padding-top: 0.85rem;
+}
+
+/* ---- 15. Bodies ------------------------------------------------------- */
+
+.bodies {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: 1fr;
+  margin-top: 2.5rem;
+}
+@media (min-width: 52rem) {
+  .bodies {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.body-card {
+  border: 1px solid var(--hair);
+  border-radius: var(--r);
+  padding: 1.1rem;
+  display: grid;
+  gap: 0.85rem;
+  align-content: start;
+}
+.body-card .line-art {
+  color: var(--slate);
+}
+.body-card .status {
+  font-family: var(--f-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--slate);
+}
+.body-card .part {
+  font-family: var(--f-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  color: var(--slate);
+  overflow-wrap: anywhere;
+}
+.bootlog {
+  margin-top: 2.5rem;
+  border-top: 1px solid var(--hair);
+  padding-top: 1.25rem;
+}
+.bootlog pre {
+  border-left: 1px solid var(--hair-strong);
+  padding-left: 0.9rem;
+  min-width: 34ch;
+  white-space: pre;
+}
+.bootlog .scroller {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+/* ---- 16. Specimen row ------------------------------------------------ */
+
+.specimen {
+  display: grid;
+  gap: 1.1rem;
+  margin-top: 2rem;
+}
+.specimen li {
+  border-top: 1px solid var(--hair);
+  padding-top: 0.9rem;
+  display: grid;
+  gap: 0.2rem;
+}
+.specimen a,
+.specimen .name {
+  font-family: var(--f-voice);
+  font-size: clamp(1.25rem, 2.4vw, 1.75rem);
+  font-weight: 400;
+  letter-spacing: -0.008em;
+  text-decoration: none;
+}
+.specimen a:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--hair-strong);
+}
+
+/* ---- 17. Motion. One sequence on load, then stillness, never a loop. -- */
+
+@keyframes settle {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 1. the human line arrives word by word at caption cadence */
+/* white-space: pre keeps the trailing space inside each inline-block word,
+   which a normal inline-block would collapse away. */
+.seq-word {
+  display: inline-block;
+  white-space: pre;
+  opacity: 0;
+  animation: settle 240ms ease-out forwards;
+  animation-delay: calc(160ms + var(--i) * 170ms);
+}
+/* 2. the plan the sentence drafted appears whole, because machines do not type */
+.seq-plan {
+  opacity: 0;
+  animation: settle 200ms ease-out forwards 1.45s;
+}
+/* 3. the signature lands */
+.seq-sign {
+  opacity: 0;
+  animation: rise 260ms ease-out forwards 2.05s;
+}
+/* 4. the dotted gutter rule goes solid */
+.score-row.is-signed::after {
+  opacity: 0;
+  animation: settle 300ms linear forwards 2.4s;
+}
+/* 5. the receipt row prints */
+.seq-receipt {
+  opacity: 0;
+  animation: settle 220ms ease-out forwards 2.95s;
+}
+/* 6. and the robot's own screen reports the motion. This is the robot's turn:
+   it never gets a line of dialogue, so the sequence ends on the device. */
+.seq-screen {
+  opacity: 0;
+  animation: settle 240ms ease-out forwards 3.3s;
+}
+.seq-cap {
+  opacity: 0;
+  animation: settle 300ms linear forwards 3.65s;
+}
+
+/* Below the fold: one opacity settle per section, nothing else.
+   INVERTED ON PURPOSE. This used to be `.settle { opacity: 0 }` undone by a
+   script at the end of the body, which made a decoration load-bearing: any
+   failure in that script (a syntax error, a stricter CSP, a blocked inline
+   script) left whole sections of real content invisible. Now the content is
+   visible by default and the animation only exists if the script that removes
+   it also ran: the script's first act is to add `js-anim` to <html>, and only
+   inside that class does anything start hidden. The 900ms safety net in that
+   script stays as a belt. */
+.settle {
+  opacity: 1;
+}
+.js-anim .settle {
+  opacity: 0;
+  transition: opacity 120ms linear;
+}
+.js-anim .settle.seen {
+  opacity: 1;
+}
+.log-row {
+  opacity: 1;
+}
+.js-anim .logwrap.stagger .log-row {
+  opacity: 0;
+}
+.js-anim .logwrap.stagger.seen .log-row {
+  animation: settle 130ms linear forwards;
+  animation-delay: calc(var(--i) * 130ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .seq-word,
+  .seq-plan,
+  .seq-sign,
+  .seq-receipt,
+  .seq-screen,
+  .seq-cap,
+  .score-row.is-signed::after {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .settle,
+  .js-anim .settle,
+  .js-anim .logwrap.stagger .log-row,
+  .js-anim .logwrap.stagger.seen .log-row {
+    opacity: 1;
+    transition: none;
+    animation: none;
+  }
+  .stopdemo-chip,
+  .stopdemo-latency,
+  .stopdemo-line,
+  .stopdemo-btn {
+    transition: none;
+  }
+}
+
+/* ---- 18. Narrow screens --------------------------------------------- */
+
+@media (max-width: 30rem) {
+  :root {
+    --pad: 1.15rem;
+  }
+  .score {
+    padding: 1.15rem 1rem 1rem 2.1rem;
+  }
+  .score-row {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+  .score-row::before,
+  .score-row.is-signed::after {
+    left: -1rem;
+  }
+  main > section {
+    padding: 3.25rem 0;
+  }
+}

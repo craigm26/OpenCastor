@@ -1,5 +1,32 @@
 ---
+/**
+ * BaseLayout — the shell for every page that is NOT the home page.
+ *
+ * Minimally restyled, deliberately: the docs, changelog, blog, tutorials,
+ * beginners, hardware, hub, explore, about, robot and config routes keep their
+ * own content and keep returning 200. What changed is only the shell:
+ *
+ *   1. The old five-dropdown nav is gone, replaced by the shared quiet header
+ *      (one Docs door, GitHub, TestFlight).
+ *   2. The Google Fonts <link> is gone. The site now makes zero third-party
+ *      requests, so the same self-hosted OFL faces serve these pages too.
+ *   3. A footer, which this shell did not have at all. Replacing the old
+ *      five-dropdown nav with a three-link header left 84 pages with NO
+ *      navigation to each other: the changelog, the tutorials, the beginner
+ *      path, the hardware guides, the hub, the config explorer, the blog and
+ *      the about page were reachable only from the home page's own footer.
+ *      The same list now sits at the bottom of every page that uses this
+ *      shell, which is what makes the home page's claim that they all still
+ *      work an honest one.
+ *
+ * global.css is otherwise untouched. The footer below carries its own scoped
+ * styles and its own palette fallbacks so it does not depend on which tokens
+ * global.css happens to define.
+ */
+import "../styles/fonts.css";
 import "../styles/global.css";
+import SiteHeader from "../components/SiteHeader.astro";
+
 export interface Props {
   title: string;
   description?: string;
@@ -11,17 +38,12 @@ export interface Props {
 
 const {
   title,
-  description = 'Give any robot a brain. Apple Foundation Models + 12+ AI providers, stack-aware setup, and a $0 primary brain. Open source, Apache 2.0.',
+  description = 'OpenCastor is the open source runtime that connects AI brains to robot bodies. Speak or type one sentence, a local model drafts a bounded plan, you sign it, and the wheels turn.',
   ogTitle,
   ogDescription,
   ogUrl,
   canonical,
 } = Astro.props;
-
-const currentPath = Astro.url.pathname.replace(/\/$/, '') || '/';
-
-const sunSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
-const moonSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
 ---
 
 <!DOCTYPE html>
@@ -36,12 +58,13 @@ const moonSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" 
   {ogUrl && <meta property="og:url" content={ogUrl} />}
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary_large_image" />
+  <meta name="color-scheme" content="light dark" />
   {canonical && <link rel="canonical" href={canonical} />}
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Bricolage+Grotesque:wght@400;600;700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  
+  <!-- favicon.png, not favicon.svg: the svg in public/ is 359 KB. -->
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="preload" as="font" type="font/woff2"
+        href="/fonts/atkinson-hyperlegible-next-latin-wght-normal.woff2" crossorigin />
+
   <!-- Theme init: must run before render to prevent flash -->
   <script is:inline>
     (function(){
@@ -55,210 +78,116 @@ const moonSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" 
 </head>
 <body>
 
-<!-- ======== NAV ======== -->
-<nav class="site-nav" id="siteNav">
-  <div class="nav-inner">
-
-    <!-- Logo -->
-    <a href="/" class="nav-logo">
-      <img src="/assets/icon-64.png" alt="" class="nav-logo-img" width="26" height="26" aria-hidden="true" />
-      <span class="nav-logo-text">OpenCastor</span>
-    </a>
-
-    <!-- Center links + mobile drawer -->
-    <div class="nav-links" id="navLinks">
-      
-      <!-- 'Community' Dropdown: Aggregates Hub and Explore -->
-      <div class="nav-dropdown">
-        <span class="nav-dropdown-title nav-toggle">Community
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-        </span>
-        <div class="nav-dropdown-menu">
-          <a href="/explore">Explore Configs</a>
-          <a href="/hub">Community Hub</a>
-          <a href="https://app.opencastor.com">App</a>
-        </div>
-      </div>
-
-      <!-- 'Resources' Dropdown: Hardware, Tutorials, Docs -->
-      <div class="nav-dropdown">
-        <span class="nav-dropdown-title nav-toggle">Resources
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-        </span>
-        <div class="nav-dropdown-menu">
-          <a href="/tutorials">Tutorials</a>
-          <a href="/hardware">Hardware</a>
-          <a href="https://docs.opencastor.com/runtime/harness/">Harnesses</a>
-          <a href="/plan">TurboQuant Plan</a>
-        </div>
-      </div>
-
-      <!-- 'Docs' Dropdown: Core docs mapping -->
-      <div class="nav-dropdown">
-        <span class="nav-dropdown-title nav-toggle" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false"><a href="https://docs.opencastor.com/getting-started/quickstart/" class="nav-dropdown-fallback-link" tabindex="-1">Docs</a>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-        </span>
-        <div class="nav-dropdown-menu">
-          <a href="https://docs.opencastor.com/getting-started/quickstart/">Getting Started</a>
-          <a href="https://docs.opencastor.com/getting-started/hardware-profiles/">SO-ARM101 Guide</a>
-          <a href="https://docs.opencastor.com/getting-started/configuration/">RCAN config.yaml</a>
-          <a href="https://docs.opencastor.com/runtime/safety/">Protocol 66</a>
-          <a href="https://docs.opencastor.com/runtime/cli/">CLI Reference</a>
-        </div>
-      </div>
-
-      <!-- 'Ecosystem' Dropdown -->
-      <div class="nav-dropdown">
-        <span class="nav-dropdown-title nav-toggle">Ecosystem
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-        </span>
-        <div class="nav-dropdown-menu">
-          <a href="https://docs.opencastor.com/getting-started/quickstart/">Ecosystem Overview</a>
-          <a href="https://rcan.dev" target="_blank" rel="noopener">RCAN Protocol</a>
-          <a href="https://robotregistryfoundation.org" target="_blank" rel="noopener">Robot Registry</a>
-          <a href="https://app.opencastor.com" target="_blank" rel="noopener">OpenCastor Fleet</a>
-        </div>
-      </div>
-
-      <a href="/blog" class={currentPath.startsWith('/blog') ? 'nav-active' : ''}>Blog</a>
-      <a href="/about" class={currentPath === '/about' ? 'nav-active' : ''}>About</a>
-
-      <!-- Theme pill — visible inside mobile drawer only -->
-      <div class="nav-drawer-theme">
-        <button class="theme-pill" id="themeToggleMobile" aria-label="Toggle theme">
-          <span class="theme-pill-opt" data-opt="light" aria-label="Light mode">
-            <Fragment set:html={sunSvg} /> Light
-          </span>
-          <span class="theme-pill-opt" data-opt="dark" aria-label="Dark mode">
-            <Fragment set:html={moonSvg} /> Dark
-          </span>
-        </button>
-      </div>
-    </div>
-
-    <!-- Right side -->
-    <div class="nav-end">
-      <!-- Theme pill — desktop -->
-      <button class="theme-pill" id="themeToggle" aria-label="Toggle theme" title="Toggle light/dark mode">
-        <span class="theme-pill-opt" data-opt="light" aria-label="Light mode">
-          <Fragment set:html={sunSvg} />
-        </span>
-        <span class="theme-pill-opt" data-opt="dark" aria-label="Dark mode">
-          <Fragment set:html={moonSvg} />
-        </span>
-      </button>
-
-      <a href="https://github.com/craigm26/OpenCastor" class="btn-nav" target="_blank" rel="noopener" aria-label="GitHub">
-        <span class="btn-label">GitHub</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11" aria-hidden="true"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg>
-      </a>
-
-      <button class="mobile-toggle" id="mobileToggle" aria-label="Toggle menu" aria-expanded="false">
-        <span></span><span></span><span></span>
-      </button>
-    </div>
-
-  </div>
-</nav>
+<SiteHeader />
 
 <slot />
 
+<footer class="oc-foot">
+  <div class="oc-foot-inner">
+    <nav class="oc-foot-links" aria-label="Footer">
+      <a href="/">Home</a>
+      <a href="/docs">Docs</a>
+      <a href="https://github.com/craigm26/OpenCastor" rel="noopener">GitHub</a>
+      <a href="https://robotmd.dev" rel="noopener">robotmd.dev</a>
+      <a href="https://rcan.dev" rel="noopener">rcan.dev</a>
+      <a href="/testflight">TestFlight beta</a>
+    </nav>
+
+    <!-- The rest of this site. This is the whole of these pages'
+         navigation to each other, so the list is complete on purpose and is
+         kept identical to the one in HomeLayout. -->
+    <nav class="oc-foot-links oc-foot-quiet" aria-label="The rest of this site">
+      <a href="/changelog">Changelog</a>
+      <a href="/tutorials">Tutorials</a>
+      <a href="/beginners">Beginners</a>
+      <a href="/hardware">Hardware</a>
+      <a href="/hub">Hub</a>
+      <a href="/explore">Explore configs</a>
+      <a href="/blog">Blog</a>
+      <a href="/about">About</a>
+      <a href="/pair">Pairing QRs</a>
+    </nav>
+
+    <p class="oc-foot-note">Apache 2.0. The documentation lives at docs.opencastor.com.</p>
+  </div>
+</footer>
+
+<style>
+  .oc-foot {
+    --f-bg: #edeee6;
+    --f-ink: #143028;
+    --f-slate: #5d6c73;
+    --f-hair: rgba(20, 48, 40, 0.12);
+
+    background: var(--f-bg);
+    color: var(--f-ink);
+    border-top: 1px solid var(--f-hair);
+    margin-top: 4rem;
+    padding: 2.5rem 0 3rem;
+    font-family:
+      'Atkinson Hyperlegible Next', system-ui, -apple-system, 'Segoe UI', Roboto,
+      Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :global(:root:not([data-theme='light'])) .oc-foot {
+      --f-bg: #0e1412;
+      --f-ink: #e6e8df;
+      --f-slate: #93a3a8;
+      --f-hair: rgba(230, 232, 223, 0.14);
+    }
+  }
+  :global(:root[data-theme='dark']) .oc-foot {
+    --f-bg: #0e1412;
+    --f-ink: #e6e8df;
+    --f-slate: #93a3a8;
+    --f-hair: rgba(230, 232, 223, 0.14);
+  }
+
+  .oc-foot-inner {
+    width: 100%;
+    max-width: 74rem;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+    box-sizing: border-box;
+  }
+  .oc-foot-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 1.5rem;
+    font-size: 0.875rem;
+  }
+  .oc-foot-links a {
+    color: var(--f-slate);
+    text-decoration: none;
+  }
+  .oc-foot-links a:hover {
+    color: var(--f-ink);
+  }
+  .oc-foot-quiet {
+    margin-top: 0.75rem;
+    font-size: 0.8125rem;
+    gap: 0.3rem 1.1rem;
+  }
+  .oc-foot-note {
+    margin: 1.5rem 0 0;
+    color: var(--f-slate);
+    font-size: 0.8125rem;
+  }
+  .oc-foot :focus-visible {
+    outline: 2px solid #c0761c;
+    outline-offset: 3px;
+  }
+</style>
+
 <script is:inline>
 (function () {
-  // ── Scroll: pin nav ──
-  var nav = document.getElementById('siteNav');
-  if (nav) {
-    window.addEventListener('scroll', function () {
-      nav.classList.toggle('scrolled', window.scrollY > 30);
-    }, { passive: true });
+  // Reveal animations. global.css sets `.reveal { opacity: 0 }`, so this has
+  // to keep running or these pages render blank.
+  if (!('IntersectionObserver' in window) ||
+      (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+    document.querySelectorAll('.reveal').forEach(function (el) { el.classList.add('visible'); });
+    return;
   }
-
-  // ── Theme pill: apply theme and sync all pills ──
-  function applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('oc-theme', theme);
-  }
-
-  document.querySelectorAll('.theme-pill').forEach(function (pill) {
-    pill.addEventListener('click', function (e) {
-      var opt = e.target.closest('[data-opt]');
-      if (opt) {
-        applyTheme(opt.dataset.opt);
-      } else {
-        var cur = document.documentElement.getAttribute('data-theme') || 'dark';
-        applyTheme(cur === 'dark' ? 'light' : 'dark');
-      }
-    });
-  });
-
-  // ── Mobile menu ──
-  var toggle = document.getElementById('mobileToggle');
-  var links  = document.getElementById('navLinks');
-  if (toggle && links) {
-    toggle.addEventListener('click', function () {
-      var open = links.classList.toggle('open');
-      toggle.classList.toggle('active', open);
-      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-      document.body.style.overflow = open ? 'hidden' : '';
-    });
-    // Close on simple nav link click
-    links.querySelectorAll('a').forEach(function (a) {
-      a.addEventListener('click', function () {
-        links.classList.remove('open');
-        toggle.classList.remove('active');
-        toggle.setAttribute('aria-expanded', 'false');
-        document.body.style.overflow = '';
-      });
-    });
-    // Toggle internal groups (.nav-dropdown) on all screen sizes
-    links.querySelectorAll('.nav-toggle').forEach(function (t) {
-      t.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        var parent = this.closest('.nav-dropdown');
-        var isOpen = parent.classList.contains('is-open');
-        // Close all others first
-        document.querySelectorAll('.nav-dropdown').forEach(function (d) {
-          d.classList.remove('is-open');
-        });
-        if (!isOpen) parent.classList.add('is-open');
-      });
-    });
-    // Keyboard Enter/Space to toggle dropdowns (accessibility)
-    links.querySelectorAll('.nav-toggle').forEach(function (t) {
-      t.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          t.click();
-        }
-      });
-    });
-    // Close dropdowns when clicking outside
-    document.addEventListener('click', function (e) {
-      if (!e.target.closest('.nav-dropdown')) {
-        document.querySelectorAll('.nav-dropdown').forEach(function (d) {
-          d.classList.remove('is-open');
-        });
-      }
-    });
-    // Keyboard accessibility: close on Escape
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') {
-        document.querySelectorAll('.nav-dropdown').forEach(function (d) {
-          d.classList.remove('is-open');
-        });
-      }
-    });
-  }
-
-  // ── Scroll spy: active nav link ──
-  var path = window.location.pathname.replace(/\/$/, '') || '/';
-  document.querySelectorAll('.nav-links a').forEach(function (a) {
-    var href = (a.getAttribute('href') || '').replace(/\/$/, '') || '/';
-    if (href === path) a.classList.add('nav-active');
-  });
-
-  // ── Reveal animations ──
   var ro = new IntersectionObserver(function (entries) {
     entries.forEach(function (e) {
       if (e.isIntersecting) { e.target.classList.add('visible'); ro.unobserve(e.target); }

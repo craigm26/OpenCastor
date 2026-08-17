@@ -1,0 +1,174 @@
+---
+/* =========================================================================
+   /pair  ·  the page a robot's face points at.
+
+   WHY THIS PAGE EXISTS: as of tonight an ESP32-C6 on the bench paints a QR
+   code on its own AMOLED panel, and that QR encodes exactly
+
+       https://opencastor.com/pair?demo=esp32c6
+
+   verbatim from opencastor-esp32/logs/boot-20260817-082553.log. Hardware in
+   the field pointing at a 404 is a broken promise, so the URL gets a page.
+
+   BOTH STATES ARE RENDERED, STATICALLY. This site builds to static HTML and a
+   query string does not select a different file, so there is no branch here
+   and no script that reads `?demo`. A scanner arrives at the top, where the
+   scanned story is; a reader who typed the address gets the same page and the
+   general explanation is the second half. Nothing on this page needs
+   JavaScript to be complete.
+
+   Where the real artifacts came from:
+     · the four QR / display lines .... opencastor-esp32/logs/boot-20260817-082553.log
+     · the payload field names ........ ~/rover/pair-payload.json (names only,
+                                        never a value: a bearer token in a
+                                        screenshot is a robot anyone can drive)
+   ========================================================================= */
+import HomeLayout from '../layouts/HomeLayout.astro';
+import Well from '../components/Well.astro';
+
+/* Field names only, in the order the real payload writes them. */
+const payloadFields = [
+  ['gateway_url', 'where the robot answers'],
+  ['bearer', 'a token scoped to a tier, not a password'],
+  ['rrn', 'its registration number'],
+  ['estop_url', 'the address that stops it'],
+  ['attest_kid', 'which key signs its receipts'],
+  ['attest_pub', 'that key, so you can check them offline'],
+  ['capability_surface', 'everything it can actually be asked to do'],
+];
+---
+
+<HomeLayout
+  title="OpenCastor pairing QRs"
+  canonical="https://opencastor.com/pair"
+  description="A robot hands itself to you by showing you a code. What that code carries, and what the demo QR on the ESP32-C6 bench board does not."
+>
+  <!-- =============================================== 1. YOU SCANNED IT === -->
+  <section aria-labelledby="pair-h">
+    <div class="wrap two-col">
+      <div class="body-copy">
+        <h1 class="chapter" id="pair-h">You just scanned a robot's face.</h1>
+        <p class="lede" style="margin-bottom:2rem">
+          If you got here from a small square glowing on a panel the size of a
+          large coin, that was an ESP32-C6 on our bench showing you its own
+          pairing code.
+        </p>
+        <p>
+          That board is groundwork. It runs the MCU host work for OpenCastor,
+          the part that has to be true before a six dollar class robot can be
+          adopted the way a robot should be: you point a phone at its face, and
+          it is yours. On boot it inventories every chip on its own I2C bus,
+          brings up a 368 by 448 AMOLED over QSPI, and paints a QR of the
+          address you just visited. It has no Wi-Fi credentials and no network.
+        </p>
+        <p>
+          <b>The code you scanned is a demo payload.</b> It is a link to this
+          page and nothing else. It carries no identity, no token, no address
+          and no key, and it cannot pair anything to anything. What it proves is
+          the gesture: a robot that shows its own code needs no companion app,
+          no captive portal and no serial console to be adopted.
+        </p>
+      </div>
+
+      <div>
+        <div class="logwrap">
+          <pre class="mono">{`  display init ok 368x448 (SH8601 over QSPI, RGB565, no backlight -- AMOLED)
+  QR painted, version 3, modules 29x29, 9 px/module, quiet zone 36 px
+  QR payload   : https://opencastor.com/pair?demo=esp32c6
+  QR caption   : OpenCastor · scan to pair (demo)`}</pre>
+        </div>
+        <p class="meta" style="margin-top:0.9rem">
+          four lines, verbatim, from the C6's boot capture, 2026-08-17
+        </p>
+
+        <div style="margin-top:1.75rem">
+          <Well
+            clip="the ESP32-C6 on the bench with the pairing QR lit on its panel, a phone in frame mid-scan. This is the photograph the whole board exists for."
+            aspect="3x4"
+            size="small"
+          />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================ 2. THE REAL PAYLOAD ==== -->
+  <section class="settle" aria-labelledby="real-h">
+    <div class="wrap two-col">
+      <div class="body-copy">
+        <h2 class="plain" id="real-h">What a real pairing QR carries.</h2>
+        <p>
+          A real one is not a link. It is a small payload your phone reads once
+          and keeps: where the robot's gateway answers, a bearer token scoped to
+          a tier rather than a password, the robot's registration number, the
+          URL that stops it, the key its receipts are signed with, and the list
+          of everything it can actually be asked to do. Scanning is the whole of
+          pairing. There is no account, nothing is uploaded, and from then on
+          your phone can sign plans for that robot while the robot's receipts
+          stay checkable against the key that arrived in the same scan.
+        </p>
+        <p style="margin-top:1.5rem">
+          <a class="btn" href="/">Back to the runtime</a>
+        </p>
+      </div>
+
+      <div>
+        <ul class="facts">
+          {
+            payloadFields.map(([name, what]) => (
+              <li>
+                {name}
+                <span class="hairline" style="display:block;font-size:0.8125rem">{what}</span>
+              </li>
+            ))
+          }
+        </ul>
+        <p class="meta" style="margin-top:1.25rem;max-width:44ch">
+          field names verbatim from a real pair-payload.json on the RC car
+          bench. no values on this page: a bearer token in a screenshot is a
+          robot anyone can drive.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================== 3. WHERE IT GOES ===== -->
+  <section class="settle" aria-labelledby="next-h">
+    <div class="wrap">
+      <h2 class="plain" id="next-h">What is not built yet.</h2>
+      <div class="two-col">
+        <div class="body-copy">
+          <p>
+            The C6 cannot pair. Generating its own signed identity, issuing a
+            bearer, publishing the attestation key its receipts would be checked
+            against: none of that runs on the board today, and the QR on its
+            panel is a demo payload precisely because pretending otherwise would
+            be the one thing this project refuses to do. The Raspberry Pi side
+            of that loop is real and shipping, which is the difference between
+            the two halves of this page.
+          </p>
+          <p>
+            The work is tracked in the open, and the app that will do the
+            scanning is in public beta.
+          </p>
+        </div>
+
+        <div class="cta-row" style="margin-top:0">
+          <div>
+            <a
+              class="btn"
+              href="https://github.com/craigm26/OpenCastor/issues/941"
+              rel="noopener">Issue 941, the MCU host work</a>
+          </div>
+          <div class="cta-tf">
+            <a class="btn" href="/testflight">Get the iOS app, TestFlight beta</a>
+            <p class="beta">
+              Public beta, and we mean beta. Builds change most weeks, some
+              things are rough, and the release notes tell you which.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</HomeLayout>

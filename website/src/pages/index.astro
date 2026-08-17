@@ -1,523 +1,803 @@
 ---
-import BaseLayout from '../layouts/BaseLayout.astro';
+/* =========================================================================
+   opencastor.com  ·  "Speech Score"
+
+   Honesty rules this file is built to, and must keep passing:
+     1. No em-dashes in authored copy. Verbatim machine output keeps its own
+        punctuation exactly, and only inside a device frame or a mono block.
+     2. Mono type means a machine wrote it. Authored prose is never mono.
+     3. Never invent hex, a signature, a hash or a timestamp. Anything not
+        pasted from a real bench artifact is a labeled ink bar. Rows of `x`
+        characters are not allowed.
+     4. No fake footage and no fake stills. Every place a real capture
+        belongs ships as an empty well with a mono caption.
+     5. Two accents, one job each: brass = authorized, red = stop.
+
+   Where the real artifacts in this file came from:
+     · the human sentence ................ the operator's bench sentence, saved
+                                           from that chat as the drive.creep1m
+                                           capability (~/rover/capabilities.json)
+     · castor up step vocabulary ......... castor/up.py, _say()
+     · kid rover-gw-attest-2026 .......... ~/rover/gateway-attestation.env
+     · kid rover-manifest-2026 ........... ~/rover/keys/rrf/
+     · brain ollama qwen3.5:2b ........... ~/rover/active-model.json
+     · the receipt ....................... ~/rover/attestation-export.ndjsonl
+     · the screen strings ................ the mounted screen on the RC car
+     · the ESP32-C6 boot log ............. opencastor-esp32/logs/
+     · the offline verifier usage ........ RobotRegistryFoundation/robot-md-gateway,
+                                           scripts/verify_receipt.py
+   The `sig` and `telemetry_sha256` spans of the real receipt are covered with
+   ink bars on purpose: a reader cannot tell real hex from invented hex, so
+   this page prints none of it.
+
+   THE ROBOT HAS NO LINE OF DIALOGUE. Earlier drafts of the speech score gave
+   it two sentences of authored prose set in the voice face, inside rows
+   labelled as capture. That is the exact forgery this page exists to argue
+   against, and it also contradicted its own receipt (a 4 second window three
+   screens above a duration_s of 2). The robot's turns are now the plan drafted
+   from the sentence, the receipt the action left, and the string its own
+   screen showed. It answers in motion, which is the headline.
+   ========================================================================= */
+import HomeLayout from '../layouts/HomeLayout.astro';
+import Well from '../components/Well.astro';
+
+/* The human line arrives word by word at caption cadence, never
+   character-by-character terminal typing. The sentence is the operator's own,
+   spoken at the bench on the run that produced the receipt below. */
+const said = 'Do a 1 meter creep drive'.split(' ');
+
+/* The plan's arguments, verbatim from the tool_args of the one real receipt
+   printed further down this page. Kept in one place so the hero row and the
+   anatomy card can never drift apart again. */
+const planLine = 'drive.set {"throttle": 0.2, "steering": 0, "duration_s": 2}';
+
+/* Verbatim step text in the order castor/up.py prints it, with the kid names
+   from the RC car bench. Host-specific values are ink bars, and so is the
+   elapsed column: this page will not print a number it did not measure. The
+   actuator row and the gaps row are the branch a host takes when the rc-car
+   actuator package is not installed, which is what `pip install opencastor`
+   alone gives you; the caption under the log says so.
+   Each row is a list of parts, so the rendered cells carry no stray
+   whitespace: they are set in white-space: pre. */
+type Part = string | { bar: string; label: string };
+
+const upLog: Part[][] = [
+  ['detected: ', { bar: 'w20', label: 'host-specific device list, covered with an ink bar' }],
+  ['archetype: rc-car'],
+  [
+    'identity: ',
+    { bar: 'w20', label: 'robot registration number, covered with an ink bar' },
+    ' (local — `castor register` upgrades it)',
+  ],
+  ['ROBOT.md written and signed (kid rover-manifest-2026)'],
+  ['bearers: tokens generated (actuate + read)'],
+  /* castor/up.py:402, the branch that reports the resolution note, with the
+     note resolve_actuator() actually returns for the rc-car actuator. The
+     other branch (up.py:404) prints "actuator: rc-car (simulated wheels)",
+     which is what a host that already has the package prints and is a strange
+     thing to read one screen after a promise of motion. This row is what the
+     `pip install opencastor` above this log really produces, and the gaps row
+     below it is the same run's gap count, so the two cannot disagree. */
+  [
+    'actuator: noop — the rc-car actuator is not installed — ' +
+      '`pip install rc-car-actuator`, then rerun `castor up`',
+  ],
+  ['attestation: rover-gw-attest-2026'],
+  ['brain: ollama qwen3.5:2b'],
+  [
+    'services written: rover-gateway.service, rover-castor.service, ' +
+      'rover-console.service, rover-discovery.service',
+  ],
+  ['services started'],
+  [
+    'pairing QR: ',
+    { bar: 'w20', label: 'robot home path, covered with an ink bar' },
+    '/pair-qr.png',
+  ],
+  /* castor/up.py:521, and it follows from the actuator row above: an actuator
+     that resolved to noop is exactly the missing-package gap castor/gaps.py
+     records. "gaps: none" belongs to a host that already has the actuator
+     package, and printing it under a noop actuator would be a log no run of
+     `castor up` has ever produced. */
+  ['gaps: 1 noted in gaps.json (missing-package)'],
+];
+
+const bodies = [
+  {
+    name: 'Raspberry Pi 5 RC car',
+    status: 'driving today',
+    part: 'Raspberry Pi 5 · PCA9685 PWM · brushed ESC and steering servo',
+    clip: 'the Pi 5 RC car driving on the bench, one take, wheels in frame',
+  },
+  {
+    /* "on the bench", not "running": the arm's wrist camera is physically
+       unplugged, so nothing here can honestly claim a vision-driven pick, and
+       the fact list gives the arm no status of its own to lean on. */
+    name: 'SO-ARM101 arm',
+    status: 'on the bench',
+    part: 'SO-ARM101 six degree of freedom · Feetech STS3215 servos, six',
+    clip:
+      'the SO-ARM101 arm moving to a signed pose on the bench, one take. ' +
+      'Shootable today: the wrist camera is unplugged, so keep it out of ' +
+      'frame and do not stage a vision-driven pick.',
+  },
+  {
+    name: 'ESP32-C6',
+    status: 'groundwork',
+    part: 'ESP32-C6 rev v0.2 · 16 MB flash · toward six dollar class robots',
+    clip: 'the ESP32-C6 screen showing its own pairing QR',
+  },
+];
 ---
 
-<BaseLayout
-  title="OpenCastor — The Universal Runtime for Physical AI"
-  description="Give any robot a brain. Apple Foundation Models + 12+ AI providers, stack-aware setup, and a $0 primary brain. Open source, Apache 2.0."
-  ogUrl="https://opencastor.com"
+<HomeLayout
+  title="OpenCastor"
+  canonical="https://opencastor.com/"
+  description="OpenCastor is the open source runtime that connects AI brains to robot bodies. Speak or type one sentence, a local model drafts a bounded plan, you sign it, and the wheels turn."
 >
+  <!-- ===================================================== 1. HERO ===== -->
+  <section id="hero" aria-labelledby="hero-h">
+    <div class="wrap two-col hero-cols">
+      <!-- The hero stack is a flex column below 62rem, where the CSS `order`
+           declarations in home.css put the install block ahead of the speech
+           score: on a 390px phone the score is six rows of evidence and it
+           pushed the only call to action past the fold. Nothing here is
+           focusable except the CTAs, so visual order and focus order still
+           agree; the score is the reward for the first scroll. -->
+      <div class="hero-stack">
+        <h1 class="chapter hero-h" id="hero-h">
+          Talk to your robot. It answers in motion.
+        </h1>
+        <p class="lede hero-lede">
+          OpenCastor is the open source runtime that connects AI brains to robot
+          bodies. Speak or type one sentence, a local model drafts a bounded
+          plan, you sign it, and the wheels turn.
+        </p>
 
-<main>
+        <!-- The speech score. One pass of the loop, typeset, and every row is
+             an artifact: the operator's sentence, the plan drafted from it, the
+             receipt it left, the string the robot's own screen showed. The
+             robot is given no line of dialogue, because it does not answer in
+             words. The gutter rule at the left margin is dotted until the
+             signature lands and solid brass after: a plan is inert until
+             signed, stated structurally before any security copy is read. -->
+        <div class="hero-score">
+          <div class="score">
+            <div class="score-row">
+              <span class="score-slug" aria-hidden="true">you</span>
+              <p class="score-turn said">
+                <span class="vh">You said: </span>{
+                  said.map((w, i) => (
+                    <span class="seq-word" style={`--i:${i}`}>{w}{i < said.length - 1 ? ' ' : ''}</span>
+                  ))
+                }
+              </p>
+            </div>
 
-<!-- ======== HERO ======== -->
-<section class="hero">
-  <div class="hero-card reveal">
-    <!-- Phase 8: Prominent Brand Identifier -->
-    <div class="hero-brand-logo reveal">
-      <img src="/assets/icon-128.png" alt="OpenCastor Icon" width="64" height="64" />
-      <span class="brand-text">OpenCastor</span>
-    </div>
+            <div class="score-row">
+              <span class="score-slug" aria-hidden="true">plan</span>
+              {/* One line, no stray whitespace: this element is white-space: pre. */}
+              <div class="score-turn mono seq-plan"><span class="vh">The plan drafted from it: </span>{planLine}</div>
+            </div>
 
-    <h1 class="hero-title reveal-d1">
-      The Universal Runtime for<br><span class="gradient-text">Physical AI.</span>
-    </h1>
+            <div class="score-row is-signed seq-sign">
+              <span class="score-slug" aria-hidden="true">you</span>
+              <p class="score-turn said"><span class="vh">You said: </span>signed</p>
+            </div>
 
-    <p class="hero-sub reveal-d2">
-      Give any robot a brain. Semantic perception with local embeddings, 12+ AI providers,<br>
-      HLabs ACB · LiDAR · IMU · depth cameras · reactive obstacle avoidance. One config file. Zero lock-in.
-    </p>
+            <div class="score-row is-signed">
+              <span class="score-slug" aria-hidden="true">receipt</span>
+              <div class="score-turn mono seq-receipt"><span class="vh">The receipt it left: </span>{'drive.set -> ok    envelope_signature '}<span class="inkbar w12" role="img" aria-label="signature bytes, covered with an ink bar"></span></div>
+            </div>
 
-    <div class="hero-actions reveal-d3">
-      <a href="https://docs.opencastor.com" class="btn btn-primary btn-lg pulse-btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-7-7 7 7-7 7"></path></svg>
-        Connect to Robot
-      </a>
-      <a href="https://github.com/craigm26/OpenCastor" class="btn btn-secondary btn-lg">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.09.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
-        Star on GitHub
-      </a>
-    </div>
+            <div class="score-row is-signed">
+              <span class="score-slug" aria-hidden="true">screen</span>
+              <div class="score-turn seq-screen">
+                <span class="vh">And on the robot's own screen: </span>
+                <span
+                  class="screen score-screen"
+                  role="img"
+                  aria-label="Robot screen: Creeping, 2.1 metres ahead.">Creeping — 2.1 m ahead</span>
+              </div>
+            </div>
+          </div>
 
-    <div class="install-block reveal-d4">
-      <code id="install-cmd">curl -sL opencastor.com/install | bash</code>
-      <button onclick="copyInstall()">Copy</button>
-    </div>
-
-    <div class="hero-links reveal-d5">
-      <a href="https://pypi.org/project/opencastor/">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.585 11.692h4.328s2.432.039 2.432-2.35V5.391S16.714 3 11.936 3C7.362 3 7.647 4.983 7.647 4.983l.006 2.055h4.363v.617H5.92S3 7.28 3 11.874s2.547 4.456 2.547 4.456h1.521v-2.143s-.083-2.547 2.508-2.547l-.001.052zm-.282-4.444a.812.812 0 110-1.624.812.812 0 010 1.624z"/><path d="M14.415 12.308h-4.328s-2.432-.039-2.432 2.35v3.951S7.286 21 12.064 21c4.574 0 4.289-1.983 4.289-1.983l-.006-2.055h-4.363v-.617h6.096S21 16.72 21 12.126s-2.547-4.456-2.547-4.456h-1.521v2.143s.083 2.547-2.508 2.547l.001-.052zm.282 4.444a.812.812 0 110 1.624.812.812 0 010-1.624z"/></svg>
-        PyPI
-      </a>
-      <a href="https://github.com/craigm26/OpenCastor">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.09.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
-        GitHub
-      </a>
-      <a href="https://docs.opencastor.com">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-        Docs
-      </a>
-    </div>
-  </div>
-</section>
-
-<!-- ======== PROVIDER BAR ======== -->
-<section class="provider-bar">
-  <p class="provider-bar-label">Works with Apple Foundation Models + 12+ AI providers &middot; 1M+ models on Hugging Face</p>
-  <div class="provider-grid">
-    <div class="provider-item"><span class="provider-dot" style="background:#111"></span>Apple Foundation Models</div>
-    <div class="provider-item"><span class="provider-dot" style="background:#D97706"></span>Anthropic</div>
-    <div class="provider-item"><span class="provider-dot" style="background:#4285F4"></span>Google Gemini</div>
-    <div class="provider-item"><span class="provider-dot" style="background:#10A37F"></span>OpenAI</div>
-    <div class="provider-item"><span class="provider-dot" style="background:#FFD21E"></span>Hugging Face</div>
-    <div class="provider-item"><span class="provider-dot" style="background:#888"></span>Ollama</div>
-    <div class="provider-item"><span class="provider-dot" style="background:#aaa"></span>llama.cpp</div>
-    <div class="provider-item"><span class="provider-dot" style="background:#7C3AED"></span>MLX</div>
-    <div class="provider-item"><span class="provider-dot" style="background:#D97706"></span>Claude OAuth</div>
-    <div class="provider-item"><span class="provider-dot" style="background:#00A67E"></span>OpenRouter</div>
-    <div class="provider-item"><span class="provider-dot" style="background:#FF6B35"></span>Groq</div>
-    <div class="provider-item"><span class="provider-dot" style="background:#5B21B6"></span>VLA</div>
-    <div class="provider-item"><span class="provider-dot" style="background:#0EA5E9"></span>Sentence Transformers</div>
-  </div>
-</section>
-
-<!-- ======== ARCHITECTURE ======== -->
-<section class="section alt-section" id="architecture">
-  <div class="container">
-    <div class="section-header center reveal">
-      <p class="section-label">Architecture</p>
-      <h2 class="section-title">Tiered Cognitive Architecture</h2>
-      <p class="section-desc">Three layers of intelligence — from reflexive safety to long-horizon planning. Each tier runs independently with automatic fallback.</p>
-    </div>
-
-    <div class="arch-visual reveal reveal-d1">
-      <div class="arch-tier" style="background: linear-gradient(135deg, rgba(168,85,247,0.08), var(--bg-card));">
-        <div class="arch-tier-icon" style="background: var(--purple-light);">🧠</div>
-        <div class="arch-tier-content">
-          <h3>Planner</h3>
-          <p>Long-horizon reasoning, task decomposition, and strategic planning. Claude, GPT-4.1, Gemini.</p>
+          <p class="score-cap seq-cap">
+            One pass of the loop, set as type. Your sentence, the plan drafted
+            from it, the receipt it left, and the line its screen showed while
+            it moved. The robot has no line of dialogue here because its answer
+            was the motion. The bench video is the proof.
+          </p>
         </div>
-        <span class="arch-tier-badge" style="background: var(--purple-light); color: var(--purple);">~2s latency</span>
-      </div>
-      <div class="arch-tier" style="background: linear-gradient(135deg, rgba(99,102,241,0.08), var(--bg-card));">
-        <div class="arch-tier-icon" style="background: var(--accent-glow);">⚡</div>
-        <div class="arch-tier-content">
-          <h3>Fast Brain</h3>
-          <p>Real-time perception and quick decisions. Open-source models via HuggingFace, Ollama, or llama.cpp.</p>
+
+        <!-- ------------------------------------------------ the 3 CTAs -->
+        <div class="cta-row">
+          <div class="cta-install">
+            <div class="install">
+              <div class="install-lines">
+                <pre id="install-cmd">pip install opencastor
+castor up</pre>
+                <button class="copy" type="button" data-copy="install-cmd">copy</button>
+              </div>
+            </div>
+            <p class="beta" style="max-width:34ch">
+              Python 3.10 to 3.13. <code>castor up</code> takes a bare host to a
+              paired robot printing its pairing QR.
+            </p>
+          </div>
+
+          <div>
+            <a class="btn" href="https://github.com/craigm26/OpenCastor" rel="noopener">
+              Read the code on GitHub
+            </a>
+          </div>
+
+          <div class="cta-tf">
+            <a class="btn" href="/testflight">Get the iOS app, TestFlight beta</a>
+            <p class="beta">
+              Public beta, and we mean beta. Builds change most weeks, some
+              things are rough, and the release notes tell you which.
+            </p>
+          </div>
         </div>
-        <span class="arch-tier-badge" style="background: var(--accent-glow); color: var(--accent);">~100ms</span>
+
+        <p class="hairline hero-note">
+          Apache 2.0. Live on the bench this week, on a real RC car.
+        </p>
       </div>
-      <div class="arch-tier" style="background: linear-gradient(135deg, rgba(34,197,94,0.08), var(--bg-card));">
-        <div class="arch-tier-icon" style="background: var(--green-light);">🛡️</div>
-        <div class="arch-tier-content">
-          <h3>Reactive Layer</h3>
-          <p>Hardware-level safety reflexes, emergency stop, collision avoidance. No AI latency — pure code.</p>
+
+      <!-- Two objects, always visible, so the fold carries evidence even
+           before any footage exists. -->
+      <div>
+        <div class="evidence">
+          <div class="evidence-card is-signed seq-sign">
+            <span class="chip chip-signed">signed</span>
+            <span class="meta">kid rover-gw-attest-2026</span>
+          </div>
+          <div class="evidence-card is-stop">
+            <span class="chip chip-stop">stop</span>
+            <span class="meta">partial transcript, before the sentence ends</span>
+          </div>
         </div>
-        <span class="arch-tier-badge" style="background: var(--green-light); color: var(--green);">&lt;1ms</span>
+
+        <Well clip="the one-take RC car bench video: speak the sentence, sign, wheels turn. Audio on, no cuts. HIGHEST PRIORITY: the hero's argument lands with this filled." />
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- ======== FEATURES ======== -->
-<section class="section" id="features">
-  <div class="container">
-    <div class="section-header center reveal">
-      <p class="section-label">Features</p>
-      <h2 class="section-title">Everything you need to build<br>intelligent robots.</h2>
-      <p class="section-desc">From vision to safety, from hardware drivers to community configs — it's all here.</p>
-    </div>
+  <!-- ============================================ 2. STOP ALWAYS WINS == -->
+  <section id="stop" class="settle" aria-labelledby="stop-h">
+    <div class="wrap">
+      <h2 class="chapter is-stop" id="stop-h">Stop always wins.</h2>
+      <div class="two-col">
+        <div class="body-copy">
+          <p>
+            Say stop and the word goes straight to the wheels. It does not wait
+            for a model to finish thinking. It does not wait for you to finish
+            the sentence. Motion needs a budget, a window, and a speed cap you
+            approved. If commands stop arriving, the robot stops about a second
+            later. Every action leaves a receipt you can verify offline.
+          </p>
+          <p>
+            You are not operating a machine. You are asking someone in the room
+            to do one small thing, and being told what it did.
+          </p>
 
-    <div class="feature-grid">
-      <div class="card reveal">
-        <div class="card-icon" style="background: var(--cyan-light);">🔌</div>
-        <h3>Plug-and-Play Peripherals</h3>
-        <p>Any USB camera, depth sensor, LiDAR, IMU, or motor controller works out of the box. OpenCastor auto-detects hardware at startup — no driver code required. Run <code>castor scan</code> to see everything connected.</p>
-      </div>
+          <!-- The page's one and only interaction. Built only from verbatim
+               screen strings. Keyboard accessible, works on touch, and under
+               prefers-reduced-motion it renders the stopped state on press
+               with no transition. -->
+          <div class="stopdemo">
+            <div class="screen" role="img" aria-label="Robot screen, moving: Depth camera at 9 hertz. Creeping, 2.1 metres ahead.">
+              <span>Depth camera · 9 Hz</span>
+              <span class="stopdemo-line">Creeping — 2.1 m ahead</span>
+            </div>
+            <div class="stopdemo-state">
+              <span class="chip chip-stop stopdemo-chip" aria-hidden="true">stop</span>
+              <span class="meta stopdemo-latency" aria-hidden="true">
+                partial transcript, before the sentence ends
+              </span>
+            </div>
+            <button class="stopdemo-btn" type="button" aria-pressed="false">
+              press and hold to stop
+            </button>
+            <p class="meta stopdemo-hint">hold the button, or focus it and hold space</p>
+          </div>
+        </div>
 
-      <div class="card reveal reveal-d1">
-        <div class="card-icon" style="background: var(--accent-glow);">👁️</div>
-        <h3>Vision &amp; Depth, Your Way</h3>
-        <p>V4L2 USB cameras, CSI ribbon cameras, OAK-D stereo depth, Intel RealSense, Hailo-8 NPU acceleration — set <code>camera: type: auto</code> and OpenCastor picks the best available hardware. Swap it at any time.</p>
-      </div>
-
-      <div class="card reveal reveal-d2">
-        <div class="card-icon" style="background: var(--orange-light);">🛡️</div>
-        <h3>Safety &amp; AI Accountability</h3>
-        <p>Multi-layered safety kernel: anti-subversion defense, work authorization, physical bounds enforcement, tamper-evident audit logs, and emergency stop in every loop. RCAN §16 AI Accountability: every command carries model identity, confidence gates, and Human-in-the-Loop authorization — produces evidence for EU AI Act compliance assessments.</p>
-      </div>
-
-      <div class="card reveal reveal-d3">
-        <div class="card-icon" style="background: var(--green-light);">🌐</div>
-        <h3>Community Hub</h3>
-        <p>Share and discover robot configurations, behaviors, and presets. Pull community-tested RCAN configs with one command. Build on what others have proven.</p>
-      </div>
-
-      <div class="card reveal reveal-d4">
-        <div class="card-icon" style="background: var(--purple-light);">💻</div>
-        <h3>Cross-Platform</h3>
-        <p>Runs on Raspberry Pi, Jetson, x86 Linux, and macOS. ARM64 native. From $35 Pi Zero to workstation-class machines — same codebase, same config.</p>
-      </div>
-
-      <div class="card reveal reveal-d5">
-        <div class="card-icon" style="background: var(--red-light);">🔄</div>
-        <h3>Hot-Swap AI Brains</h3>
-        <p>Switch between Apple/local/cloud stacks with a single config line. Setup recommends compatible stacks automatically for your device.</p>
-      </div>
-
-      <div class="card reveal reveal-d6">
-        <div class="card-icon" style="background: var(--purple-light);">🧠</div>
-        <h3>Semantic Perception</h3>
-        <p>EmbeddingInterpreter gives your robot semantic memory — it recognizes familiar scenes, detects novel situations, and injects relevant past experience into every decision. Uses local CLIP embeddings by default (no API key needed). Optionally upgrade to Gemini Embedding 2 for multimodal depth. Configure with a single RCAN block.</p>
-      </div>
-
-      <div class="card reveal reveal-d7">
-        <div class="card-icon" style="background: var(--cyan-light);">⚙️</div>
-        <h3>HLabs ACB v2.0 Motor Control</h3>
-        <p>First-class support for HLaboratories' open-source Actuator Control Board — 3-phase BLDC, 12V–30V, 40A, CAN Bus at 1Mbit/s. Auto-detects via USB VID/PID, runs full calibration sequences, streams 50Hz encoder telemetry. Pre-built profiles for single actuator, 3-DOF arm, and 6-DOF biped. Install: <code>pip install opencastor[hlabs]</code>.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ======== COST ======== -->
-<section class="section alt-section" id="cost">
-  <div class="container">
-    <div class="section-header center reveal">
-      <p class="section-label">Cost</p>
-      <h2 class="section-title">Your primary brain costs $0.</h2>
-      <p class="section-desc">Open-source models via Hugging Face free API power the fast brain. Paid providers are optional fallbacks for planning tasks.</p>
-    </div>
-
-    <div class="cost-grid reveal reveal-d1">
-      <div class="cost-card featured">
-        <h3>Primary Brain</h3>
-        <div class="cost-price free">$0</div>
-        <div class="cost-label">forever</div>
-        <ul class="cost-features">
-          <li>Apple Foundation Models on eligible Macs</li>
-          <li>HuggingFace free inference API</li>
-          <li>Ollama local models</li>
-          <li>llama.cpp on-device</li>
-          <li>Full vision pipeline</li>
-          <li>All safety modules</li>
-          <li>Community configs</li>
-        </ul>
-      </div>
-      <div class="cost-card">
-        <h3>Planner Fallback</h3>
-        <div class="cost-price">Pay-per-use</div>
-        <div class="cost-label">only when you need it</div>
-        <ul class="cost-features">
-          <li>Anthropic Claude</li>
-          <li>Google Gemini</li>
-          <li>OpenAI GPT-4.1</li>
-          <li>Complex task planning</li>
-          <li>Long-horizon reasoning</li>
-        </ul>
-      </div>
-      <div class="cost-card">
-        <h3>Claude OAuth</h3>
-        <div class="cost-price">Free*</div>
-        <div class="cost-label">with Claude Pro subscription</div>
-        <ul class="cost-features">
-          <li>Use your existing Claude sub</li>
-          <li>No separate API keys needed</li>
-          <li>OAuth-based authentication</li>
-          <li>Full Claude capabilities</li>
+        <ul class="facts">
+          <li>spoken stop bypasses every model in the stack</li>
+          <li>human-approved budget, window, speed cap</li>
+          <li>deadman stops the robot about 1 s after commands stop</li>
         </ul>
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- ======== QUICK START ======== -->
-<section class="section" id="quickstart">
-  <div class="container">
-    <div class="section-header center reveal">
-      <p class="section-label">Quick Start</p>
-      <h2 class="section-title">Three steps to intelligent.</h2>
-      <p class="section-desc">No PhD required. No firmware. No custom drivers.</p>
+  <!-- ================================== 3. A PLAN IS INERT UNTIL SIGNED -->
+  <section id="plan" class="settle" aria-labelledby="plan-h">
+    <div class="wrap">
+      <h2 class="chapter" id="plan-h">A plan is inert until signed.</h2>
+      <div class="two-col">
+        <div class="body-copy">
+          <p>
+            Your sentence becomes a plan, and the plan is a small, boring
+            object: one tool, three arguments, and the limits it has to live
+            inside. It cannot move anything. It moves when a signature lands on
+            it. You sign it from your phone, or a standing owner grant you wrote
+            in advance signs it for you, on terms you set.
+          </p>
+        </div>
+
+        <!-- Same line as the hero row, from the same constant, and the same
+             arguments as the receipt three screens down. A page that argues
+             receipts are checkable does not get to disagree with its own. -->
+        <div class="plan">
+          <div class="plan-line">{planLine}</div>
+          <div class="plan-annos">
+            <div class="plan-anno"><b>drive.set</b><span>the one tool this plan may call</span></div>
+            <div class="plan-anno"><b>throttle</b><span>0.2, under the speed cap you approved</span></div>
+            <div class="plan-anno"><b>steering</b><span>0, straight ahead</span></div>
+            <div class="plan-anno"><b>duration_s</b><span>2, the window in seconds it may move inside</span></div>
+            <div class="plan-anno"><b>budget</b><span>one motion, then the plan is spent</span></div>
+          </div>
+          <div class="plan-sig">
+            <span class="chip chip-signed">envelope_signature</span>
+            <p class="meta" style="margin-top:0.6rem">
+              alg Ed25519 · kid rover-gw-attest-2026 · sig
+              <span class="inkbar w12" role="img" aria-label="signature bytes, covered with an ink bar"></span>
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
+  </section>
 
-    <div class="quickstart reveal reveal-d1">
-      <div class="quickstart-step">
-        <div class="quickstart-num">01</div>
+  <!-- ===================================== 4. ANATOMY OF A RECEIPT ===== -->
+  <section id="receipt" class="settle" aria-labelledby="receipt-h">
+    <div class="wrap">
+      <h2 class="plain" id="receipt-h">Anatomy of a receipt.</h2>
+      <div class="two-col">
         <div>
-          <h4>Install</h4>
-          <p>One command installs OpenCastor and all dependencies.</p>
-          <code>curl -sL opencastor.com/install | bash</code>
+          <div class="body-copy">
+            <p>
+              Every action leaves one of these behind. The tool name, the
+              arguments it actually ran with, the result, and an Ed25519
+              signature over the whole envelope. You can check it on a laptop
+              with no network, months from now. There is no account to log into
+              and no server in the loop.
+            </p>
+          </div>
+
+          <!-- The offline verify gesture closes the section: one command, no
+               network, months later. The verifier does NOT live in the repo
+               this page links to; it ships with the gateway, in a different
+               org, so the invocation here is repo-qualified and includes the
+               clone. Its argument line is verbatim from the Usage block of
+               RobotRegistryFoundation/robot-md-gateway,
+               scripts/verify_receipt.py. -->
+          <p class="receipt-note">One command, no network, months later:</p>
+          <div class="logwrap is-cmd" style="margin-top:0.6rem">
+            <pre>git clone https://github.com/RobotRegistryFoundation/robot-md-gateway
+python robot-md-gateway/scripts/verify_receipt.py --receipt r.json --pubkey gw.pub</pre>
+          </div>
+          <p class="receipt-note">
+            The verifier lives with the gateway, not with the runtime, and that
+            is the point: it is stdlib and one crypto library, it imports
+            neither the runtime nor the protocol package, and a third party
+            checking your robot should not have to trust either one. It also
+            flips one byte and proves the signature fails, so a run that
+            reports success has asserted both directions.
+          </p>
         </div>
-      </div>
-      <div class="quickstart-step">
-        <div class="quickstart-num">02</div>
+
         <div>
-          <h4>Configure</h4>
-          <p>Interactive setup wizard probes your device, suggests a stack, and guides onboarding with inline QR codes. Bridge and fleet registration included.</p>
-          <code>castor setup</code>
-        </div>
-      </div>
-      <div class="quickstart-step">
-        <div class="quickstart-num">03</div>
-        <div>
-          <h4>Run</h4>
-          <p>Your robot is now an AI-powered agent. Send commands via voice, chat, or WhatsApp.</p>
-          <code>castor run --config my_robot.rcan.yaml</code>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ======== STATS ======== -->
-<section class="alt-section" style="padding: 72px 0">
-  <div class="container">
-    <div class="stats-grid">
-      <div class="reveal">
-        <div class="stat-number">166,186</div>
-        <div class="stat-label">Lines of Code</div>
-      </div>
-      <div class="reveal reveal-d1">
-        <div class="stat-number">6,404</div>
-        <div class="stat-label">Tests</div>
-      </div>
-      <div class="reveal reveal-d2">
-        <div class="stat-number">12</div>
-        <div class="stat-label">AI Providers</div>
-      </div>
-      <div class="reveal reveal-d3">
-        <div class="stat-number">Any</div>
-        <div class="stat-label">USB / I2C / SPI Peripheral</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ======== COMMUNITY ======== -->
-<section class="section" id="community">
-  <div class="container">
-    <div class="section-header center reveal">
-      <p class="section-label">Community</p>
-      <h2 class="section-title">Recipes that<br><span class="gradient-text">actually work.</span></h2>
-      <p class="section-desc">Real builders share tested configs. Browse by use case, fork what works, and skip the hard parts.</p>
-    </div>
-
-    <div class="community-index-grid">
-      <div class="hw-card reveal">
-        <div class="hw-card-top">
-          <div class="hw-card-icon">🏠</div>
-          <span class="status status-green">Tested</span>
-        </div>
-        <h3>PiCar-X Home Patrol</h3>
-        <p>Nightly patrol with Gemini vision. Spots open windows, water leaks, unexpected items. WhatsApp alerts.</p>
-        <div class="recipe-tags">
-          <span class="recipe-tag">PiCar-X</span>
-          <span class="recipe-tag">Gemini</span>
-          <span class="recipe-tag">~$120</span>
-        </div>
-        <div class="hw-card-meta">by robotmike &middot; Beginner</div>
-      </div>
-
-      <div class="hw-card reveal reveal-d1">
-        <div class="hw-card-top">
-          <div class="hw-card-icon">🌿</div>
-          <span class="status status-green">Tested</span>
-        </div>
-        <h3>Farm Scout</h3>
-        <p>4WD rover checking crop rows for pests, disease, and dry spots. Llama 3.3 on Hugging Face free tier.</p>
-        <div class="recipe-tags">
-          <span class="recipe-tag">Freenove 4WD</span>
-          <span class="recipe-tag">Llama 3.3</span>
-          <span class="recipe-tag">~$200</span>
-        </div>
-        <div class="hw-card-meta">by agribot_sarah &middot; Intermediate</div>
-      </div>
-
-      <div class="hw-card reveal reveal-d2">
-        <div class="hw-card-top">
-          <div class="hw-card-icon">🎓</div>
-          <span class="status status-green">Tested</span>
-        </div>
-        <h3>Classroom Q&amp;A Bot</h3>
-        <p>Roams the classroom answering student questions via WhatsApp. Claude Haiku with topic and content filters.</p>
-        <div class="recipe-tags">
-          <span class="recipe-tag">PiCar-X</span>
-          <span class="recipe-tag">Claude Haiku</span>
-          <span class="recipe-tag">~$140</span>
-        </div>
-        <div class="hw-card-meta">by edu_maker_jen &middot; Beginner</div>
-      </div>
-    </div>
-
-    <div class="hero-actions reveal" style="justify-content:center">
-      <a href="/hub" class="btn btn-primary">
-        Browse all recipes &rarr;
-      </a>
-      <a href="/hub#submit" class="btn btn-secondary">
-        Share your robot config &rarr;
-      </a>
-    </div>
-  </div>
-</section>
-
-<!-- ======== RELEASE ======== -->
-<section class="section" id="release">
-  <div class="container">
-    <div class="section-header center reveal">
-      <p class="section-label">Recent Releases</p>
-      <h2 class="section-title">What's New</h2>
-    </div>
-    <div class="feature-grid">
-      <div class="card reveal">
-        <div class="card-icon" style="background: var(--green-light);">🧬</div>
-        <h3>v2026.3.27.1 — ML-DSA-65 only, Physical AI dual-brain</h3>
-        <p>Sprint, Threshold Race, and Model×Hardware Bracket Season competition formats. All Gemini 2.0/1.5 model strings updated to Gemini 2.5 ahead of June 2026 deprecation. Contribute throughput 10x via Firestore caching (4.6s → 14ms).</p>
-        <a href="/changelog#v2026.3.27.1">Release notes →</a>
-      </div>
-      <div class="card reveal reveal-d1">
-        <div class="card-icon" style="background: var(--purple-light);">🔐</div>
-        <h3>v2026.3.26.1 — Firmware Attestation &amp; EU AI Act</h3>
-        <p>Signed firmware manifests, CycloneDX SBOM supply chain, M2M_TRUSTED fleet orchestration, EU AI Act Art. 16(j) authority access, and L5 conformance checks. rcan-py 1.1.0 and rcan-ts 1.1.0 published.</p>
-        <a href="/blog/rcan-v21-release">Release notes →</a>
-      </div>
-      <div class="card reveal reveal-d2">
-        <div class="card-icon" style="background: var(--cyan-light);">🔧</div>
-        <h3>v2026.3.16.3 — Surface Routing Fix + Chat E2E</h3>
-        <p>Surface routing fix confirmed chat end-to-end. Bob↔Alex live robot conversation milestone reached. Fleet UI launched at <a href="https://app.opencastor.com" style="color:var(--accent)">app.opencastor.com</a>.</p>
-        <a href="/changelog#v2026.3.16.3">Release notes →</a>
-      </div>
-      <div class="card reveal reveal-d3">
-        <div class="card-icon" style="background: var(--orange-light);">📋</div>
-        <h3>Full Changelog</h3>
-        <p>View complete release notes including all bug fixes, API changes, and migration notes.</p>
-        <a href="/changelog" class="btn-secondary" style="margin-top:1rem;display:inline-block;">View Changelog →</a>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ======== RCAN Relationship ======== -->
-<section class="section" style="background: var(--bg-alt, #0d0f1a); border-top: 1px solid rgba(255,255,255,0.06); border-bottom: 1px solid rgba(255,255,255,0.06);">
-  <div class="container" style="max-width: 800px;">
-    <div class="section-header center reveal">
-      <p class="section-label">Open Protocol</p>
-      <h2 class="section-title">OpenCastor implements RCAN.<br>RCAN doesn't belong to OpenCastor.</h2>
-    </div>
-    <div class="reveal reveal-d1" style="color: var(--text-secondary, #9ca3af); line-height: 1.8; font-size: 1.05rem; text-align: center; max-width: 680px; margin: 0 auto;">
-      <p style="margin-bottom: 1.2rem;">
-        <a href="https://rcan.dev" style="color: var(--accent); text-decoration: none; font-weight: 600;">RCAN</a> is an independent open protocol — the proposed standard for robot identity, accountability, and communication. Think of it like DNS and ICANN, but for robotics. Any robot, any runtime, any manufacturer can implement RCAN and register at the <a href="https://robotregistryfoundation.org/registry/" style="color: var(--accent); text-decoration: none;">Robot Registry Foundation</a>.
-      </p>
-      <p style="margin-bottom: 1.2rem;">
-        OpenCastor is a productized open-core RCAN runtime. RCAN-the-protocol is implementation-independent; OpenCastor is the most fully-documented runtime that speaks it. You don't need OpenCastor to use RCAN. You don't need RCAN to use OpenCastor. Using both together is encouraged and gives you the full stack: a robot that is controllable, auditable, and globally addressable.
-      </p>
-      <p>
-        If you're building a robot runtime, a fleet management system, or robotics hardware — <strong style="color: var(--text, #f1f5f9);">you are welcome and encouraged to implement RCAN</strong>. The spec is CC BY 4.0. The registry is open to all robots.
-      </p>
-      <p style="margin-top: 1.2rem;">
-        Describing your robot? <a href="https://robotmd.dev" style="color: var(--accent); text-decoration: none; font-weight: 600;">ROBOT.md</a> is the companion one-file manifest — YAML + markdown, readable by humans and LLM agents. OpenCastor reads RCAN configs; ROBOT.md is the file an agent harness (Claude Code, Desktop, Mobile) reads to understand what the robot <em>is</em>. Use either alone, or both together.
-      </p>
-    </div>
-    <div class="reveal reveal-d2" style="display: flex; justify-content: center; gap: 1rem; margin-top: 2rem; flex-wrap: wrap;">
-      <a href="https://rcan.dev/spec/" class="btn btn-secondary" style="font-size: 0.9rem;">Read the RCAN Spec →</a>
-      <a href="https://robotregistryfoundation.org/registry/submit/" class="btn btn-secondary" style="font-size: 0.9rem;">Register Your Robot →</a>
-      <a href="https://robotmd.dev" class="btn btn-secondary" style="font-size: 0.9rem;">ROBOT.md format →</a>
-      <a href="https://rcan.dev/quickstart/" class="btn btn-secondary" style="font-size: 0.9rem;">Implement RCAN →</a>
-    </div>
-  </div>
-</section>
-
-<!-- ======== CTA ======== -->
-<section class="cta-section">
-  <h2 class="reveal">Start building today.</h2>
-  <p class="reveal reveal-d1">Open source. Apache 2.0. Free forever.</p>
-  <div style="display:flex;gap:12px;justify-content:center;margin-bottom:12px">
-    <a href="https://docs.opencastor.com" class="btn btn-primary btn-lg">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-7-7 7 7-7 7"></path></svg>
-      Quick Start
-    </a>
-    <a href="https://github.com/craigm26/OpenCastor" class="btn btn-secondary btn-lg">
-      View on GitHub
-    </a>
-  </div>
-</section>
-
-</main>
-
-<!-- ======== FOOTER ======== -->
-<footer class="site-footer">
-  <div class="footer-inner">
-    <div class="footer-grid">
-      <div class="footer-brand">
-        <a href="/" class="nav-logo">
-      <div class="nav-logo-img"></div>
-      <span>OpenCastor</span>
-    </a>
-        <p>The universal runtime for physical AI. Give any robot a brain.</p>
-      </div>
-      <div class="footer-col">
-        <h4>Product</h4>
-        <a href="https://docs.opencastor.com">Documentation</a>
-        <a href="/hardware">Hardware</a>
-        <a href="/changelog">Changelog</a>
-        <a href="https://rcan.dev/spec/">RCAN Spec</a>
-        <a href="https://pypi.org/project/opencastor/">PyPI</a>
-      </div>
-      <div class="footer-col">
-        <h4>Resources</h4>
-        <a href="https://docs.opencastor.com">Getting Started</a>
-        <a href="https://github.com/craigm26/OpenCastor">GitHub</a>
-        <a href="https://github.com/craigm26/OpenCastor/issues">Issues</a>
-        <a href="https://discord.gg/jMjA8B26Bq">Discord Community</a>
-      </div>
-      <div class="footer-col">
-        <h4>Company</h4>
-        <a href="/hub">Hub</a>
-        <a href="/about">About</a>
-        <a href="mailto:hello@opencastor.com">Contact</a>
-      </div>
-    </div>
-    <div class="footer-bottom">
-      <p>&copy; 2025-2026 Craig Merry. Apache 2.0 License.</p>
-      <div class="footer-social">
-        <a href="https://github.com/craigm26" aria-label="GitHub">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.09.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
-        </a>
-        <a href="https://twitter.com/opencastor" aria-label="Twitter / X">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-        </a>
-        <a href="https://discord.gg/jMjA8B26Bq" aria-label="Discord">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03z M8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.947 2.418-2.157 2.418z"/></svg>
-        </a>
-      </div>
-    </div>
-  </div>
-</footer>
-
-<script>
-  // Theme pill — clicking ☀ or 🌙 sets that theme directly; clicking pill body toggles
-  (function() {
-    var t = localStorage.getItem('oc-theme');
-    var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    document.documentElement.setAttribute('data-theme', t || (dark ? 'dark' : 'light'));
-  })();
-
-  document.addEventListener('DOMContentLoaded', function() {
-    function applyTheme(theme) {
-      document.documentElement.setAttribute('data-theme', theme);
-      localStorage.setItem('oc-theme', theme);
+          <div class="receipt">
+            <pre>{`{
+  "v": "rcan-action-trace/1",
+  "rrn": "RRN-000000000012",
+  "ruri": "rcan://RRN-000000000012/drive.set",
+  "invoke": {
+    "type": "rcan/v1/invoke",
+    "tool_name": "drive.set",
+    "scope": "MANIPULATE",
+    "tool_args": {
+      "throttle": 0.2,
+      "steering": 0,
+      "duration_s": 2
     }
-    document.querySelectorAll('.theme-pill').forEach(function(pill) {
-      pill.addEventListener('click', function(e) {
-        var opt = e.target.closest('[data-opt]');
-        if (opt) {
-          applyTheme(opt.dataset.opt);
-        } else {
-          var cur = document.documentElement.getAttribute('data-theme') || 'dark';
-          applyTheme(cur === 'dark' ? 'light' : 'dark');
-        }
-      });
-    });
-  });
-</script>
+  },
+  "outcome": {
+    "status": "ok",
+    "duration_ms": 1,
+    "started_at": "2026-08-04T01:37:57.302051+00:00",
+    "ended_at":   "2026-08-04T01:37:57.303164+00:00",
+    "telemetry_sha256": `}<span
+                class="inkbar w26"
+                role="img"
+                aria-label="telemetry digest, covered with an ink bar"></span>{`,
+    "envelope_signature": {
+      "alg": "Ed25519",
+      "kid": "rover-gw-attest-2026",
+      "sig": `}<span
+                class="inkbar w26"
+                role="img"
+                aria-label="signature bytes, covered with an ink bar"></span>{`
+    }
+  }
+}`}</pre>
+          </div>
+          <p class="meta" style="margin-top:0.9rem">
+            one real receipt from the RC car bench, 2026-08-04. field names,
+            alg and kid verbatim. the digest and the signature are covered:
+            this page prints no hex.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
 
-</BaseLayout>
+  <!-- ============================ 5. TEN MINUTES, ON THE CLOCK ======== -->
+  <section id="ten-minutes" class="settle" aria-labelledby="ten-h">
+    <div class="wrap">
+      <h2 class="plain" id="ten-h">Ten minutes, on the clock.</h2>
+      <!-- This line used to say "we measure it on the bench, every build",
+           which the page then contradicted with a column of ink bars. The
+           ledger has no timed run in it yet, so the claim is the goal and the
+           instrumentation, not a measurement. -->
+      <p class="hairline" style="max-width:52ch;margin:-0.75rem 0 2rem">
+        It is the goal we design against, and the command times itself so the
+        number is yours to check.
+      </p>
+
+      <div class="two-col narrow-left">
+        <div class="body-copy">
+          <p>
+            Ten minutes is the goal we design against. The timed run that fills
+            the column on the right is the one the flashable Pi image produces
+            when it clears hardware verification, and until that capture exists
+            this page prints ink bars instead of numbers. It is not a
+            certification and we will not dress it up as one.
+          </p>
+          <p>
+            One command does the work. <code>castor up</code> detects your
+            hardware, writes and signs a ROBOT.md manifest, issues its tokens,
+            starts the services, and prints a pairing QR. It timestamps every
+            step as it goes, so you can check the arithmetic yourself.
+          </p>
+        </div>
+
+        <div>
+          <!-- Two source lines, because two of them produce what is below: the
+               timing printf that prefixes every row, and the actuator row's own
+               f-string. -->
+          <p class="meta log-legend">
+            castor/up.py:312 &nbsp;·&nbsp; {'print(f"  [{time.monotonic() - started:5.1f}s] {step}")'}
+            <br />
+            castor/up.py:402 &nbsp;·&nbsp; {'_say(f"actuator: {actuator_name} — {actuator_note}", started)'}
+          </p>
+          <div class="logwrap stagger">
+            <dl class="log">
+              {
+                upLog.map((row, i) => (
+                  <>
+                    <dt class="log-row" style={`--i:${i}`}>{'  ['}<span class="inkbar w5" role="img" aria-label="elapsed seconds, not captured yet"></span>{'s]'}</dt>
+                    <dd class="log-row" style={`--i:${i}`}>{row.map((p) => (typeof p === 'string' ? p : <span class={`inkbar ${p.bar}`} role="img" aria-label={p.label}></span>))}</dd>
+                  </>
+                ))
+              }
+            </dl>
+          </div>
+          <p class="meta log-note">
+            step text verbatim from castor/up.py, in the order it prints, with
+            the kid names from the RC car bench. the actuator row and the gap
+            row are the branch a host takes when the rc-car actuator package is
+            not installed, which is what `pip install opencastor` on its own
+            gives you, and they belong to each other. host-specific values and
+            the elapsed column are ink bars until the operator's timed capture
+            lands: this page will not print a number it did not measure.
+          </p>
+
+          <div style="margin-top:2rem">
+            <Well
+              clip="the timer capture: bare host to pairing QR, one take, the clock visible in frame"
+              size="small"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- The pairing QR beat: scanning the QR is the turn from host to
+           robot, so it gets its own small moment. -->
+      <div class="two-col" style="margin-top:3rem">
+        <div class="body-copy">
+          <h3 class="sub">The scan.</h3>
+          <p class="lede">
+            Scan that QR with the app. Your robot has a face now, and on a
+            vehicle, an eye.
+          </p>
+        </div>
+        <div>
+          <Well clip="a phone scanning the printed pairing QR, then the robot's face appearing in the app" aspect="3x4" size="small" />
+        </div>
+      </div>
+
+      <div style="margin-top:3rem" class="body-copy">
+        <h3 class="sub">If you would rather never open a terminal.</h3>
+        <p>
+          There is a flashable Pi image: blank SD card to pairing QR. It is
+          built and in final hardware verification now.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================= 6. LOCAL BRAINS, LONG MEMORY ======= -->
+  <section id="brains" class="settle" aria-labelledby="brains-h">
+    <div class="wrap">
+      <h2 class="plain" id="brains-h">Local brains, long memory.</h2>
+      <div class="two-col">
+        <div class="body-copy">
+          <p>
+            The brain runs on the robot. Ollama with qwen for language,
+            gemma-vision for what the camera sees, and cloud brains available
+            when you want them, optional by design. The robot also keeps a long
+            term memory of its own bench history, and it recalls relevantly.
+          </p>
+          <ul class="facts" style="margin-top:1.5rem">
+            <li>brain: ollama qwen3.5:2b</li>
+            <li>vision: gemma-vision, on the robot</li>
+            <li>cloud brains: optional, per robot, never required</li>
+          </ul>
+        </div>
+
+        <div class="score">
+          <div class="score-row">
+            <span class="score-slug" aria-hidden="true">you</span>
+            <p class="score-turn said">
+              <span class="vh">You asked: </span>why won't it move at low throttle?
+            </p>
+          </div>
+          <div class="score-row">
+            <span class="score-slug" aria-hidden="true">bob</span>
+            <div class="score-turn mono"><span class="vh">The robot's recalled answer is not on this page yet: </span>operator memory transcript pending</div>
+          </div>
+          <p class="score-cap">
+            The question is verbatim. The answer is the robot's own recalled
+            memory, and it goes here once the bench transcript is captured. We
+            are not going to write a plausible one.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================== 7. THE FACE, AND ON VEHICLES THE EYE ========== -->
+  <section id="face" class="settle" aria-labelledby="face-h">
+    <div class="wrap">
+      <h2 class="plain" id="face-h">The face, and on vehicles the eye.</h2>
+      <div class="two-col">
+        <div class="body-copy">
+          <p>
+            The iOS app is the robot's face, and on a vehicle it is also its
+            eye. Wake word, per robot brain assignment, and an autonomy grant
+            you hand over on purpose. Autonomy is tiered by what the camera can
+            actually see: with LiDAR it runs full, with sparse depth it creeps
+            only, and blind it refuses and tells you why.
+          </p>
+          <p style="margin-top:1.5rem">
+            <a class="btn" href="/testflight">Get the iOS app, TestFlight beta</a>
+          </p>
+          <p class="beta">
+            Public beta, and we mean beta. Builds change most weeks, some things
+            are rough, and the release notes tell you which.
+          </p>
+        </div>
+
+        <div>
+          <div
+            class="screen"
+            role="img"
+            aria-label="Three strings from the mounted screen: Depth camera at 9 hertz. Creeping, 2.1 metres ahead. Clear, nothing in the corridor."
+          >
+            <span>Depth camera · 9 Hz</span>
+            <span>Creeping — 2.1 m ahead</span>
+            <span>clear — nothing in the corridor</span>
+          </div>
+          <p class="meta" style="margin-top:0.6rem">
+            three strings, verbatim, from the mounted screen
+          </p>
+
+          <div class="evidence" style="margin-top:1.5rem">
+            <Well
+              clip="app capture: the depth-tier ladder, LiDAR full then sparse creep-only then blind refusal"
+              caption="operator app capture pending"
+              aspect="3x4"
+            />
+            <Well
+              clip="app capture: the wake word waking the robot, then a signed drive"
+              caption="operator app capture pending"
+              aspect="3x4"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================= 8. BODIES ====== -->
+  <section id="bodies" class="settle" aria-labelledby="bodies-h">
+    <div class="wrap">
+      <h2 class="plain" id="bodies-h">Bodies.</h2>
+      <div class="body-copy">
+        <p>
+          Three bodies, three honest labels. A Raspberry Pi 5 RC car, driving
+          today. An SO-ARM101 six degree of freedom arm, on the bench with its
+          wrist camera unplugged. An ESP32-C6, groundwork toward six dollar
+          class robots that show their own pairing QR on their own screen, and
+          on the bench tonight it does exactly that.
+        </p>
+      </div>
+
+      <div class="bodies">
+        {
+          bodies.map((b, i) => (
+            <article class="body-card">
+              <svg
+                class="line-art"
+                viewBox="0 0 120 56"
+                width="120"
+                height="56"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1"
+                role="img"
+              >
+                <title>{`Line drawing of the ${b.name}`}</title>
+                {i === 0 && (
+                  <>
+                    <path d="M14 34h92" />
+                    <path d="M26 34l8-14h52l10 14" />
+                    <circle cx="34" cy="42" r="8" />
+                    <circle cx="88" cy="42" r="8" />
+                    <path d="M52 20h20" />
+                  </>
+                )}
+                {i === 1 && (
+                  <>
+                    <path d="M22 50h24" />
+                    <path d="M34 50V34l26-16 20 10" />
+                    <path d="M80 28l10 8" />
+                    <path d="M90 30v12" />
+                    <path d="M96 30v12" />
+                    <circle cx="34" cy="34" r="3" />
+                    <circle cx="60" cy="18" r="3" />
+                  </>
+                )}
+                {i === 2 && (
+                  <>
+                    <rect x="20" y="10" width="80" height="36" />
+                    <rect x="30" y="18" width="26" height="20" />
+                    <path d="M34 22h6v6h-6zM46 22h6v6h-6zM34 32h6v4h-6z" />
+                    <path d="M66 20h24M66 26h18M66 32h24M66 38h14" />
+                  </>
+                )}
+              </svg>
+              <h3 class="sub" style="margin:0">{b.name}</h3>
+              <span class="status">{b.status}</span>
+              <span class="part">{b.part}</span>
+              <Well clip={b.clip} />
+            </article>
+          ))
+        }
+      </div>
+
+      <!-- Typographic texture, not terminal chrome: five real lines from a
+           real ESP32-C6 boot capture. No green on black, no blinking cursor. -->
+      <div class="bootlog">
+        <p class="meta" style="margin-bottom:0.8rem">
+          five lines, verbatim, from an ESP32-C6 boot capture
+        </p>
+        <div class="scroller">
+          <pre class="mono">{`  OpenCastor C6 alive
+  chip model   : ESP32-C6 (rev v0.2)
+  flash size   : 16777216 bytes (16 MB) physical
+  i2c total    : 5 devices on the shared bus
+OpenCastor C6 heartbeat #1 tag=ALPHA uptime=2s free_heap=456464`}</pre>
+        </div>
+        <p class="hairline" style="margin-top:1.1rem;max-width:56ch">
+          That board paints its own pairing QR on its panel now, and the QR
+          encodes <a href="/pair?demo=esp32c6">opencastor.com/pair?demo=esp32c6</a>.
+          Scan it off the bench, or open the page and read what a real pairing
+          QR carries.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================= 9. THE WORLD IT PLUGS INTO ===== -->
+  <section id="world" class="settle" aria-labelledby="world-h">
+    <div class="wrap">
+      <h2 class="plain" id="world-h">The world it plugs into.</h2>
+      <div class="body-copy">
+        <!-- This paragraph used to claim that the changelog, the tutorials and
+             the beginner path all live behind the Docs door. They do not: the
+             Docs door is a redirect to docs.opencastor.com, and those pages are
+             this site's own older routes. They are now listed in the footer of
+             every page, which is what makes the second sentence true. -->
+        <p>
+          ROBOT.md manifests at robotmd.dev. The RCAN protocol at rcan.dev. The
+          code at github.com/craigm26/OpenCastor. The documentation lives at
+          docs.opencastor.com, behind the one Docs link in the header. The older
+          pages of this site, the changelog, the tutorials, the beginner path,
+          the hardware guides, the hub, the config explorer, the blog and the
+          about page, all still work, and every one of them is in the footer
+          below.
+        </p>
+      </div>
+
+      <ul class="specimen">
+        <li>
+          <a href="https://robotmd.dev" rel="noopener">robotmd.dev</a>
+          <span class="hairline">ROBOT.md, the single-file robot manifest</span>
+        </li>
+        <li>
+          <a href="https://rcan.dev" rel="noopener">rcan.dev</a>
+          <span class="hairline">the RCAN protocol these envelopes speak</span>
+        </li>
+        <li>
+          <a href="https://github.com/craigm26/OpenCastor" rel="noopener">
+            github.com/craigm26/OpenCastor
+          </a>
+          <span class="hairline">the runtime itself</span>
+        </li>
+        <li>
+          <span class="name">Apache 2.0</span>
+          <span class="hairline">
+            the whole runtime, and every line of it is yours to read
+          </span>
+        </li>
+        <li>
+          <a href="/docs">Docs</a>
+          <span class="hairline">
+            the one door, and it opens on docs.opencastor.com
+          </span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ========================================== 10. START TALKING ===== -->
+  <section id="start" class="settle" aria-labelledby="start-h">
+    <div class="wrap">
+      <h2 class="plain" id="start-h">Start talking.</h2>
+      <div class="cta-row" style="margin-top:0">
+        <div class="cta-install">
+          <div class="install">
+            <div class="install-lines">
+              <pre id="install-cmd-2">pip install opencastor
+castor up</pre>
+              <button class="copy" type="button" data-copy="install-cmd-2">copy</button>
+            </div>
+          </div>
+          <p class="beta" style="max-width:34ch">
+            Python 3.10 to 3.13. <code>castor up</code> takes a bare host to a
+            paired robot printing its pairing QR.
+          </p>
+        </div>
+        <div>
+          <a class="btn" href="https://github.com/craigm26/OpenCastor" rel="noopener">
+            Read the code on GitHub
+          </a>
+        </div>
+        <div class="cta-tf">
+          <a class="btn" href="/testflight">Get the iOS app, TestFlight beta</a>
+          <p class="beta">
+            Public beta, and we mean beta. Builds change most weeks, some things
+            are rough, and the release notes tell you which.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+</HomeLayout>
