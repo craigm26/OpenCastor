@@ -45,6 +45,7 @@ print(hw)
 | Raspberry Pi AI Camera (IMX500) | — | `picamera2` probe |
 | Pollen Robotics Reachy 2 | — | mDNS (`reachy.local`) |
 | Pollen Robotics Reachy Mini | — | mDNS (`reachy-mini.local`) |
+| Pollen Robotics Microduck | — | local socket, hostnames, `duckctl ip` (BLE), mDNS, ARP |
 
 ## I2C Address Lookup Table
 

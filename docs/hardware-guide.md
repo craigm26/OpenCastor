@@ -52,6 +52,25 @@ drivers:
 
 Install: `pip install opencastor[reachy]` · Guide: [docs/hardware/reachy.md](hardware/reachy.md)
 
+### Pollen Robotics Microduck
+
+A 25 cm biped duck. **The easiest setup in OpenCastor** — one command finds it,
+verifies SSH and group access, checks robotd's health and writes the config:
+
+```bash
+castor duck
+```
+
+```yaml
+drivers:
+- id: duck
+  protocol: microduck
+  transport: ssh          # unix | ssh | tcp
+  ssh_host: 192.168.1.42
+```
+
+No extra install — the driver is stdlib-only · Guide: [docs/hardware/microduck.md](hardware/microduck.md)
+
 ---
 
 ## 🔍 Peripheral Auto-Detection (Legacy)

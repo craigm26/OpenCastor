@@ -57,6 +57,14 @@ The wizard will:
 - Show a QR code to connect to the Fleet UI at [app.opencastor.com](https://app.opencastor.com)
 - Configure your AI brain provider (Gemini, Claude, OpenAI, or local Ollama)
 
+> **Have a [Pollen Microduck](docs/hardware/microduck.md)?** Skip the wizard — one command does everything:
+>
+> ```bash
+> castor duck
+> ```
+>
+> It finds the duck on your network, checks SSH and `robot` group access (printing the exact fix if either is missing), asks `robotd` for live health, and writes the config. Then `castor duck test` makes it walk.
+
 ### 3. Start your robot
 
 ```bash

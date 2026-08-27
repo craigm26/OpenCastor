@@ -4,8 +4,9 @@
 #
 # MIGRATED (implement _move()):
 #   acb_driver.py, composite.py (_NullDriver too), esp32_ble_driver.py,
-#   esp32_websocket.py, ev3dev_driver.py, ipc.py, pca9685.py (both classes),
-#   reachy_driver.py, ros2_driver.py, simulation_driver.py, spike_driver.py
+#   esp32_websocket.py, ev3dev_driver.py, ipc.py, microduck_driver.py,
+#   pca9685.py (both classes), reachy_driver.py, ros2_driver.py,
+#   simulation_driver.py, spike_driver.py
 #
 # NOT MIGRATED (move() overrides DriverBase — intentional or pending):
 #   arduino_driver.py — pending

@@ -2483,7 +2483,10 @@ def generate_preset_config(preset_name, robot_name, agent_config, secondary_mode
 
     if os.path.exists(preset_path):
         with open(preset_path) as f:
-            config = yaml.safe_load(f)
+            config = yaml.safe_load(f) or {}
+        # Slash-style profiles (castor/profiles/**) may omit these blocks entirely.
+        config.setdefault("metadata", {})
+        config.setdefault("agent", {})
         config["metadata"]["robot_name"] = robot_name
         config["metadata"]["robot_uuid"] = str(uuid.uuid4())
         config["metadata"]["created_at"] = datetime.now(timezone.utc).isoformat()

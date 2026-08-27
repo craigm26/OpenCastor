@@ -138,6 +138,7 @@ move(cmd)  ──►  SafetyLayer.check(cmd)  ──►  _move(cmd)  ──►  
 | EV3dev | `ev3dev_driver.py` | ev3dev2 |
 | SPIKE | `spike_driver.py` | LEGO SPIKE |
 | Reachy | `reachy_driver.py` | Pollen Robotics |
+| Microduck | `microduck_driver.py` | Pollen Robotics (robotd JSON-RPC/NDJSON) — setup: `castor duck` |
 | Simulation | `simulation_driver.py` | In-process mock |
 | Composite | `composite.py` | Multi-driver aggregator |
 
@@ -248,6 +249,7 @@ castor/hardware/so_arm101/safety_bridge.py # Arm safety routing
 castor/hardware/so_arm101/vision.py        # Arm vision pipeline
 castor/hardware/so_arm101/rcan_bridge.py   # RCAN→arm translation
 castor/drivers/base.py                     # DriverBase (_move() pattern)
+castor/microduck.py                        # Microduck discovery/provisioning (castor duck)
 castor/rcan/registry.py                    # RRN validation + §21 registry
 castor/rcan/invoke.py                      # §19 INVOKE + SkillRegistry
 castor/api.py                              # FastAPI gateway

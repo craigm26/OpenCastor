@@ -848,6 +848,30 @@ def detect_rpi_ai_camera() -> dict:
     return {"detected": detected, "model": "imx500", "npu": npu}
 
 
+def detect_microduck_network(timeout: float = 2.0) -> list:
+    """Detect a Pollen Robotics Microduck on the network (or on this machine).
+
+    Delegates to :mod:`castor.microduck`, which probes well-known hostnames,
+    mDNS, ``duckctl ip`` over Bluetooth, and a local ``/run/robotd.sock``.
+
+    Args:
+        timeout: Maximum wall-clock seconds to spend on discovery.
+
+    Returns:
+        List of host strings that answered (e.g. ``["duck-01.local"]``).
+    """
+    try:
+        from castor.microduck import FAST_METHODS, discover
+
+        # Hostname + local-socket probes only: a routine `castor scan` must not
+        # pay for a Bluetooth (duckctl) or mDNS wait.  `castor duck` runs the
+        # full sweep.
+        return [c.host for c in discover(timeout=min(timeout, 1.5), methods=FAST_METHODS)]
+    except Exception as exc:  # pragma: no cover - environment dependent
+        logger.debug("microduck detection failed: %s", exc)
+        return []
+
+
 def detect_lerobot_hardware() -> dict:
     """Detect LeRobot-compatible hardware (Feetech SO-ARM101 / ALOHA).
 
@@ -971,6 +995,7 @@ def _run_all_detectors() -> dict:
         "imx500": detect_imx500_camera(),
         "rpi_ai_camera": detect_rpi_ai_camera(),
         "reachy": detect_reachy_network(),
+        "microduck": detect_microduck_network(),
         "lerobot": detect_lerobot_hardware(),
     }
 
@@ -1119,6 +1144,11 @@ def suggest_preset(hw: dict) -> tuple:
     is_rpi = hw.get("platform") == "rpi"
     usb_desc = " ".join(hw.get("usb_descriptors", []))
 
+    # ── Pollen Microduck ───────────────────────────────────────────────────
+    if hw.get("microduck"):
+        host = hw["microduck"][0]
+        return "pollen/microduck", "high", f"Microduck detected at {host} — run `castor duck`"
+
     # ── Reachy humanoid ────────────────────────────────────────────────────
     if hw.get("reachy"):
         host = hw["reachy"][0]
@@ -1262,6 +1292,7 @@ def print_scan_results(hw: dict, colors_class=None):
         "coral",
         "imx500",
         "reachy",
+        "microduck",
     ):
         items = hw.get(category, [])
         if items:
@@ -1280,6 +1311,7 @@ def print_scan_results(hw: dict, colors_class=None):
 _HARDWARE_EXTRAS: dict = {
     "oakd": ["depthai"],
     "reachy": ["reachy2-sdk", "zeroconf"],
+    "microduck": [],  # stdlib-only driver — nothing to install
     "feetech": ["feetech-servo-sdk"],
     "dynamixel": ["dynamixel-sdk"],
     "hailo": ["hailo-platform"],

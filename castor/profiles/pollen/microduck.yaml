@@ -1,0 +1,94 @@
+# Pollen Robotics Microduck — packaged profile (ships with pip install opencastor).
+# Kept in sync with config/presets/pollen_microduck.rcan.yaml by
+# tests/test_microduck_setup.py::test_packaged_profile_matches_repo_preset.
+# Easiest setup:  castor duck
+
+profile: pollen/microduck
+robot_type: biped
+rcan_version: '3.0'
+metadata:
+  robot_name: Pollen_Microduck
+  robot_uuid: 73d3b905-d73a-4e4f-9fde-d6c6268a3dcb
+  manufacturer: Pollen Robotics
+  model: Microduck
+  author: OpenCastor Default
+  license: Apache-2.0
+  tags:
+  - biped
+  - legged
+  - rl-policy
+  - tabletop
+  - camera
+  - depth
+  description: "Pollen Robotics Microduck \u2014 a 25 cm, ~800 g biped with 15 servos, a camera,\
+    \ a ToF depth sensor, two IMUs and an articulated beak. Onboard compute is a Rockchip RK3566\
+    \ (1 GB RAM, 32 GB storage) running Armbian; motion comes from RL policies (PPO in MuJoCo, exported\
+    \ to ONNX) executed by the `robotd` daemon at 50 Hz. OpenCastor drives it as an intent client\
+    \ over robotd's JSON-RPC 2.0 NDJSON socket, the same contract used by robotctl, the gamepad daemon\
+    \ and the phone app.\n"
+  rrn_uri: rrn://community/robot/opencastor/pollen-microduck/microduck
+agent:
+  provider: anthropic
+  model: claude-sonnet-4-5
+  vision_enabled: true
+  latency_budget_ms: 150
+  safety_stop: true
+  offline_provider: ollama
+physics:
+  type: legged
+  dof: 14
+drivers:
+- id: duck
+  protocol: microduck
+  transport: ssh
+  socket: /run/robotd.sock
+  ssh_host: 192.168.1.42
+  ssh_user: pierre
+  local_port: 7788
+  max_vx: 0.2
+  max_vy: 0.1
+  max_vyaw: 1.0
+  intent_hz: 20
+  command_ttl_s: 1.5
+  auto_init: false
+connection:
+  type: wifi
+  host: 192.168.1.42
+  reconnect_interval_ms: 1000
+  watchdog_timeout_ms: 500
+rcan_protocol:
+  port: 8000
+  capabilities:
+  - status
+  - teleop
+  - chat
+  - vision
+  enable_mdns: false
+safety:
+  estop_on_startup: true
+  max_linear_speed_mps: 0.2
+  max_angular_speed_radps: 1.0
+  voltage_monitoring: true
+  local_safety_wins: true
+  watchdog:
+    timeout_s: 2
+notes:
+  setup: "Off-board (recommended): the duck has 1 GB of RAM and a 50 Hz control loop to protect,\
+    \ so run OpenCastor on another machine and let the driver open an `ssh -L 7788:/run/robotd.sock`\
+    \ forward. Find the duck's address with `duckctl ip` over Bluetooth or your router's DHCP table\
+    \ \u2014 mDNS on the stock image is unreliable. Add your key with `ssh-copy-id`, and put the\
+    \ login user in the `robot` group (`sudo usermod -aG robot \"$USER\"`) so it can open the robotd\
+    \ socket.\nOn-board: set `transport: unix`. Expect contention with robotd, mediad and the RL\
+    \ policy on four Cortex-A55 cores.\nBring-up: `robot.init` torques the servos on and ramps to\
+    \ standing over ~2 s. The driver does not call it automatically (`auto_init: false`) \u2014 the\
+    \ duck deliberately does not move on process start. `stop()` holds it standing; `relax()` cuts\
+    \ torque and it will drop, so seat it first.\n"
+  hardware:
+    compute: Rockchip RK3566 (quad Cortex-A55, 1 GB RAM, 32 GB storage, NPU)
+    os: Armbian (Radxa Zero 3 profile)
+    servos: 15 x Dynamixel-protocol on /dev/ttyS2 @ 1 Mbps
+    sensors: camera, ToF depth, 2 x IMU
+    battery: NP-F550 removable (approx 1 h), empty floor 6.6 V
+  warning: "robotd owns the motor bus exclusively and enforces its own limits, fall detection and\
+    \ battery cutoff. OpenCastor sends intents, never raw motor writes \u2014 do not bypass the driver\
+    \ to write the servo bus while robotd is running.\n"

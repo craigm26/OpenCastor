@@ -54,6 +54,7 @@ _EXACT_PROTOCOLS = {
     "arduino_serial_json",
     "feetech",
     "reachy",
+    "microduck",
 }
 
 
@@ -190,6 +191,10 @@ def get_driver(config: dict):
         from castor.drivers.reachy_driver import ReachyDriver
 
         return ReachyDriver(driver_config)
+    elif protocol == "microduck":
+        from castor.drivers.microduck_driver import MicroduckDriver
+
+        return MicroduckDriver(driver_config)
     else:
         logger.warning(f"Unknown driver protocol: {protocol}. Running without hardware.")
         return None

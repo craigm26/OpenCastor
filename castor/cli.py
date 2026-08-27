@@ -3741,6 +3741,286 @@ def cmd_setup(args) -> None:
     _print("")
 
 
+def cmd_duck(args) -> int:
+    """castor duck — find, verify and configure a Pollen Microduck in one command."""
+    import json as _json
+    import subprocess
+
+    from castor import microduck as md
+
+    action = getattr(args, "duck_cmd", None) or "setup"
+    as_json = bool(getattr(args, "json", False))
+    assume_yes = bool(getattr(args, "yes", False))
+
+    try:
+        from rich.console import Console
+
+        console = Console()
+    except ImportError:
+        console = None
+
+    def say(msg: str = "") -> None:
+        if as_json:
+            return
+        if console:
+            # soft_wrap: never hard-break a path or command mid-word — these lines
+            # are meant to be copy-pasted.
+            console.print(msg, soft_wrap=True)
+        else:
+            import re
+
+            print(re.sub(r"\[/?[a-z_ #0-9]+\]", "", msg))
+
+    def confirm(label: str, default: bool = True) -> bool:
+        if assume_yes:
+            return True
+        if as_json:
+            return False
+        try:
+            suffix = " [Y/n] " if default else " [y/N] "
+            val = input(f"  {label}{suffix}").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            return False
+        if not val:
+            return default
+        return val in ("y", "yes")
+
+    def emit(payload: dict) -> None:
+        if as_json:
+            print(_json.dumps(payload, indent=2, default=str))
+
+    # ── Locate ──────────────────────────────────────────────────────────
+    def locate() -> "md.DuckCandidate | None":
+        host = getattr(args, "host", None)
+        user = getattr(args, "user", None)
+        deep = bool(getattr(args, "deep", False))
+
+        if host:
+            cand = md.DuckCandidate(host=host, source="manual", user=user)
+            return md.verify(cand)
+
+        say("        [dim]looking…[/dim]")
+        candidates = md.discover(deep=deep)
+        if not candidates:
+            return None
+        for cand in candidates:
+            if user and cand.transport != "unix":
+                cand.user = user
+            md.verify(cand)
+            if cand.is_duck:
+                return cand
+        return candidates[0]
+
+    # ── castor duck find ────────────────────────────────────────────────
+    if action == "find":
+        candidates = md.discover(deep=bool(getattr(args, "deep", False)))
+        for cand in candidates:
+            md.verify(cand)
+        emit({"candidates": [vars(c) for c in candidates]})
+        if not candidates:
+            say("\n  No duck found.")
+            say("  [dim]Try: castor duck find --deep, or castor duck --host <ip>[/dim]\n")
+            return 1
+        say("")
+        for cand in candidates:
+            mark = "[green]✓[/green]" if cand.is_duck else "[yellow]?[/yellow]"
+            detail = cand.blocker or "ready"
+            say(f"  {mark} {cand.describe()} — {detail}")
+        say("")
+        return 0
+
+    # ── castor duck health ──────────────────────────────────────────────
+    if action == "health":
+        cand = locate()
+        if cand is None or not cand.is_duck:
+            emit({"ok": False, "error": "no duck found"})
+            say("\n  No reachable duck. Run [cyan]castor duck[/cyan] to set one up.\n")
+            return 1
+        result = md.health(host=cand.host, user=cand.user, transport=cand.transport)
+        emit(result)
+        if result.get("ok"):
+            loop = result.get("loop") or {}
+            batt = result.get("battery") or {}
+            say(f"\n  [green]healthy[/green] — {cand.describe()}")
+            say(f"    loop     {loop.get('hz', '?')} Hz ({loop.get('missed', 0)} missed)")
+            say(f"    battery  {batt.get('percent', '?')}% ({batt.get('volts', '?')} V)")
+            say(f"    imu      {result.get('imu', '?')}    bus {result.get('bus', '?')}")
+            policies = result.get("policies") or []
+            if policies:
+                say(f"    policies {', '.join(policies)}")
+            say("")
+            return 0
+        say(f"\n  [red]unhealthy[/red] — {result.get('error', 'robotd reports unhealthy')}\n")
+        return 1
+
+    # ── castor duck test ────────────────────────────────────────────────
+    if action == "test":
+        from castor.drivers.microduck_driver import MicroduckDriver
+
+        cand = locate()
+        if cand is None or not cand.is_duck:
+            say("\n  No reachable duck. Run [cyan]castor duck[/cyan] first.\n")
+            return 1
+
+        say("")
+        say("  [bold]This will make the duck stand up and walk forward briefly.[/bold]")
+        say("  [dim]Put it on the floor with clear space around it.[/dim]")
+        if not confirm("Ready?", default=False):
+            say("  Cancelled.\n")
+            return 0
+
+        cfg = {"transport": cand.transport}
+        if cand.transport == "ssh":
+            cfg.update({"ssh_host": cand.host, "ssh_user": cand.user})
+        driver = MicroduckDriver(cfg)
+        try:
+            if driver._mode != "hardware":
+                say("\n  [red]Could not reach robotd.[/red]\n")
+                return 1
+            say("  standing up…")
+            driver.init()
+            import time as _time
+
+            _time.sleep(2.5)
+            say("  walking…")
+            deadline = _time.monotonic() + 1.5
+            while _time.monotonic() < deadline:
+                driver.move(0.3, 0.0)
+                _time.sleep(0.1)
+            driver.stop()
+            say("  [green]✓ it walks.[/green]\n")
+            return 0
+        finally:
+            driver.close()
+
+    # ── castor duck (setup) ─────────────────────────────────────────────
+    say("")
+    say("  [bold]🦆 OpenCastor · Microduck[/bold]")
+    say("")
+
+    say("  [bold]1/4[/bold]  Finding your duck")
+    cand = locate()
+    if cand is None:
+        emit({"ok": False, "error": "no duck found"})
+        say("        [red]nothing found.[/red]")
+        say("")
+        say("        Try one of these:")
+        say("          [cyan]castor duck --deep[/cyan]        scan the local network")
+        say("          [cyan]castor duck --host <ip>[/cyan]   if you know the address")
+        say("          [dim]duckctl ip[/dim]                  ask over Bluetooth")
+        say("")
+        return 1
+    say(f"        [green]found[/green] {cand.describe()}")
+
+    say("  [bold]2/4[/bold]  Checking access")
+    if cand.transport == "unix":
+        say("        [green]running on the duck itself[/green] — no SSH needed")
+    else:
+        if not cand.ssh_auth:
+            cmd = md.ssh_copy_id_command(cand.host, cand.user or "radxa")
+            say("        [yellow]ssh key not installed yet[/yellow]")
+            say(f"        run: [cyan]{cmd}[/cyan]")
+            if confirm("Run it now?", default=True):
+                subprocess.run(cmd, shell=True, check=False)
+                md.verify(cand)
+        if not cand.ssh_auth:
+            emit({"ok": False, "error": "ssh auth failed", "host": cand.host})
+            say("        [red]still cannot log in — fix SSH access and re-run.[/red]\n")
+            return 1
+        if not cand.is_duck:
+            emit({"ok": False, "error": "robotd socket not found", "host": cand.host})
+            say(f"        [red]{cand.host} answers, but robotd is not running there.[/red]")
+            say("        [dim]On the duck: sudo systemctl status robotd[/dim]\n")
+            return 1
+        if cand.in_robot_group is False:
+            say("        [yellow]login is not in the 'robot' group[/yellow]")
+            say(f"        run: [cyan]{md.robot_group_command(cand.host, cand.user)}[/cyan]")
+            say("        [dim]robotd's socket is group-owned; this is a one-time fix.[/dim]")
+        else:
+            say(f"        [green]ssh ok[/green] as {cand.user} · robot group ok")
+
+    say("  [bold]3/4[/bold]  Talking to robotd")
+    result = md.health(host=cand.host, user=cand.user, transport=cand.transport)
+    if result.get("ok"):
+        loop = result.get("loop") or {}
+        batt = result.get("battery") or {}
+        policies = ", ".join(result.get("policies") or []) or "none loaded"
+        say(
+            f"        [green]healthy[/green] · loop {loop.get('hz', '?')} Hz · "
+            f"battery {batt.get('percent', '?')}% · {policies}"
+        )
+    else:
+        say(f"        [yellow]{result.get('error', 'no answer')}[/yellow]")
+        say("        [dim]Writing the config anyway — you can retry with "
+            "`castor duck health`.[/dim]")
+
+    say("  [bold]4/4[/bold]  Writing config")
+    robot_name = getattr(args, "name", None) or cand.robot_name or "duck"
+    robot_name = robot_name.replace(" ", "-")
+
+    agent_override = None
+    brain = getattr(args, "brain", None)
+    if brain:
+        provider, _, model = brain.partition(":")
+        agent_override = {"provider": provider}
+        if model:
+            agent_override["model"] = model
+
+    config = md.build_config(
+        host=None if cand.transport == "unix" else cand.host,
+        user=cand.user,
+        robot_name=robot_name,
+        transport=cand.transport,
+        agent=agent_override,
+    )
+    path = md.write_config(config, robot_name=robot_name)
+    say(f"        [cyan]{path}[/cyan]")
+
+    provider = (config.get("agent") or {}).get("provider", "")
+    try:
+        from castor.auth import check_provider_ready
+
+        brain_ready = check_provider_ready(provider, config) if provider else False
+    except Exception:
+        brain_ready = False
+
+    emit({
+        "ok": True,
+        "host": cand.host,
+        "user": cand.user,
+        "transport": cand.transport,
+        "robot_name": robot_name,
+        "config": str(path),
+        "health": result,
+        "brain": {"provider": provider, "ready": brain_ready},
+    })
+
+    say("")
+    if brain_ready:
+        say("  [bold green]Ready.[/bold green]")
+        say(f"    [cyan]castor run --config {path}[/cyan]")
+    else:
+        say("  [bold green]Duck ready.[/bold green] One thing left — the brain:")
+        say(f"    [cyan]castor login[/cyan]                 sign in to {provider or 'a provider'}")
+        say(
+            "    [dim]or:[/dim] [cyan]castor duck --brain ollama[/cyan]"
+            "   run a local model instead"
+        )
+        say(f"    [dim]then:[/dim] [cyan]castor run --config {path}[/cyan]")
+    say("    [cyan]castor duck test[/cyan]     make it walk (no brain needed)")
+    say("    [cyan]castor duck health[/cyan]   check on it")
+    say("")
+
+    if getattr(args, "start", False):
+        args.config = str(path)
+        args.simulate = False
+        args.behavior = None
+        args.dashboard = False
+        args.layout = "full"
+        cmd_run(args)
+    return 0
+
+
 def cmd_pair(args) -> int:
     """castor pair — print the iOS app's pairing QR + wire gateway attestation.
 
@@ -6881,6 +7161,7 @@ def main() -> None:
             "  castor run --config robot.rcan.yaml           # Start the robot\n"
             "  castor run --config robot.rcan.yaml --dashboard  # Robot + tmux dashboard\n"
             "  castor demo                                   # Try without hardware\n"
+            "  castor duck                                   # Set up a Pollen Microduck\n"
             "  castor doctor                                 # Check system health\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -8461,6 +8742,48 @@ def main() -> None:
         help="URL or local file path to the plugin .py file",
     )
 
+    # castor duck — Pollen Microduck one-command setup
+    p_duck = sub.add_parser(
+        "duck",
+        help="Set up a Pollen Microduck — find it, verify it, configure it",
+        epilog=(
+            "Examples:\n"
+            "  castor duck                      # find, verify and configure (start here)\n"
+            "  castor duck --deep               # also sweep the local network\n"
+            "  castor duck --host 192.168.1.42  # skip discovery\n"
+            "  castor duck --start              # configure, then run it\n"
+            "  castor duck find                 # just list candidates\n"
+            "  castor duck health               # live loop rate + battery\n"
+            "  castor duck test                 # stand up and walk (asks first)\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_duck.add_argument("--host", default=None, help="Duck address (skips discovery)")
+    p_duck.add_argument("--user", default=None, help="SSH login on the duck")
+    p_duck.add_argument("--name", default=None, help="Robot name (default: duck)")
+    p_duck.add_argument(
+        "--brain",
+        default=None,
+        metavar="PROVIDER[:MODEL]",
+        help="LLM provider for this duck (e.g. ollama, anthropic:claude-sonnet-4-5)",
+    )
+    p_duck.add_argument("--deep", action="store_true", help="Sweep the ARP neighbour table too")
+    p_duck.add_argument("--yes", "-y", action="store_true", help="Assume yes to prompts")
+    p_duck.add_argument("--start", action="store_true", help="Run the robot once configured")
+    p_duck.add_argument("--json", action="store_true", help="Machine-readable output")
+    p_duck_sub = p_duck.add_subparsers(dest="duck_cmd")
+    p_duck_find = p_duck_sub.add_parser("find", help="List candidate ducks on the network")
+    p_duck_find.add_argument("--deep", action="store_true", help="Sweep the ARP neighbour table")
+    p_duck_find.add_argument("--json", action="store_true", help="Machine-readable output")
+    p_duck_health = p_duck_sub.add_parser("health", help="Live robotd health for the duck")
+    p_duck_health.add_argument("--host", default=None, help="Duck address")
+    p_duck_health.add_argument("--user", default=None, help="SSH login on the duck")
+    p_duck_health.add_argument("--json", action="store_true", help="Machine-readable output")
+    p_duck_test = p_duck_sub.add_parser("test", help="Stand up and walk forward briefly")
+    p_duck_test.add_argument("--host", default=None, help="Duck address")
+    p_duck_test.add_argument("--user", default=None, help="SSH login on the duck")
+    p_duck_test.add_argument("--yes", "-y", action="store_true", help="Skip the confirmation")
+
     # castor scan — detect connected peripherals
     p_scan = sub.add_parser(
         "scan",
@@ -9601,6 +9924,7 @@ def main() -> None:
         "login": cmd_login,
         "flash": cmd_flash,
         "hub": cmd_hub,
+        "duck": cmd_duck,
         "scan": cmd_scan,
         "stop": cmd_stop,
         "daemon": cmd_daemon,

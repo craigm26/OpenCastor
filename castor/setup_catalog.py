@@ -554,6 +554,9 @@ _HARDWARE_PRESETS: list[HardwarePreset] = [
     HardwarePreset(id="hlabs_acb_single", label="HLabs ACB v2.0 (single BLDC motor)"),
     HardwarePreset(id="hlabs_acb_arm_3dof", label="HLabs ACB v2.0 Arm (3-DOF)"),
     HardwarePreset(id="hlabs_acb_biped_6dof", label="HLabs ACB v2.0 Biped (6-DOF)"),
+    HardwarePreset(
+        id="pollen_microduck", label="Pollen Microduck (biped duck) — or run `castor duck`"
+    ),
 ]
 
 _STACK_PROFILES: list[StackProfile] = [
@@ -657,6 +660,7 @@ def get_hardware_preset_map() -> dict[str, Optional[str]]:
         "13": "hlabs_acb_single",
         "14": "hlabs_acb_arm_3dof",
         "15": "hlabs_acb_biped_6dof",
+        "16": "pollen_microduck",
     }
 
 
