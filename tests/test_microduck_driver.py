@@ -288,14 +288,6 @@ def test_head_sends_four_joint_angles(driver, fake_robotd):
     assert params["neck_pitch"] == pytest.approx(0.35)
 
 
-def test_look_at_maps_to_yaw_and_pitch(driver, fake_robotd):
-    driver.look_at(1.0, 1.0, 0.0)
-    assert _wait_for(lambda: fake_robotd.notifications_for("robot.head"))
-    params = fake_robotd.notifications_for("robot.head")[-1]["params"]
-    assert params["head_yaw"] == pytest.approx(0.7853981, abs=1e-4)
-    assert params["head_pitch"] == pytest.approx(0.0)
-
-
 # ── Telemetry ─────────────────────────────────────────────────────────────────
 
 
@@ -405,3 +397,92 @@ def test_close_is_idempotent(fake_robotd):
     drv.close()
     drv.close()
     assert drv._mode == "mock"
+
+
+# ── Skills, voice, mouth, pose ────────────────────────────────────────────────
+
+
+def test_skills_are_answered_requests(driver, fake_robotd):
+    driver.ground_pick()
+    driver.kick(left=True)
+    driver.kick(left=False)
+    driver.sit_toggle()
+    driver.roulade()
+
+    skills = [r["params"]["skill"] for r in fake_robotd.requests if r.get("method") == "robot.do"]
+    assert skills == ["ground_pick", "kick_left", "kick_right", "sit_toggle", "roulade"]
+
+
+def test_an_unknown_skill_is_refused_before_it_reaches_the_wire(driver, fake_robotd):
+    with pytest.raises(ValueError, match="unknown skill"):
+        driver.do_skill("backflip")
+    assert "robot.do" not in fake_robotd.request_methods()
+
+
+def test_quack_plays_the_chirp(driver, fake_robotd):
+    driver.quack()
+    sounds = [r["params"] for r in fake_robotd.requests if r.get("method") == "robot.sound"]
+    assert sounds == [{"tag": "chirp"}]
+
+
+def test_the_held_ride_carries_its_hold_flag(driver, fake_robotd):
+    driver.sound("wheee", hold=True)
+    driver.sound("wheee", hold=False)
+    sounds = [r["params"] for r in fake_robotd.requests if r.get("method") == "robot.sound"]
+    assert sounds == [{"tag": "wheee", "hold": True}, {"tag": "wheee", "hold": False}]
+
+
+def test_an_unknown_sound_is_refused(driver):
+    with pytest.raises(ValueError, match="unknown sound"):
+        driver.sound("honk")
+
+
+def test_the_mouth_is_a_held_intent_that_repeats(driver, fake_robotd):
+    driver.mouth(0.8)
+    assert _wait_for(lambda: len(fake_robotd.notifications_for("robot.mouth")) >= 3)
+    assert fake_robotd.notifications_for("robot.mouth")[0]["params"] == {"open": 0.8}
+
+
+def test_the_mouth_clamps_to_its_fraction(driver, fake_robotd):
+    driver.mouth(5.0)
+    assert _wait_for(lambda: fake_robotd.notifications_for("robot.mouth"))
+    assert fake_robotd.notifications_for("robot.mouth")[0]["params"] == {"open": 1.0}
+
+
+def test_pose_is_held_inside_the_trained_envelope(driver, fake_robotd):
+    driver.pose(z=-0.5, roll=3.0, pitch=-3.0)
+    assert _wait_for(lambda: fake_robotd.notifications_for("robot.pose"))
+    params = fake_robotd.notifications_for("robot.pose")[0]["params"]
+    assert params == {"z": -0.025, "roll": 0.26, "pitch": -0.26, "active": True}
+
+
+def test_an_expired_pose_snaps_the_body_back_rather_than_leaving_it_leaning(driver, fake_robotd):
+    driver.pose(z=-0.02)
+    assert _wait_for(lambda: fake_robotd.notifications_for("robot.pose"))
+    time.sleep(driver._command_ttl_s + 0.2)
+    assert fake_robotd.notifications_for("robot.pose")[-1]["params"]["active"] is False
+
+
+def test_look_at_uses_robotd_ik_not_local_trigonometry(driver, fake_robotd):
+    driver.look_at(0.5, 0.25, 0.1, neck_pitch=0.2)
+    assert _wait_for(lambda: fake_robotd.notifications_for("robot.look"))
+    assert fake_robotd.notifications_for("robot.look")[-1]["params"] == {
+        "x": 0.5, "y": 0.25, "z": 0.1, "neck_pitch": 0.2,
+    }
+    assert fake_robotd.notifications_for("robot.head") == []
+
+
+def test_theremin_and_shutdown_are_requests(driver, fake_robotd):
+    driver.theremin(True)
+    driver.shutdown()
+    methods = fake_robotd.request_methods()
+    assert "robot.theremin" in methods
+    assert "robot.shutdown" in methods
+
+
+def test_stop_releases_every_held_slot(driver, fake_robotd):
+    driver.mouth(1.0)
+    driver.pose(z=-0.02)
+    driver.move(1.0, 0.0)
+    driver.stop()
+    assert driver._mouth is None and driver._pose is None

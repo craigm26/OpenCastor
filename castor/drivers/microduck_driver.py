@@ -59,7 +59,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import shutil
 import socket
 import subprocess
@@ -162,6 +161,12 @@ class MicroduckDriver(DriverBase):
         self._twist_idle = True
         self._head: Optional[dict[str, float]] = None
         self._head_ts = 0.0
+        # Mouth and body pose are continuous intents too — same last-writer-wins
+        # slot discipline, same expiry, so a released button stops being held.
+        self._mouth: Optional[dict[str, float]] = None
+        self._mouth_ts = 0.0
+        self._pose: Optional[dict[str, Any]] = None
+        self._pose_ts = 0.0
 
         self._last_state: dict[str, Any] = {}
         self._policies: list[str] = []
@@ -411,6 +416,23 @@ class MicroduckDriver(DriverBase):
                 else:
                     self._safe_notify("robot.head", head)
 
+            mouth = self._mouth
+            if mouth is not None:
+                if now - self._mouth_ts > self._command_ttl_s:
+                    self._mouth = None
+                else:
+                    self._safe_notify("robot.mouth", mouth)
+
+            pose = self._pose
+            if pose is not None:
+                if now - self._pose_ts > self._command_ttl_s:
+                    # Expiry snaps the body back to nominal rather than leaving
+                    # it leaning — `active: false` is robotd's own instant exit.
+                    self._safe_notify("robot.pose", {**pose, "active": False})
+                    self._pose = None
+                else:
+                    self._safe_notify("robot.pose", pose)
+
     def _send_twist(self) -> None:
         vx, vy, vyaw = self._twist
         self._safe_notify("robot.move", {"vx": vx, "vy": vy, "vyaw": vyaw})
@@ -462,6 +484,8 @@ class MicroduckDriver(DriverBase):
         self._twist = (0.0, 0.0, 0.0)
         self._twist_idle = True
         self._head = None
+        self._mouth = None
+        self._pose = None
         if self._mode == "mock":
             logger.debug("MOCK microduck stop")
             return
@@ -587,17 +611,164 @@ class MicroduckDriver(DriverBase):
             return
         self._safe_notify("robot.head", params)
 
-    def look_at(self, x: float, y: float, z: float) -> None:
-        """Point the head at a Cartesian target, mirroring ``ReachyDriver.look_at``.
+    def look_at(self, x: float, y: float, z: float, neck_pitch: float = 0.0) -> None:
+        """Aim the head at a point, using robotd's own inverse kinematics.
+
+        ``robot.look`` is not ``robot.head`` with the trigonometry moved: the
+        daemon holds ``neck_pitch`` as posture and aims the remaining three
+        joints around it, which is a better answer than any yaw/pitch this end
+        can compute. Mirrors ``ReachyDriver.look_at``.
 
         Args:
-            x: Forward distance in metres.
-            y: Lateral offset in metres (positive = left).
-            z: Vertical offset in metres.
+            x: Forward of the trunk origin, metres.
+            y: Left of it, metres.
+            z: Above it, metres — trunk frame, so the floor is ~0.12 m below 0.
+            neck_pitch: Posture the aim is computed around, radians.
         """
-        yaw = math.atan2(y, x)
-        pitch = -math.atan2(z, math.hypot(x, y))
-        self.head(neck_pitch=pitch / 2.0, head_pitch=pitch / 2.0, head_yaw=yaw)
+        params = {"x": float(x), "y": float(y), "z": float(z), "neck_pitch": float(neck_pitch)}
+        if self._mode == "mock":
+            logger.debug("MOCK microduck look: %s", params)
+            return
+        self._safe_notify("robot.look", params)
+
+    # ------------------------------------------------------------------
+    # Skills — the one-shot scripted moves robotd schedules
+    # ------------------------------------------------------------------
+
+    #: Skills the daemon will run, named exactly as the wire spells them.
+    SKILLS = ("ground_pick", "kick_left", "kick_right", "sit_toggle", "roulade")
+
+    def do_skill(self, skill: str) -> Any:
+        """Run a one-shot skill. Answered — a refusal names what is holding the duck.
+
+        Args:
+            skill: One of :data:`SKILLS`.
+        """
+        if skill not in self.SKILLS:
+            raise ValueError(f"unknown skill {skill!r}; expected one of {self.SKILLS}")
+        if self._mode == "mock":
+            logger.debug("MOCK microduck skill: %s", skill)
+            return None
+        return self._request("robot.do", {"skill": skill}, timeout=max(5.0, self._rpc_timeout_s))
+
+    def kick(self, left: bool = False) -> Any:
+        """Kick with one leg. Half a second, and blind — the duck does not look
+        for a ball, so aiming is the caller's job."""
+        return self.do_skill("kick_left" if left else "kick_right")
+
+    def ground_pick(self) -> Any:
+        """Run the scripted ground pick — the beak goes down and comes up with
+        whatever was there. One shot, about three seconds."""
+        return self.do_skill("ground_pick")
+
+    def sit_toggle(self) -> Any:
+        """Sit if standing, stand if sitting. The daemon knows which."""
+        return self.do_skill("sit_toggle")
+
+    def roulade(self) -> Any:
+        """One forward roll, about a second. Requests made during a roll chain
+        another when it finishes, which is how a held button maps onto it."""
+        return self.do_skill("roulade")
+
+    # ------------------------------------------------------------------
+    # Voice, mouth, body pose, theremin
+    # ------------------------------------------------------------------
+
+    #: The voice bank, as the wire spells it.
+    SOUNDS = ("alarm", "greet", "inquire", "peck", "chirp", "coo", "wheee")
+
+    def sound(self, tag: str = "chirp", hold: Optional[bool] = None) -> Any:
+        """Play a voice-bank sound.
+
+        ``wheee`` is the held ride: pass ``hold=True`` repeatedly to keep it
+        going, ``hold=False`` to cut it. A hold that simply stops arriving
+        plays out through its end segment instead — the two endings differ on
+        purpose.
+
+        Args:
+            tag: One of :data:`SOUNDS`.
+            hold: Only meaningful for ``wheee``.
+        """
+        if tag not in self.SOUNDS:
+            raise ValueError(f"unknown sound {tag!r}; expected one of {self.SOUNDS}")
+        params: dict[str, Any] = {"tag": tag}
+        if hold is not None:
+            params["hold"] = bool(hold)
+        if self._mode == "mock":
+            logger.debug("MOCK microduck sound: %s", params)
+            return None
+        return self._request("robot.sound", params)
+
+    def quack(self) -> Any:
+        """The mouth-trigger quack — what ``robotctl quack`` plays."""
+        return self.sound("chirp")
+
+    def mouth(self, open: float = 0.0) -> None:
+        """Open the beak, 0 closed to 1 open.
+
+        The mouth is in no policy — this is the only thing that moves it — and
+        it is a continuous intent, so the driver keeps re-sending it until the
+        command TTL expires. That is what makes "hold the beak open" work
+        without the caller running its own loop.
+        """
+        params = {"open": _clamp(float(open), 0.0, 1.0)}
+        self._mouth = params
+        self._mouth_ts = time.monotonic()
+        if self._mode == "mock":
+            logger.debug("MOCK microduck mouth: %s", params)
+            return
+        self._safe_notify("robot.mouth", params)
+
+    #: Body-pose offsets the policies were trained across. The robot clamps
+    #: nothing here — out-of-distribution values just produce a policy leaning
+    #: on inputs it never saw — so the envelope is enforced on this side.
+    POSE_LIMITS = {"z": (-0.025, 0.010), "roll": (-0.26, 0.26), "pitch": (-0.26, 0.26)}
+
+    def pose(
+        self, z: float = 0.0, roll: float = 0.0, pitch: float = 0.0, active: bool = True
+    ) -> None:
+        """Lean the standing body. Continuous, and held only while re-sent.
+
+        Args:
+            z: Height offset, metres. Negative crouches.
+            roll: Radians.
+            pitch: Radians.
+            active: ``False`` snaps the body back to nominal at once.
+        """
+        params = {
+            "z": _clamp(float(z), *self.POSE_LIMITS["z"]),
+            "roll": _clamp(float(roll), *self.POSE_LIMITS["roll"]),
+            "pitch": _clamp(float(pitch), *self.POSE_LIMITS["pitch"]),
+            "active": bool(active),
+        }
+        if not active:
+            self._pose = None
+        else:
+            self._pose = params
+            self._pose_ts = time.monotonic()
+        if self._mode == "mock":
+            logger.debug("MOCK microduck pose: %s", params)
+            return
+        self._safe_notify("robot.pose", params)
+
+    def theremin(self, active: bool = True) -> Any:
+        """Pick up the ToF theremin, or put it down.
+
+        The head's depth sensor becomes an instrument: the distance of a hand
+        in front of the beak is the pitch, and the mouth opens with it, so the
+        note is visible as well as audible. Idempotent both ways.
+        """
+        if self._mode == "mock":
+            logger.debug("MOCK microduck theremin: %s", active)
+            return None
+        return self._request("robot.theremin", {"active": bool(active)})
+
+    def shutdown(self) -> Any:
+        """Ask for the sit-then-power-off sequence — the duck sits down first."""
+        if self._mode == "mock":
+            logger.debug("MOCK microduck shutdown")
+            return None
+        return self._request("robot.shutdown", timeout=max(10.0, self._rpc_timeout_s))
 
     def get_state(self) -> dict:
         """Return the most recent ``robot.state`` notification (last-value-wins)."""

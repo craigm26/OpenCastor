@@ -123,6 +123,32 @@ gamepad daemon and the phone app use, so OpenCastor is a first-class client.
 | `driver.get_state()` / `get_battery()` / `get_odometry()` | cached `robot.state` stream |
 | `driver.get_policies()` | ONNX policies reported at `robot.subscribe` |
 
+### Skills, voice and the beak
+
+The duck ships more than a gait. Every scripted move `robotd` schedules has a
+method here, named as the wire names it:
+
+| OpenCastor | What happens |
+|---|---|
+| `driver.kick(left=False)` | `robot.do` `kick_left`/`kick_right` — half a second, and **blind**: the duck does not look for the ball, so aiming is yours |
+| `driver.ground_pick()` | The beak goes down and comes up with whatever was there (~3 s) |
+| `driver.sit_toggle()` | Sit if standing, stand if sitting — the daemon knows which |
+| `driver.roulade()` | One forward roll (~1 s); requests during a roll chain another |
+| `driver.quack()` / `sound(tag, hold=)` | The voice bank: `alarm`, `greet`, `inquire`, `peck`, `chirp`, `coo`, `wheee` |
+| `driver.mouth(open)` | 0 closed → 1 open. No policy touches the mouth; this is the only thing that moves it |
+| `driver.pose(z, roll, pitch)` | Lean the standing body, held inside the trained envelope |
+| `driver.look_at(x, y, z)` | `robot.look` — **robotd's own IK**, not trigonometry on this end |
+| `driver.theremin(True)` | The ToF sensor becomes an instrument; the beak opens with the pitch |
+| `driver.shutdown()` | Sit, then power off |
+
+`wheee` is a held ride: pass `hold=True` repeatedly to keep it going and
+`hold=False` to cut it. A hold that simply stops arriving plays out through
+its end segment — the two endings differ on purpose.
+
+`mouth()` and `pose()` are continuous intents like the twist, so the driver
+re-sends them until the command TTL expires. A pose that expires snaps the
+body back to nominal rather than leaving the duck leaning.
+
 ### Deadman
 
 robotd zeroes the twist if intents stop arriving (~0.5 s), but OpenCastor's
