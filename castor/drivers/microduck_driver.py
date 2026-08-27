@@ -198,9 +198,7 @@ class MicroduckDriver(DriverBase):
                 )
                 target = f"{self._host}:{self._port}"
             else:
-                logger.warning(
-                    "MicroduckDriver: unknown transport %r — mock mode", self._transport
-                )
+                logger.warning("MicroduckDriver: unknown transport %r — mock mode", self._transport)
                 return
         except Exception as exc:
             logger.warning(
@@ -248,12 +246,18 @@ class MicroduckDriver(DriverBase):
             "ssh",
             "-N",
             "-T",
-            "-p", str(self._ssh_port),
-            "-o", "ExitOnForwardFailure=yes",
-            "-o", "BatchMode=yes",
-            "-o", "ServerAliveInterval=5",
-            "-o", "ServerAliveCountMax=2",
-            "-L", f"127.0.0.1:{self._local_port}:{self._socket_path}",
+            "-p",
+            str(self._ssh_port),
+            "-o",
+            "ExitOnForwardFailure=yes",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ServerAliveInterval=5",
+            "-o",
+            "ServerAliveCountMax=2",
+            "-L",
+            f"127.0.0.1:{self._local_port}:{self._socket_path}",
             dest,
         ]
         logger.debug("MicroduckDriver ssh forward: %s", " ".join(cmd))
@@ -341,7 +345,7 @@ class MicroduckDriver(DriverBase):
                 return
             try:
                 chunk = sock.recv(65536)
-            except socket.timeout:
+            except TimeoutError:
                 continue
             except OSError:
                 break

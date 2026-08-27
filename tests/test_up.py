@@ -171,11 +171,17 @@ def test_a_host_without_the_rc_car_actuator_falls_back_to_noop(monkeypatch):
     assert "pip install rc-car-actuator" in note
 
 
-def test_with_the_actuator_installed_rc_car_is_chosen():
-    # This host has it; the resolver must find it through the real registry.
-    from castor.up import resolve_actuator
+def test_with_the_actuator_installed_rc_car_is_chosen(monkeypatch):
+    # rc-car-actuator is an opt-in extra (it is not on PyPI), so this cannot
+    # assume the host has it — stub the registry the way the fallback test does.
+    import castor.up as up
 
-    name, note = resolve_actuator()
+    class EP:
+        name = "rc-car"
+
+    monkeypatch.setattr("importlib.metadata.entry_points",
+                        lambda group: [EP()] if group == "robot_md_gateway.actuators" else [])
+    name, note = up.resolve_actuator()
     assert name == "rc-car"
     assert note is None
 

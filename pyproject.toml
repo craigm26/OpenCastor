@@ -72,16 +72,18 @@ dependencies = [
     "rcan>=3.3,<4",
     # Gateway Authority enforcement (Plan 6 Track 2 / Plan 7 open-core)
     "robot-md-gateway>=0.4.0a1",
-    # The rc-car actuator plugin, so `castor up` on a fresh host resolves
-    # `actuator: rc-car` instead of degrading to noop. A hard dependency on
-    # purpose: the ten-minute goal is `pip install opencastor` and done, and
-    # this package is pure Python (its hardware backends import lazily).
-    "rc-car-actuator>=0.1.0",
 ]
 
 [project.optional-dependencies]
 # The recommended stack: RPi + PCA9685 RC car + CSI camera + WhatsApp + Claude
 core = []
+# The rc-car actuator plugin. NOT a hard dependency: it is not published to
+# PyPI, so requiring it made `pip install opencastor` fail outright — which is
+# strictly worse than the graceful path `castor up` already takes.
+# `up.resolve_actuator()` falls back to the gateway's built-in `noop` actuator
+# and prints the one command that upgrades it. Move this back into
+# [project] dependencies once the package is on PyPI.
+rc-car = ["rc-car-actuator>=0.1.0"]
 rpi = [
     "adafruit-circuitpython-pca9685>=3.4.0; sys_platform == 'linux'",
     "adafruit-circuitpython-motor>=3.4.0; sys_platform == 'linux'",

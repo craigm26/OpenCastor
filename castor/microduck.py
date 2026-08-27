@@ -81,9 +81,12 @@ CANDIDATE_HOSTNAMES = (
 CANDIDATE_USERS = ("duck", "radxa", "pi", "ubuntu", "armbian")
 
 _SSH_OPTS = (
-    "-o", "BatchMode=yes",
-    "-o", "StrictHostKeyChecking=accept-new",
-    "-o", "ConnectTimeout=4",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "StrictHostKeyChecking=accept-new",
+    "-o",
+    "ConnectTimeout=4",
 )
 
 
@@ -136,9 +139,7 @@ class DuckCandidate:
 def _run(cmd: list[str], timeout: float = 10.0) -> tuple[int, str, str]:
     """Run *cmd*, returning ``(returncode, stdout, stderr)``. Never raises."""
     try:
-        proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout, check=False
-        )
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
         return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
     except FileNotFoundError:
         return 127, "", f"{cmd[0]}: not found"

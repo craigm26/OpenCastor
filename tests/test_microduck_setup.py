@@ -487,9 +487,7 @@ def test_cli_duck_brain_flag_sets_provider_and_model(monkeypatch, tmp_path):
     assert cfg["agent"]["model"] == "gemma3:4b"
 
 
-def test_cli_duck_points_at_login_when_the_brain_has_no_credentials(
-    monkeypatch, tmp_path, capsys
-):
+def test_cli_duck_points_at_login_when_the_brain_has_no_credentials(monkeypatch, tmp_path, capsys):
     from castor import cli
 
     _ready_duck(monkeypatch, tmp_path)
