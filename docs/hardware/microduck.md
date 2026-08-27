@@ -195,6 +195,52 @@ castor duck --brain ollama       # choose the LLM provider while configuring
 
 Add `--json` to any of them for machine-readable output.
 
+## Stringing it together
+
+The duck's own vocabulary is atomic. `robot.do` runs exactly one skill, and a
+refusal names the move already holding the robot. It can kick. It cannot
+*"walk to the ball, line up, knock it toward the couch, then celebrate"* —
+every verb in that sentence exists, but the sentence does not.
+
+That sentence is what OpenCastor adds:
+
+```bash
+castor duck do fetch                              # a routine by name
+castor duck do '[{"move":"approach","metres":0.4},{"move":"nudge"}]'
+castor duck do "greet me, then patrol the room"   # plain English
+```
+
+`fetch` is one word that becomes ten primitives — look down, walk, stop, pick,
+turn, stop, walk, stop, open beak, quack. The routines are `approach`,
+`back_off`, `turn_by`, `scan`, `nod`, `shake`, `greet`, `celebrate`, `nudge`,
+`fetch`, `patrol`, `dance` and `settle`, and each one is written as a plan a
+user could have typed — nothing is hidden in code that you could not have
+asked for yourself.
+
+Plain English goes to whatever brain the robot is configured with, along with
+the vocabulary — including how long each move takes and which ones hold the
+robot, because a planner that doesn't know a kick blocks for half a second
+cannot sequence around one. **A routine name and a literal JSON plan need no
+model at all**: a duck that can only be choreographed by an LLM is a duck that
+stops working offline.
+
+The same two tools (`duck_vocabulary`, `duck_perform`) are registered with the
+brain automatically whenever a Microduck is the attached robot, so the model
+can discover the verbs mid-conversation and use them.
+
+Three things the performer enforces, because a plan is not a promise:
+
+- **A bad plan is refused whole, before anything moves.** An unknown move in
+  step nine means step one never runs.
+- **The duck can end the performance.** A fall, a limp, or a battery under
+  12% stops the run between steps and stops the duck.
+- **Timing is the robot's, not a guess.** A kick waits out its half second, a
+  ground pick its three, a roll its one.
+
+Everything still goes out through the driver, so the SafetyLayer sees every
+motion, and robotd's own limits apply on top and come back in `limited_by`.
+A plan is a proposal. The robot still decides.
+
 ## Config reference
 
 | Key | Default | Meaning |

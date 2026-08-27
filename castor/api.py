@@ -436,6 +436,28 @@ class JWTKeyRotateRequest(BaseModel):
     new_kid: Optional[str] = None
 
 
+def _register_duck_tools_if_present(state, tool_registry) -> None:
+    """Give the brain the duck's vocabulary when a Microduck is attached.
+
+    The duck's own skills are atomic — one kick, one pick, one roll — so a
+    model holding only ``move()`` can drive it but cannot choreograph it.
+    These two tools are what turn "go and get it" into a sequence: one to
+    discover the verbs, one to perform a plan built from them.
+
+    Silent when the robot is anything else, and never fatal: a brain that
+    cannot see the duck tools is a less capable robot, not a broken one.
+    """
+    driver = getattr(state, "driver", None)
+    if driver is None or type(driver).__name__ != "MicroduckDriver":
+        return
+    try:
+        from castor.microduck_choreography import register_duck_tools
+
+        register_duck_tools(tool_registry, driver)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("could not register duck choreography tools: %s", exc)
+
+
 @app.post("/auth/token")
 async def auth_token(req: UserLoginRequest):
     """Issue a JWT access token using username + password (multi-user auth).
@@ -688,6 +710,7 @@ async def send_command(cmd: CommandRequest, request: Request):
             _harness = getattr(state, "_harness", None)
             if _harness is None:
                 _tool_reg = getattr(state, "tool_registry", None) or ToolRegistry(_agent_cfg)
+                _register_duck_tools_if_present(state, _tool_reg)
                 _harness = AgentHarness(
                     provider=active,
                     config=_agent_cfg,

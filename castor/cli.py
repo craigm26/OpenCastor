@@ -3896,6 +3896,68 @@ def cmd_duck(args) -> int:
         say(f"\n  [red]unhealthy[/red] — {result.get('error', 'robotd reports unhealthy')}\n")
         return 1
 
+    # ── castor duck do ──────────────────────────────────────────────────
+    if action == "do":
+        from castor.drivers.microduck_driver import MicroduckDriver
+        from castor.microduck_choreography import ChoreographyError, DuckChoreographer
+
+        request = " ".join(getattr(args, "request", []) or []).strip()
+        if not request:
+            say("\n  Say what the duck should do:")
+            say('    [cyan]castor duck do "walk to the ball and knock it over"[/cyan]')
+            say("    [cyan]castor duck do fetch[/cyan]                 (a routine by name)")
+            say("")
+            return 1
+
+        cand = locate()
+        if cand is None or not cand.is_duck:
+            say("\n  No reachable duck. Run [cyan]castor duck[/cyan] first.\n")
+            return 1
+
+        cfg = {"transport": cand.transport}
+        if cand.transport == "ssh":
+            cfg.update({"ssh_host": cand.host, "ssh_user": cand.user})
+        driver = MicroduckDriver(cfg)
+        duck = DuckChoreographer(driver)
+        try:
+            plan = _duck_plan_from_request(duck, request, say)
+            if plan is None:
+                return 1
+
+            say("")
+            steps = duck.expand(plan)
+            say(f"  [bold]{len(steps)} moves:[/bold] " + " → ".join(s["move"] for s in steps))
+            if not confirm("Perform it?", default=True):
+                say("  Cancelled.\n")
+                return 0
+
+            performance = duck.perform(plan)
+            emit(
+                {
+                    "ok": performance.completed,
+                    "summary": performance.summary,
+                    "aborted_because": performance.aborted_because,
+                    "steps": [
+                        {"move": s.step["move"], "ok": s.ok, "detail": s.detail}
+                        for s in performance.steps
+                    ],
+                }
+            )
+            say("")
+            for step in performance.steps:
+                mark = "[green]✓[/green]" if step.ok else "[red]✗[/red]"
+                say(f"    {mark} {step.step['move']:<10} {step.detail}")
+            if performance.completed:
+                say(f"\n  [bold green]{performance.summary}.[/bold green]\n")
+                return 0
+            say(f"\n  [yellow]{performance.summary}.[/yellow]\n")
+            return 1
+        except ChoreographyError as exc:
+            say(f"\n  [red]Refused:[/red] {exc}\n")
+            return 1
+        finally:
+            driver.close()
+
     # ── castor duck test ────────────────────────────────────────────────
     if action == "test":
         from castor.drivers.microduck_driver import MicroduckDriver
@@ -4065,6 +4127,66 @@ def cmd_duck(args) -> int:
         args.layout = "full"
         cmd_run(args)
     return 0
+
+
+def _duck_plan_from_request(duck, request: str, say) -> "list | None":
+    """Turn what the operator typed into a plan.
+
+    Three ways in, cheapest first: a routine's own name, a literal JSON plan,
+    or English handed to whatever brain the robot is configured with. The
+    first two need no model at all, which matters — a duck that can only be
+    choreographed by an LLM is a duck that stops working offline.
+    """
+    import json as _json
+
+    from castor.microduck_choreography import ROUTINES
+
+    word = request.strip()
+    if word in ROUTINES:
+        return [{"move": word}]
+
+    if word.startswith("["):
+        try:
+            return _json.loads(word)
+        except ValueError as exc:
+            say(f"\n  [red]That is not a plan:[/red] {exc}\n")
+            return None
+
+    try:
+        from castor.providers import get_provider
+    except Exception:
+        get_provider = None  # type: ignore[assignment]
+
+    if get_provider is None:
+        say("\n  [yellow]No brain available to translate that.[/yellow]")
+        say("  Name a routine instead: " + ", ".join(sorted(ROUTINES)) + "\n")
+        return None
+
+    say("  [dim]thinking…[/dim]")
+    prompt = (
+        duck.vocabulary()
+        + "\n\nRequest: "
+        + word
+        + "\n\nAnswer with ONLY a JSON array of steps. No prose, no code fence."
+    )
+    try:
+        provider = get_provider({})
+        thought = provider.think(prompt)
+        text = getattr(thought, "text", None) or str(thought)
+    except Exception as exc:  # noqa: BLE001
+        say(f"\n  [yellow]The brain could not answer:[/yellow] {exc}")
+        say("  Name a routine instead: " + ", ".join(sorted(ROUTINES)) + "\n")
+        return None
+
+    start, end = text.find("["), text.rfind("]")
+    if start < 0 or end < start:
+        say(f"\n  [yellow]No plan in that answer:[/yellow] {text[:160]}\n")
+        return None
+    try:
+        return _json.loads(text[start : end + 1])
+    except ValueError as exc:
+        say(f"\n  [yellow]The plan did not parse:[/yellow] {exc}\n")
+        return None
 
 
 def cmd_pair(args) -> int:
@@ -8812,6 +8934,8 @@ def main() -> None:
             "  castor duck find                 # just list candidates\n"
             "  castor duck health               # live loop rate + battery\n"
             "  castor duck test                 # stand up and walk (asks first)\n"
+            "  castor duck do fetch             # perform a routine\n"
+            '  castor duck do "greet me, then patrol the room"   # plain English\n'
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -8836,6 +8960,14 @@ def main() -> None:
     p_duck_health.add_argument("--host", default=None, help="Duck address")
     p_duck_health.add_argument("--user", default=None, help="SSH login on the duck")
     p_duck_health.add_argument("--json", action="store_true", help="Machine-readable output")
+    p_duck_do = p_duck_sub.add_parser(
+        "do", help="Choreograph the duck — plain English, a routine name, or a JSON plan"
+    )
+    p_duck_do.add_argument("request", nargs="*", help="what the duck should do")
+    p_duck_do.add_argument("--host", default=None, help="Duck address")
+    p_duck_do.add_argument("--user", default=None, help="SSH login on the duck")
+    p_duck_do.add_argument("--yes", "-y", action="store_true", help="Skip the confirmation")
+    p_duck_do.add_argument("--json", action="store_true", help="Machine-readable output")
     p_duck_test = p_duck_sub.add_parser("test", help="Stand up and walk forward briefly")
     p_duck_test.add_argument("--host", default=None, help="Duck address")
     p_duck_test.add_argument("--user", default=None, help="SSH login on the duck")
