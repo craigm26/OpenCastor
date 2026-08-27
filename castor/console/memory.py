@@ -19,6 +19,7 @@ AND IT IS BOUNDED. ``recall`` carries a hard wall-clock budget
 asked a question will wait out a cold model load, but finite): a model daemon
 that answers one byte at a time cannot hold a console worker open indefinitely.
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException

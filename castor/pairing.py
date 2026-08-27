@@ -64,8 +64,8 @@ from __future__ import annotations
 
 import base64
 import binascii
-import json
 import hashlib
+import json
 import logging
 import os
 import socket
@@ -177,10 +177,14 @@ def generate_attestation_identity(
         priv = serialization.load_pem_private_key(key_file.read_bytes(), password=None)
         pub_file = key_file.with_suffix(key_file.suffix + ".pub")
         if not pub_file.exists():
-            _atomic_write_bytes(pub_file, priv.public_key().public_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo,
-            ), mode=0o644)
+            _atomic_write_bytes(
+                pub_file,
+                priv.public_key().public_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PublicFormat.SubjectPublicKeyInfo,
+                ),
+                mode=0o644,
+            )
         if kid is None:
             raw_pub = priv.public_key().public_bytes(
                 encoding=serialization.Encoding.Raw,
@@ -261,8 +265,8 @@ def read_bearer_from_bearers_yaml(path: Path, *, prefer_tier: str = "actuate") -
         data = data.get("bearers") or []
     if not isinstance(data, list):
         raise ValueError(
-            f"{path}: expected a list of bearer entries, or a mapping with a "
-            f"'bearers:' list")
+            f"{path}: expected a list of bearer entries, or a mapping with a 'bearers:' list"
+        )
     entries = [e for e in data if isinstance(e, dict) and e.get("token")]
     if not entries:
         raise ValueError(f"{path}: no bearer entries with a token found")
@@ -354,9 +358,7 @@ def capability_surface_from_manifest(manifest_path: Path) -> dict | None:
     for gate in safety.get("hitl_gates") or []:
         if not isinstance(gate, dict) or not gate.get("scope"):
             continue
-        gates.append(
-            {"scope": str(gate["scope"]), "require_auth": bool(gate.get("require_auth"))}
-        )
+        gates.append({"scope": str(gate["scope"]), "require_auth": bool(gate.get("require_auth"))})
     if gates:
         surface["gates"] = gates
 
@@ -445,8 +447,8 @@ def decode_pair_fragment(fragment: str) -> dict:
     tag, dot, encoded = fragment.partition(".")
     if not dot or tag != PAIR_LINK_SCHEMA:
         raise ValueError(
-            f"unknown pairing fragment version {tag!r} (this runtime writes "
-            f"{PAIR_LINK_SCHEMA!r})")
+            f"unknown pairing fragment version {tag!r} (this runtime writes {PAIR_LINK_SCHEMA!r})"
+        )
     try:
         raw = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
     except (binascii.Error, ValueError) as exc:
@@ -490,8 +492,9 @@ def _encoded_size(payload: dict, *, for_link: bool) -> int:
     return len(compact_payload_json(payload).encode("utf-8"))
 
 
-def _fit_surface(payload: dict, surface: dict, budget: int, *,
-                 for_link: bool = False) -> dict | None:
+def _fit_surface(
+    payload: dict, surface: dict, budget: int, *, for_link: bool = False
+) -> dict | None:
     """Trim the capability surface until the encoded payload fits ``budget`` bytes.
 
     Drops in order of least value per byte: the contracts (by far the largest
@@ -618,8 +621,7 @@ def build_pair_payload(
         payload["console_url"] = console_url
         payload["console_token"] = console_token
     if capability_surface and capability_surface.get("capabilities"):
-        fitted = _fit_surface(payload, capability_surface, PAIR_QR_BYTE_BUDGET,
-                              for_link=for_link)
+        fitted = _fit_surface(payload, capability_surface, PAIR_QR_BYTE_BUDGET, for_link=for_link)
         if fitted:
             payload["capability_surface"] = fitted
     return payload
@@ -716,8 +718,7 @@ def write_pair_artifacts(payload: dict, out_dir: Path, *, link: bool = False) ->
     compact = compact_payload_json(payload)
     json_path = out_dir / "pair-payload.json"
     # Pretty for the file (humans diff it), compact for the QR (bytes matter).
-    _atomic_write_bytes(json_path, (json.dumps(payload, indent=1) + "\n").encode(),
-                        mode=0o600)
+    _atomic_write_bytes(json_path, (json.dumps(payload, indent=1) + "\n").encode(), mode=0o600)
     written["payload"] = json_path
 
     qr_content = compact
@@ -730,8 +731,11 @@ def write_pair_artifacts(payload: dict, out_dir: Path, *, link: bool = False) ->
     try:
         import qrcode  # noqa: PLC0415 - optional dependency, degrade gracefully
     except ImportError:
-        logger.warning("qrcode not installed — wrote %s only; "
-                       "`pip install qrcode[pil]` to also get pair-qr.png", json_path)
+        logger.warning(
+            "qrcode not installed — wrote %s only; "
+            "`pip install qrcode[pil]` to also get pair-qr.png",
+            json_path,
+        )
         return written
 
     png_path = out_dir / "pair-qr.png"

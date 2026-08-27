@@ -35,6 +35,7 @@ where ``<state dir>`` is ``CASTOR_OPENCASTOR_DIR`` or ``~/.opencastor``.
 Every one of those is read at CALL time, not import time: a test, a wizard, or
 a second robot on the same Pi may move ``ROBOT_HOME`` after this module loads.
 """
+
 from __future__ import annotations
 
 import os

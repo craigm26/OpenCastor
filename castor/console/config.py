@@ -13,6 +13,7 @@ to describe THIS robot, and the pairing QR describes the robot at
 documents would make the phone's picture of the robot disagree with the robot's
 own, which is the exact failure /surface exists to end.
 """
+
 from __future__ import annotations
 
 import os

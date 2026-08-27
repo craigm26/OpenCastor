@@ -16,6 +16,7 @@ MANIFEST READS GO THROUGH ``castor.manifest`` / ``castor.pairing``. A ROBOT.md
 is signed, and its comments are load-bearing safety prose; this module never
 parses or rewrites one itself.
 """
+
 from __future__ import annotations
 
 import json
@@ -100,7 +101,7 @@ def surface() -> dict:
         raise HTTPException(
             status_code=404,
             detail=f"no ROBOT.md at {path} — this robot has not been set up "
-                   f"(`castor up`) or ROBOT_HOME points somewhere else",
+            f"(`castor up`) or ROBOT_HOME points somewhere else",
         )
     try:
         rrn = read_rrn_from_manifest(path)
@@ -116,7 +117,7 @@ def surface() -> dict:
         raise HTTPException(
             status_code=422,
             detail=f"ROBOT.md frontmatter unparseable: {_short_yaml_reason(exc)}",
-        )
+        ) from exc
     except (OSError, ValueError):
         rrn = ""
     return {
@@ -159,7 +160,7 @@ def declared_capabilities() -> list[str]:
 def _read_policy() -> dict[str, str]:
     path = policy_file()
     values: dict[str, str] = {}
-    for source in (path.read_text().splitlines() if path.is_file() else []):
+    for source in path.read_text().splitlines() if path.is_file() else []:
         line = source.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -234,8 +235,7 @@ def permitted_primitives() -> list[str]:
     # Implemented matters as much as allowed: a capability the driver cannot
     # execute fails as an actuator error, which reads like a bug rather than a
     # decision. Only offer building blocks that can genuinely run.
-    permitted = [c for c in declared
-                 if c in allowed and (not implemented or c in implemented)]
+    permitted = [c for c in declared if c in allowed and (not implemented or c in implemented)]
 
     # Capabilities the driver implements and the operator has allowed, but that
     # the SIGNED manifest predates. arm.reach_point is the live example: it was
@@ -358,11 +358,21 @@ def primitives() -> dict:
             continue
         if implemented and cap not in implemented:
             # The honest reason. Enabling it in policy would NOT make it work.
-            blocked.append({"name": cap, "reason": "not implemented by this robot's driver",
-                            "operator_can_enable": False})
+            blocked.append(
+                {
+                    "name": cap,
+                    "reason": "not implemented by this robot's driver",
+                    "operator_can_enable": False,
+                }
+            )
         else:
-            blocked.append({"name": cap, "reason": "not in the operator allowlist",
-                            "operator_can_enable": True})
+            blocked.append(
+                {
+                    "name": cap,
+                    "reason": "not in the operator allowlist",
+                    "operator_can_enable": True,
+                }
+            )
     return {
         "permitted": sorted(permitted),
         "declared_but_blocked": blocked,
@@ -388,8 +398,9 @@ def list_capabilities() -> dict:
     permitted = set(permitted_primitives())
     items = []
     for item in _load():
-        missing = [s["tool_name"] for s in item.get("steps", [])
-                   if s.get("tool_name") not in permitted]
+        missing = [
+            s["tool_name"] for s in item.get("steps", []) if s.get("tool_name") not in permitted
+        ]
         # A plan can go stale if the operator later revokes a primitive; say so
         # rather than letting it fail halfway through a motion.
         items.append({**item, "runnable": not missing, "blocked_steps": missing})
@@ -441,8 +452,10 @@ def save_capability(cap: Capability) -> dict:
             # keeps composition from becoming a way to widen authority.
             raise HTTPException(
                 status_code=422,
-                detail=(f"step {index} uses {step.tool_name!r}, which this robot "
-                        f"does not currently permit. Allowed: {sorted(permitted)}"),
+                detail=(
+                    f"step {index} uses {step.tool_name!r}, which this robot "
+                    f"does not currently permit. Allowed: {sorted(permitted)}"
+                ),
             )
 
     items = [i for i in _load() if i.get("name") != name]
@@ -495,23 +508,26 @@ def resolve_capability(name: str, req: ResolveRequest) -> dict:
             # have revoked a primitive since this workflow was written.
             raise HTTPException(
                 status_code=409,
-                detail=(f"{step.get('tool_name')!r} is no longer permitted on this "
-                        f"robot — this workflow cannot run as written"),
+                detail=(
+                    f"{step.get('tool_name')!r} is no longer permitted on this "
+                    f"robot — this workflow cannot run as written"
+                ),
             )
-        resolved.append({
-            "tool_name": step["tool_name"],
-            "tool_args": _substitute(step.get("tool_args", {}), values),
-            "when": step.get("when", "always"),
-            "wait_s": step.get("wait_s", 0.0),
-            "note": step.get("note", ""),
-        })
+        resolved.append(
+            {
+                "tool_name": step["tool_name"],
+                "tool_args": _substitute(step.get("tool_args", {}), values),
+                "when": step.get("when", "always"),
+                "wait_s": step.get("wait_s", 0.0),
+                "note": step.get("note", ""),
+            }
+        )
     return {
         "name": name,
         "revision": item.get("revision", 1),
         "arguments": values,
         "steps": resolved,
-        "motion_steps": sum(1 for s in resolved
-                            if not s["tool_name"].startswith("status.")),
+        "motion_steps": sum(1 for s in resolved if not s["tool_name"].startswith("status.")),
     }
 
 

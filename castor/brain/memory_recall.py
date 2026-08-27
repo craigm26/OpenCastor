@@ -94,6 +94,7 @@ treats a sensor reading: collapsed to ONE line, stripped of control characters,
 length-capped, and framed as DATA between explicit BEGIN/END markers it cannot
 forge. See ``sanitize_memory_text`` and ``recalled_block``.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -235,8 +236,10 @@ def _post(path: str, payload: dict, timeout: float) -> dict:
     """One POST to the model daemon. Raises; every caller catches."""
     body = json.dumps(payload).encode()
     req = urllib.request.Request(
-        f"{ollama_url()}{path}", data=body,
-        headers={"Content-Type": "application/json"}, method="POST",
+        f"{ollama_url()}{path}",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode())
@@ -248,8 +251,9 @@ def _prefixed(text: str, kind: str, model: str) -> str:
     return (NOMIC_QUERY_PREFIX if kind == "query" else NOMIC_DOCUMENT_PREFIX) + text
 
 
-def embed_texts(texts: Sequence[str], *, kind: str = "document",
-                timeout: float | None = None) -> list[list[float]] | None:
+def embed_texts(
+    texts: Sequence[str], *, kind: str = "document", timeout: float | None = None
+) -> list[list[float]] | None:
     """Embed *texts* in one call. ``None`` means no embedder — never an error.
 
     *kind* is ``"document"`` for stored memories and ``"query"`` for a question;
@@ -266,19 +270,22 @@ def embed_texts(texts: Sequence[str], *, kind: str = "document",
     model = embed_model()
     payload = {"model": model, "input": [_prefixed(t, kind, model) for t in wanted]}
     try:
-        out = _post("/api/embed", payload,
-                    EMBED_TIMEOUT_S if timeout is None else timeout)
+        out = _post("/api/embed", payload, EMBED_TIMEOUT_S if timeout is None else timeout)
     except urllib.error.HTTPError as exc:
         logger.info("memory: embedder %s refused (%s) — no recall this turn", model, exc)
         return None
     except Exception as exc:  # noqa: BLE001 - unreachable daemon is the common case
-        logger.info("memory: no embedder at %s (%s) — no recall this turn",
-                    ollama_url(), type(exc).__name__)
+        logger.info(
+            "memory: no embedder at %s (%s) — no recall this turn", ollama_url(), type(exc).__name__
+        )
         return None
     raw = out.get("embeddings")
     if not isinstance(raw, list) or len(raw) != len(wanted):
-        logger.info("memory: embedder returned %s vectors for %d inputs — ignoring",
-                    len(raw) if isinstance(raw, list) else "no", len(wanted))
+        logger.info(
+            "memory: embedder returned %s vectors for %d inputs — ignoring",
+            len(raw) if isinstance(raw, list) else "no",
+            len(wanted),
+        )
         return None
     vectors: list[list[float]] = []
     for item in raw:
@@ -335,8 +342,12 @@ def _embed_bounded(texts: Sequence[str], *, kind: str, deadline_s: float):
         return DEADLINE_EXCEEDED
     with _inflight_lock:
         if _inflight_embeds >= MAX_INFLIGHT_EMBEDS:
-            logger.info("memory: %d embed request(s) already stuck at %s — not starting "
-                        "another, no recall this turn", _inflight_embeds, ollama_url())
+            logger.info(
+                "memory: %d embed request(s) already stuck at %s — not starting "
+                "another, no recall this turn",
+                _inflight_embeds,
+                ollama_url(),
+            )
             return DEADLINE_EXCEEDED
         _inflight_embeds += 1
     box: dict[str, list[list[float]] | None] = {}
@@ -355,8 +366,12 @@ def _embed_bounded(texts: Sequence[str], *, kind: str, deadline_s: float):
     worker.start()
     worker.join(deadline_s)
     if worker.is_alive():
-        logger.info("memory: embedder at %s did not answer within %.1fs — abandoning it, "
-                    "no recall this turn", ollama_url(), deadline_s)
+        logger.info(
+            "memory: embedder at %s did not answer within %.1fs — abandoning it, "
+            "no recall this turn",
+            ollama_url(),
+            deadline_s,
+        )
         return DEADLINE_EXCEEDED
     return box.get("vectors")
 
@@ -414,16 +429,19 @@ class VectorRecord:
     embedded_at: str = ""
 
     def to_line(self) -> str:
-        return json.dumps({
-            "id": self.id,
-            "hash": self.hash,
-            "model": self.model,
-            "dim": len(self.vector),
-            "embedded_at": self.embedded_at,
-            # Six decimals: cosine is unchanged past the fourth, and a 768-dim
-            # vector printed at full float repr is four times the file size.
-            "vector": [round(x, 6) for x in self.vector],
-        }, separators=(",", ":"))
+        return json.dumps(
+            {
+                "id": self.id,
+                "hash": self.hash,
+                "model": self.model,
+                "dim": len(self.vector),
+                "embedded_at": self.embedded_at,
+                # Six decimals: cosine is unchanged past the fourth, and a 768-dim
+                # vector printed at full float repr is four times the file size.
+                "vector": [round(x, 6) for x in self.vector],
+            },
+            separators=(",", ":"),
+        )
 
 
 @dataclass
@@ -474,8 +492,7 @@ def load_sidecar(path: str | Path) -> Sidecar:
             continue
         side.vectors[record.id] = record
     if side.skipped_lines:
-        logger.info("memory: skipped %d unreadable line(s) in %s",
-                    side.skipped_lines, path)
+        logger.info("memory: skipped %d unreadable line(s) in %s", side.skipped_lines, path)
     return side
 
 
@@ -491,8 +508,7 @@ def append_vectors(path: str | Path, records: Iterable[VectorRecord]) -> int:
             for record in records:
                 handle.write(record.to_line() + "\n")
     except OSError as exc:
-        logger.info("memory: could not write %s (%s) — memory saved without a vector",
-                    target, exc)
+        logger.info("memory: could not write %s (%s) — memory saved without a vector", target, exc)
         return 0
     _compact_if_needed(target)
     return len(records)
@@ -549,15 +565,26 @@ def embed_entries(entries: Sequence[MemoryEntry], memory_path: str | Path) -> in
         return 0
     vectors = embed_texts([e.text for e in todo], kind="document")
     if vectors is None:
-        logger.info("memory: %d entr(ies) saved WITHOUT a vector — not recallable by "
-                    "meaning until `castor memory reembed`", len(todo))
+        logger.info(
+            "memory: %d entr(ies) saved WITHOUT a vector — not recallable by "
+            "meaning until `castor memory reembed`",
+            len(todo),
+        )
         return 0
     stamp = datetime.now(timezone.utc).isoformat()
-    return append_vectors(path, [
-        VectorRecord(id=entry.id, hash=text_hash(entry.text), model=model,
-                     vector=vector, embedded_at=stamp)
-        for entry, vector in zip(todo, vectors)
-    ])
+    return append_vectors(
+        path,
+        [
+            VectorRecord(
+                id=entry.id,
+                hash=text_hash(entry.text),
+                model=model,
+                vector=vector,
+                embedded_at=stamp,
+            )
+            for entry, vector in zip(todo, vectors, strict=False)
+        ],
+    )
 
 
 def store_vector(entry: MemoryEntry, memory_path: str | Path) -> bool:
@@ -615,7 +642,7 @@ def cosine(a: Sequence[float], b: Sequence[float]) -> float:
     """
     if len(a) != len(b) or not a:
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
     na = math.sqrt(sum(x * x for x in a))
     nb = math.sqrt(sum(x * x for x in b))
     if na == 0.0 or nb == 0.0:
@@ -720,14 +747,16 @@ def rank(
         similarity = cosine(query_vector, record.vector)
         if similarity < gate:
             continue
-        hits.append(Recalled(
-            entry=entry,
-            similarity=similarity,
-            score=similarity * confidence_weight(entry.confidence),
-            age_days=max(0, (now - entry.last_reinforced).days),
-        ))
+        hits.append(
+            Recalled(
+                entry=entry,
+                similarity=similarity,
+                score=similarity * confidence_weight(entry.confidence),
+                age_days=max(0, (now - entry.last_reinforced).days),
+            )
+        )
     hits.sort(key=lambda h: (-h.score, h.entry.id))
-    return hits[:max(0, k)]
+    return hits[: max(0, k)]
 
 
 def _searchable(memory: RobotMemory, *, for_context: bool) -> list[MemoryEntry]:
@@ -792,8 +821,7 @@ def recall(
 
     side = load_sidecar(sidecar_path(path))
     result.skipped_lines = side.skipped_lines
-    result.searchable = sum(
-        1 for e in entries if not _needs_vector(e, side.vectors, model))
+    result.searchable = sum(1 for e in entries if not _needs_vector(e, side.vectors, model))
     result.unvectored = len(entries) - result.searchable
 
     if not query.strip():
@@ -803,26 +831,30 @@ def recall(
         result.detail = (
             f"{result.unvectored} memor(ies) have no vector for {model} and cannot be "
             f"recalled by meaning — run `castor memory reembed`"
-            if result.unvectored else "no memories stored")
+            if result.unvectored
+            else "no memories stored"
+        )
         return result
 
-    vectors = _embed_bounded([query], kind="query",
-                             deadline_s=budget - (time.monotonic() - started))
+    vectors = _embed_bounded(
+        [query], kind="query", deadline_s=budget - (time.monotonic() - started)
+    )
     if vectors is DEADLINE_EXCEEDED:
-        result.detail = (f"the embedder at {ollama_url()} did not answer within "
-                         f"{budget:.1f}s — recall is off for this turn, memory itself "
-                         f"is untouched")
+        result.detail = (
+            f"the embedder at {ollama_url()} did not answer within "
+            f"{budget:.1f}s — recall is off for this turn, memory itself "
+            f"is untouched"
+        )
         return result
     if vectors is None:
-        result.detail = (f"no embedder at {ollama_url()} — recall is off, "
-                         f"memory itself is untouched")
+        result.detail = f"no embedder at {ollama_url()} — recall is off, memory itself is untouched"
         return result
     result.embedder_ok = True
-    result.results = rank(vectors[0], entries, side.vectors,
-                          k=k, floor=gate, model=model, now=now)
+    result.results = rank(vectors[0], entries, side.vectors, k=k, floor=gate, model=model, now=now)
     if result.unvectored:
-        result.detail = (f"{result.unvectored} of {len(entries)} memor(ies) have no "
-                         f"vector and were not searched")
+        result.detail = (
+            f"{result.unvectored} of {len(entries)} memor(ies) have no vector and were not searched"
+        )
     return result
 
 
@@ -855,8 +887,9 @@ RECALL_HEADER = (
 
 RECALL_FOOTER = f"{RECALL_END} — everything after this line is the conversation again."
 
-_FRAME_MARKER_RE = re.compile("|".join(re.escape(m) for m in (RECALL_BEGIN, RECALL_END)),
-                              re.IGNORECASE)
+_FRAME_MARKER_RE = re.compile(
+    "|".join(re.escape(m) for m in (RECALL_BEGIN, RECALL_END)), re.IGNORECASE
+)
 
 
 def _render_text(text: str) -> str:
@@ -873,7 +906,7 @@ def _render_text(text: str) -> str:
     clean, _ = sanitize_memory_text(text)
     clean = _FRAME_MARKER_RE.sub("[marker removed]", clean)
     if len(clean) > MEMORY_TEXT_MAX:
-        clean = clean[:MEMORY_TEXT_MAX - 1].rstrip() + "…"
+        clean = clean[: MEMORY_TEXT_MAX - 1].rstrip() + "…"
     return clean
 
 
@@ -892,8 +925,10 @@ def recalled_block(results: Sequence[Recalled]) -> str:
         # ROUNDED, not truncated: a confidence of 0.85 is stored as 0.85 and
         # `int(0.85 * 100)` is 84, which is a wrong number in a block whose
         # whole job is telling the model how much to trust the line.
-        lines.append(f"- [{round(hit.entry.confidence * 100)}% confident, last seen "
-                     f"{age}] {_render_text(hit.entry.text)}")
+        lines.append(
+            f"- [{round(hit.entry.confidence * 100)}% confident, last seen "
+            f"{age}] {_render_text(hit.entry.text)}"
+        )
     lines.append(RECALL_FOOTER)
     return "\n".join(lines)
 
@@ -925,12 +960,16 @@ def ground_system_prompt(
     trade a working robot for a filing cabinet.
     """
     try:
-        found = recall(message, k=min(k, CHAT_RECALL_K), memory_path=memory_path,
-                       deadline_s=CHAT_DEADLINE_S, for_context=True)
+        found = recall(
+            message,
+            k=min(k, CHAT_RECALL_K),
+            memory_path=memory_path,
+            deadline_s=CHAT_DEADLINE_S,
+            for_context=True,
+        )
         block = recalled_block(found.results)
     except Exception as exc:  # noqa: BLE001 - a chat turn outranks its grounding
-        logger.info("memory: recall failed (%s) — this turn is ungrounded",
-                    type(exc).__name__)
+        logger.info("memory: recall failed (%s) — this turn is ungrounded", type(exc).__name__)
         return system
     if not block:
         return system

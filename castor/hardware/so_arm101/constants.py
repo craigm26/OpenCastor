@@ -62,7 +62,13 @@ DENIED_USB_VIDS = {
 
 #: Substrings in a USB product/manufacturer string that disqualify a port.
 DENIED_PRODUCT_SUBSTRINGS = (
-    "heltec", "lora", "meshtastic", "meshcore", "esp32", "rak", "t-beam",
+    "heltec",
+    "lora",
+    "meshtastic",
+    "meshcore",
+    "esp32",
+    "rak",
+    "t-beam",
 )
 
 
@@ -76,6 +82,7 @@ def is_denied_serial(vid_pid: str, description: str = "") -> str:
         if token in haystack:
             return f"looks like a {token} radio/dev board — not a servo controller"
     return ""
+
 
 # ── Assembly steps ────────────────────────────────────────────────────────────
 

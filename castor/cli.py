@@ -373,8 +373,11 @@ def cmd_capability(args) -> int:
 
     home = _P(args.home).expanduser()
     path = _P(args.manifest).expanduser() if args.manifest else home / "ROBOT.md"
-    key_file = (_P(args.key_file).expanduser() if args.key_file
-                else home / "keys" / "manifest-ed25519-private.pem")
+    key_file = (
+        _P(args.key_file).expanduser()
+        if args.key_file
+        else home / "keys" / "manifest-ed25519-private.pem"
+    )
 
     if args.cap_action == "list":
         for name in manifest.capabilities(path):
@@ -382,23 +385,30 @@ def cmd_capability(args) -> int:
         return 0
 
     if not key_file.is_file():
-        print(f"error: manifest key not found at {key_file} — pass --key-file. "
-              "Signing happens ON the robot; the key never leaves it.", file=sys.stderr)
+        print(
+            f"error: manifest key not found at {key_file} — pass --key-file. "
+            "Signing happens ON the robot; the key never leaves it.",
+            file=sys.stderr,
+        )
         return 1
 
     if args.cap_action == "add":
-        changed = manifest.add_capability(path, args.name, key_file=key_file,
-                                          kid=args.kid, comment=args.comment)
+        changed = manifest.add_capability(
+            path, args.name, key_file=key_file, kid=args.kid, comment=args.comment
+        )
         print(f"{'declared' if changed else 'already declared'}: {args.name}")
     else:
-        changed = manifest.remove_capability(path, args.name, key_file=key_file,
-                                             kid=args.kid)
+        changed = manifest.remove_capability(path, args.name, key_file=key_file, kid=args.kid)
         print(f"{'withdrawn' if changed else 'was not declared'}: {args.name}")
     if changed:
-        print(f"re-signed {path}. Restart the gateway to pick it up "
-              "(systemctl --user restart <robot>-gateway).")
-        print("NOTE: declaring is not permitting — a tool capability still needs "
-              "the gateway's allowlist in gateway-policy.env before it can act.")
+        print(
+            f"re-signed {path}. Restart the gateway to pick it up "
+            "(systemctl --user restart <robot>-gateway)."
+        )
+        print(
+            "NOTE: declaring is not permitting — a tool capability still needs "
+            "the gateway's allowlist in gateway-policy.env before it can act."
+        )
     return 0
 
 
@@ -412,8 +422,11 @@ def cmd_manifest(args) -> int:
     path = _P(args.manifest).expanduser() if args.manifest else home / "ROBOT.md"
 
     if args.manifest_action == "verify":
-        pub_file = (_P(args.pub_file).expanduser() if args.pub_file
-                    else home / "keys" / "rrf" / f"{manifest.Manifest.load(path).kid}.pem")
+        pub_file = (
+            _P(args.pub_file).expanduser()
+            if args.pub_file
+            else home / "keys" / "rrf" / f"{manifest.Manifest.load(path).kid}.pem"
+        )
         if not pub_file.is_file():
             print(f"error: verify key not found at {pub_file}", file=sys.stderr)
             return 1
@@ -421,16 +434,22 @@ def cmd_manifest(args) -> int:
         print(("VERIFIED " if ok else "FAILED ") + why)
         return 0 if ok else 1
 
-    key_file = (_P(args.key_file).expanduser() if args.key_file
-                else home / "keys" / "manifest-ed25519-private.pem")
+    key_file = (
+        _P(args.key_file).expanduser()
+        if args.key_file
+        else home / "keys" / "manifest-ed25519-private.pem"
+    )
     kid = args.kid or manifest.Manifest.load(path).kid
     if kid is None:
-        print("error: this manifest was never signed — pass --kid to name its key.",
-              file=sys.stderr)
+        print(
+            "error: this manifest was never signed — pass --kid to name its key.", file=sys.stderr
+        )
         return 1
     manifest.sign(path, key_file=key_file, kid=kid)
-    print(f"re-signed {path} (kid {kid}). Hand edits are first-class; "
-          "restart the gateway to pick it up.")
+    print(
+        f"re-signed {path} (kid {kid}). Hand edits are first-class; "
+        "restart the gateway to pick it up."
+    )
     return 0
 
 
@@ -446,8 +465,10 @@ def cmd_gaps(args) -> int:
     if not gaps:
         print("No gaps: everything detected has a driver and a brain.")
         return 0
-    print(f"{len(gaps)} gap(s) — each one is a skill somebody could build "
-          f"(see docs/SKILL-GAPS.md). Written to {path}.\n")
+    print(
+        f"{len(gaps)} gap(s) — each one is a skill somebody could build "
+        f"(see docs/SKILL-GAPS.md). Written to {path}.\n"
+    )
     for g in gaps:
         print(f"  [{g.kind}] {g.evidence}")
         print(f"      fix: {g.suggestion}")
@@ -1845,19 +1866,24 @@ def cmd_memory(args) -> None:
         # bullet. Normalised here, and independently again at render time.
         text, control_chars = sanitize_memory_text(raw_text)
         if not text:
-            print("\n✗ Nothing to store — that text is entirely whitespace or "
-                  "control characters.\n")
+            print(
+                "\n✗ Nothing to store — that text is entirely whitespace or control characters.\n"
+            )
             return
         if control_chars or text != raw_text.strip():
-            print(f"  Normalized {control_chars} control character(s) and collapsed "
-                  f"whitespace — a memory is one line of plain text")
+            print(
+                f"  Normalized {control_chars} control character(s) and collapsed "
+                f"whitespace — a memory is one line of plain text"
+            )
         if len(text) > MEMORY_TEXT_MAX:
             # REFUSED, not truncated: the operator wrote this sentence and is
             # standing right here. Silently keeping the first 500 characters of
             # their observation is how a memory ends mid-clause and reads, six
             # weeks later, as something the robot noticed and then forgot.
-            print(f"\n✗ Too long — {len(text)} characters, and the cap is "
-                  f"{MEMORY_TEXT_MAX}. Nothing was stored.")
+            print(
+                f"\n✗ Too long — {len(text)} characters, and the cap is "
+                f"{MEMORY_TEXT_MAX}. Nothing was stored."
+            )
             print("  Shorten it, or split it into two observations.\n")
             return
 
@@ -1897,8 +1923,10 @@ def cmd_memory(args) -> None:
         if store_vector(entry, memory_path):
             print(f"  Embedded for recall ({embed_model()})")
         else:
-            print("  No embedder — saved without a vector, so this memory is not "
-                  "recallable by meaning yet (`castor memory reembed`)")
+            print(
+                "  No embedder — saved without a vector, so this memory is not "
+                "recallable by meaning yet (`castor memory reembed`)"
+            )
 
     elif cmd == "recall":
         _memory_recall(args, memory_path)
@@ -1918,8 +1946,10 @@ def cmd_memory(args) -> None:
         print(f"  {len(side.vectors)} of {len(mem.entries)} memories now have a vector")
         print(f"  Sidecar: {sidecar_path(memory_path)}")
         if stored == 0 and len(side.vectors) < len(mem.entries):
-            print("  Nothing was embedded — is Ollama running and the embed model "
-                  "pulled? (`ollama pull nomic-embed-text`)")
+            print(
+                "  Nothing was embedded — is Ollama running and the embed model "
+                "pulled? (`ollama pull nomic-embed-text`)"
+            )
 
     elif cmd == "decay":
         mem = load_memory(memory_path)
@@ -1969,20 +1999,27 @@ def _memory_recall(args, memory_path: str) -> None:
         return
 
     floor = getattr(args, "floor", None)
-    result = recall(query, k=k, memory_path=memory_path,
-                    floor=float(floor) if floor is not None else None)
+    result = recall(
+        query, k=k, memory_path=memory_path, floor=float(floor) if floor is not None else None
+    )
 
     print(f"\n🧠 Recall — {query!r}")
     if verbose:
         print(f"   File: {memory_path}")
         print(f"   Sidecar: {sidecar_path(memory_path)}")
-        print(f"   Model: {result.model} | floor: {result.floor:.2f} "
-              f"(default {relevance_floor():.2f})")
-        print(f"   Store: {result.total_entries} entries, {result.searchable} searchable, "
-              f"{result.unvectored} without a vector")
+        print(
+            f"   Model: {result.model} | floor: {result.floor:.2f} "
+            f"(default {relevance_floor():.2f})"
+        )
+        print(
+            f"   Store: {result.total_entries} entries, {result.searchable} searchable, "
+            f"{result.unvectored} without a vector"
+        )
         if result.unvectored:
-            print("   Memories with no vector are NOT recallable by meaning — they are "
-                  "skipped here entirely (`castor memory reembed`)")
+            print(
+                "   Memories with no vector are NOT recallable by meaning — they are "
+                "skipped here entirely (`castor memory reembed`)"
+            )
         if result.skipped_lines:
             print(f"   {result.skipped_lines} unreadable sidecar line(s) skipped")
         if not result.embedder_ok:
@@ -1995,16 +2032,22 @@ def _memory_recall(args, memory_path: str) -> None:
         print()
         return
 
-    print(f"   {len(result.results)} of {result.searchable} searchable memories "
-          f"scored above {result.floor:.2f}\n")
+    print(
+        f"   {len(result.results)} of {result.searchable} searchable memories "
+        f"scored above {result.floor:.2f}\n"
+    )
     for hit in result.results:
         age = "today" if hit.age_days == 0 else f"{hit.age_days}d ago"
-        print(f"  [{hit.score:.2f}] {round(hit.entry.confidence * 100)}% · {age} · "
-              f"{hit.entry.type.value}")
+        print(
+            f"  [{hit.score:.2f}] {round(hit.entry.confidence * 100)}% · {age} · "
+            f"{hit.entry.type.value}"
+        )
         print(f"         {hit.entry.text}")
         if verbose:
-            print(f"         id:{hit.entry.id} | cosine:{hit.similarity:.3f} | "
-                  f"obs:{hit.entry.observation_count}x")
+            print(
+                f"         id:{hit.entry.id} | cosine:{hit.similarity:.3f} | "
+                f"obs:{hit.entry.observation_count}x"
+            )
     print()
     if result.detail:
         print(f"  {result.detail}\n")
@@ -3951,8 +3994,10 @@ def cmd_duck(args) -> int:
         )
     else:
         say(f"        [yellow]{result.get('error', 'no answer')}[/yellow]")
-        say("        [dim]Writing the config anyway — you can retry with "
-            "`castor duck health`.[/dim]")
+        say(
+            "        [dim]Writing the config anyway — you can retry with "
+            "`castor duck health`.[/dim]"
+        )
 
     say("  [bold]4/4[/bold]  Writing config")
     robot_name = getattr(args, "name", None) or cand.robot_name or "duck"
@@ -3984,16 +4029,18 @@ def cmd_duck(args) -> int:
     except Exception:
         brain_ready = False
 
-    emit({
-        "ok": True,
-        "host": cand.host,
-        "user": cand.user,
-        "transport": cand.transport,
-        "robot_name": robot_name,
-        "config": str(path),
-        "health": result,
-        "brain": {"provider": provider, "ready": brain_ready},
-    })
+    emit(
+        {
+            "ok": True,
+            "host": cand.host,
+            "user": cand.user,
+            "transport": cand.transport,
+            "robot_name": robot_name,
+            "config": str(path),
+            "health": result,
+            "brain": {"provider": provider, "ready": brain_ready},
+        }
+    )
 
     say("")
     if brain_ready:
@@ -4003,8 +4050,7 @@ def cmd_duck(args) -> int:
         say("  [bold green]Duck ready.[/bold green] One thing left — the brain:")
         say(f"    [cyan]castor login[/cyan]                 sign in to {provider or 'a provider'}")
         say(
-            "    [dim]or:[/dim] [cyan]castor duck --brain ollama[/cyan]"
-            "   run a local model instead"
+            "    [dim]or:[/dim] [cyan]castor duck --brain ollama[/cyan]   run a local model instead"
         )
         say(f"    [dim]then:[/dim] [cyan]castor run --config {path}[/cyan]")
     say("    [cyan]castor duck test[/cyan]     make it walk (no brain needed)")
@@ -4062,15 +4108,17 @@ def cmd_pair(args) -> int:
     # bearers.yaml (flag, or one sitting next to the manifest).
     bearer = args.bearer or ""
     if not bearer:
-        bearers_path = Path(args.bearers).expanduser() if args.bearers else (
-            manifest_path.parent / "bearers.yaml"
+        bearers_path = (
+            Path(args.bearers).expanduser()
+            if args.bearers
+            else (manifest_path.parent / "bearers.yaml")
         )
         if bearers_path.exists():
             try:
                 bearer = pairing.read_bearer_from_bearers_yaml(bearers_path)
             except (ValueError, OSError) as exc:
                 print(f"error: could not read bearer from {bearers_path}: {exc}", file=sys.stderr)
-                raise SystemExit(1)
+                raise SystemExit(1) from None
         else:
             print(
                 "error: no bearer token. Pass --bearer TOKEN or --bearers path/to/bearers.yaml "
@@ -4117,12 +4165,16 @@ def cmd_pair(args) -> int:
     console_url = args.console_url
     if console_token and not console_url and console_port:
         from urllib.parse import urlsplit
+
         host = urlsplit(gateway_url).hostname
         if host:
             console_url = f"http://{host}:{console_port}"
     if console_url and not console_token:
-        print("warning: --console-url given without a console token — leaving both "
-              "out of the QR (a URL without its token just 401s).", file=sys.stderr)
+        print(
+            "warning: --console-url given without a console token — leaving both "
+            "out of the QR (a URL without its token just 401s).",
+            file=sys.stderr,
+        )
         console_url = None
 
     # Where the attestation key + env config land.
@@ -4154,7 +4206,7 @@ def cmd_pair(args) -> int:
         )
     except FileExistsError as exc:
         print(f"error: {exc}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
     # What the QR carries. In link mode it is the universal link, whose fragment
     # holds the same payload base64url'd; otherwise the compact JSON, with every
@@ -4171,9 +4223,11 @@ def cmd_pair(args) -> int:
             print(f"  {name:8}: {path}")
 
     if link:
-        print("\nScan this QR with any phone camera — with the OpenCastor app "
-              "installed it\nopens straight into pairing; without it, "
-              "opencastor.com/pair explains what\nit is and where to get the app:\n")
+        print(
+            "\nScan this QR with any phone camera — with the OpenCastor app "
+            "installed it\nopens straight into pairing; without it, "
+            "opencastor.com/pair explains what\nit is and where to get the app:\n"
+        )
     else:
         print("\nScan this QR from the OpenCastor iOS app to pair:\n")
     _print_qr(qr_content)
@@ -4194,8 +4248,7 @@ def cmd_pair(args) -> int:
     print(f"  set -a; . {result.env_file}; set +a")
     print("  robot-md-gateway serve \\")
     print(f"    --robot-md {result.payload['manifest_path']} \\")
-    print("    --bearers /path/to/bearers.yaml --host 0.0.0.0 --port "
-          f"{args.port}")
+    print(f"    --bearers /path/to/bearers.yaml --host 0.0.0.0 --port {args.port}")
     print()
     return 0
 
@@ -7650,17 +7703,21 @@ def main() -> None:
         help="Find the memories that MEAN what you asked (semantic, top-k)",
     )
     p_mem_recall.add_argument("query", nargs="*", help="What you are looking for")
-    p_mem_recall.add_argument("-k", dest="k", type=int, default=5,
-                              help="How many memories to return (default: 5)")
     p_mem_recall.add_argument(
-        "--floor", type=float, default=None,
-        help="Minimum cosine to count as relevant (default: 0.55, measured for "
-             "nomic-embed-text)",
+        "-k", dest="k", type=int, default=5, help="How many memories to return (default: 5)"
     )
     p_mem_recall.add_argument(
-        "--verbose", "-v", action="store_true",
+        "--floor",
+        type=float,
+        default=None,
+        help="Minimum cosine to count as relevant (default: 0.55, measured for nomic-embed-text)",
+    )
+    p_mem_recall.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
         help="Show the store's own state — including memories with no vector, "
-             "which cannot be recalled by meaning at all",
+        "which cannot be recalled by meaning at all",
     )
     memory_sub.add_parser(
         "reembed",
@@ -9450,22 +9507,38 @@ def main() -> None:
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p_up.add_argument("--home", default=str(os.path.expanduser("~/robot")),
-                      help="Robot home directory (default ~/robot)")
-    p_up.add_argument("--name", default=None,
-                      help="Robot name (default: the home directory's name)")
-    p_up.add_argument("--archetype", default=None, choices=["rc-car", "sim"],
-                      help="Override hardware detection")
-    p_up.add_argument("--base-port", type=int, default=8080,
-                      help="Gateway port; runtime and console follow (+1, +2)")
-    p_up.add_argument("--python", default=None,
-                      help="Python for the services (default: this interpreter's env)")
-    p_up.add_argument("--no-start", action="store_true",
-                      help="Generate everything but do not start systemd units")
-    p_up.add_argument("--no-link", dest="link", action="store_false", default=True,
-                      help="Make the pairing QR the raw payload JSON instead of the "
-                           "https://opencastor.com/pair universal link (default: the "
-                           "link, which any phone camera can open)")
+    p_up.add_argument(
+        "--home",
+        default=str(os.path.expanduser("~/robot")),
+        help="Robot home directory (default ~/robot)",
+    )
+    p_up.add_argument(
+        "--name", default=None, help="Robot name (default: the home directory's name)"
+    )
+    p_up.add_argument(
+        "--archetype", default=None, choices=["rc-car", "sim"], help="Override hardware detection"
+    )
+    p_up.add_argument(
+        "--base-port",
+        type=int,
+        default=8080,
+        help="Gateway port; runtime and console follow (+1, +2)",
+    )
+    p_up.add_argument(
+        "--python", default=None, help="Python for the services (default: this interpreter's env)"
+    )
+    p_up.add_argument(
+        "--no-start", action="store_true", help="Generate everything but do not start systemd units"
+    )
+    p_up.add_argument(
+        "--no-link",
+        dest="link",
+        action="store_false",
+        default=True,
+        help="Make the pairing QR the raw payload JSON instead of the "
+        "https://opencastor.com/pair universal link (default: the "
+        "link, which any phone camera can open)",
+    )
 
     p_cap = sub.add_parser(
         "capability",
@@ -9479,18 +9552,26 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_cap.add_argument("cap_action", choices=["add", "remove", "list"])
-    p_cap.add_argument("name", nargs="?", default=None,
-                       help="Capability name (for add/remove)")
-    p_cap.add_argument("--home", default=str(os.path.expanduser("~/robot")),
-                       help="Robot home directory (default ~/robot)")
-    p_cap.add_argument("--manifest", default=None,
-                       help="ROBOT.md path (default <home>/ROBOT.md)")
-    p_cap.add_argument("--key-file", default=None,
-                       help="Manifest signing key (default <home>/keys/manifest-ed25519-private.pem)")
-    p_cap.add_argument("--kid", default=None,
-                       help="Signing kid (default: the one already in the footer)")
-    p_cap.add_argument("--comment", default=None,
-                       help="Why this capability exists — rides as a comment above the entry")
+    p_cap.add_argument("name", nargs="?", default=None, help="Capability name (for add/remove)")
+    p_cap.add_argument(
+        "--home",
+        default=str(os.path.expanduser("~/robot")),
+        help="Robot home directory (default ~/robot)",
+    )
+    p_cap.add_argument("--manifest", default=None, help="ROBOT.md path (default <home>/ROBOT.md)")
+    p_cap.add_argument(
+        "--key-file",
+        default=None,
+        help="Manifest signing key (default <home>/keys/manifest-ed25519-private.pem)",
+    )
+    p_cap.add_argument(
+        "--kid", default=None, help="Signing kid (default: the one already in the footer)"
+    )
+    p_cap.add_argument(
+        "--comment",
+        default=None,
+        help="Why this capability exists — rides as a comment above the entry",
+    )
 
     p_manifest = sub.add_parser(
         "manifest",
@@ -9501,15 +9582,19 @@ def main() -> None:
     p_manifest.add_argument("--manifest", default=None)
     p_manifest.add_argument("--key-file", default=None)
     p_manifest.add_argument("--kid", default=None)
-    p_manifest.add_argument("--pub-file", default=None,
-                            help="Verify key PEM (default <home>/keys/rrf/<kid>.pem)")
+    p_manifest.add_argument(
+        "--pub-file", default=None, help="Verify key PEM (default <home>/keys/rrf/<kid>.pem)"
+    )
 
     p_gaps = sub.add_parser(
         "gaps",
         help="List capability gaps — hardware present with no driver, missing packages, no brain",
     )
-    p_gaps.add_argument("--home", default=str(os.path.expanduser("~/robot")),
-                        help="Robot home directory (default ~/robot)")
+    p_gaps.add_argument(
+        "--home",
+        default=str(os.path.expanduser("~/robot")),
+        help="Robot home directory (default ~/robot)",
+    )
 
     p_pair = sub.add_parser(
         "pair",
@@ -9533,7 +9618,9 @@ def main() -> None:
         help="Gateway base URL (default: best-effort LAN URL http://<lan-ip>:<port>)",
     )
     p_pair.add_argument("--port", type=int, default=8080, help="Gateway port for the default URL")
-    p_pair.add_argument("--bearer", default=None, help="Bearer token to embed (else read --bearers)")
+    p_pair.add_argument(
+        "--bearer", default=None, help="Bearer token to embed (else read --bearers)"
+    )
     p_pair.add_argument(
         "--bearers",
         default=None,
@@ -9602,7 +9689,9 @@ def main() -> None:
         help="Env file to write ROBOT_MD_ATTESTATION_KEY_FILE/_KID into "
         "(default: ~/.config/opencastor/gateway-attestation.env)",
     )
-    p_pair.add_argument("--kid", default=None, help="Override the attestation kid (default: derived)")
+    p_pair.add_argument(
+        "--kid", default=None, help="Override the attestation kid (default: derived)"
+    )
     p_pair.add_argument(
         "--force",
         action="store_true",

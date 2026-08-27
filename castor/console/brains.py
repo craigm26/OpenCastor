@@ -21,6 +21,7 @@ converts every chat turn from "the subscription the operator already pays for"
 into per-token billing, with an identical-looking answer. `test_console.py`
 pins it.
 """
+
 from __future__ import annotations
 
 import base64
@@ -40,9 +41,7 @@ from .config import robot_home
 METERED_KEY_ENV = "ANTHROPIC_API_KEY"
 
 GEMINI_ER_MODEL = os.environ.get("GEMINI_ER_MODEL", "gemini-robotics-er-2-preview")
-GEMINI_ENDPOINT = (
-    "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-)
+GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 
 def secrets_file() -> Path:
@@ -96,8 +95,13 @@ def anthropic_available() -> bool:
     return Path.home().joinpath(".claude", ".credentials.json").is_file()
 
 
-def anthropic_chat(system: str, message: str, history: list[dict],
-                   timeout: float = 180.0, image_jpeg: bytes | None = None) -> dict:
+def anthropic_chat(
+    system: str,
+    message: str,
+    history: list[dict],
+    timeout: float = 180.0,
+    image_jpeg: bytes | None = None,
+) -> dict:
     """One turn through the local `claude` CLI, using the subscription.
 
     ANTHROPIC_API_KEY is explicitly REMOVED from the child environment: if one
@@ -132,15 +136,19 @@ def anthropic_chat(system: str, message: str, history: list[dict],
         frame_dir.mkdir(parents=True, exist_ok=True)
         frame_path = frame_dir / f"phone-{uuid.uuid4().hex[:10]}.jpg"
         frame_path.write_bytes(image_jpeg)
-        prompt = (f"The user's phone camera is showing this image: "
-                  f"frames/{frame_path.name}\n"
-                  f"Read that image file, then answer.\n\n" + prompt)
+        prompt = (
+            f"The user's phone camera is showing this image: "
+            f"frames/{frame_path.name}\n"
+            f"Read that image file, then answer.\n\n" + prompt
+        )
 
     try:
         proc = subprocess.run(
-            [str(exe), "-p", prompt, "--append-system-prompt", system,
-             "--output-format", "json"],
-            capture_output=True, text=True, timeout=timeout, env=env,
+            [str(exe), "-p", prompt, "--append-system-prompt", system, "--output-format", "json"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
             cwd=str(home),
         )
     finally:
@@ -155,9 +163,7 @@ def anthropic_chat(system: str, message: str, history: list[dict],
         return {"content": proc.stdout.strip(), "thinking": ""}
     content = payload.get("result") or payload.get("content") or ""
     if isinstance(content, list):
-        content = "".join(
-            block.get("text", "") for block in content if isinstance(block, dict)
-        )
+        content = "".join(block.get("text", "") for block in content if isinstance(block, dict))
     return {"content": str(content).strip(), "thinking": ""}
 
 
@@ -170,8 +176,13 @@ def gemini_available() -> bool:
     return bool(_secret("GEMINI_API_KEY"))
 
 
-def gemini_er(prompt: str, image_jpeg: bytes | None = None, *,
-              thinking_level: str = "medium", timeout: float = 120.0) -> dict:
+def gemini_er(
+    prompt: str,
+    image_jpeg: bytes | None = None,
+    *,
+    thinking_level: str = "medium",
+    timeout: float = 120.0,
+) -> dict:
     """Ask Gemini Robotics-ER about the scene.
 
     The model answers spatial questions about an image — pointing at objects,
@@ -188,12 +199,14 @@ def gemini_er(prompt: str, image_jpeg: bytes | None = None, *,
 
     parts: list[dict] = []
     if image_jpeg:
-        parts.append({
-            "inlineData": {
-                "mimeType": "image/jpeg",
-                "data": base64.b64encode(image_jpeg).decode("ascii"),
+        parts.append(
+            {
+                "inlineData": {
+                    "mimeType": "image/jpeg",
+                    "data": base64.b64encode(image_jpeg).decode("ascii"),
+                }
             }
-        })
+        )
     parts.append({"text": prompt})
 
     body = {
@@ -212,7 +225,7 @@ def gemini_er(prompt: str, image_jpeg: bytes | None = None, *,
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode(errors="replace")[:300]
         # Never echo the key back, even if the upstream error quotes the request.
-        raise RuntimeError(f"gemini {exc.code}: {detail.replace(key, '<redacted>')}")
+        raise RuntimeError(f"gemini {exc.code}: {detail.replace(key, '<redacted>')}") from None
 
     text = ""
     for candidate in payload.get("candidates", []):
@@ -245,7 +258,8 @@ def set_gemini_key(key: str) -> tuple[bool, str]:
     lines = []
     if path.is_file():
         lines = [
-            ln for ln in path.read_text().splitlines()
+            ln
+            for ln in path.read_text().splitlines()
             if not ln.strip().startswith("GEMINI_API_KEY=")
         ]
     lines.append(f"GEMINI_API_KEY={key}")
@@ -269,7 +283,7 @@ def _probe_gemini(key: str) -> None:
         urllib.request.urlopen(req, timeout=30).read()
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode(errors="replace")[:200]
-        raise RuntimeError(f"{exc.code} {detail.replace(key, '<redacted>')}")
+        raise RuntimeError(f"{exc.code} {detail.replace(key, '<redacted>')}") from None
 
 
 def _parse_points(text: str) -> list[dict]:
@@ -284,7 +298,7 @@ def _parse_points(text: str) -> list[dict]:
     if start == -1 or end <= start:
         return []
     try:
-        data = json.loads(text[start:end + 1])
+        data = json.loads(text[start : end + 1])
     except ValueError:
         return []
     if not isinstance(data, list):
@@ -294,11 +308,16 @@ def _parse_points(text: str) -> list[dict]:
         if not isinstance(item, dict):
             continue
         point = item.get("point")
-        if (isinstance(point, list) and len(point) == 2
-                and all(isinstance(n, (int, float)) for n in point)):
-            out.append({
-                "y": float(point[0]),
-                "x": float(point[1]),
-                "label": str(item.get("label", "")),
-            })
+        if (
+            isinstance(point, list)
+            and len(point) == 2
+            and all(isinstance(n, (int, float)) for n in point)
+        ):
+            out.append(
+                {
+                    "y": float(point[0]),
+                    "x": float(point[1]),
+                    "label": str(item.get("label", "")),
+                }
+            )
     return out

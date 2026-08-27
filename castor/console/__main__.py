@@ -5,6 +5,7 @@ Every endpoint but /console/health is behind the console bearer, and an unset
 CONSOLE_TOKEN fails every request closed with a 503 rather than serving the
 robot's brains to the network.
 """
+
 from __future__ import annotations
 
 from .app import build_app
@@ -18,8 +19,10 @@ def main() -> None:
         # Not fatal — the 503 is the real enforcement — but a console nobody can
         # authenticate to is almost always a missing EnvironmentFile, and that
         # is worth saying once at start rather than once per request.
-        print("warning: CONSOLE_TOKEN is not set — every authenticated endpoint "
-              "will answer 503 until it is (see <ROBOT_HOME>/console.env)")
+        print(
+            "warning: CONSOLE_TOKEN is not set — every authenticated endpoint "
+            "will answer 503 until it is (see <ROBOT_HOME>/console.env)"
+        )
     port = console_port()
     print(f"OpenCastor console for {robot_home()} on :{port}")
     # ACCESS LOG OFF, deliberately. The console bearer may ride in the query

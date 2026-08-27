@@ -526,11 +526,11 @@ def scan_usb() -> list[PeripheralInfo]:
 #: this stdlib-only scanner cannot do. Names are matched as prefixes, so an
 #: unknown-but-real camera is never hidden — only these known internals are.
 _V4L2_NON_CAMERA_DRIVERS: tuple[str, ...] = (
-    "pispbe",          # Pi ISP back-end (Pi 5)
-    "rpi-hevc-dec",    # hardware HEVC decoder
-    "rpi-h264",        # hardware H.264 encoder/decoder
-    "bcm2835-codec",   # legacy Pi codec
-    "rpivid",          # legacy Pi video decoder
+    "pispbe",  # Pi ISP back-end (Pi 5)
+    "rpi-hevc-dec",  # hardware HEVC decoder
+    "rpi-h264",  # hardware H.264 encoder/decoder
+    "bcm2835-codec",  # legacy Pi codec
+    "rpivid",  # legacy Pi video decoder
     "rpi-isp",
 )
 
@@ -959,8 +959,7 @@ def scan_all(i2c_buses: list[int] | None = None) -> list[PeripheralInfo]:
         # that had just been wired in, while hardware_detect could.
         #
         # An I2C device is identified by (bus, address), never by the bus alone.
-        if (p.device_path and p.interface != "i2c"
-                and p.category in ("serial", "lidar", "motor")):
+        if p.device_path and p.interface != "i2c" and p.category in ("serial", "lidar", "motor"):
             if p.device_path in seen_device_paths:
                 continue
         if p.interface == "i2c":

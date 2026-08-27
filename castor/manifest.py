@@ -22,6 +22,7 @@ ROBOT.md's comments are load-bearing safety prose (the rover's explains why
 its wheels must stay off the ground). A capability is added by splicing one
 line into the existing list, leaving every other byte alone.
 """
+
 from __future__ import annotations
 
 import base64
@@ -47,7 +48,7 @@ class Manifest:
     kid: str | None
 
     @classmethod
-    def load(cls, path: Path) -> "Manifest":
+    def load(cls, path: Path) -> Manifest:
         text = path.read_text()
         m = SIG_RE.search(text)
         if m is None:
@@ -80,8 +81,9 @@ def _capability_lines(body: str) -> list[tuple[str, int]]:
     return out
 
 
-def add_capability(path: Path, name: str, *, key_file: Path,
-                   kid: str | None = None, comment: str | None = None) -> bool:
+def add_capability(
+    path: Path, name: str, *, key_file: Path, kid: str | None = None, comment: str | None = None
+) -> bool:
     """Declare one capability and re-sign. False if already declared.
 
     The new entry is spliced directly after the LAST existing entry, at the
@@ -103,15 +105,13 @@ def add_capability(path: Path, name: str, *, key_file: Path,
     if comment:
         insert += [f"{indent}# {line}" for line in comment.splitlines()]
     insert.append(f"{indent}- {name}")
-    lines[last_idx + 1:last_idx + 1] = insert
+    lines[last_idx + 1 : last_idx + 1] = insert
 
-    _write_signed(path, "\n".join(lines), key_file=key_file,
-                  kid=kid or manifest.kid)
+    _write_signed(path, "\n".join(lines), key_file=key_file, kid=kid or manifest.kid)
     return True
 
 
-def remove_capability(path: Path, name: str, *, key_file: Path,
-                      kid: str | None = None) -> bool:
+def remove_capability(path: Path, name: str, *, key_file: Path, kid: str | None = None) -> bool:
     """Withdraw one declaration and re-sign. False if it was not declared.
 
     Removes the entry line only — a comment above it stays, because prose
@@ -126,8 +126,7 @@ def remove_capability(path: Path, name: str, *, key_file: Path,
     lines = manifest.body.split("\n")
     for idx in reversed(hits):
         del lines[idx]
-    _write_signed(path, "\n".join(lines), key_file=key_file,
-                  kid=kid or manifest.kid)
+    _write_signed(path, "\n".join(lines), key_file=key_file, kid=kid or manifest.kid)
     return True
 
 

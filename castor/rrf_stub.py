@@ -8,6 +8,7 @@ robot's own verify keys in.
 
 Env: RRF_KEY_DIR (directory of <kid>.pem), RRF_PORT (default 8090).
 """
+
 from __future__ import annotations
 
 import json
@@ -32,8 +33,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
             return
-        body = json.dumps({"kid": m.group(1),
-                           "public_key_pem": pem.read_text()}).encode()
+        body = json.dumps({"kid": m.group(1), "public_key_pem": pem.read_text()}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))

@@ -32,6 +32,7 @@ routers every robot can honestly answer:
 every console what it can see, and "nothing — the phone is my eye" is an answer,
 not an error.
 """
+
 from __future__ import annotations
 
 import os
@@ -42,7 +43,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from .capabilities import router as capabilities_router
 from .config import console_token, robot_home
 from .memory import router as memory_router
-from .models import read_active, router as models_router
+from .models import read_active
+from .models import router as models_router
 
 
 def _matches(supplied: str | None, expected: str) -> bool:
@@ -73,8 +75,9 @@ def _auth(authorization: str | None, token: str | None = None) -> None:
     raise HTTPException(status_code=401, detail="missing or invalid bearer")
 
 
-def require_console_auth(authorization: str | None = Header(default=None),
-                         token: str | None = None) -> None:
+def require_console_auth(
+    authorization: str | None = Header(default=None), token: str | None = None
+) -> None:
     _auth(authorization, token)
 
 
@@ -97,8 +100,9 @@ def build_app() -> FastAPI:
         }
 
     @app.get("/camera/list")
-    def list_cameras(authorization: str | None = Header(default=None),
-                     token: str | None = None) -> dict:
+    def list_cameras(
+        authorization: str | None = Header(default=None), token: str | None = None
+    ) -> dict:
         _auth(authorization, token)
         # An answer, not an error. Hosts that serve frames add them here; a
         # vehicle whose only camera is the phone says so plainly.

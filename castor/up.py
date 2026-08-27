@@ -31,13 +31,12 @@ Design rules, each earned the hard way:
     against — with identity substituted. Fresh prose in a generator drifts
     from reality; a template cut from a working robot cannot.
 """
+
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 import logging
-import os
 import secrets
 import shutil
 import socket
@@ -249,9 +248,11 @@ def ensure_console_token(home: Path) -> tuple[str, bool]:
     # CONSOLE_TOKEN is filled in.
     kept = [line for line in lines if not line.strip().startswith("CONSOLE_TOKEN=")]
     if not kept:
-        kept = ["# Read-only console bearer — generated once by `castor up`.",
-                "# It grants viewing and model management, never actuation, and it",
-                "# is never rotated: it rides in the pairing QR."]
+        kept = [
+            "# Read-only console bearer — generated once by `castor up`.",
+            "# It grants viewing and model management, never actuation, and it",
+            "# is never rotated: it rides in the pairing QR.",
+        ]
     env_file.write_text("\n".join([*kept, f"CONSOLE_TOKEN={token}"]) + "\n")
     env_file.chmod(0o600)
     return token, False
@@ -273,10 +274,13 @@ def sign_manifest(body: str, key_file: Path, kid: str) -> str:
     else:
         priv = Ed25519PrivateKey.generate()
         key_file.parent.mkdir(parents=True, exist_ok=True)
-        key_file.write_bytes(priv.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption()))
+        key_file.write_bytes(
+            priv.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+        )
         key_file.chmod(0o600)
     # SIGN EXACTLY THE BYTES THE GATEWAY WILL VERIFY. Its footer regex starts
     # at the newline BEFORE the comment, and it verifies text[:match.start()] —
@@ -295,8 +299,8 @@ def publish_manifest_key(key_file: Path, kid: str, rrf_dir: Path) -> Path:
 
     priv = serialization.load_pem_private_key(key_file.read_bytes(), password=None)
     pub_pem = priv.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo)
+        encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
     rrf_dir.mkdir(parents=True, exist_ok=True)
     out = rrf_dir / f"{kid}.pem"
     out.write_bytes(pub_pem)
@@ -312,9 +316,16 @@ def _say(step: str, started: float) -> None:
     print(f"  [{time.monotonic() - started:5.1f}s] {step}")
 
 
-def run_up(*, home: Path, name: str | None = None, archetype: str | None = None,
-           base_port: int = 8080, python: str | None = None,
-           start_services: bool = True, link: bool = True) -> UpPlan:
+def run_up(
+    *,
+    home: Path,
+    name: str | None = None,
+    archetype: str | None = None,
+    base_port: int = 8080,
+    python: str | None = None,
+    start_services: bool = True,
+    link: bool = True,
+) -> UpPlan:
     """The whole bring-up. Prints progress; returns the plan for callers/tests.
 
     ``link`` (default on, same as ``castor pair``) makes the pairing QR a
@@ -330,6 +341,7 @@ def run_up(*, home: Path, name: str | None = None, archetype: str | None = None,
     i2c: set[int] = set()
     try:
         from castor.peripherals import scan_i2c
+
         i2c = {p.i2c_address for p in scan_i2c() if p.i2c_address is not None}
     except Exception:  # noqa: BLE001 - no bus is a valid machine state
         pass
@@ -351,8 +363,15 @@ def run_up(*, home: Path, name: str | None = None, archetype: str | None = None,
         rrn, robot_uuid = derive_identity(name)
         _say(f"identity: {rrn} (local — `castor register` upgrades it)", started)
 
-    plan = UpPlan(name=name, home=home, archetype=archetype, rrn=rrn,
-                  robot_uuid=robot_uuid, base_port=base_port, detected=detected)
+    plan = UpPlan(
+        name=name,
+        home=home,
+        archetype=archetype,
+        rrn=rrn,
+        robot_uuid=robot_uuid,
+        base_port=base_port,
+        detected=detected,
+    )
 
     # -- home dir ------------------------------------------------------------
     home.mkdir(parents=True, exist_ok=True)
@@ -377,6 +396,7 @@ def run_up(*, home: Path, name: str | None = None, archetype: str | None = None,
     bearers = home / "bearers.yaml"
     if bearers.exists():
         from castor.pairing import read_bearer_from_bearers_yaml
+
         actuate = read_bearer_from_bearers_yaml(bearers)
         read_tok = read_bearer_from_bearers_yaml(bearers, prefer_tier="read")
         _say("bearers: tokens reused", started)
@@ -402,7 +422,8 @@ def run_up(*, home: Path, name: str | None = None, archetype: str | None = None,
         f"  - token: {read_tok}\n    tier: read\n    caller: {name}-runtime\n"
         "actuator:\n"
         f"  name: {actuator_name}\n"
-        "  config: {}\n")
+        "  config: {}\n"
+    )
     bearers.chmod(0o600)
     if actuator_note:
         _say(f"actuator: {actuator_name} — {actuator_note}", started)
@@ -416,17 +437,20 @@ def run_up(*, home: Path, name: str | None = None, archetype: str | None = None,
         # not also hand out the runtime's stop endpoint.
         tokens.write_text(
             f"ACTUATE_TOKEN={actuate}\nREAD_TOKEN={read_tok}\n"
-            f"OPENCASTOR_API_TOKEN=oc_api_{secrets.token_hex(16)}\n")
+            f"OPENCASTOR_API_TOKEN=oc_api_{secrets.token_hex(16)}\n"
+        )
         tokens.chmod(0o600)
     console_token, console_reused = ensure_console_token(home)
-    _say("console: token reused" if console_reused
-         else "console: read-only token generated", started)
+    _say(
+        "console: token reused" if console_reused else "console: read-only token generated", started
+    )
 
     # -- rrf stub key + attestation identity --------------------------------
     stub_dir = home / "keys" / "rrf"
     publish_manifest_key(manifest_key, manifest_kid, stub_dir)
 
     from castor.pairing import generate_attestation_identity, set_env_var
+
     attest_key = home / "keys" / "attestation-ed25519-private.pem"
     identity = generate_attestation_identity(attest_key, kid=f"{name}-gw-attest")
     env_file = home / "gateway-attestation.env"
@@ -438,13 +462,17 @@ def run_up(*, home: Path, name: str | None = None, archetype: str | None = None,
 
     # -- AI models -----------------------------------------------------------
     provider, model = detect_brain()
-    (home / "active-model.json").write_text(json.dumps(
-        {"provider": provider, "model": model, "updated_at": time.time()}, indent=2))
+    (home / "active-model.json").write_text(
+        json.dumps({"provider": provider, "model": model, "updated_at": time.time()}, indent=2)
+    )
     _say(f"brain: {provider} {model or '(subscription)'}".rstrip(), started)
 
-    state_file.write_text(json.dumps({"rrn": rrn, "uuid": robot_uuid,
-                                      "archetype": archetype,
-                                      "base_port": base_port}, indent=2))
+    state_file.write_text(
+        json.dumps(
+            {"rrn": rrn, "uuid": robot_uuid, "archetype": archetype, "base_port": base_port},
+            indent=2,
+        )
+    )
 
     # -- services ------------------------------------------------------------
     python = python or shutil.which("python3") or "/usr/bin/python3"
@@ -460,7 +488,8 @@ def run_up(*, home: Path, name: str | None = None, archetype: str | None = None,
         raise SystemExit(
             "robot-md-gateway is not installed in this environment.\n"
             "It is a dependency of opencastor — `pip install opencastor` "
-            "(or `pip install robot-md-gateway`), then rerun `castor up`.")
+            "(or `pip install robot-md-gateway`), then rerun `castor up`."
+        )
     unit_dir = Path.home() / ".config" / "systemd" / "user"
     unit_dir.mkdir(parents=True, exist_ok=True)
     rendered = unit_files(plan, python=python, gateway_bin=gateway_bin)
@@ -483,8 +512,11 @@ def run_up(*, home: Path, name: str | None = None, archetype: str | None = None,
     if start_services:
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
         for unit_name in rendered:
-            subprocess.run(["systemctl", "--user", "enable", "--now", unit_name],
-                           check=True, capture_output=True)
+            subprocess.run(
+                ["systemctl", "--user", "enable", "--now", unit_name],
+                check=True,
+                capture_output=True,
+            )
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline:
             if _port_answers(plan.runtime_port):
@@ -493,8 +525,12 @@ def run_up(*, home: Path, name: str | None = None, archetype: str | None = None,
         _say("services started", started)
 
     # -- pair ----------------------------------------------------------------
-    from castor.pairing import build_pair_payload, capability_surface_from_manifest, \
-        default_gateway_url, write_pair_artifacts
+    from castor.pairing import (
+        build_pair_payload,
+        capability_surface_from_manifest,
+        default_gateway_url,
+        write_pair_artifacts,
+    )
 
     gateway_url = default_gateway_url(port=plan.gateway_port)
     host = gateway_url.split("//")[1].rsplit(":", 1)[0]
@@ -510,31 +546,39 @@ def run_up(*, home: Path, name: str | None = None, archetype: str | None = None,
         console_url=f"http://{host}:{plan.console_port}",
         console_token=console_token,
         attest_kid=identity.kid,
-        attest_pub=base64.b64encode(
-            _spki_der(identity.pub_file)).decode(),
+        attest_pub=base64.b64encode(_spki_der(identity.pub_file)).decode(),
         capability_surface=capability_surface_from_manifest(home / "ROBOT.md"),
         for_link=link,
     )
     write_pair_artifacts(payload, home, link=link)
-    _say(f"pairing QR: {home / 'pair-qr.png'}"
-         + (" (opens the app from any phone camera)" if link else ""), started)
+    _say(
+        f"pairing QR: {home / 'pair-qr.png'}"
+        + (" (opens the app from any phone camera)" if link else ""),
+        started,
+    )
 
     # -- gaps: what this host's hardware could do that its software can't yet.
     # Data, not log lines — the app renders it, an AI can read it, and closing
     # one is always an operator-gated act (docs/SKILL-GAPS.md).
-    from castor.gaps import collect, write as write_gaps
+    from castor.gaps import collect
+    from castor.gaps import write as write_gaps
+
     found_gaps = collect(home=home)
     if found_gaps:
         write_gaps(found_gaps, home)
-        _say(f"gaps: {len(found_gaps)} noted in gaps.json "
-             f"({', '.join(g.kind for g in found_gaps)})", started)
+        _say(
+            f"gaps: {len(found_gaps)} noted in gaps.json ({', '.join(g.kind for g in found_gaps)})",
+            started,
+        )
     else:
         write_gaps([], home)
         _say("gaps: none — everything detected has a driver and a brain", started)
     scan_with = "with any phone camera" if link else "with the OpenCastor app"
-    print(f"\nDone in {time.monotonic() - started:.0f}s. "
-          f"Scan {home / 'pair-qr.png'} {scan_with}, "
-          "then follow “Run your first drive”.")
+    print(
+        f"\nDone in {time.monotonic() - started:.0f}s. "
+        f"Scan {home / 'pair-qr.png'} {scan_with}, "
+        "then follow “Run your first drive”."
+    )
     return plan
 
 
@@ -551,13 +595,16 @@ def resolve_actuator() -> tuple[str, str | None]:
     """
     try:
         from importlib.metadata import entry_points
+
         names = {ep.name for ep in entry_points(group="robot_md_gateway.actuators")}
     except Exception:  # noqa: BLE001
         names = set()
     if "rc-car" in names:
         return "rc-car", None
-    return "noop", ("the rc-car actuator is not installed — "
-                    "`pip install rc-car-actuator`, then rerun `castor up`")
+    return "noop", (
+        "the rc-car actuator is not installed — "
+        "`pip install rc-car-actuator`, then rerun `castor up`"
+    )
 
 
 def detect_brain() -> tuple[str, str]:
@@ -565,6 +612,7 @@ def detect_brain() -> tuple[str, str]:
     else Ollama-with-no-model (the console explains how to pull one)."""
     try:
         import urllib.request
+
         with urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=3) as r:
             models = json.load(r).get("models", [])
         if models:
@@ -579,9 +627,11 @@ def detect_brain() -> tuple[str, str]:
 
 def _spki_der(pub_file: Path) -> bytes:
     from cryptography.hazmat.primitives import serialization
+
     pub = serialization.load_pem_public_key(pub_file.read_bytes())
-    return pub.public_bytes(encoding=serialization.Encoding.DER,
-                            format=serialization.PublicFormat.SubjectPublicKeyInfo)
+    return pub.public_bytes(
+        encoding=serialization.Encoding.DER, format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
 
 
 def _port_answers(port: int) -> bool:

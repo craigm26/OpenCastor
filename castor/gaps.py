@@ -24,6 +24,7 @@ An AI that could close gaps on its own initiative would be inventing authority
 out of an I2C address, which is the exact thing the signed-manifest design
 exists to prevent. See docs/SKILL-GAPS.md for the full rail.
 """
+
 from __future__ import annotations
 
 import json
@@ -70,13 +71,15 @@ def _actuator_gaps() -> list[Gap]:
     name, note = resolve_actuator()
     if note is None:
         return []
-    return [Gap(
-        id="actuator.rc-car.missing",
-        kind="missing-package",
-        evidence=f"gateway actuator resolved to {name!r}",
-        suggestion="pip install rc-car-actuator && castor up",
-        skill_hint="entry-point group robot_md_gateway.actuators",
-    )]
+    return [
+        Gap(
+            id="actuator.rc-car.missing",
+            kind="missing-package",
+            evidence=f"gateway actuator resolved to {name!r}",
+            suggestion="pip install rc-car-actuator && castor up",
+            skill_hint="entry-point group robot_md_gateway.actuators",
+        )
+    ]
 
 
 def _peripheral_gaps(home: Path) -> list[Gap]:
@@ -113,19 +116,27 @@ def _peripheral_gaps(home: Path) -> list[Gap]:
             if any(c.startswith(wanted) for c in declared):
                 continue
             where = dev.device_path or (
-                f"i2c 0x{dev.i2c_address:02x}" if dev.i2c_address is not None else "?")
-            gaps.append(Gap(
-                id=f"peripheral.{dev.category}.{where.replace('/', '_')}",
-                kind="unclaimed-peripheral",
-                evidence=f"{dev.name} ({dev.confidence}) on {where}; "
-                         f"no declared capability starts with {'/'.join(wanted)}",
-                suggestion=(f"castor capability add sensor.{dev.category} "
-                            f"--home {home} --comment '{dev.name}' "
-                            "— then wire a driver (see docs/SKILL-GAPS.md)"),
-                skill_hint=dev.rcan_snippet,
-                detail={"category": dev.category, "interface": dev.interface,
-                        "driver_hint": dev.driver_hint},
-            ))
+                f"i2c 0x{dev.i2c_address:02x}" if dev.i2c_address is not None else "?"
+            )
+            gaps.append(
+                Gap(
+                    id=f"peripheral.{dev.category}.{where.replace('/', '_')}",
+                    kind="unclaimed-peripheral",
+                    evidence=f"{dev.name} ({dev.confidence}) on {where}; "
+                    f"no declared capability starts with {'/'.join(wanted)}",
+                    suggestion=(
+                        f"castor capability add sensor.{dev.category} "
+                        f"--home {home} --comment '{dev.name}' "
+                        "— then wire a driver (see docs/SKILL-GAPS.md)"
+                    ),
+                    skill_hint=dev.rcan_snippet,
+                    detail={
+                        "category": dev.category,
+                        "interface": dev.interface,
+                        "driver_hint": dev.driver_hint,
+                    },
+                )
+            )
     return gaps
 
 
@@ -134,13 +145,15 @@ def _brain_gaps() -> list[Gap]:
 
     provider, model = detect_brain()
     if provider == "ollama" and not model:
-        return [Gap(
-            id="brain.none",
-            kind="no-brain",
-            evidence="no Ollama daemon answered and no Claude sign-in was found",
-            suggestion="install Ollama and `ollama pull qwen3.5:2b`, or sign in "
-                       "with `claude` — the phone's own brains work meanwhile",
-        )]
+        return [
+            Gap(
+                id="brain.none",
+                kind="no-brain",
+                evidence="no Ollama daemon answered and no Claude sign-in was found",
+                suggestion="install Ollama and `ollama pull qwen3.5:2b`, or sign in "
+                "with `claude` — the phone's own brains work meanwhile",
+            )
+        ]
     return []
 
 
@@ -170,9 +183,15 @@ def write(gaps: list[Gap], home: Path) -> Path:
     every run — a gap that stopped being detected stops being reported, which
     is exactly what plugging the missing package in should look like."""
     out = home / "gaps.json"
-    out.write_text(json.dumps({
-        "v": GAPS_VERSION,
-        "generated_at": time.time(),
-        "gaps": [asdict(g) for g in gaps],
-    }, indent=1) + "\n")
+    out.write_text(
+        json.dumps(
+            {
+                "v": GAPS_VERSION,
+                "generated_at": time.time(),
+                "gaps": [asdict(g) for g in gaps],
+            },
+            indent=1,
+        )
+        + "\n"
+    )
     return out

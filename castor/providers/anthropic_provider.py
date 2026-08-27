@@ -167,7 +167,8 @@ class AnthropicProvider(BaseProvider):
                 model=self.model_name,
                 max_tokens=1024,
                 system=system_arg,
-                messages=[{"role": "user", "content": content}],                timeout=60.0,
+                messages=[{"role": "user", "content": content}],
+                timeout=60.0,
             )
             # Track cache stats and log per-call savings
             usage = response.usage
@@ -291,7 +292,8 @@ class AnthropicProvider(BaseProvider):
                 self._cache_stats.record(
                     SimpleNamespace(
                         cache_read_input_tokens=tokens_cached,
-                        cache_creation_input_tokens=usage.get("cache_creation_input_tokens", 0) or 0,
+                        cache_creation_input_tokens=usage.get("cache_creation_input_tokens", 0)
+                        or 0,
                     )
                 )
                 self._cache_stats.alert_if_low(logger=logger)
@@ -373,7 +375,8 @@ class AnthropicProvider(BaseProvider):
                 model=self.model_name,
                 max_tokens=1024,
                 system=system_arg,
-                messages=[{"role": "user", "content": content}],                timeout=60.0,
+                messages=[{"role": "user", "content": content}],
+                timeout=60.0,
             ) as stream:
                 yield from stream.text_stream
         except Exception as e:

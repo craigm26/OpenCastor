@@ -18,6 +18,7 @@ So this module serves exactly two things: the local model catalog (and the
 machinery to grow it), and enough provider metadata for a settings screen to
 render. It holds no secrets.
 """
+
 from __future__ import annotations
 
 import json
@@ -47,8 +48,7 @@ def state_file() -> Path:
     return robot_home() / "active-model.json"
 
 
-def _ollama(path: str, payload: dict | None = None, timeout: float = 15.0,
-            base: str | None = None):
+def _ollama(path: str, payload: dict | None = None, timeout: float = 15.0, base: str | None = None):
     data = json.dumps(payload).encode() if payload is not None else None
     req = urllib.request.Request(
         f"{base or ollama_url()}{path}",
@@ -119,8 +119,10 @@ pull_state = PullState()
 def _pull_worker(model: str) -> None:
     body = json.dumps({"model": model, "stream": True}).encode()
     req = urllib.request.Request(
-        f"{ollama_url()}/api/pull", data=body,
-        headers={"Content-Type": "application/json"}, method="POST",
+        f"{ollama_url()}/api/pull",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
     )
     try:
         # No read timeout: a multi-GB pull on a Pi legitimately runs for many
@@ -161,19 +163,43 @@ def _pull_worker(model: str) -> None:
 #: first chat becomes a 40-minute download into a disappointment. Sizes are
 #: install sizes; ram_gb is the working-set rule of thumb (weights x ~1.3).
 SUGGESTED_MODELS = [
-    {"name": "qwen3.5:2b", "size_gb": 1.9, "ram_gb": 2.5,
-     "good_for": "Fast chat and workflow naming. The snappiest thing a Pi runs."},
-    {"name": "gemma4:e2b", "size_gb": 3.0, "ram_gb": 3.9,
-     "good_for": "Better answers than 2B, still quick after first load."},
-    {"name": "qwen3.5:4b", "size_gb": 3.3, "ram_gb": 4.3,
-     "good_for": "Noticeably better reasoning; slower first load (~75 s cold)."},
-    {"name": "gemma4:e4b-it-qat", "size_gb": 4.1, "ram_gb": 5.3,
-     "good_for": "The best local chat quality this bench has run."},
-    {"name": "gemma3:4b", "size_gb": 3.3, "ram_gb": 4.3,
-     "good_for": "Vision: can look at photos and camera frames locally."},
-    {"name": "nomic-embed-text", "size_gb": 0.3, "ram_gb": 0.6,
-     "good_for": "Memory: turns notes and chat into searchable long-term memory "
-                 "(embeddings — not a chat model)."},
+    {
+        "name": "qwen3.5:2b",
+        "size_gb": 1.9,
+        "ram_gb": 2.5,
+        "good_for": "Fast chat and workflow naming. The snappiest thing a Pi runs.",
+    },
+    {
+        "name": "gemma4:e2b",
+        "size_gb": 3.0,
+        "ram_gb": 3.9,
+        "good_for": "Better answers than 2B, still quick after first load.",
+    },
+    {
+        "name": "qwen3.5:4b",
+        "size_gb": 3.3,
+        "ram_gb": 4.3,
+        "good_for": "Noticeably better reasoning; slower first load (~75 s cold).",
+    },
+    {
+        "name": "gemma4:e4b-it-qat",
+        "size_gb": 4.1,
+        "ram_gb": 5.3,
+        "good_for": "The best local chat quality this bench has run.",
+    },
+    {
+        "name": "gemma3:4b",
+        "size_gb": 3.3,
+        "ram_gb": 4.3,
+        "good_for": "Vision: can look at photos and camera frames locally.",
+    },
+    {
+        "name": "nomic-embed-text",
+        "size_gb": 0.3,
+        "ram_gb": 0.6,
+        "good_for": "Memory: turns notes and chat into searchable long-term memory "
+        "(embeddings — not a chat model).",
+    },
     # Benched 2026-08-14 on a Pi 5/16GB through the console's own chat path:
     # cold turn 136 s, warm turn 73 s for two sentences (~0.7 tok/s). The
     # QUALITY earned the listing — its answers matched the subscription's
@@ -184,10 +210,14 @@ SUGGESTED_MODELS = [
     # bench that can genuinely look at a photo. Verified: read a dense QR
     # correctly, on-device. Vision tolerates its pace far better than chat:
     # one photo, one answer, a minute is fine while parked.
-    {"name": "gemma4:12b-it-qat", "size_gb": 7.2, "ram_gb": 9.0,
-     "good_for": "Vision + highest-quality local answers (encoder-free "
-                 "multimodal, 262K context). SLOW on a Pi (~1 min/reply) — "
-                 "best as the VISION brain, with a fast model on chat."},
+    {
+        "name": "gemma4:12b-it-qat",
+        "size_gb": 7.2,
+        "ram_gb": 9.0,
+        "good_for": "Vision + highest-quality local answers (encoder-free "
+        "multimodal, 262K context). SLOW on a Pi (~1 min/reply) — "
+        "best as the VISION brain, with a fast model on chat.",
+    },
 ]
 
 #: How much of the host's RAM a model may claim. The remaining 40% is the
@@ -224,20 +254,24 @@ def suggestions() -> dict:
     """
     ram = _total_ram_gb()
     try:
-        installed = {_base_tag(m["name"])
-                     for m in _ollama("/api/tags").get("models", [])}
+        installed = {_base_tag(m["name"]) for m in _ollama("/api/tags").get("models", [])}
     except Exception:  # noqa: BLE001 - no daemon means "nothing installed"
         installed = set()
     active = read_active().get("model", "")
     out = []
     for m in SUGGESTED_MODELS:
         fits = ram > 0 and m["ram_gb"] <= ram * RAM_FIT_FRACTION
-        out.append({**m,
-                    "fits": fits,
-                    "installed": _base_tag(m["name"]) in installed,
-                    "active": m["name"] == active,
-                    "note": None if fits else
-                    f"needs ~{m['ram_gb']:.0f} GB free; this host has {ram:.0f} GB total"})
+        out.append(
+            {
+                **m,
+                "fits": fits,
+                "installed": _base_tag(m["name"]) in installed,
+                "active": m["name"] == active,
+                "note": None
+                if fits
+                else f"needs ~{m['ram_gb']:.0f} GB free; this host has {ram:.0f} GB total",
+            }
+        )
     return {"host_ram_gb": round(ram, 1), "suggestions": out}
 
 
@@ -247,7 +281,7 @@ def local_models() -> dict:
     try:
         tags = _ollama("/api/tags")
     except Exception as exc:  # noqa: BLE001 - reported as 503 below
-        raise HTTPException(status_code=503, detail=f"ollama unreachable: {exc}")
+        raise HTTPException(status_code=503, detail=f"ollama unreachable: {exc}") from exc
     try:
         loaded = {m["name"] for m in _ollama("/api/ps").get("models", [])}
     except Exception:  # noqa: BLE001 - "which are warm" is optional detail
@@ -321,8 +355,11 @@ def set_active(req: ActiveRequest) -> dict:
         # Robot-hosted brains have no local model file to validate; refuse only
         # if the operator has not configured them, so the failure is visible in
         # Settings rather than at the first chat turn.
-        ok = (brains.anthropic_available() if req.provider == "anthropic-sub"
-              else brains.gemini_available())
+        ok = (
+            brains.anthropic_available()
+            if req.provider == "anthropic-sub"
+            else brains.gemini_available()
+        )
         if not ok:
             raise HTTPException(
                 status_code=409,
@@ -333,7 +370,7 @@ def set_active(req: ActiveRequest) -> dict:
         try:
             names = {m["name"] for m in _ollama("/api/tags").get("models", [])}
         except Exception as exc:  # noqa: BLE001 - reported as 503 below
-            raise HTTPException(status_code=503, detail=f"ollama unreachable: {exc}")
+            raise HTTPException(status_code=503, detail=f"ollama unreachable: {exc}") from exc
         if req.model not in names:
             raise HTTPException(
                 status_code=404,
@@ -392,10 +429,8 @@ def chat(req: ChatRequest) -> dict:
     memory index is cold is worse than a robot that forgets.
     """
     active = read_active()
-    if req.provider is not None and req.provider not in (
-            "ollama", "anthropic-sub", "gemini-er"):
-        raise HTTPException(status_code=422,
-                            detail=f"unknown provider {req.provider!r}")
+    if req.provider is not None and req.provider not in ("ollama", "anthropic-sub", "gemini-er"):
+        raise HTTPException(status_code=422, detail=f"unknown provider {req.provider!r}")
     provider = req.provider or active.get("provider", "ollama")
     # Before the branch, so all three brains are grounded by the same rail.
     system = ground_system_prompt(req.system, req.message)
@@ -409,15 +444,19 @@ def chat(req: ChatRequest) -> dict:
             try:
                 client_frame = _b64.b64decode(req.image_b64, validate=True)
             except Exception:  # noqa: BLE001 - a bad frame is a client error
-                raise HTTPException(status_code=422,
-                                    detail="image_b64 is not valid base64")
+                raise HTTPException(
+                    status_code=422, detail="image_b64 is not valid base64"
+                ) from None
         try:
-            out = brains.anthropic_chat(system, req.message, req.history,
-                                        image_jpeg=client_frame)
+            out = brains.anthropic_chat(system, req.message, req.history, image_jpeg=client_frame)
         except Exception as exc:  # noqa: BLE001 - upstream failure, reported as 502
-            raise HTTPException(status_code=502, detail=f"claude: {exc}")
-        return {"model": "claude (subscription)", "content": out["content"],
-                "thinking": out.get("thinking", ""), "elapsed_s": 0}
+            raise HTTPException(status_code=502, detail=f"claude: {exc}") from exc
+        return {
+            "model": "claude (subscription)",
+            "content": out["content"],
+            "thinking": out.get("thinking", ""),
+            "elapsed_s": 0,
+        }
     if provider == "gemini-er":
         # Vision-native, and this console owns no cameras (see app.py): the only
         # frame it can offer is the one the CALLER attached. Without one the
@@ -430,15 +469,20 @@ def chat(req: ChatRequest) -> dict:
             try:
                 image = _b64.b64decode(req.image_b64, validate=True)
             except Exception:  # noqa: BLE001 - a bad frame is a client error
-                raise HTTPException(status_code=422,
-                                    detail="image_b64 is not valid base64")
+                raise HTTPException(
+                    status_code=422, detail="image_b64 is not valid base64"
+                ) from None
         try:
             out = brains.gemini_er(system + "\n\n" + req.message, image_jpeg=image)
         except Exception as exc:  # noqa: BLE001 - upstream failure, reported as 502
-            raise HTTPException(status_code=502, detail=f"gemini: {exc}")
-        return {"model": out.get("model", "gemini-robotics-er"),
-                "content": out["content"], "thinking": "",
-                "points": out.get("points", []), "elapsed_s": 0}
+            raise HTTPException(status_code=502, detail=f"gemini: {exc}") from exc
+        return {
+            "model": out.get("model", "gemini-robotics-er"),
+            "content": out["content"],
+            "thinking": "",
+            "points": out.get("points", []),
+            "elapsed_s": 0,
+        }
 
     model = req.model or active.get("model")
     if not model:
@@ -463,16 +507,15 @@ def chat(req: ChatRequest) -> dict:
     try:
         out = _ollama(
             "/api/chat",
-            {"model": model, "messages": messages, "stream": False,
-             "think": req.think},
+            {"model": model, "messages": messages, "stream": False, "think": req.think},
             base=chat_upstream(),
             # Generous: a cold model load dominates the first turn.
             timeout=300.0,
         )
     except urllib.error.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"ollama error: {exc}")
+        raise HTTPException(status_code=502, detail=f"ollama error: {exc}") from exc
     except Exception as exc:  # noqa: BLE001 - anything else read as a timeout
-        raise HTTPException(status_code=504, detail=f"ollama timeout: {exc}")
+        raise HTTPException(status_code=504, detail=f"ollama timeout: {exc}") from exc
     msg = out.get("message") or {}
     return {
         "model": model,
@@ -566,14 +609,18 @@ def auth_status() -> dict:
     return {
         "anthropic_subscription": {
             "configured": brains.anthropic_available(),
-            "detail": ("Claude is signed in on the robot."
-                       if brains.anthropic_available()
-                       else "Run `claude` on the robot once to sign in."),
+            "detail": (
+                "Claude is signed in on the robot."
+                if brains.anthropic_available()
+                else "Run `claude` on the robot once to sign in."
+            ),
         },
         "gemini_er": {
             "configured": brains.gemini_available(),
-            "detail": ("A Gemini key is stored on the robot."
-                       if brains.gemini_available()
-                       else "Paste a Google AI Studio key to enable vision."),
+            "detail": (
+                "A Gemini key is stored on the robot."
+                if brains.gemini_available()
+                else "Paste a Google AI Studio key to enable vision."
+            ),
         },
     }

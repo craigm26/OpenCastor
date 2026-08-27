@@ -9,6 +9,7 @@ that does exactly that. Configuration is entirely environment:
     OLLAMA_URL     the model daemon (default http://127.0.0.1:11434)
     CHAT_UPSTREAM  where chat turns go (default: Ollama, per OLLAMA_URL)
 """
+
 from __future__ import annotations
 
 from .app import build_app
