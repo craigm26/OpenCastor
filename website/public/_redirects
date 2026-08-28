@@ -18,6 +18,12 @@
 /docs/setup-wizard      https://docs.opencastor.com/runtime/cli/                       301
 /docs/architecture      https://docs.opencastor.com/runtime/overview/                  301
 /docs/peripherals       https://docs.opencastor.com/getting-started/hardware-profiles/ 301
+# Robot guides go to the robot pages. The catch-all below used to send every
+# /docs/hardware/* URL to Hardware Profiles, which is about Pi5-vs-Jetson
+# compute tiers and says nothing about any robot — so a link to a robot guide
+# landed on a page that could not answer it. More specific rules win, so these
+# sit above the catch-all.
+/docs/hardware/microduck  https://docs.opencastor.com/robots/microduck/                  301
 /docs/hardware/*        https://docs.opencastor.com/getting-started/hardware-profiles/ 301
 /docs/provider-auth     https://docs.opencastor.com/runtime/overview/                  301
 /docs/*                 https://docs.opencastor.com/:splat                             301
