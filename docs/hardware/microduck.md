@@ -259,6 +259,29 @@ A plan is a proposal. The robot still decides.
 `auto_init` defaults to false on purpose: the duck deliberately does not move on
 process start, and OpenCastor doesn't change that.
 
+## The same duck, in Swift
+
+The brain also exists as a standalone Swift package —
+[DuckKit](https://github.com/craigm26/duckkit) — so a phone can run the *real*
+trained policy with no robot in the room. That is what makes an AR ghost duck
+the trained network walking rather than an animation of walking.
+
+It has **zero dependencies**: a hand-written ONNX reader and an ELU multilayer
+perceptron in Foundation and arithmetic, which is what lets the real
+`alpha_walking.onnx` run under `swift test` on a Raspberry Pi and produce the
+same floats an iPhone will. The joint order, home pose, action scaling and
+filter coefficients are the same ported numbers this driver uses, and the
+kinematic chain is the upstream MuJoCo model vendored as a fixture — so the
+tables cannot drift from upstream without a test going red. The forward pass is
+proved against onnxruntime's own output to 1e-4.
+
+A second product, `DuckEvidence`, adds swift-crypto for the things that sign:
+canonical bytes, a hash-chain fold, and a match record nobody can quietly edit.
+
+```swift
+.package(url: "https://github.com/craigm26/duckkit.git", from: "1.0.0")
+```
+
 ## See also
 
 - Profile: `castor/profiles/pollen/microduck.yaml` (ships with the package)

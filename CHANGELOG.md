@@ -7,6 +7,123 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ---
 
+## [Unreleased]
+
+### Added — the Microduck
+
+OpenCastor drives Pollen Robotics' Microduck: a 25 cm walking biped whose
+motion comes from RL policies executed by its own `robotd` daemon at 50 Hz.
+We are an intent client over robotd's JSON-RPC 2.0 NDJSON socket; robotd
+keeps exclusive ownership of the motor bus.
+
+- **`castor duck`** — one command from a duck on the desk to a duck under an
+  LLM: find the robot, prove we can reach it, ask robotd how it feels, write
+  the config. Discovery tries five things (local socket, hostnames, `duckctl
+  ip` over Bluetooth, mDNS, and the ARP table with `--deep`) because Pollen's
+  own docs admit mDNS "resolves when it feels like it". Hostname probes run on
+  a hard deadline in daemon threads, so a stalled `.local` lookup cannot hang
+  the CLI. The two things that can block you — SSH access and `robot` group
+  membership — each get their exact fix printed, and the first is offered as a
+  keystroke. A host is only a duck once robotd's socket answers on the far end.
+- **The whole vocabulary.** The driver could walk the duck and look around; it
+  could not kick, pick anything up, sit, roll, quack, open its beak or lean.
+  Reading `duck-ipc-proto` turned up twenty-two `robot.*` methods against the
+  eleven the driver knew. `robot.do` now carries the five scripted skills
+  (`ground_pick`, both kicks, `sit_toggle`, `roulade`) as named methods, with
+  an unknown skill refused on this side rather than sent to be rejected on
+  that one. `robot.sound` carries the seven-sound voice bank, including the
+  held `wheee` whose two endings differ — a deliberate release cuts it, a hold
+  that stops arriving plays out. `robot.mouth` and `robot.pose` join the twist
+  as continuous intents.
+- **Choreography.** Pollen ships a vocabulary of atoms: `robot.do` runs exactly
+  one skill, and a refusal names the move already holding the robot. There is
+  no sequencing and no way to say *"walk to the ball, line up, knock it toward
+  the couch, then celebrate"* — every verb exists, the sentence does not. So
+  thirteen primitives now carry the two facts a planner cannot work without
+  (how long a move occupies the duck, and whether it holds the robot
+  exclusively), and thirteen routines compose them: `fetch`, `greet`,
+  `patrol`, `nudge`, `celebrate`, `settle` and the rest. `fetch` is one word
+  that becomes ten primitives. Every routine is written as a plan a user could
+  have typed, so nothing is hidden in code you could not have asked for
+  yourself. `castor duck do "greet me, then patrol the room"`.
+- **Profile and preset** — `pollen/microduck` ships with the package (preset
+  #16, `config/presets/pollen_microduck.rcan.yaml`), kept in sync by
+  `tests/test_microduck_setup.py`. Envelope: 0.2 m/s forward, 0.1 m/s strafe,
+  1.0 rad/s yaw, 20 Hz intents, 1.5 s TTL, `auto_init: false` so the duck does
+  not move when a process starts.
+- **Docs** — `docs/hardware/microduck.md`, and a hardware guide on the website
+  at `/docs/hardware/microduck`.
+
+The choreographer computes no permission. Every motion still goes out through
+`MicroduckDriver` and the SafetyLayer, the duck's own limits apply on top and
+come back in `robot.state.limited_by`, and steps abort on a fall or a flat
+battery. A plan is a proposal; robotd remains the only thing that decides what
+a servo does.
+
+### Added — `castor up`
+
+The ten-minute contract, enforced by a command: a robot up and running in
+under ten minutes, on common hardware, by people who do not administer Linux
+for a living. The counter-example that motivated it is our own bench, where
+the rover took an experienced operator three sessions of hand work — hand-
+written systemd units, hand-edited env files, a hand-assembled pairing payload
+that shipped pinned to a dead DHCP address. Every piece existed; the
+composition did not.
+
+`castor up` is the composition: detect hardware → pick archetype → generate
+the robot home (signed ROBOT.md, rcan.yaml, bearers, policy, keys, runtime) →
+start the systemd units → detect a brain (smallest local Ollama model, else
+the Claude subscription) → write the pairing QR. Non-interactive throughout:
+every question it could ask is one it can answer by looking at the machine.
+Idempotent throughout.
+
+- Degrades honestly on a host where pip brought less than this bench has,
+  rather than claiming a capability it cannot back.
+- **Universal-link pairing** — the QR is now a link any camera understands,
+  with the server half to match, so pairing no longer needs the app open
+  first. `/pair` offers the board's own image.
+- **Capability edits** are one operator command, and hand edits stay
+  first-class. Gaps became data, and closing one is always the operator's act.
+- The QR states what *this* robot can do, so a car stops arriving as an arm.
+- A robot remembers across reboots, and an SD card can become a robot.
+
+### Fixed
+
+- **`rc-car-actuator` is a dependency, not an extra.** It had been a hard
+  requirement that broke `pip install opencastor` for weeks; it is now the
+  `[rc-car]` extra, so a fresh host resolves the rc-car actuator without the
+  base install failing.
+- **The peripheral scanner could not see a board that had just been plugged
+  in.**
+- **Two tools shared one file and disagreed about its shape**, and `--force`
+  ate a live key.
+- **CI can install itself again.**
+- Cert smoke tests catch up with the gateway's anonymous fail-open fix.
+- Cleared a 22-error lint backlog that nothing surfaced.
+
+### Changed
+
+- **The website** became what the product became: a conversation with
+  receipts. The beta ended the good way — every CTA points at the App Store.
+
+---
+
+## [3.0.3] - 2026-07-31
+
+### Fixed
+
+- **Auto-detection must never offer a LoRa radio as a servo bus.** Detection
+  put a green tick next to `/dev/ttyACM0` — an ESP32 LoRa radio — labelled
+  "controller board", and `castor arm verify` therefore defaulted to it. A
+  denylist is now checked *before* any allowlist match: Espressif/Adafruit/
+  Arduino VIDs plus product-string matches on
+  `heltec|lora|meshtastic|meshcore|esp32|rak|t-beam`. This ordering matters
+  because pyserial asserts DTR and RTS on open, which is esptool's
+  reset-into-download-mode sequence on an ESP32-S3 native-USB CDC: probing
+  such a board does not merely fail, it can knock it out of operation.
+
+---
+
 ## [3.0.2] - 2026-05-03
 
 ### Verified

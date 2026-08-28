@@ -1205,3 +1205,73 @@ code, pre { font-family: var(--font-mono); }
 }
 
 /* ── Astro migration stubs (superseded by nav rewrite above) ── */
+
+/* ── Changelog ──────────────────────────────────────────────────────────────
+   The /changelog page shipped with markup and no styles: every one of these
+   class names appeared in changelog.astro and in no stylesheet, so the page
+   rendered as bare divs and bullet lists. Written in the same idiom as
+   .hw-card / .guide-card (glass surface, hairline border, accent on hover) so
+   the release history looks like the rest of the site rather than like a
+   second site. The timeline rail is a single left border on the container with
+   a dot per release, which keeps it to one element and no pseudo-element
+   stacking. */
+.changelog-timeline { max-width: 820px; margin: 0 auto; padding-left: 28px; border-left: 1px solid var(--border); }
+
+.changelog-release {
+  position: relative; margin-bottom: 28px; padding: 28px;
+  background: var(--glass-bg); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  transition: all var(--dur) var(--ease);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+.changelog-release:hover {
+  border-color: rgba(14, 165, 233, 0.4);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+/* The dot on the rail. Sits on the container's left border, not inside it. */
+.changelog-release::before {
+  content: ""; position: absolute; left: -34px; top: 34px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--bg); border: 2px solid var(--border-hover);
+}
+/* The release being shipped right now gets the accent dot and a lit edge. */
+.changelog-release.current { border-color: rgba(14, 165, 233, 0.35); }
+.changelog-release.current::before { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-glow); }
+
+.release-header { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+.release-version { font-family: var(--font-mono); font-size: 1.0625rem; font-weight: 600; color: var(--text); }
+.release-date { font-size: 0.8125rem; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
+
+.release-badge {
+  font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 600;
+  letter-spacing: 0.02em; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.badge-new      { color: var(--accent); background: var(--cyan-light);   border-color: rgba(14, 165, 233, 0.3); }
+.badge-current  { color: var(--accent); background: var(--cyan-light);   border-color: rgba(14, 165, 233, 0.3); }
+.badge-feature  { color: var(--green);  background: var(--green-light);  border-color: rgba(45, 212, 191, 0.3); }
+.badge-fix      { color: var(--orange); background: var(--orange-light); border-color: rgba(249, 115, 22, 0.3); }
+.badge-breaking { color: var(--red);    background: var(--red-light);    border-color: rgba(239, 68, 68, 0.3); }
+
+.release-body h3 { font-size: 1.0625rem; font-weight: 600; margin-bottom: 14px; color: var(--text); line-height: 1.45; }
+.release-body ul { list-style: none; padding: 0; margin: 0; }
+.release-body li {
+  position: relative; padding-left: 20px; margin-bottom: 10px;
+  font-size: 0.9375rem; line-height: 1.7; color: var(--text-secondary);
+}
+.release-body li::before { content: "—"; position: absolute; left: 0; color: var(--text-muted); }
+.release-body li strong { color: var(--text); font-weight: 600; }
+.release-body code {
+  font-family: var(--font-mono); font-size: 0.8125em;
+  background: var(--code-bg); border: 1px solid var(--border);
+  padding: 1px 6px; border-radius: var(--radius-sm); color: var(--code-kw);
+}
+.release-body a { color: var(--accent); }
+.release-body a:hover { color: var(--accent-hover); }
+
+@media (max-width: 640px) {
+  .changelog-timeline { padding-left: 18px; }
+  .changelog-release { padding: 20px; }
+  .changelog-release::before { left: -24px; top: 26px; }
+  .release-date { margin-left: 0; width: 100%; }
+}

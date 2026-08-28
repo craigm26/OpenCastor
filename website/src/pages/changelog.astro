@@ -19,11 +19,97 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     <div class="container">
       <div class="changelog-timeline">
 
-        <!-- v2026.3.21.1 -->
-        <div class="changelog-release current reveal" id="v2026.3.27.1">
+        <!-- Unreleased -->
+        <div class="changelog-release current reveal" id="unreleased">
+          <div class="release-header">
+            <span class="release-version">Unreleased</span>
+            <span class="release-badge badge-new">Latest</span>
+            <span class="release-badge badge-feature">Microduck</span>
+            <span class="release-badge badge-feature">castor up</span>
+            <span class="release-date">On main</span>
+          </div>
+          <div class="release-body">
+            <h3>The Microduck, and one command from bare host to paired robot</h3>
+            <ul>
+              <li><strong>Pollen Microduck support</strong> &mdash; a 25 cm walking biped whose motion comes from RL policies executed by its own <code>robotd</code> daemon at 50 Hz. OpenCastor is an intent client over robotd's JSON-RPC 2.0 NDJSON socket; robotd keeps exclusive ownership of the motor bus. <a href="/docs/hardware/microduck">Hardware guide &rarr;</a></li>
+              <li><strong><code>castor duck</code></strong> &mdash; one command from a duck on the desk to a duck under an LLM: find it, prove we can reach it, ask robotd how it feels, write the config. Discovery tries five things (local socket, hostnames, <code>duckctl ip</code> over Bluetooth, mDNS, ARP with <code>--deep</code>) because Pollen's own docs admit mDNS &ldquo;resolves when it feels like it&rdquo;. The two things that can block you &mdash; SSH access and <code>robot</code> group membership &mdash; each get their exact fix printed.</li>
+              <li><strong>The whole vocabulary</strong> &mdash; reading <code>duck-ipc-proto</code> turned up twenty-two <code>robot.*</code> methods against the eleven the driver knew. <code>robot.do</code> now carries the five scripted skills (<code>ground_pick</code>, both kicks, <code>sit_toggle</code>, <code>roulade</code>); <code>robot.sound</code> carries the seven-sound voice bank including the held <code>wheee</code>; <code>robot.mouth</code> and <code>robot.pose</code> join the twist as continuous intents.</li>
+              <li><strong>Choreography</strong> &mdash; <code>robot.do</code> runs exactly one skill, so there is no way to say <em>&ldquo;walk to the ball, line up, knock it toward the couch, then celebrate&rdquo;</em>. Every verb exists; the sentence does not. Thirteen primitives now carry how long a move occupies the duck and whether it holds the robot exclusively, and thirteen routines compose them &mdash; <code>fetch</code>, <code>greet</code>, <code>patrol</code>, <code>nudge</code>, <code>celebrate</code>, <code>settle</code>. <code>castor duck do "greet me, then patrol the room"</code>.</li>
+              <li><strong><code>castor up</code></strong> &mdash; the ten-minute contract as a command: detect hardware &rarr; pick archetype &rarr; generate the robot home (signed ROBOT.md, rcan.yaml, bearers, policy, keys, runtime) &rarr; start the systemd units &rarr; detect a brain &rarr; write the pairing QR. Non-interactive and idempotent throughout: every question it could ask is one it can answer by looking at the machine.</li>
+              <li><strong>Universal-link pairing</strong> &mdash; the QR is a link any camera understands, with the server half to match. The QR states what <em>this</em> robot can do, so a car stops arriving as an arm.</li>
+              <li><strong>DuckKit</strong> &mdash; the duck's brain as a zero-dependency Swift package, so a phone runs the real trained policy with no robot in the room. <a href="https://github.com/craigm26/duckkit">github.com/craigm26/duckkit</a></li>
+              <li><strong>Fixed</strong> &mdash; <code>rc-car-actuator</code> was a hard requirement that broke <code>pip install opencastor</code> for weeks; it is now the <code>[rc-car]</code> extra. The peripheral scanner could not see a board that had just been plugged in. Two tools shared one file and disagreed about its shape, and <code>--force</code> ate a live key.</li>
+            </ul>
+            <p style="margin-top:12px;opacity:.75">A plan is a proposal. The choreographer computes no permission &mdash; every motion goes out through the driver and the SafetyLayer, the duck's own limits apply on top and come back in <code>robot.state.limited_by</code>, and steps abort on a fall or a flat battery. robotd remains the only thing that decides what a servo does.</p>
+          </div>
+        </div>
+
+        <!-- 3.0.3 -->
+        <div class="changelog-release reveal" id="v3.0.3">
+          <div class="release-header">
+            <span class="release-version">3.0.3</span>
+            <span class="release-date">July 31, 2026</span>
+          </div>
+          <div class="release-body">
+            <h3>Auto-detection must never offer a LoRa radio as a servo bus</h3>
+            <ul>
+              <li>Detection put a green tick next to <code>/dev/ttyACM0</code> &mdash; an ESP32 LoRa radio &mdash; labelled &ldquo;controller board&rdquo;, and <code>castor arm verify</code> therefore defaulted to it. A <strong>denylist is now checked before any allowlist match</strong>: Espressif/Adafruit/Arduino VIDs plus product-string matches on <code>heltec|lora|meshtastic|meshcore|esp32|rak|t-beam</code>.</li>
+              <li>The ordering matters: pyserial asserts DTR and RTS on open, which is esptool's reset-into-download-mode sequence on an ESP32-S3 native-USB CDC. Probing such a board does not merely fail &mdash; it can knock it out of operation.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- 3.0.2 -->
+        <div class="changelog-release reveal" id="v3.0.2">
+          <div class="release-header">
+            <span class="release-version">3.0.2</span>
+            <span class="release-date">May 3, 2026</span>
+          </div>
+          <div class="release-body">
+            <h3>Conformance re-verified against the frozen spec</h3>
+            <ul>
+              <li>All 195 tests across the conformance, compliance and RCAN 3 compliance suites pass against the post-freeze rcan-spec. No code changes &mdash; the release memorializes the verification outcome with a signed version-tuple envelope.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- 3.0.1 -->
+        <div class="changelog-release reveal" id="v3.0.1">
+          <div class="release-header">
+            <span class="release-version">3.0.1</span>
+            <span class="release-date">April 24, 2026</span>
+          </div>
+          <div class="release-body">
+            <h3>Two CLI gaps caught while recording the peer-runtime demo</h3>
+            <ul>
+              <li><strong><code>castor init</code></strong> now matches the v3.0 wizard. The argparse registration was still the legacy shape and did not hit the wizard's expected attribute names.</li>
+              <li><strong><code>castor validate ROBOT.md</code></strong> now works. The old handler always fed the target through <code>yaml.safe_load</code>, which errored on any ROBOT.md because the frontmatter-markdown format contains two <code>---</code> documents.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- 3.0.0 -->
+        <div class="changelog-release reveal" id="v3.0.0">
+          <div class="release-header">
+            <span class="release-version">3.0.0</span>
+            <span class="release-badge badge-breaking">Breaking</span>
+            <span class="release-date">April 24, 2026</span>
+          </div>
+          <div class="release-body">
+            <h3>ROBOT.md-native, full RCAN 3.x peer runtime</h3>
+            <ul>
+              <li><strong>Version scheme change</strong> &mdash; CalVer (2026.4.23.0) &rarr; SemVer (3.0.0). The major signals peer-runtime alignment with rcan-spec 3.2, rcan-py 3.3 and rcan-ts 3.4.</li>
+              <li><strong>Legacy <code>.rcan.yaml</code> input removed</strong> &mdash; runtime, register and compliance commands read ROBOT.md (v3.2 frontmatter) as the canonical source. The 2.x config path is rejected at ingress with a <code>castor migrate</code> hint.</li>
+              <li><strong><code>castor/rcan3/</code></strong> &mdash; the peer-runtime integration package: ROBOT.md reader with runtime selection, ML-DSA-65 + Ed25519 hybrid identity (private keys written <code>0o600</code> atomically, no chmod race), dict-level signer, async RRF client, the &sect;22&ndash;26 compliance facade, and the Harness Protocol.</li>
+              <li><strong>Removed</strong> &mdash; <code>castor.config_validation</code> (superseded by rcan-py's <code>rcan.validate</code>) and five legacy <code>castor rrf</code> subcommands.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- v2026.3.27.1 -->
+        <div class="changelog-release reveal" id="v2026.3.27.1">
           <div class="release-header">
             <span class="release-version">v2026.3.27.1</span>
-            <span class="release-badge badge-new">Latest</span>
             <span class="release-badge badge-feature">RCAN v2.2</span>
             <span class="release-badge badge-feature">ML-DSA-65</span>
             <span class="release-date">March 27, 2026</span>
@@ -50,7 +136,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         <div class="changelog-release reveal" id="v2026.3.21.1">
           <div class="release-header">
             <span class="release-version">v2026.3.21.1</span>
-            <span class="release-badge badge-new">Latest</span>
             <span class="release-date">March 21, 2026</span>
           </div>
           <div class="release-body">

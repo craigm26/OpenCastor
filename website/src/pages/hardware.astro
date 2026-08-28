@@ -268,6 +268,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <p>Desktop humanoid with 5-DOF animated head, speaker, and microphone. Same gRPC API as Reachy 2. Auto-discovered via <code>reachy-mini.local</code> mDNS. <code>pip install opencastor[reachy]</code></p>
             <div class="hw-card-meta">protocol: reachy · gRPC / mDNS · New in v2026.3.11.0</div>
           </div>
+          <div class="hw-card reveal reveal-d6">
+            <div class="hw-card-top">
+              <div class="hw-card-icon">🦆</div><span class="status status-green">Supported</span>
+            </div>
+            <h3>Pollen Robotics Microduck</h3>
+            <p>25 cm walking biped. 15 servos, camera, ToF depth, two IMUs, articulated beak — driven by RL policies at 50 Hz. OpenCastor is an intent client over <code>robotd</code>'s JSON-RPC socket, and turns a sentence into a sequence the duck can perform. One command: <code>castor duck</code>. <a href="/docs/hardware/microduck">Guide →</a></p>
+            <div class="hw-card-meta">protocol: microduck · JSON-RPC / NDJSON over SSH</div>
+          </div>
         </div>
       </div>
     </section>
