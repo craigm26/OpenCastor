@@ -72,6 +72,9 @@ class UpPlan:
     robot_uuid: str
     base_port: int
     detected: list[str] = field(default_factory=list)
+    #: Whether the generated gateway policy names the PCA9685 or the simulator.
+    #: False is the default everywhere; only an explicit answer sets it True.
+    real_wheels: bool = False
 
     @property
     def gateway_port(self) -> int:
@@ -105,6 +108,128 @@ def pick_archetype(i2c_addresses: set[int]) -> tuple[str, list[str]]:
     return "sim", found
 
 
+#: The five variables that switch a generated robot from SimulatedDrive to the
+#: PCA9685. Kept as data because two things must agree about them: the renderer
+#: that writes them out, and the toggler that flips an already-written file.
+DRIVE_VARS = (
+    "OPENCASTOR_DRIVE",
+    "OPENCASTOR_DRIVE_I2C_BUS",
+    "OPENCASTOR_DRIVE_I2C_ADDRESS",
+    "OPENCASTOR_DRIVE_THROTTLE_CHANNEL",
+    "OPENCASTOR_DRIVE_STEERING_CHANNEL",
+)
+
+#: Printed next to the question and again after the flip. Motion is the one
+#: consequence of this tool that a person cannot undo by rerunning it.
+WHEELS_OFF_THE_GROUND = (
+    "REAL WHEELS: this robot will be able to MOVE the moment the gateway starts.\n"
+    "  Put the vehicle on a stand with its WHEELS OFF THE GROUND first. Constructing\n"
+    "  the driver writes NEUTRAL to both channels, but 'neutral' is only neutral once\n"
+    "  the per-vehicle trims are measured for YOUR car: an untrimmed neutral is a slow\n"
+    "  crawl, often in reverse. Measure them with the wheels up, and fit the e-stop\n"
+    "  before the car touches the ground.\n"
+    "  Checklist: docs/hardware/pca9685-bringup.md\n"
+    "  https://github.com/craigm26/OpenCastor/blob/main/docs/hardware/pca9685-bringup.md"
+)
+
+
+def real_wheels_question(detected: list[str]) -> str:
+    """The ONE question `up` is allowed to ask, as text (so a test can read it).
+
+    `up` is otherwise non-interactive on purpose. This question exists because
+    the alternative it replaces is worse: a file nobody mentions, in a directory
+    nobody named, whose five commented lines are the difference between a robot
+    that drives and a robot that signs receipts for motion that never happens.
+    The deliberate act stays deliberate; it just happens in the tool that has
+    the chip on the bus in front of it, instead of in an unmentioned editor.
+    """
+    found = detected[0] if detected else "a PCA9685 PWM controller"
+    return (
+        f"\n  Detected {found}.\n\n"
+        f"  {WHEELS_OFF_THE_GROUND}\n\n"
+        "  Simulated wheels are the default: everything else works (envelopes,\n"
+        "  receipts, the deadman, the app) and the PWM chip is never written to.\n\n"
+        "  Enable real wheels now? [y/N] "
+    )
+
+
+def decide_real_wheels(
+    *,
+    requested: bool | None,
+    detected_pwm: bool,
+    interactive: bool,
+    detected: list[str] | None = None,
+    ask=None,
+) -> tuple[bool, str]:
+    """Resolve the real-wheels decision. Pure but for `ask`; returns (choice, why).
+
+    Precedence, and the order is the safety argument:
+      1. An explicit ``--real-wheels`` / ``--simulated-wheels`` always wins.
+      2. No chip on the bus means no question and no real wheels, whatever the
+         archetype says: an rc-car archetype forced by hand on a bare host must
+         not produce a config naming a device that is not there.
+      3. A chip plus a terminal gets the question, defaulting to No.
+      4. A chip with no terminal (image firstboot, CI, ssh -T) gets simulated
+         wheels and a printed line saying how to change that. A machine that
+         cannot be asked is never assumed to have said yes.
+    """
+    if requested is not None:
+        return requested, "asked for on the command line"
+    if not detected_pwm:
+        return False, "no PWM controller detected"
+    if not interactive:
+        return False, (
+            "no terminal to ask — rerun with `castor up --real-wheels` "
+            "(wheels off the ground) to enable the PCA9685"
+        )
+    answer = (ask or input)(real_wheels_question(detected or []))
+    if answer.strip().lower() in ("y", "yes"):
+        return True, "you answered yes at the prompt"
+    return False, "you answered no at the prompt"
+
+
+def apply_real_wheels(text: str, enable: bool) -> str:
+    """Comment or uncomment the drive block of an EXISTING policy file.
+
+    `up` never rewrites `gateway-policy.env` — it carries hand-measured trims
+    and an operator's decision. But re-running with an explicit flag has to be
+    able to change that one decision, or the answer to "how do I turn the wheels
+    on now?" is again "open a file nobody told you about". So this touches
+    exactly the five lines in `DRIVE_VARS` and nothing else: trims, tier
+    bindings, allowlists and comments all survive byte-for-byte.
+    """
+    out = []
+    for line in text.splitlines(keepends=True):
+        bare = line.lstrip("#")
+        name = bare.split("=", 1)[0].strip()
+        if name not in DRIVE_VARS or "=" not in bare:
+            out.append(line)
+            continue
+        if enable and name == "OPENCASTOR_DRIVE" and bare.split("=", 1)[1].strip() == "simulated":
+            # An explicitly simulated robot: enabling means naming a real
+            # backend, not uncommenting the word "simulated". Any OTHER value is
+            # left alone — `maestro` is also real wheels, and this flag is not
+            # the place to overrule a controller choice somebody made on purpose.
+            bare = "OPENCASTOR_DRIVE=pca9685\n"
+        out.append(("" if enable else "#") + bare.lstrip())
+    return "".join(out)
+
+
+def policy_names_real_wheels(text: str) -> bool:
+    """True if an existing policy file has the drive block live (not commented).
+
+    Read rather than remembered: the operator may have edited this file by hand
+    between runs, and `up` reporting what it wrote last time instead of what the
+    gateway will actually read is exactly the class of lie this file exists to
+    stop.
+    """
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("OPENCASTOR_DRIVE=") and not stripped.endswith("=simulated"):
+            return True
+    return False
+
+
 def derive_identity(name: str) -> tuple[str, str]:
     """A locally-derived RRN and uuid for a robot not yet registered.
 
@@ -126,6 +251,10 @@ def render(template_name: str, plan: UpPlan, **extra: str) -> str:
         "rrn": plan.rrn,
         "uuid": plan.robot_uuid,
         "port_runtime": str(plan.runtime_port),
+        # The one character that decides whether this robot can move. Empty
+        # only when a human answered the real-wheels question; the dataclass
+        # default is False, so every other path renders the block commented.
+        "drive": "" if plan.real_wheels else "#",
         **extra,
     }
     for key, value in mapping.items():
@@ -312,6 +441,22 @@ def publish_manifest_key(key_file: Path, kid: str, rrf_dir: Path) -> Path:
 # ---------------------------------------------------------------------------
 
 
+def _stdin_is_a_terminal() -> bool:
+    """Can this run ask a question at all?
+
+    The image's firstboot runs `castor up` from a systemd unit with no stdin,
+    and CI runs it with a closed one. Both must reach the same answer a silent
+    machine deserves: simulated wheels, and a printed line saying how to change
+    it — never a prompt read from EOF and never a default of yes.
+    """
+    import sys
+
+    try:
+        return bool(sys.stdin and sys.stdin.isatty())
+    except Exception:  # noqa: BLE001 - a detached stdin is not a terminal
+        return False
+
+
 def _say(step: str, started: float) -> None:
     print(f"  [{time.monotonic() - started:5.1f}s] {step}")
 
@@ -325,6 +470,8 @@ def run_up(
     python: str | None = None,
     start_services: bool = True,
     link: bool = True,
+    real_wheels: bool | None = None,
+    ask=None,
 ) -> UpPlan:
     """The whole bring-up. Prints progress; returns the plan for callers/tests.
 
@@ -332,6 +479,11 @@ def run_up(
     universal link — a phone camera opens the app, or the /pair explainer page
     if it is not installed. ``link=False`` writes the raw-JSON QR only the app's
     in-app scanner reads.
+
+    ``real_wheels`` is the one decision `up` cannot make for you. ``None`` means
+    "ask, once, if there is a chip on the bus and a terminal to ask at";
+    ``True``/``False`` come from ``--real-wheels``/``--simulated-wheels`` and
+    skip the question. ``ask`` overrides ``input`` for tests.
     """
     started = time.monotonic()
     home = home.expanduser().resolve()
@@ -363,6 +515,29 @@ def run_up(
         rrn, robot_uuid = derive_identity(name)
         _say(f"identity: {rrn} (local — `castor register` upgrades it)", started)
 
+    # -- the one question ---------------------------------------------------
+    # Asked BEFORE anything is written, and only when this run would create the
+    # policy file: a rerun on a configured robot must not re-litigate a decision
+    # its operator already made (and possibly already trimmed for).
+    detected_pwm = any("PCA9685" in line for line in detected)
+    policy = home / "gateway-policy.env"
+    if real_wheels is None and policy.exists():
+        wheels = policy_names_real_wheels(policy.read_text())
+        why = "gateway-policy.env already exists — left untouched"
+    else:
+        wheels, why = decide_real_wheels(
+            requested=real_wheels,
+            detected_pwm=detected_pwm,
+            interactive=_stdin_is_a_terminal(),
+            detected=detected,
+            ask=ask,
+        )
+    if real_wheels and not detected_pwm:
+        # --real-wheels on a bus with nothing on it. Honoured (the chip may be
+        # unpowered while the operator wires it), but never silently: the
+        # gateway will refuse to start until the board answers.
+        _say("warning: --real-wheels but no PCA9685 answered at 0x40", started)
+
     plan = UpPlan(
         name=name,
         home=home,
@@ -371,6 +546,7 @@ def run_up(
         robot_uuid=robot_uuid,
         base_port=base_port,
         detected=detected,
+        real_wheels=wheels,
     )
 
     # -- home dir ------------------------------------------------------------
@@ -384,12 +560,28 @@ def run_up(
     _say(f"ROBOT.md written and signed (kid {manifest_kid})", started)
 
     (home / "robot.rcan.yaml").write_text(render("robot.rcan.yaml.tmpl", plan))
-    policy = home / "gateway-policy.env"
     if not policy.exists():
-        # Never overwritten: this file is where an operator later flips
-        # simulated wheels to real ones, and a rerun of `up` must not
-        # silently reverse that decision — or make it.
+        # Never overwritten wholesale: this file carries hand-measured trims and
+        # an operator's decision, and a rerun of `up` must not silently reverse
+        # either. Only the five drive lines are ever touched again, and only on
+        # an explicit flag (below).
         policy.write_text(render("gateway-policy.env.tmpl", plan))
+    elif real_wheels is not None:
+        before = policy.read_text()
+        after = apply_real_wheels(before, real_wheels)
+        if after != before:
+            policy.write_text(after)
+            _say(
+                f"gateway-policy.env: drive block "
+                f"{'UNCOMMENTED (real wheels)' if real_wheels else 'commented out (simulated)'}",
+                started,
+            )
+    _say(
+        ("wheels: REAL (PCA9685) — " if wheels else "wheels: simulated — ") + why,
+        started,
+    )
+    if wheels:
+        print("\n  " + WHEELS_OFF_THE_GROUND + "\n")
     (home / "runtime.py").write_text(render("runtime.py.tmpl", plan))
 
     # -- bearers + runtime tokens (reused: rotating them un-pairs the phone) --

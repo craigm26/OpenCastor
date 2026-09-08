@@ -12,9 +12,14 @@ from pathlib import Path
 import pytest
 
 from castor.up import (
+    DRIVE_VARS,
     UpPlan,
+    apply_real_wheels,
+    decide_real_wheels,
     derive_identity,
     pick_archetype,
+    policy_names_real_wheels,
+    real_wheels_question,
     render,
     sign_manifest,
     unit_files,
@@ -92,14 +97,190 @@ def test_resigning_reuses_the_key(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_THERULE_generated_policy_drives_simulated_wheels():
-    # The template was cut from a live robot AFTER its wheels went real, and
-    # quietly carried that decision to every future robot: the first scratch
-    # bring-up constructed PCA9685Drive out of the box. `up` must never
-    # generate a config that can move hardware.
+def test_THERULE_generated_policy_drives_simulated_wheels_unless_asked():
+    # The rule, restated. The template was cut from a live robot AFTER its
+    # wheels went real, and quietly carried that decision to every future robot:
+    # the first scratch bring-up constructed PCA9685Drive out of the box. The
+    # rule is not "the drive lines are always commented" — that made the flip a
+    # file nobody mentions — it is that NOTHING BUT AN EXPLICIT ANSWER can
+    # produce a config that moves hardware. UpPlan.real_wheels defaults False,
+    # so every path that does not carry an answer renders the safe file.
     text = render("gateway-policy.env.tmpl", plan())
     live = [l for l in text.splitlines() if l.startswith("OPENCASTOR_DRIVE")]
-    assert live == [], f"template enables real drive: {live}"
+    assert live == [], f"template enables real drive by default: {live}"
+
+
+def test_an_answered_yes_renders_the_drive_block_live():
+    text = render("gateway-policy.env.tmpl", plan(real_wheels=True))
+    live = [l.split("=")[0] for l in text.splitlines() if l.startswith("OPENCASTOR_DRIVE")]
+    assert live == list(DRIVE_VARS)
+    assert "OPENCASTOR_DRIVE=pca9685" in text.splitlines()
+
+
+def test_THEBUG_template_channels_match_both_real_vehicles():
+    # The template shipped throttle 0 / steering 1. The live rover runs throttle
+    # 1 / steering 0 and keeps a backup file named `.bak-channelswap` to prove
+    # what that cost; carbot agrees with the rover. A cross-plugged harness is
+    # invisible to every bench test ("the steering command produced a pulse on
+    # the steering channel" is true whatever is in that pin), so the default has
+    # to be the one both real cars actually use.
+    text = render("gateway-policy.env.tmpl", plan(real_wheels=True))
+    assert "OPENCASTOR_DRIVE_THROTTLE_CHANNEL=1" in text.splitlines()
+    assert "OPENCASTOR_DRIVE_STEERING_CHANNEL=0" in text.splitlines()
+
+
+def test_the_policy_template_points_at_a_checklist_that_exists():
+    # `gateway-policy.env.tmpl` used to say "the PCA9685 bring-up checklist" with
+    # no such file in the repository — a dead reference at the exact moment the
+    # user needs it, since this is the file they are editing to make the car move.
+    text = render("gateway-policy.env.tmpl", plan())
+    assert "docs/hardware/pca9685-bringup.md" in text
+    doc = Path(__file__).resolve().parents[1] / "docs" / "hardware" / "pca9685-bringup.md"
+    assert doc.is_file(), "the checklist the template names must be in the repo"
+
+
+def test_the_template_does_not_leak_the_donor_robots_name():
+    text = render("gateway-policy.env.tmpl", plan())
+    assert "Rover" not in text and "rover" not in text
+
+
+# ---------------------------------------------------------------------------
+# The one question: real wheels
+# ---------------------------------------------------------------------------
+
+
+def test_an_explicit_flag_beats_everything_including_a_bare_bus():
+    # --real-wheels on a host where the chip has not answered is honoured (it
+    # may be unpowered while the operator wires it) — `up` warns, the gateway
+    # refuses to start until the board is there.
+    assert decide_real_wheels(requested=True, detected_pwm=False, interactive=False)[0] is True
+    assert decide_real_wheels(requested=False, detected_pwm=True, interactive=True)[0] is False
+
+
+def test_no_chip_means_no_question_and_no_real_wheels():
+    asked = []
+    choice, why = decide_real_wheels(
+        requested=None, detected_pwm=False, interactive=True,
+        ask=lambda prompt: asked.append(prompt) or "y",
+    )
+    assert choice is False and asked == [], "nothing to drive, nothing to ask"
+    assert "no PWM controller" in why
+
+
+def test_THERULE_a_machine_that_cannot_be_asked_never_says_yes():
+    # The image's firstboot runs `up` from a unit with no stdin. Reading a
+    # prompt from EOF, or treating "could not ask" as consent, would make every
+    # flashed card a car that can move on first boot.
+    choice, why = decide_real_wheels(requested=None, detected_pwm=True, interactive=False)
+    assert choice is False
+    assert "--real-wheels" in why, "and it must say how to change that"
+
+
+@pytest.mark.parametrize("answer,expected", [
+    ("y", True), ("Y", True), ("yes", True), (" YES \n", True),
+    ("", False), ("n", False), ("no", False), ("sure", False), ("1", False),
+])
+def test_only_an_actual_yes_is_a_yes(answer, expected):
+    choice, _ = decide_real_wheels(
+        requested=None, detected_pwm=True, interactive=True, ask=lambda _: answer,
+    )
+    assert choice is expected
+
+
+def test_the_question_names_the_chip_that_was_actually_found():
+    # The evidence for the question has to travel with the question: a prompt
+    # that says "a PCA9685" reads as boilerplate, one that quotes the bus scan
+    # is the machine telling you what it saw.
+    seen = []
+    decide_real_wheels(
+        requested=None, detected_pwm=True, interactive=True,
+        detected=["PCA9685 PWM controller at 0x40 (i2c)"],
+        ask=lambda prompt: seen.append(prompt) or "n",
+    )
+    assert "0x40" in seen[0]
+
+
+def test_the_question_carries_the_wheels_off_the_ground_warning():
+    q = real_wheels_question(["PCA9685 PWM controller at 0x40 (i2c)"])
+    assert "WHEELS OFF THE GROUND" in q
+    assert "docs/hardware/pca9685-bringup.md" in q
+    assert q.rstrip().endswith("[y/N]"), "the default must read as No"
+
+
+# ---------------------------------------------------------------------------
+# Flipping an ALREADY-WRITTEN policy file
+# ---------------------------------------------------------------------------
+
+
+LIVE_POLICY = (
+    'ROBOT_MD_TOOL_ALLOWLIST="drive.set,drive.stop"\n'
+    "#OPENCASTOR_DRIVE=pca9685\n"
+    "#OPENCASTOR_DRIVE_I2C_BUS=1\n"
+    "#OPENCASTOR_DRIVE_I2C_ADDRESS=0x40\n"
+    "#OPENCASTOR_DRIVE_THROTTLE_CHANNEL=1\n"
+    "#OPENCASTOR_DRIVE_STEERING_CHANNEL=0\n"
+    "OPENCASTOR_DRIVE_THROTTLE_NEUTRAL_US=1487\n"
+)
+
+
+def test_flipping_the_drive_block_touches_nothing_else():
+    # gateway-policy.env carries hand-MEASURED trims. A flip that rewrote the
+    # file from the template would silently discard an afternoon on a stand.
+    on = apply_real_wheels(LIVE_POLICY, True)
+    assert "OPENCASTOR_DRIVE_THROTTLE_NEUTRAL_US=1487" in on, "measured trim survived"
+    assert 'ROBOT_MD_TOOL_ALLOWLIST="drive.set,drive.stop"' in on
+    assert apply_real_wheels(on, False) == LIVE_POLICY, "and the flip is reversible"
+
+
+def test_enabling_replaces_an_explicit_simulated_rather_than_uncommenting_it():
+    # A robot whose file says OPENCASTOR_DRIVE=simulated out loud: uncommenting
+    # is not enough, the value itself is the switch.
+    on = apply_real_wheels("OPENCASTOR_DRIVE=simulated\n", True)
+    assert on == "OPENCASTOR_DRIVE=pca9685\n"
+
+
+def test_enabling_leaves_another_real_backend_alone():
+    # `maestro` is also real wheels, and is chosen for its hardware failsafe.
+    # --real-wheels must not overrule a controller somebody picked on purpose.
+    assert apply_real_wheels("#OPENCASTOR_DRIVE=maestro\n", True) == "OPENCASTOR_DRIVE=maestro\n"
+
+
+def test_up_reports_what_the_gateway_will_read_not_what_it_wrote_last_time():
+    assert policy_names_real_wheels(apply_real_wheels(LIVE_POLICY, True)) is True
+    assert policy_names_real_wheels(LIVE_POLICY) is False
+    assert policy_names_real_wheels("OPENCASTOR_DRIVE=simulated\n") is False
+
+
+# ---------------------------------------------------------------------------
+# The manifest's own contract (trap 7): a schema that cannot draft a stop
+# ---------------------------------------------------------------------------
+
+
+def _contract(tool: str) -> dict:
+    import yaml
+
+    front = render("ROBOT.md.tmpl", plan()).split("---")[1]
+    return yaml.safe_load(front)["capability_contracts"][tool]
+
+
+def test_THETRAP_drive_set_duration_has_no_default_a_model_could_copy():
+    # The generated manifest is the document a drafting model reads. It used to
+    # say `duration_s: {kind: float, default: 0}` while its own prose fifty
+    # lines later promised 400 ms — and 0 is a zero-length lease, which the
+    # actuator treats as a STOP. A model that filled in the schema default wrote
+    # a stop and reported a drive. There is no safe default for this field, so
+    # it has none, and it is required instead.
+    duration = _contract("drive.set")["args"]["duration_s"]
+    assert "default" not in duration, "a default here is a default STOP"
+    assert duration["required"] is True
+
+
+def test_the_manifest_prose_and_the_schema_agree_about_duration():
+    text = render("ROBOT.md.tmpl", plan())
+    assert "**required, and has no default**" in text
+    assert "A command that states no duration gets 400 ms." not in text, (
+        "the old prose contradicted the schema; both now say the same thing"
+    )
 
 
 def test_the_manifest_template_carries_the_substituted_identity():
@@ -258,6 +439,90 @@ def test_up_no_link_writes_the_raw_json_qr(tmp_path, monkeypatch):
     reference = tmp_path / "ref.png"
     qrcode.make(compact_payload_json(payload)).save(str(reference))
     assert (home / "pair-qr.png").read_bytes() == reference.read_bytes()
+
+
+def test_up_on_a_bare_host_writes_a_policy_that_cannot_move(tmp_path, monkeypatch):
+    import sys
+
+    import castor.up as up
+
+    _stub_the_host(monkeypatch, tmp_path)  # scan_i2c returns []
+    home = tmp_path / "testbot"
+    up.run_up(home=home, base_port=8300, python=sys.executable, start_services=False)
+    policy = (home / "gateway-policy.env").read_text()
+    assert [l for l in policy.splitlines() if l.startswith("OPENCASTOR_DRIVE")] == []
+
+
+def test_up_real_wheels_writes_the_drive_block_live(tmp_path, monkeypatch):
+    import sys
+
+    import castor.up as up
+
+    _stub_the_host(monkeypatch, tmp_path)
+    home = tmp_path / "testbot"
+    up.run_up(home=home, base_port=8300, python=sys.executable, start_services=False,
+              real_wheels=True)
+    policy = (home / "gateway-policy.env").read_text()
+    assert "OPENCASTOR_DRIVE=pca9685" in policy.splitlines()
+    assert "OPENCASTOR_DRIVE_THROTTLE_CHANNEL=1" in policy.splitlines()
+
+
+def test_a_rerun_never_re_asks_and_never_reverses_the_decision(tmp_path, monkeypatch):
+    # Idempotence, and it is a safety property in both directions: a rerun must
+    # not turn a simulated robot real, and must not turn a trimmed real robot
+    # back to simulated behind the operator's back.
+    import sys
+
+    import castor.up as up
+
+    _stub_the_host(monkeypatch, tmp_path)
+    home = tmp_path / "testbot"
+    up.run_up(home=home, base_port=8300, python=sys.executable, start_services=False,
+              real_wheels=True)
+    (home / "gateway-policy.env").write_text(
+        (home / "gateway-policy.env").read_text() + "\n# hand note\n"
+    )
+    monkeypatch.setattr(up, "_stdin_is_a_terminal", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *a: pytest.fail("a rerun must not ask"))
+    up.run_up(home=home, base_port=8300, python=sys.executable, start_services=False)
+    policy = (home / "gateway-policy.env").read_text()
+    assert "OPENCASTOR_DRIVE=pca9685" in policy.splitlines(), "decision survived the rerun"
+    assert "# hand note" in policy, "and so did the hand edit"
+
+
+def test_an_explicit_flag_flips_an_existing_robot(tmp_path, monkeypatch):
+    # The answer to "I already ran up, how do I turn the wheels on now?" has to
+    # be a command, not "open a file nobody told you about".
+    import sys
+
+    import castor.up as up
+
+    _stub_the_host(monkeypatch, tmp_path)
+    home = tmp_path / "testbot"
+    up.run_up(home=home, base_port=8300, python=sys.executable, start_services=False)
+    up.run_up(home=home, base_port=8300, python=sys.executable, start_services=False,
+              real_wheels=True)
+    assert "OPENCASTOR_DRIVE=pca9685" in (home / "gateway-policy.env").read_text().splitlines()
+    up.run_up(home=home, base_port=8300, python=sys.executable, start_services=False,
+              real_wheels=False)
+    live = [l for l in (home / "gateway-policy.env").read_text().splitlines()
+            if l.startswith("OPENCASTOR_DRIVE=")]
+    assert live == [], "--simulated-wheels puts it back"
+
+
+def test_up_prints_the_wheels_off_the_ground_warning_when_it_goes_real(
+    tmp_path, monkeypatch, capsys
+):
+    import sys
+
+    import castor.up as up
+
+    _stub_the_host(monkeypatch, tmp_path)
+    up.run_up(home=tmp_path / "testbot", base_port=8300, python=sys.executable,
+              start_services=False, real_wheels=True)
+    out = capsys.readouterr().out
+    assert "WHEELS OFF THE GROUND" in out
+    assert "pca9685-bringup.md" in out
 
 
 # ---------------------------------------------------------------------------

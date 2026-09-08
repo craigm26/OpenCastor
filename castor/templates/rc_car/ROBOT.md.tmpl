@@ -88,8 +88,16 @@ capability_contracts:
         kind: float
         default: 0
       duration_s:
+        # REQUIRED, and deliberately WITHOUT a default. A schema default is the
+        # number a drafting model copies when it has no opinion, and for this
+        # field the only defensible default is the one value that means STOP:
+        # duration_s is a lease, and a zero-length lease returns the wheels to
+        # neutral. A contract whose default silently stops the car while the
+        # receipt reports a drive is a contract that teaches models to lie.
+        # State a number. 0.4 is the actuator's own fallback for a caller that
+        # omits the field entirely; 2.0 is the hard ceiling on any one command.
         kind: float
-        default: 0
+        required: true
     returns:
       throttle:
         kind: float
@@ -172,10 +180,19 @@ is granted as asked, cut to a hard ceiling of 2 s for any one command and to
 whatever motion budget the envelope has left. The `lease_s` on the signed
 receipt is the lease the deadman will actually enforce — both are read from the
 watchdog itself, so they cannot disagree — and `stops_at_monotonic` says when
-the wheels stop, within one 50 ms watchdog tick and never sooner. A command that
-states no duration gets 400 ms. It is a Python thread on Linux: it covers a
-locked phone, a crashed app, dropped Wi-Fi, and a hung gateway. It does **not**
-cover the kernel stalling, the process being SIGKILLed, or the Pi browning out.
+the wheels stop, within one 50 ms watchdog tick and never sooner. It is a Python
+thread on Linux: it covers a locked phone, a crashed app, dropped Wi-Fi, and a
+hung gateway. It does **not** cover the kernel stalling, the process being
+SIGKILLed, or the Pi browning out.
+
+`duration_s` is **required, and has no default** — which looks like an omission
+and is not. A lease of zero is a STOP, so a schema default of 0 would be a
+contract that hands every under-specified command back as a halt the receipt then
+describes as a drive, and the default in a schema is exactly the number a
+drafting model copies when it has no opinion. State a duration. A caller that
+omits it anyway gets the actuator's own fallback of 400 ms: short enough to be a
+mistake you watch happen, and never a value this document taught anyone to send.
+
 The authoritative stop must be a lease that expires in firmware, on an MCU
 between the Pi and the ESC. Until that exists this manifest describes a vehicle
 that must run with its wheels off the ground — and here they do not exist.
