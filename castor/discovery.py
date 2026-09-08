@@ -396,7 +396,7 @@ def decode(info) -> FoundRobot:
 
 
 def browse(timeout: float = 3.0, *, include_legacy: bool = True) -> list[FoundRobot]:
-    """Browse the LAN and return what is advertising, newest answer wins.
+    """Browse the LAN and return what is advertising, one entry per robot.
 
     Uses python-zeroconf rather than `avahi-browse`, and that is not a
     preference. avahi-browse on this bench reports nothing for records that
