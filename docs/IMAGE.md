@@ -36,7 +36,7 @@ headed with.
 | Runtime | `opencastor` in a venv at `/opt/opencastor`, built from the working tree |
 | Actuator | `rc-car-actuator` — **not on PyPI**, carried as a wheel so the image never waits on a publish |
 | Gateway | `robot-md-gateway`, pinned to the build the bench runs |
-| Brain | ollama + `qwen3.5:2b` (2.6 GiB) already in the store, so the robot has a local model before it has a network |
+| Brain | ollama + `qwen3:1.7b` (1.27 GiB) already in the store, so the robot has a local model before it has a network. The size is a release constraint, not a preference — see [One file](#one-file-and-what-it-costs) |
 | Provisioner | `opencastor-firstboot.service` — runs `castor up` once, then never again |
 | Interface | `opencastor-qr.service` — the pairing page on port 80 |
 | Provenance | `/etc/opencastor-image.json` — the commit, whether the tree was dirty, and the wheelhouse manifest hash |
@@ -54,8 +54,14 @@ machine** — the build uses a native chroot and there is no qemu in it:
 ```
 ~/image-build/raspios-lite-arm64.img.xz     Raspberry Pi OS Lite arm64
 ~/image-build/ollama-linux-arm64.tar.zst    the official ollama release tarball
-~/.ollama/models                            with qwen3.5:2b pulled
+~/.ollama/models                            with qwen3:1.7b pulled
 ~/projects/RobotRegistryFoundation/rc-car-actuator/dist/   the built wheel
+```
+
+The model is the one input a fresh build host will not have:
+
+```bash
+ollama pull qwen3:1.7b
 ```
 
 Every path is overridable — `./scripts/image/build.sh --help` lists the
@@ -101,6 +107,7 @@ Useful flags:
 | `--no-compress` | stop at the `.img`; skip the 10–20 minute xz while iterating |
 | `--reuse-img` | keep the already-unpacked work image; every stage is idempotent |
 | `--xz-preset N` | 0–9, optionally with xz's `e` suffix. Validated when the flag is parsed, not when `xz` finally runs 25 minutes later |
+| `--asset-budget N` | the largest `.xz` this build may emit, in bytes. Default `2147483648` — GitHub's per-release-asset cap. Checked in preflight from measured inputs *and* again on the real file. Raise it only for a build that is not going to a release |
 
 Output lands in `~/image-build/work/`:
 
@@ -125,7 +132,7 @@ inside the image, and `opencastor-image.json` next to the artifacts (because an
   "wheelhouse_manifest_sha256": "…",
   "wheelhouse_wheels": 98,
   "base_image": "raspios-lite-arm64.img.xz",
-  "model": "qwen3.5:2b"
+  "model": "qwen3:1.7b"
 }
 ```
 
@@ -149,6 +156,97 @@ edits ships code that exists in no commit and `git_head` describes nothing.
 
 **About 25 minutes total**, most of it the final compression. Use
 `--no-compress` while iterating.
+
+---
+
+## Release it
+
+### One file, and what it costs
+
+The `image-v0.1.0` release shipped as `opencastor-pi.img.xz.part-00` (1.68 GB)
+and `.part-01` (1.64 GB), with these two lines in the release body — quoted
+here as the thing that must never come back, not as something to do:
+
+> `cat opencastor-pi.img.xz.part-* > opencastor-pi.img.xz`
+> `sha256sum -c opencastor-pi.img.xz.sha256`
+
+That is a terminal, on the path whose first claim is that there is no terminal,
+at the one moment the owner has nothing else to go on.
+
+**The image ships as one file or it is not a release.**
+
+`build.sh` now enforces that rather than trusting
+whoever does the upload: `--asset-budget` (default 2 GiB, GitHub's per-asset
+cap) is checked in preflight from measured inputs, and again against the real
+`.xz` before the build says "done". Neither check offers `split` as a way out.
+
+The arithmetic, measured on the 2026-08-17 build rather than estimated:
+
+| | bytes | |
+|---|---:|---|
+| `opencastor-pi.img.xz` as shipped | 3,321,684,768 | 3.09 GiB, in two parts |
+| of which `qwen3.5:2b`'s blobs | 2,741,192,820 | already compressed; xz cannot touch them |
+| **everything else, compressed** | **580,491,948** | base rootfs + venv + ollama binary |
+| GitHub's per-asset cap | 2,147,483,648 | 2 GiB |
+| **so the model's budget is** | **1,566,991,700** | 2 GiB minus the 580 MB above |
+
+The model is the release size. Nothing else on the card is within an order of
+magnitude of it, so no amount of stripping packages out of
+`requirements-image.txt` closes a 1.17 GB gap out of a 580 MB compressible
+pool — even `qwen3.5:2b-q4_K_M` (1,945,323,638) misses by 378 MB. The decision
+is therefore a smaller model:
+
+| Model | blobs | projected `.xz` | verdict |
+|---|---:|---:|---|
+| `qwen3.5:2b` | 2,741,192,820 | 3.09 GiB | what shipped, in two parts |
+| `qwen3.5:2b-q4_K_M` | 1,945,323,638 | 2.35 GiB | still over by 378 MB |
+| **`qwen3:1.7b`** | **1,359,293,444** | **1.81 GiB** | **the default. 198 MiB of margin** |
+| `qwen2.5:1.5b` | 986,061,892 | 1.46 GiB | 580 MiB of margin |
+| `gemma3:1b` | 815,319,791 | 1.30 GiB | 751 MiB of margin |
+
+198 MiB is about 10% margin. It is the venv that will eat it: if
+`build-wheelhouse.sh` grows, preflight says so *before* the build starts, and
+the next model down is one environment variable away. `build.sh` also warns
+when its projection missed reality by more than 100 MiB and prints the new
+constant to paste back into `XZ_OTHER_MEASURED`.
+
+The download is now 1.94 GB instead of 3.32 GB. That is not a nicety: the
+stopwatch below starts at the download link, so it is 42% off the largest slice
+of a slow-connection run.
+
+### The publish, in one command
+
+```bash
+sudo ./scripts/image/build.sh --shrink
+
+gh release create image-vX.Y.Z --repo craigm26/OpenCastor \
+  --title "OpenCastor Pi image X.Y.Z" \
+  ~/image-build/work/opencastor-pi.img.xz \
+  ~/image-build/work/opencastor-pi.img.xz.sha256 \
+  ~/image-build/work/opencastor-image.json
+```
+
+`build.sh` prints that same command with the paths filled in when it finishes.
+
+### Release checklist
+
+1. `git status` is clean. `build-wheelhouse.sh` builds `opencastor` **from the
+   working tree**, so a dirty tree ships code that exists in no commit.
+2. `ollama pull qwen3:1.7b` — the one staged input a fresh host lacks.
+3. `./scripts/image/build-wheelhouse.sh`
+4. `./scripts/image/selftest.sh` — green.
+5. `sudo ./scripts/image/build.sh --dry-run` — read the `release ~X projected
+   .xz … vs a 2.0 GiB cap` line. If it refuses here, it has told you what to
+   change; do not argue with it at minute twenty-five.
+6. `sudo ./scripts/image/build.sh --shrink`
+7. **Exactly three assets**, and the `.xz` is one file:
+   `opencastor-pi.img.xz`, `.sha256`, `opencastor-image.json`. If you find
+   yourself typing `split`, stop: go back to step 5.
+8. Release body: the download link, "open Raspberry Pi Imager, choose the file
+   you just downloaded, set hostname and Wi-Fi, write". No `cat`. No
+   `sha256sum`. The checksum asset is there for people who want it, not as a
+   step.
+9. Run the stopwatch below, on hardware, with somebody who has not seen it.
 
 ---
 
@@ -232,15 +330,27 @@ the strength of this stopwatch.
 Run it with somebody who has not seen the robot before. Watch them; do not
 help. Record the hardware, because the answer depends on it.
 
+**The clock starts when they click the download link, not when they click
+Write.** The earlier version of this table started at Write, which excluded the
+download entirely — and the download was, and still is, one of the two largest
+slices. A stopwatch that starts after the slowest step is not a measurement of
+anything.
+
 | # | Step | Start the clock at | Record |
 |---|---|---|---|
-| 1 | Imager: select the image, set hostname + Wi-Fi | clicking **Write** | ⏱ write + verify |
+| 0 | Click the release's download link | **the click** | ⏱ to file on disk |
+| 1 | Imager: select that file, set hostname + Wi-Fi, Write | file on disk | ⏱ write + verify |
 | 2 | Card into the Pi, power on | card seated | ⏱ |
 | 3 | First boot (Imager's `firstrun.sh`, then reboot) | power on | ⏱ to reboot |
 | 4 | Second boot to `http://<hostname>.local/` answering | reboot | ⏱ to first page |
 | 5 | Page reaches **ready to pair** | first page | ⏱ to QR |
 | 6 | Scan with the app; robot appears paired | QR visible | ⏱ to paired |
 | | **Total** | | **must be < 10:00** |
+
+There is no step between 0 and 1. That is the point of the one-file rule: the
+old release had a `cat` and a `sha256sum -c` in there, and those two commands
+cost about ninety seconds and required the terminal this whole path exists to
+avoid.
 
 Also record:
 
@@ -252,21 +362,41 @@ Also record:
 
 ### The arithmetic to expect, honestly
 
-Without `--shrink` the image is about **7.8 GiB uncompressed**. Imager writes
-every byte of that and then reads it all back to verify:
+**Step 0, the download.** The asset is **1.94 GB** (`qwen3:1.7b`; it was
+3.32 GB and two files):
+
+| Connection | Download |
+|---|---|
+| 100 Mbit/s | ~2.6 min |
+| 25 Mbit/s | ~10.3 min — **blows the budget on step 0 alone** |
+
+**Step 1, the flash.** Without `--shrink` the image is about **7.8 GiB
+uncompressed** — the model got smaller but `MIN_GROW_MIB` did not, so this
+number is unchanged. Imager writes every byte and reads it all back to verify:
 
 | Reader + card | Write + verify |
 |---|---|
 | USB 3 + UHS-I A2 (~80 MB/s) | ~3.5 min |
-| USB 2 + ordinary class 10 (~20 MB/s) | ~13 min — **blows the budget on step 1 alone** |
+| USB 2 + ordinary class 10 (~20 MB/s) | ~14 min — **blows the budget on step 1 alone** |
 
-With `--shrink` the image is roughly **5.8 GiB**, which is about 2 GiB less to
-write and 2 GiB less to verify.
+With `--shrink` the image should come out around **4.5 GiB** (5.8 GiB before
+the smaller model), which is ~2.0 min and ~8.1 min on those two readers. That
+figure is projected, not measured: `--shrink` has never been run at root.
 
-Steps 2–6 should total around 2–3 minutes: two boots plus a `castor up` that
-has nothing to download. So the ten minutes is comfortably met on a fast reader
-and *not* met on a slow one. If a run misses, the number to report is step 1's,
-not the total — the fix is image size and card choice, not the robot.
+**Steps 2–6** should total around 2–3 minutes: two boots plus a `castor up`
+that has nothing to download. Add ~30 s if the I2C bus needed the third boot.
+
+So, end to end:
+
+| Path | 0 | 1 | 2–6 | Total |
+|---|---|---|---|---|
+| 100 Mbit/s, USB 3 + A2, `--shrink` | 2.6 | 2.0 | 2.5 | **~7.1 min — met** |
+| 25 Mbit/s, USB 2 + class 10, `--shrink` | 10.3 | 8.1 | 2.5 | **~21 min — not met** |
+
+The ten minutes is met on a fast connection and a fast reader, and is not met
+on a slow one — and now the document says which slice missed. If a run misses,
+report step 0's and step 1's numbers, not the total: the fix is asset size and
+card choice, not the robot.
 
 ---
 
@@ -424,7 +554,15 @@ checks, all green as of this writing:
   in it
 - `build.sh --dry-run`, including that it creates nothing, that it names the
   commit it would bake, and that it warns when the tree is dirty
-- `--xz-preset` argument validation, including the missing-value case
+- `--xz-preset` and `--asset-budget` argument validation, including the
+  missing-value and wrong-units cases
+- **the one-file rule, both ways**: a dry run with a model that fits reports
+  its projection and passes; a dry run with a model that does not fails, names
+  the shortfall, refuses the split and lists the models that do fit. Run
+  against the model that actually shipped, the check fires 6 seconds in and
+  says *over by 1.1 GiB* — which is what should have happened on
+  2026-08-17 instead of a `split`. The projection is also accurate: it said
+  3.1 GiB for that build and the real `.xz` was 3.09 GiB
 - the firstboot degradation path, run for real: a partial boot must still leave
   parseable JSON that names every cause, and no stamp — plus both ends of the
   stamp decision, a boot with a QR (stamps) and one without (must not)
@@ -470,5 +608,12 @@ and nothing more:
   `dtparam i2c_arm=on` brings `/dev/i2c-1` up on a running Pi 5 without a
   reboot, and that when it does not, one reboot is enough. The decision logic
   is rehearsed above against stubs; the two Pi commands are not
-- **and then, on hardware: flash, boot twice, and run the stopwatch above.**
-  The ten minutes is a measurement, not a claim.
+- **the size of a `qwen3:1.7b` image.** 1.94 GB is a projection built from the
+  2026-08-17 measurement, not a file anyone has weighed. The post-`xz` check
+  catches it if it is wrong, and prints the constant to correct
+  `XZ_OTHER_MEASURED` with
+- **`--shrink` at ~4.5 GiB.** Also projected, and `--shrink` itself has never
+  been run at root
+- **and then, on hardware: flash, boot twice, and run the stopwatch above —
+  now starting at the download link.** The ten minutes is a measurement, not a
+  claim.

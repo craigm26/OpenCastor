@@ -231,12 +231,41 @@ fi
 # ===========================================================================
 stage "5. build.sh --dry-run (rootless, validates every staged input)"
 # ===========================================================================
+# WHICH MODEL THIS STAGE RUNS WITH, AND WHY IT IS NOT SIMPLY THE DEFAULT.
+# build.sh's default model has to be PULLED before a build; a host that has
+# not pulled it fails preflight for a reason that has nothing to do with the
+# code under test. So the input/flag checks run against the smallest model
+# this host actually has staged, and the default gets its own check below.
+STORE="${OPENCASTOR_MODEL_STORE:-$HOME/.ollama/models}"
+STAGED_MODEL="$(python3 - "$STORE" <<'PYEOF'
+import json, os, sys
+store = sys.argv[1]
+lib = os.path.join(store, "manifests", "registry.ollama.ai", "library")
+best = None
+for repo in sorted(os.listdir(lib)) if os.path.isdir(lib) else []:
+    d = os.path.join(lib, repo)
+    for tag in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        try:
+            m = json.load(open(os.path.join(d, tag)))
+            n = sum(os.path.getsize(os.path.join(store, "blobs", l["digest"].replace(":", "-")))
+                    for l in [m["config"], *m["layers"]])
+        except Exception:
+            continue
+        if best is None or n < best[0]:
+            best = (n, f"{repo}:{tag}")
+print(best[1] if best else "")
+PYEOF
+)"
 DRY="$TMP/dry.out"
-"$HERE/build.sh" --dry-run > "$DRY" 2>&1
-check $? "build.sh --dry-run exits clean" "$(tail -5 "$DRY")"
+if [ -z "$STAGED_MODEL" ]; then
+  skip "no ollama model is staged in $STORE — build.sh --dry-run cannot run here"
+  : > "$DRY"
+else
+env OPENCASTOR_MODEL="$STAGED_MODEL" "$HERE/build.sh" --dry-run > "$DRY" 2>&1
+check $? "build.sh --dry-run exits clean (model $STAGED_MODEL)" "$(tail -5 "$DRY")"
 assert "--dry-run reports every input present" grep -q 'dry run: every input is present' "$DRY"
 assert "--dry-run prints the computed growth" grep -q 'grow by' "$DRY"
-assert "--dry-run names the model it will stage" grep -q 'qwen3.5:2b' "$DRY"
+assert "--dry-run names the model it will stage" grep -q "$STAGED_MODEL" "$DRY"
 assert "--dry-run states the boot partition is read-only" grep -q 'READ-ONLY' "$DRY"
 # Refusing to run as root is not the same as running: prove nothing was made.
 assert "--dry-run created no work image" \
@@ -275,6 +304,55 @@ assert "a bad OPENCASTOR_XZ_PRESET is caught too" \
   not env OPENCASTOR_XZ_PRESET=99 "$HERE/build.sh" -h
 assert "a good OPENCASTOR_XZ_PRESET still works" \
   env OPENCASTOR_XZ_PRESET=0 "$HERE/build.sh" -h
+
+# -- ONE FILE: the release-size budget, both ways ---------------------------
+# The 2026-08-17 release shipped as .part-00 and .part-01 with a `cat` and a
+# `sha256sum -c` in the release body — three terminal steps on the path whose
+# central claim is that there is no terminal, and three steps the ten-minute
+# stopwatch never counted because it started at "click Write". So the build
+# now refuses to emit something that cannot be one asset, and it refuses at
+# minute zero rather than after the xz.
+assert "--dry-run projects the release size against the per-asset cap" \
+  grep -q 'projected .xz' "$DRY"
+assert "…and says it fits, for a model that fits" \
+  not grep -q 'would not ship as ONE file' "$DRY"
+env OPENCASTOR_MODEL="$STAGED_MODEL" "$HERE/build.sh" --dry-run --asset-budget 1 \
+  >"$TMP/budget.out" 2>&1
+check "$([ $? -ne 0 ] && echo 0 || echo 1)" \
+  "a model that cannot ship as one asset FAILS the dry run"
+assert "…naming the shortfall, not just the failure" \
+  grep -q 'over by' "$TMP/budget.out"
+assert "…and refusing the split rather than suggesting it" \
+  grep -q 'Splitting is not the answer' "$TMP/budget.out"
+assert "…and offering models that do fit" \
+  grep -q 'OPENCASTOR_MODEL=' "$TMP/budget.out"
+fi   # STAGED_MODEL
+
+assert "--asset-budget with no value errors instead of \$2-unbound" \
+  not "$HERE/build.sh" --asset-budget
+assert "--asset-budget 2GB is rejected — it is BYTES" \
+  not "$HERE/build.sh" --asset-budget 2GB -h
+assert "--asset-budget 0 is rejected" not "$HERE/build.sh" --asset-budget 0 -h
+assert "--asset-budget 2147483648 is accepted" \
+  "$HERE/build.sh" --asset-budget 2147483648 -h
+assert "a bad OPENCASTOR_ASSET_BUDGET is caught too" \
+  not env OPENCASTOR_ASSET_BUDGET=lots "$HERE/build.sh" -h
+# Nothing in the rail may reintroduce the split, in code or in the runbook.
+# A CALL to split(1), not the word: build.sh's own help text and its refusal
+# message both talk about splitting, which is exactly the point of them.
+assert "build.sh never calls split(1) on its own artifact" \
+  not grep -qE '(^|[[:space:];|&(])split[[:space:]]+-' "$HERE/build.sh"
+# The runbook still QUOTES the two-part release, as the thing that must not
+# come back; what it must not contain is a line telling anyone to do it. So
+# the check is for an instruction at the start of a line, not for the words.
+assert "the runbook no longer INSTRUCTS a cat/sha256sum of image parts" \
+  not grep -qE '^(cat|sha256sum).*(part-|img\.xz)' "$HERE/../../docs/IMAGE.md"
+assert "…and states the one-file rule instead" \
+  grep -q 'one file or it is not a release' "$HERE/../../docs/IMAGE.md"
+assert "…and the stopwatch starts at the download, not at Write" \
+  grep -q 'Click the release.s download link' "$HERE/../../docs/IMAGE.md"
+assert "build.sh carries the arithmetic behind the default model, not a bare number" \
+  grep -q '2,147,483,648 - 580,491,948' "$HERE/build.sh"
 
 # ===========================================================================
 stage "6. wheelhouse completeness — a venv built with the network refused"
