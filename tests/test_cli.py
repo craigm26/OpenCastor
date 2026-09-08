@@ -1098,22 +1098,65 @@ class TestCmdDashboard:
 # =====================================================================
 class TestCmdDoctor:
     def test_calls_run_all_checks(self, capsys):
-        """cmd_doctor should call run_all_checks and print_report."""
-        args = _make_args(config=None)
+        """cmd_doctor prints TWO reports: the host, then the robot.
+
+        The host section is the old one. The robot section is the one that
+        answers "can this car move", and it is printed separately because it
+        is the only one whose failures set the exit code.
+        """
+        args = _make_args(config=None, home=None)
         mock_run = MagicMock(return_value=[(True, "Test", "ok")])
+        mock_robot = MagicMock(return_value=MagicMock(can_move=True, exit_code=0))
         mock_print = MagicMock()
         with patch.dict(
             "sys.modules",
             {
                 "castor.doctor": MagicMock(
                     run_all_checks=mock_run,
+                    run_robot_checks=mock_robot,
                     print_report=mock_print,
                 )
             },
         ):
             cmd_doctor(args)
         mock_run.assert_called_once_with(config_path=None)
-        mock_print.assert_called_once()
+        mock_robot.assert_called_once_with(home=None)
+        assert mock_print.call_count == 2
+
+    def test_exits_non_zero_when_the_robot_cannot_move(self):
+        """`castor doctor && castor pair` has to mean something."""
+        args = _make_args(config=None, home="/tmp/car")
+        mock_robot = MagicMock(return_value=MagicMock(can_move=False, exit_code=1))
+        with patch.dict(
+            "sys.modules",
+            {
+                "castor.doctor": MagicMock(
+                    run_all_checks=MagicMock(return_value=[]),
+                    run_robot_checks=mock_robot,
+                    print_report=MagicMock(),
+                )
+            },
+        ):
+            with pytest.raises(SystemExit) as exc:
+                cmd_doctor(args)
+        assert exc.value.code == 1
+        mock_robot.assert_called_once_with(home="/tmp/car")
+
+    def test_exits_zero_when_the_robot_can_move(self):
+        args = _make_args(config=None, home=None)
+        with patch.dict(
+            "sys.modules",
+            {
+                "castor.doctor": MagicMock(
+                    run_all_checks=MagicMock(return_value=[]),
+                    run_robot_checks=MagicMock(
+                        return_value=MagicMock(can_move=True, exit_code=0)
+                    ),
+                    print_report=MagicMock(),
+                )
+            },
+        ):
+            cmd_doctor(args)  # no SystemExit
 
     def test_prints_header(self, capsys):
         """cmd_doctor should print a header before results."""

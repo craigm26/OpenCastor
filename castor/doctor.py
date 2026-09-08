@@ -9,6 +9,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -28,6 +29,11 @@ class CheckResult:
     status: str  # "ok" | "warn" | "fail" | "skip"
     detail: str = ""
     fix: str = ""
+    #: True when this failing means the robot CANNOT MOVE. `castor doctor`
+    #: exits non-zero on any of these, and only on these: a host that is merely
+    #: missing an optional package still has a car that drives, and an exit
+    #: code that fires on everything is one nobody can put in a script.
+    blocking: bool = False
 
 
 @dataclass
@@ -49,6 +55,19 @@ class DoctorReport:
     @property
     def all_ok(self) -> bool:
         return self.fail_count == 0
+
+    @property
+    def blocking_failures(self) -> list[CheckResult]:
+        """The checks that mean the robot cannot move."""
+        return [c for c in self.checks if c.blocking and c.status == "fail"]
+
+    @property
+    def can_move(self) -> bool:
+        return not self.blocking_failures
+
+    @property
+    def exit_code(self) -> int:
+        return 1 if self.blocking_failures else 0
 
 
 # ── Individual checks ────────────────────────────────────────────────────────
@@ -193,17 +212,26 @@ def _check_hardware_oakd() -> CheckResult:
         return CheckResult("OAK-D (DepthAI)", "skip", "not detected (optional)")
 
 
-def _check_gateway(port: int = 18789) -> CheckResult:
-    try:
-        with socket.create_connection(("127.0.0.1", port), timeout=2):
-            return CheckResult("Gateway port", "ok", f"localhost:{port} reachable")
-    except (ConnectionRefusedError, OSError):
-        return CheckResult(
-            "Gateway port",
-            "warn",
-            f"localhost:{port} not reachable",
-            fix="castor run --config <yaml>",
-        )
+def _check_gateway(port: Optional[int] = None) -> CheckResult:
+    """Probe the gateway.
+
+    `port` used to default to 18789, which nothing in this repository has ever
+    served — `castor up` puts the gateway at --base-port (8080 by default) and
+    the reference rover runs on 8081. The result was "Gateway not reachable" on
+    a healthy robot, plus a fix line (`castor run --config <yaml>`) that starts
+    a different program. With no port given the robot's own units are asked
+    instead; see :func:`_check_gateway_port`.
+    """
+    if port is None:
+        return _check_gateway_port(resolve_robot())
+    if _probe_port(port):
+        return CheckResult("Gateway port", "ok", f"localhost:{port} reachable")
+    return CheckResult(
+        "Gateway port",
+        "warn",
+        f"localhost:{port} not reachable",
+        fix=f"systemctl --user restart <name>-gateway   # nothing is listening on {port}",
+    )
 
 
 def _check_rcan_compliance() -> CheckResult:
@@ -454,9 +482,12 @@ def print_report(report) -> None:
         con = Console()
         t = Table(show_header=True, header_style="bold dim", box=None, pad_edge=False)
         t.add_column("", width=2)
-        t.add_column("Check", style="bold")
-        t.add_column("Detail")
-        t.add_column("Fix", style="dim")
+        t.add_column("Check", style="bold", overflow="fold")
+        t.add_column("Detail", overflow="fold")
+        # `fold`, not the default `ellipsis`: the Fix column is the only thing
+        # on this page the owner is supposed to paste, and a fix cut off at the
+        # terminal width is not a fix.
+        t.add_column("Fix", style="dim", overflow="fold")
         for c in report.checks:
             icon = STATUS_ICON.get(c.status, "?")
             color = STATUS_COLOR.get(c.status, "white")
@@ -478,6 +509,16 @@ def print_report(report) -> None:
                 line += f"  → {c.fix}"
             print(line)
         print(f"\n{report.ok_count} ok, {report.warn_count} warnings, {report.fail_count} failures")
+
+    # The verdict the owner came for. A doctor that prints twelve green rows and
+    # says nothing about a car that will not move has answered the wrong question.
+    blocking = report.blocking_failures
+    if blocking:
+        print("\n  ❌ THIS ROBOT CANNOT MOVE — " f"{len(blocking)} blocking check(s):")
+        for c in blocking:
+            print(f"     • {c.name}: {c.detail}")
+            if c.fix:
+                print(f"       fix: {c.fix}")
 
 
 # ── Backward-compatible tuple-returning check functions ───────────────────────
@@ -1024,3 +1065,651 @@ def run_auto_fix(results: list) -> None:
             except Exception as exc:
                 print(f"Auto-fix for '{name}' failed: {exc}")
         # No handler for this check name — silently skip (do not raise)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# THE ROBOT `castor up` PROVISIONED
+#
+# Everything above this line checks the HOST. None of it can tell you whether
+# the car in front of you can move, and a clean bill of health on a car that
+# cannot move is worse than no check at all — it sends the owner looking for
+# the fault somewhere it is not.
+#
+# So this section reads the robot itself: the systemd user units `castor up`
+# wrote, the `gateway-policy.env` beside them (the one file where simulated
+# wheels become real ones), the ports those units actually bind, the I2C bus
+# the PCA9685 needs, the advertiser the phone browses for, and the USB current
+# budget a streaming camera spends. It calls `castor gaps`, which already knows
+# how to look at an up-provisioned robot, rather than growing a second opinion.
+#
+# Every finding carries ONE line the owner can paste. Findings that mean the
+# car cannot move are marked `blocking`, and `castor doctor` exits non-zero on
+# any of them: a health check that always exits 0 is a health check nobody can
+# put in a script.
+# ═══════════════════════════════════════════════════════════════════════════
+
+DEFAULT_UNIT_DIR = Path.home() / ".config" / "systemd" / "user"
+
+#: The address every PCA9685 hat and breakout ships at.
+PCA9685_DEFAULT_ADDRESS = 0x40
+
+#: The mDNS type the iOS app browses (RobotDiscovery.swift). `castor/rcan/mdns.py`
+#: publishes `_rcan._tcp` instead, and `castor up` starts no advertiser at all —
+#: which is why "find it on my network" has never worked for an `up` robot.
+OPENCASTOR_MDNS_TYPE = "_opencastor._tcp.local."
+
+#: Values of OPENCASTOR_DRIVE that mean "nothing will turn".
+SIMULATED_DRIVE_VALUES = ("", "simulated", "sim", "mock", "none", "noop", "off")
+
+
+@dataclass
+class RobotUnits:
+    """One robot as its systemd user units describe it.
+
+    Read from the units rather than recomputed from `--base-port`, because the
+    units are what is actually running: this bench's rover has its gateway on
+    8081 and its runtime on 8003, a layout no formula in `castor up` produces.
+    """
+
+    name: str
+    home: Optional[Path] = None
+    gateway_port: Optional[int] = None
+    runtime_port: Optional[int] = None
+    console_port: Optional[int] = None
+    policy_env: Optional[Path] = None
+    units: list[str] = field(default_factory=list)
+
+    @property
+    def policy_path(self) -> Optional[Path]:
+        if self.policy_env is not None:
+            return self.policy_env
+        if self.home is not None:
+            return self.home / "gateway-policy.env"
+        return None
+
+
+def read_env_file(path) -> dict[str, str]:
+    """Parse a systemd `EnvironmentFile` the way systemd does, near enough.
+
+    Quotes are stripped because `gateway-policy.env` quotes the tier bindings
+    (they contain '|', which a sourcing shell would read as a pipeline), and a
+    caller comparing OPENCASTOR_DRIVE against "simulated" must not have to
+    know that.
+    """
+    out: dict[str, str] = {}
+    try:
+        text = Path(path).read_text()
+    except (OSError, TypeError):
+        return out
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :]
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key, value = key.strip(), value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        out[key] = value
+    return out
+
+
+def _unit_env(text: str) -> dict[str, str]:
+    """`Environment=K=V` lines from a unit file."""
+    out: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line.startswith("Environment="):
+            continue
+        body = line.split("=", 1)[1]
+        if "=" in body:
+            k, v = body.split("=", 1)
+            out[k.strip()] = v.strip()
+    return out
+
+
+def discover_robots(unit_dir=None) -> list[RobotUnits]:
+    """Every robot with a `*-gateway.service` in the user unit directory."""
+    import re as _re
+
+    unit_dir = Path(unit_dir) if unit_dir is not None else DEFAULT_UNIT_DIR
+    if not unit_dir.is_dir():
+        return []
+
+    robots: dict[str, RobotUnits] = {}
+    for unit in sorted(unit_dir.glob("*-gateway.service")):
+        name = unit.name[: -len("-gateway.service")]
+        try:
+            text = unit.read_text()
+        except OSError:
+            continue
+        robot = RobotUnits(name=name, units=[unit.name])
+        m = _re.search(r"--port\s+(\d+)", text)
+        if m:
+            robot.gateway_port = int(m.group(1))
+        for raw in text.splitlines():
+            line = raw.strip()
+            if line.startswith("EnvironmentFile=") and line.endswith("gateway-policy.env"):
+                # A leading '-' makes the file optional to systemd. carbot's
+                # units do that and it is the anti-pattern the rover's units
+                # argue against in a comment; strip it and check for real.
+                policy = Path(line.split("=", 1)[1].lstrip("-"))
+                robot.policy_env = policy
+                robot.home = policy.parent
+        if robot.home is None:
+            m = _re.search(r"--robot-md\s+(\S+)", text)
+            if m:
+                robot.home = Path(m.group(1)).parent
+        robots[name] = robot
+
+    for suffix, attr, key_suffix in (
+        ("-castor.service", "runtime_port", "RUNTIME_PORT"),
+        ("-console.service", "console_port", "CONSOLE_PORT"),
+    ):
+        for unit in sorted(unit_dir.glob(f"*{suffix}")):
+            name = unit.name[: -len(suffix)]
+            robot = robots.get(name)
+            if robot is None:
+                continue
+            try:
+                text = unit.read_text()
+            except OSError:
+                continue
+            robot.units.append(unit.name)
+            # Environment= AND every EnvironmentFile= the unit pulls in. The
+            # console's port lives in console.env, whose header invites hand
+            # edits, and a hand-written robot (this bench's rover) names its
+            # runtime port ROVER_RUNTIME_PORT rather than ROBOT_RUNTIME_PORT.
+            # Matching on the SUFFIX reads both without pretending a
+            # hand-written robot is malformed.
+            env = _unit_env(text)
+            for raw in text.splitlines():
+                line = raw.strip()
+                if line.startswith("EnvironmentFile="):
+                    merged = read_env_file(Path(line.split("=", 1)[1].lstrip("-")))
+                    for k, v in merged.items():
+                        env.setdefault(k, v)
+            for key, value in env.items():
+                if key.endswith(key_suffix) and value.isdigit():
+                    setattr(robot, attr, int(value))
+                    break
+            if robot.home is None and env.get("ROBOT_HOME"):
+                robot.home = Path(env["ROBOT_HOME"])
+
+    return list(robots.values())
+
+
+def resolve_robot(home=None, unit_dir=None, env=None) -> Optional[RobotUnits]:
+    """The robot this run of doctor is about.
+
+    `--home` wins, then $ROBOT_HOME, then the single robot the units describe,
+    then ~/robot (the `castor up` default). A host with two robots and no
+    --home is reported as ambiguous by the check, not guessed at silently.
+    """
+    env = os.environ if env is None else env
+    found = discover_robots(unit_dir)
+    wanted = home or env.get("ROBOT_HOME")
+    if wanted:
+        target = Path(wanted).expanduser()
+        for robot in found:
+            if robot.home is not None and robot.home == target:
+                return robot
+        return RobotUnits(name=target.name, home=target)
+    if len(found) == 1:
+        return found[0]
+    if found:
+        default = Path.home() / "robot"
+        for robot in found:
+            if robot.home == default:
+                return robot
+        return found[0]
+    default = Path.home() / "robot"
+    if default.is_dir():
+        return RobotUnits(name=default.name, home=default)
+    return None
+
+
+# ── Individual robot checks ──────────────────────────────────────────────────
+
+
+def _check_robot_home(robot: Optional[RobotUnits], others: int = 0) -> CheckResult:
+    if robot is None or robot.home is None:
+        return CheckResult(
+            "Robot home",
+            "fail",
+            "no robot found — no *-gateway.service unit and no ~/robot",
+            fix="castor up",
+            blocking=True,
+        )
+    if not robot.home.is_dir():
+        return CheckResult(
+            "Robot home",
+            "fail",
+            f"{robot.home} does not exist",
+            fix=f"castor up --home {robot.home}",
+            blocking=True,
+        )
+    missing = [f for f in ("ROBOT.md", "bearers.yaml") if not (robot.home / f).exists()]
+    detail = f"{robot.home} ({robot.name}, {len(robot.units)} units)"
+    if others:
+        detail += f" — {others} other robot(s) on this host; pick one with --home"
+    if missing:
+        return CheckResult(
+            "Robot home",
+            "fail",
+            f"{detail} — missing {', '.join(missing)}",
+            fix=f"castor up --home {robot.home}",
+            blocking=True,
+        )
+    return CheckResult("Robot home", "ok", detail)
+
+
+def _probe_port(port: int, host: str = "127.0.0.1", timeout: float = 2.0) -> bool:
+    """True when something accepts a TCP connection there. Patchable in tests."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _check_gateway_port(robot: Optional[RobotUnits], probe=None) -> CheckResult:
+    """The port the gateway unit actually binds — not a constant.
+
+    The old check probed 18789, a port nothing in this repository has ever
+    served, and printed "Gateway not reachable" plus `castor run --config
+    <yaml>` on a perfectly healthy robot. Both halves were wrong.
+    """
+    probe = probe or _probe_port
+    if robot is None or robot.gateway_port is None:
+        return CheckResult(
+            "Gateway port",
+            "skip",
+            "no gateway unit found — cannot tell which port to probe",
+            fix="castor up",
+        )
+    name, port = robot.name, robot.gateway_port
+    if probe(port):
+        return CheckResult("Gateway port", "ok", f"127.0.0.1:{port} answers ({name}-gateway)")
+    return CheckResult(
+        "Gateway port",
+        "fail",
+        f"127.0.0.1:{port} refused — nothing signs a drive command without it",
+        fix=f"systemctl --user restart {name}-gateway && journalctl --user -u {name}-gateway -n 40",
+        blocking=True,
+    )
+
+
+def _check_runtime_port(robot: Optional[RobotUnits], probe=None) -> CheckResult:
+    probe = probe or _probe_port
+    if robot is None or robot.runtime_port is None:
+        return CheckResult("Runtime port", "skip", "no castor runtime unit found")
+    name, port = robot.name, robot.runtime_port
+    if probe(port):
+        return CheckResult("Runtime port", "ok", f"127.0.0.1:{port} answers ({name}-castor)")
+    return CheckResult(
+        "Runtime port",
+        "warn",
+        f"127.0.0.1:{port} refused — telemetry and /api/stop are down",
+        fix=f"systemctl --user restart {name}-castor",
+    )
+
+
+def _check_console_port(robot: Optional[RobotUnits], probe=None) -> CheckResult:
+    probe = probe or _probe_port
+    if robot is None or robot.console_port is None:
+        return CheckResult("Console port", "skip", "no console unit found")
+    name, port = robot.name, robot.console_port
+    if probe(port):
+        return CheckResult("Console port", "ok", f"127.0.0.1:{port} answers ({name}-console)")
+    return CheckResult(
+        "Console port",
+        "warn",
+        f"127.0.0.1:{port} refused — chat, /surface and /gaps are down",
+        fix=f"systemctl --user restart {name}-console",
+    )
+
+
+def _check_gateway_policy(robot: Optional[RobotUnits]) -> CheckResult:
+    """The file where simulated wheels become real ones must at least exist."""
+    path = robot.policy_path if robot is not None else None
+    if path is None:
+        return CheckResult("gateway-policy.env", "skip", "no robot home resolved")
+    if not path.exists():
+        return CheckResult(
+            "gateway-policy.env",
+            "fail",
+            f"{path} missing — the gateway starts with no tool allowlist and denies every tool",
+            fix=f"castor up --home {path.parent}",
+            blocking=True,
+        )
+    policy = read_env_file(path)
+    allow = policy.get("ROBOT_MD_TOOL_ALLOWLIST", "")
+    if "drive.set" not in allow:
+        return CheckResult(
+            "gateway-policy.env",
+            "fail",
+            f"{path} — drive.set is not in ROBOT_MD_TOOL_ALLOWLIST, every drive is a signed DENY",
+            fix=f"$EDITOR {path}  # add drive.set to ROBOT_MD_TOOL_ALLOWLIST",
+            blocking=True,
+        )
+    return CheckResult("gateway-policy.env", "ok", f"{path} ({len(policy)} settings)")
+
+
+def i2c_addresses(bus: int = 1) -> set[int]:
+    """Addresses answering on the bus. Empty when there is no bus at all."""
+    try:
+        from castor.peripherals import scan_i2c
+
+        return {p.i2c_address for p in scan_i2c(bus=bus) if p.i2c_address is not None}
+    except Exception:  # noqa: BLE001 — no bus is a valid machine state
+        return set()
+
+
+def _check_i2c_bus(policy: dict, exists=None, bus: int = 1) -> CheckResult:
+    """/dev/i2c-1, the one step the flashable image is forbidden from taking.
+
+    Raspberry Pi OS ships `dtparam=i2c_arm=on` commented out and
+    `scripts/image/selftest.sh` asserts that no script may write config.txt,
+    so a freshly flashed card has no bus. Nothing told the owner that; this
+    does, with the command.
+    """
+    path = f"/dev/i2c-{bus}"
+    present = Path(path).exists() if exists is None else exists(path)
+    drive = policy.get("OPENCASTOR_DRIVE", "").strip().lower()
+    wants_i2c = drive not in SIMULATED_DRIVE_VALUES
+    if present:
+        return CheckResult("I2C bus", "ok", path)
+    return CheckResult(
+        "I2C bus",
+        "fail" if wants_i2c else "warn",
+        f"{path} missing — I2C is off, so no PCA9685 can ever answer"
+        + (f" (OPENCASTOR_DRIVE={drive} will refuse to start)" if wants_i2c else ""),
+        fix="sudo raspi-config nonint do_i2c 0 && sudo reboot",
+        blocking=wants_i2c,
+    )
+
+
+def _check_drive_mode(
+    robot: Optional[RobotUnits], policy: dict, addresses: Optional[set] = None
+) -> CheckResult:
+    """"Your wheels are simulated."
+
+    `castor up` ships OPENCASTOR_DRIVE commented out on purpose, and the rule
+    behind that is right: a driver built by accident must not move a real
+    vehicle. What was missing is anybody SAYING SO to the owner holding the
+    phone, whose stick moves, whose receipts sign, whose badge is green, and
+    whose car is still. That sentence is this check.
+    """
+    if robot is None or robot.policy_path is None:
+        return CheckResult("Drive mode", "skip", "no robot home resolved")
+    addresses = i2c_addresses() if addresses is None else addresses
+    policy_path = robot.policy_path
+    try:
+        address = int(policy.get("OPENCASTOR_DRIVE_I2C_ADDRESS", "0x40"), 0)
+    except ValueError:
+        address = PCA9685_DEFAULT_ADDRESS
+    chip_present = address in addresses
+    drive = policy.get("OPENCASTOR_DRIVE", "").strip().lower()
+
+    enable = (
+        f"sed -i 's/^#*OPENCASTOR_DRIVE=.*/OPENCASTOR_DRIVE=pca9685/' {policy_path} "
+        f"&& systemctl --user restart {robot.name}-gateway   # WHEELS OFF THE GROUND FIRST"
+    )
+
+    if drive in SIMULATED_DRIVE_VALUES:
+        shown = drive or "unset"
+        if chip_present:
+            return CheckResult(
+                "Drive mode",
+                "fail",
+                f"PCA9685 answering at 0x{address:02x} but OPENCASTOR_DRIVE={shown} — "
+                "YOUR WHEELS ARE SIMULATED. The stick moves, the receipts sign, "
+                "the badge is green, and nothing turns.",
+                fix=enable,
+                blocking=True,
+            )
+        return CheckResult(
+            "Drive mode",
+            "warn",
+            f"OPENCASTOR_DRIVE={shown} (simulated wheels) and nothing answers at "
+            f"0x{address:02x} — wire the PCA9685 before flipping it",
+            fix=f"i2cdetect -y 1   # expect {address:02x}; then: {enable}",
+        )
+
+    if not chip_present:
+        return CheckResult(
+            "Drive mode",
+            "fail",
+            f"OPENCASTOR_DRIVE={drive} but nothing answers at 0x{address:02x} — "
+            "the actuator refuses to construct and the gateway will not start",
+            fix="i2cdetect -y 1   # check wiring, 5V and the address jumpers",
+            blocking=True,
+        )
+
+    throttle = policy.get("OPENCASTOR_DRIVE_THROTTLE_CHANNEL", "")
+    steering = policy.get("OPENCASTOR_DRIVE_STEERING_CHANNEL", "")
+    if (throttle, steering) == ("0", "1"):
+        # Both real cars on this bench (the rover and carbot) wire throttle 1 /
+        # steering 0. The shipped template says the opposite, and a cross-plugged
+        # harness passes every register-level bench test there is, because
+        # "steering command produces a pulse on the steering channel" is true no
+        # matter what is on the other end of that pin.
+        return CheckResult(
+            "Drive mode",
+            "warn",
+            f"OPENCASTOR_DRIVE={drive} at 0x{address:02x}, but channels are throttle 0 / "
+            "steering 1 — the template default, reversed vs both known cars",
+            fix=f"$EDITOR {policy_path}   # THROTTLE_CHANNEL=1, STEERING_CHANNEL=0",
+        )
+    return CheckResult(
+        "Drive mode",
+        "ok",
+        f"OPENCASTOR_DRIVE={drive} at 0x{address:02x} "
+        f"(throttle ch{throttle or '?'}, steering ch{steering or '?'}) — real wheels",
+    )
+
+
+def _browse_mdns(service_type: str = OPENCASTOR_MDNS_TYPE, timeout: float = 2.0) -> list[str]:
+    """Names answering on an mDNS service type. Raises ImportError with no zeroconf."""
+    from zeroconf import ServiceBrowser, Zeroconf
+
+    found: list[str] = []
+
+    class _Listener:
+        def add_service(self, zc, type_, name):  # noqa: ANN001
+            found.append(name)
+
+        def update_service(self, zc, type_, name):  # noqa: ANN001
+            pass
+
+        def remove_service(self, zc, type_, name):  # noqa: ANN001
+            pass
+
+    zc = Zeroconf()
+    try:
+        ServiceBrowser(zc, service_type, _Listener())
+        time.sleep(timeout)
+    finally:
+        zc.close()
+    return found
+
+
+def _check_mdns_advertiser(browse=None, timeout: float = 2.0) -> CheckResult:
+    """Is anything answering on the type the phone actually browses?
+
+    The app browses `_opencastor._tcp`; `castor/rcan/mdns.py` publishes
+    `_rcan._tcp`; and `castor up` writes four units, none of which advertises
+    at all. "No robots found" on a robot that is answering has been the
+    reported symptom since 2026-08-14. Note avahi-browse will not show this
+    either way — python-zeroconf is the only thing that has ever seen it.
+    """
+    browse = browse or _browse_mdns
+    try:
+        names = browse(OPENCASTOR_MDNS_TYPE, timeout)
+    except ImportError:
+        return CheckResult(
+            "mDNS advertiser",
+            "skip",
+            "python-zeroconf not installed — cannot check LAN discovery",
+            fix="pip install zeroconf",
+        )
+    except Exception as exc:  # noqa: BLE001 — a host with no multicast is valid
+        return CheckResult("mDNS advertiser", "skip", f"browse failed: {exc}")
+    if names:
+        return CheckResult(
+            "mDNS advertiser", "ok", f"{len(names)} on {OPENCASTOR_MDNS_TYPE}: {names[0]}"
+        )
+    return CheckResult(
+        "mDNS advertiser",
+        "warn",
+        f"nothing answers on {OPENCASTOR_MDNS_TYPE} — the phone's "
+        '"find it on your network" will report no robots. The QR still pairs.',
+        fix="castor pair --home <home>   # the QR still works; LAN discovery needs an advertiser",
+    )
+
+
+def _read_boot_config(paths=("/boot/firmware/config.txt", "/boot/config.txt")) -> tuple:
+    for candidate in paths:
+        p = Path(candidate)
+        if p.exists():
+            try:
+                return p, p.read_text()
+            except OSError:
+                return p, ""
+    return None, ""
+
+
+def usb_video_devices(sys_v4l="/sys/class/video4linux") -> list[str]:
+    """V4L2 device names whose parent device sits on the USB bus.
+
+    A CSI camera's parent resolves to an on-SoC codec node; a webcam's or an
+    OAK-D's resolves under /sys/bus/usb. Only the second kind spends the
+    current budget this check is about.
+    """
+    import re as _re
+
+    root = Path(sys_v4l)
+    if not root.is_dir():
+        return []
+    out: list[str] = []
+    for entry in sorted(root.iterdir()):
+        link = entry / "device"
+        try:
+            target = link.resolve()
+        except OSError:
+            continue
+        # A path SEGMENT, never a substring: a temp directory called
+        # "test_usb_camera" is not a USB bus, and a check that cannot tell the
+        # difference is a check that reports webcams that are not there.
+        if any(part == "usb" or _re.fullmatch(r"usb\d+", part) for part in target.parts):
+            out.append(entry.name)
+    return out
+
+
+def _check_usb_power_budget(config_text=None, cameras=None, config_path=None) -> CheckResult:
+    """The carbot lesson, in software.
+
+    On a Pi 5 at the default `usb_max_current_enable=0` the USB ports share
+    600 mA. An OAK-D plus a USB speaker trips it, the kernel logs
+    `over-current change`, EVERY USB device resets at once, and what the owner
+    sees is a camera that stopped and a microphone that stopped, together, for
+    no reason. It is invisible from software after the fact — so say it before.
+    """
+    if config_text is None:
+        config_path, config_text = _read_boot_config()
+    cameras = usb_video_devices() if cameras is None else cameras
+    enabled = any(
+        line.strip().replace(" ", "").startswith("usb_max_current_enable=1")
+        for line in config_text.splitlines()
+    )
+    where = str(config_path) if config_path else "/boot/firmware/config.txt"
+    if enabled:
+        return CheckResult("USB power budget", "ok", f"usb_max_current_enable=1 in {where}")
+    if not cameras:
+        return CheckResult(
+            "USB power budget",
+            "warn",
+            f"usb_max_current_enable is not set in {where} — USB is capped at 600 mA "
+            "shared; add a USB camera or speaker and every USB device resets together",
+            fix=f"echo usb_max_current_enable=1 | sudo tee -a {where} && sudo reboot",
+        )
+    return CheckResult(
+        "USB power budget",
+        "fail",
+        f"USB camera(s) {', '.join(cameras)} streaming with usb_max_current_enable unset in "
+        f"{where} — an over-current trip resets every USB device at once (camera AND mic die "
+        "together, with nothing in the application logs)",
+        fix=f"echo usb_max_current_enable=1 | sudo tee -a {where} && sudo reboot",
+    )
+
+
+def _check_gaps(robot: Optional[RobotUnits], collect=None) -> list[CheckResult]:
+    """Ask `castor gaps`, which already understands an up-provisioned robot.
+
+    doctor never called it and gaps never called doctor, so the one health
+    check that knew how to print `pip install rc-car-actuator` was the one
+    nobody ran. A missing actuator package is blocking: `resolve_actuator()`
+    falls back to `noop`, which is a gateway that signs a receipt for a car
+    that never moved.
+    """
+    if robot is None or robot.home is None:
+        return [CheckResult("Capability gaps", "skip", "no robot home resolved")]
+    if collect is None:
+        try:
+            from castor.gaps import collect as collect  # noqa: PLC0414
+        except Exception as exc:  # noqa: BLE001
+            return [CheckResult("Capability gaps", "skip", f"castor.gaps unavailable: {exc}")]
+    try:
+        gaps = collect(home=robot.home)
+    except Exception as exc:  # noqa: BLE001
+        return [CheckResult("Capability gaps", "skip", f"gap scan failed: {exc}")]
+    if not gaps:
+        return [CheckResult("Capability gaps", "ok", "none — every peripheral is claimed")]
+    out: list[CheckResult] = []
+    for gap in gaps:
+        blocking = gap.kind == "missing-package"
+        out.append(
+            CheckResult(
+                f"gap:{gap.id}",
+                "fail" if blocking else "warn",
+                gap.evidence,
+                fix=gap.suggestion,
+                blocking=blocking,
+            )
+        )
+    return out
+
+
+def run_robot_checks(home=None, unit_dir=None) -> DoctorReport:
+    """The whole robot section, in the order an owner debugs in.
+
+    Home and services first (is there a robot, is it answering), then the
+    physical layer (bus, wheels), then the two things that are invisible until
+    they bite (discovery, USB current), then the gaps rail.
+    """
+    report = DoctorReport()
+    add = report.checks.append
+
+    found = discover_robots(unit_dir)
+    robot = resolve_robot(home=home, unit_dir=unit_dir)
+    others = max(0, len(found) - 1) if robot is not None else 0
+
+    add(_check_robot_home(robot, others=others))
+    add(_check_gateway_port(robot))
+    add(_check_runtime_port(robot))
+    add(_check_console_port(robot))
+    add(_check_gateway_policy(robot))
+
+    policy = read_env_file(robot.policy_path) if (robot and robot.policy_path) else {}
+    add(_check_i2c_bus(policy))
+    add(_check_drive_mode(robot, policy))
+    add(_check_mdns_advertiser())
+    add(_check_usb_power_budget())
+    for result in _check_gaps(robot):
+        add(result)
+
+    return report

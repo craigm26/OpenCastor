@@ -170,14 +170,45 @@ i2cdetect -y 1
 
 **Used by:** Waveshare AlphaBot, Adeept, Freenove, Yahboom ROSMASTER, SunFounder PiCar
 
-> **Driving an RC car (one ESC plus one steering servo)?** The preset below is
-> the differential-drive surface. An RC car is brought up through `castor up`,
-> which configures `rc-car-actuator` from `OPENCASTOR_DRIVE*` in the robot's
-> `gateway-policy.env` — a different surface for the same chip. The ordered
-> bring-up, wheels off the ground, is
-> [docs/hardware/pca9685-bringup.md](hardware/pca9685-bringup.md).
+**Enable the bus first.** Raspberry Pi OS ships `dtparam=i2c_arm=on` commented
+out, so a freshly flashed card has no `/dev/i2c-1` and nothing can ever answer
+at 0x40:
 
-**Preset setting:**
+```bash
+sudo raspi-config nonint do_i2c 0 && sudo reboot
+```
+
+**Which surface drives your vehicle.** OpenCastor has two ways to talk to a
+PCA9685, and they are not interchangeable. Pick by what is bolted to the chip:
+
+| Your vehicle | Use | Configured in |
+|---|---|---|
+| Servo steering + ESC (an RC car) | **`rc-car-actuator`** in `robot-md-gateway` | `<robot home>/gateway-policy.env` |
+| DC motors, differential drive (4WD kit) | the `pca9685_i2c` driver below | your RCAN YAML |
+
+For an RC car, `rc-car-actuator` is the one that drives. The deadman thread and
+the envelope budget live in the gateway process with it, so every pulse it
+writes is inside a lease somebody approved. The `pca9685_rc` driver in this
+repository is a **second, independent path to the same chip** — it can write a
+pulse that no lease and no deadman is watching — and it is not what `castor up`
+wires. Turn the RC car's wheels on in the file `castor up` already wrote you:
+
+```bash
+# in <robot home>/gateway-policy.env — WHEELS OFF THE GROUND FIRST
+OPENCASTOR_DRIVE=pca9685
+OPENCASTOR_DRIVE_I2C_BUS=1
+OPENCASTOR_DRIVE_I2C_ADDRESS=0x40
+OPENCASTOR_DRIVE_THROTTLE_CHANNEL=1   # both cars on the reference bench wire
+OPENCASTOR_DRIVE_STEERING_CHANNEL=0   # throttle 1 / steering 0
+# then: systemctl --user restart <name>-gateway
+```
+
+Run `castor doctor` afterwards: it reads that file, probes the real gateway
+port, and says plainly whether your wheels are simulated. The ordered
+bring-up, wheels off the ground, is
+[docs/hardware/pca9685-bringup.md](hardware/pca9685-bringup.md).
+
+**Preset setting** (differential-drive kits only):
 ```yaml
 drivers:
   - id: "motor_driver"
@@ -186,6 +217,12 @@ drivers:
     address: "0x40"
     frequency: 50
 ```
+
+These drivers no longer fall back to mock mode. If the Adafruit libraries are
+missing or the chip does not answer, construction raises `PCA9685Unavailable`
+rather than quietly accepting commands forever. To run one without hardware on
+purpose, ask for it: `OPENCASTOR_PCA9685_ALLOW_MOCK=1`, or `allow_mock: true`
+in the driver config block.
 
 #### 2. Arduino Serial (USB CDC / UART)
 **What it looks like:** Arduino Uno (blue, USB-B port), Nano (mini, micro-USB),

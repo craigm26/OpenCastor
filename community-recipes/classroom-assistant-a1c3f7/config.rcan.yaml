@@ -1,0 +1,222 @@
+# Classroom Q&A Assistant
+#
+# The config `castor hub install classroom-assistant-a1c3f7` writes. Derived from
+# config/presets/sunfounder_picar_x.rcan.yaml, with this recipe's identity, brain and sensors.
+#
+# Its RRN and robot_uuid are unique to this recipe, not inherited: two owners
+# of the same kit installing the same recipe must not collide on identity.
+# Run `castor doctor` after installing — it will tell you whether the wheels
+# this config describes are the ones that actually turn.
+rcan_version: '3.0'
+metadata:
+  robot_name: Classroom Q&A Assistant
+  robot_uuid: 7caf3a10-4b18-5c4b-ac1a-35511e6a5f60
+  manufacturer: SunFounder
+  model: PiCar-X v2.0
+  author: edu_maker_jen
+  license: Apache-2.0
+  tags:
+  - education
+  - classroom
+  - q&a
+  - whatsapp
+  - beginner
+  - picar
+  description: Wheeled robot that roams the classroom answering student questions using Claude
+    Haiku via WhatsApp
+  rrn: RRN-027949649179
+  rrn_uri: rrn://community/robot/opencastor/classroom-assistant-a1c3f7
+  recipe_id: classroom-assistant-a1c3f7
+agent:
+  provider: anthropic
+  model: claude-haiku-4
+  vision_enabled: true
+  latency_budget_ms: 120
+  safety_stop: true
+  offline_provider: ollama
+  confidence_gates:
+  - scope: control
+    min_confidence: 0.75
+    on_fail: block
+  - scope: safety
+    min_confidence: 0.9
+    on_fail: block
+physics:
+  type: ackermann
+  dof: 2
+  chassis:
+    wheelbase_mm: 141
+    track_width_mm: 120
+    wheel_radius_mm: 33
+camera:
+  type: picam
+  resolution:
+  - 640
+  - 480
+  framerate: 30
+  depth_enabled: false
+drivers:
+- id: motor_driver
+  protocol: gpio
+  interface: i2c
+  address: '0x14'
+  left_motor_channel: 0
+  right_motor_channel: 1
+  max_speed: 100
+- id: steering_servo
+  protocol: gpio
+  interface: i2c
+  address: '0x14'
+  sensor_type: servo
+  channel: 0
+  center_angle_deg: 0
+  min_angle_deg: -30
+  max_angle_deg: 30
+- id: camera_pan_servo
+  protocol: gpio
+  interface: i2c
+  address: '0x14'
+  sensor_type: servo
+  channel: 1
+  center_angle_deg: 0
+  min_angle_deg: -90
+  max_angle_deg: 90
+- id: camera_tilt_servo
+  protocol: gpio
+  interface: i2c
+  address: '0x14'
+  sensor_type: servo
+  channel: 2
+  center_angle_deg: 0
+  min_angle_deg: -35
+  max_angle_deg: 65
+- id: ultrasonic_sensor
+  protocol: gpio
+  sensor_type: hcsr04
+  trigger_gpio: 27
+  echo_gpio: 22
+  max_range_m: 4.0
+- id: camera
+  protocol: picam
+  enabled: true
+  url: http://localhost:8080/stream
+channels:
+  whatsapp:
+    enabled: true
+connection:
+  type: local
+network:
+  telemetry_stream: true
+  sim_to_real_sync: false
+  allow_remote_override: false
+rcan_protocol:
+  port: 8000
+  capabilities:
+  - status
+  - nav
+  - teleop
+  - chat
+  - vision
+  enable_mdns: true
+  enable_jwt: false
+safety:
+  obstacle_stop_cm: 30
+  estop_on_startup: false
+  max_linear_speed_mps: 0.3
+  local_safety_wins: true
+  emergency_stop_distance: 0.4
+  estop_bypass_rate_limit: true
+  watchdog:
+    timeout_s: 10
+tiered_brain:
+  fast_provider: ollama
+  fast_model: gemma3:1b
+  slow_provider: anthropic
+  slow_model: claude-haiku-4
+  planner_interval: 10
+agent_roster:
+- id: nav_specialist
+  provider: ollama
+  model: gemma3:4b
+  scope: nav
+- id: chat_specialist
+  provider: anthropic
+  model: claude-sonnet-4-5
+  scope: chat
+geofence:
+  enabled: false
+  boundary:
+    type: none
+reactive:
+  min_obstacle_m: 0.3
+  fallback_provider: ollama
+hardware_safety:
+  physical_estop: false
+  hardware_watchdog_mcu: false
+p66:
+  enabled: true
+  loa_enforcement: true
+  consent_required: true
+  manifest:
+    estop_qos_bypass: true
+consent:
+  required: true
+  mode: explicit
+  scope_threshold: control
+security:
+  replay_protection:
+    enabled: true
+    window_s: 30
+  signing:
+    enabled: false
+    algorithm: Ed25519
+loa:
+  enforcement: true
+  min_loa_for_control: 1
+human_identity:
+  loa_required: 1
+transport:
+  supported:
+  - http
+  - mqtt
+  constrained_enabled: false
+multimodal:
+  enabled: true
+  max_chunk_bytes: 1048576
+offline:
+  enabled: true
+  fallback_provider: ollama
+r2ram:
+  scopes:
+  - discover
+  - status
+  - chat
+  - control
+  - safety
+federation:
+  enabled: true
+  consent_bridge: false
+notes:
+  setup: "Install picar-x library: pip3 install picar-x Enable I2C on Pi: sudo raspi-config\
+    \ \u2192 Interfaces \u2192 I2C \u2192 Enable Run calibration: cd /opt/picar-x && python3\
+    \ calibration.py Library docs: https://docs.sunfounder.com/projects/picar-x\n"
+  hardware:
+    compute: Raspberry Pi 4 or 3B+
+    camera: Raspberry Pi Camera Module v2 (5MP)
+    ultrasonic: HC-SR04 (4m range)
+    battery: 7.4V Li-ion 2000mAh
+    motor_hat: SunFounder Robot HAT (I2C, PCA9685)
+  recipe: SunFounder PiCar-X. Students ask over WhatsApp; the robot answers.
+  use_case: Sits on a table or slowly drives between desks in a middle school science class.
+    Students send questions via WhatsApp and the robot responds with age-appropriate explanations.
+    Teacher can set the topic of the day via a config flag.
+  hardware_bill:
+  - SunFounder PiCar-X v2.0
+  - Raspberry Pi 4B (4GB)
+  - Pi Camera Module v3
+  - USB speaker (small)
+  - 32GB microSD
+  budget: $140
+firmware_hash: null
+attestation_ref: null
+fria_ref: null

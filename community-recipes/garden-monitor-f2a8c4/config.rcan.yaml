@@ -1,0 +1,169 @@
+# Garden Health Monitor
+#
+# The config `castor hub install garden-monitor-f2a8c4` writes. Derived from
+# config/presets/sunfounder_picar_x.rcan.yaml (drive removed), with this recipe's identity, brain and sensors.
+#
+# Its RRN and robot_uuid are unique to this recipe, not inherited: two owners
+# of the same kit installing the same recipe must not collide on identity.
+# Run `castor doctor` after installing — it will tell you whether the wheels
+# this config describes are the ones that actually turn.
+rcan_version: '3.0'
+metadata:
+  robot_name: Garden Health Monitor
+  robot_uuid: bfb04144-1b35-5fb0-8465-ee0efe23954d
+  manufacturer: DIY
+  model: Garden Monitor
+  author: green_thumb_alex
+  license: Apache-2.0
+  tags:
+  - garden
+  - agriculture
+  - plants
+  - soil
+  - solar
+  - telegram
+  - stationary
+  description: Stationary garden robot that monitors plant health via camera and soil sensors,
+    sending daily Telegram reports using GPT-4o vision
+  rrn: RRN-870835855131
+  rrn_uri: rrn://community/robot/opencastor/garden-monitor-f2a8c4
+  recipe_id: garden-monitor-f2a8c4
+agent:
+  provider: openai
+  model: gpt-4o
+  vision_enabled: true
+  latency_budget_ms: 120
+  safety_stop: true
+  offline_provider: ollama
+  confidence_gates:
+  - scope: control
+    min_confidence: 0.75
+    on_fail: block
+  - scope: safety
+    min_confidence: 0.9
+    on_fail: block
+camera:
+  type: picam
+  resolution:
+  - 640
+  - 480
+  framerate: 30
+  depth_enabled: false
+drivers:
+- id: camera
+  protocol: picam
+  enabled: true
+- id: soil_moisture
+  protocol: gpio
+  sensor_type: capacitive_soil
+  adc_channel: 0
+- id: air_temp_humidity
+  protocol: gpio
+  sensor_type: dht22
+  gpio: 4
+channels:
+  telegram:
+    enabled: true
+connection:
+  type: local
+network:
+  telemetry_stream: true
+  sim_to_real_sync: false
+  allow_remote_override: false
+rcan_protocol:
+  port: 8000
+  capabilities:
+  - status
+  - nav
+  - teleop
+  - chat
+  - vision
+  enable_mdns: true
+  enable_jwt: false
+safety:
+  estop_on_startup: false
+  local_safety_wins: true
+tiered_brain:
+  fast_provider: ollama
+  fast_model: gemma3:1b
+  slow_provider: openai
+  slow_model: gpt-4o
+  planner_interval: 10
+agent_roster:
+- id: vision_specialist
+  provider: openai
+  model: gpt-4o
+  scope: vision
+hardware_safety:
+  physical_estop: false
+  hardware_watchdog_mcu: false
+p66:
+  enabled: true
+  loa_enforcement: true
+  consent_required: true
+  manifest:
+    estop_qos_bypass: true
+consent:
+  required: true
+  mode: explicit
+  scope_threshold: control
+security:
+  replay_protection:
+    enabled: true
+    window_s: 30
+  signing:
+    enabled: false
+    algorithm: Ed25519
+loa:
+  enforcement: true
+  min_loa_for_control: 1
+human_identity:
+  loa_required: 1
+transport:
+  supported:
+  - http
+  - mqtt
+  constrained_enabled: false
+multimodal:
+  enabled: true
+  max_chunk_bytes: 1048576
+offline:
+  enabled: true
+  fallback_provider: ollama
+r2ram:
+  scopes:
+  - discover
+  - status
+  - chat
+  - control
+  - safety
+federation:
+  enabled: true
+  consent_bridge: false
+notes:
+  setup: "Install picar-x library: pip3 install picar-x Enable I2C on Pi: sudo raspi-config\
+    \ \u2192 Interfaces \u2192 I2C \u2192 Enable Run calibration: cd /opt/picar-x && python3\
+    \ calibration.py Library docs: https://docs.sunfounder.com/projects/picar-x\n"
+  hardware:
+    compute: Raspberry Pi 4 or 3B+
+    camera: Raspberry Pi Camera Module v2 (5MP)
+    ultrasonic: HC-SR04 (4m range)
+    battery: 7.4V Li-ion 2000mAh
+    motor_hat: SunFounder Robot HAT (I2C, PCA9685)
+  recipe: 'Stationary. No drive block: this robot has no wheels.'
+  use_case: Sits in my raised bed garden and takes photos of plants throughout the day. GPT-4o
+    analyzes leaf color, spots pests, and checks growth progress. Combined with soil moisture
+    and temperature readings, I get a daily Telegram digest with watering recommendations
+    and health alerts.
+  hardware_bill:
+  - Raspberry Pi 4B (4GB)
+  - Pi Camera Module v3
+  - Capacitive soil moisture sensor
+  - DHT22 temperature/humidity sensor
+  - Waterproof enclosure
+  - Solar panel + battery (5V 3A)
+  - 32GB microSD
+  budget: $95
+firmware_hash: null
+attestation_ref: null
+fria_ref: null

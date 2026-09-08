@@ -5957,8 +5957,14 @@ def cmd_key_rotation(args) -> None:
 
 
 def cmd_doctor(args) -> None:
-    """castor doctor — run system health checks."""
-    from castor.doctor import print_report, run_all_checks
+    """castor doctor — host health, then the robot this host provisioned.
+
+    Two sections on purpose. The first is about the machine and always has
+    been. The second is about the CAR, and it is the one that decides the exit
+    code: doctor exits non-zero when a check says the robot cannot move, and
+    zero otherwise, so `castor doctor && castor pair` means something.
+    """
+    from castor.doctor import print_report, run_all_checks, run_robot_checks
 
     print("  🩺 OpenCastor Doctor\n")
     config_path = getattr(args, "config", None)
@@ -5970,6 +5976,12 @@ def cmd_doctor(args) -> None:
 
         print("\n  Running auto-fix...")
         run_auto_fix(results)
+
+    print("\n  🚗 The robot on this host\n")
+    robot_report = run_robot_checks(home=getattr(args, "home", None))
+    print_report(robot_report)
+    if not robot_report.can_move:
+        sys.exit(robot_report.exit_code)
 
 
 def cmd_export(args) -> None:
@@ -6226,11 +6238,18 @@ def cmd_hub(args) -> None:
             print("  Usage: castor hub install <recipe-id>")
             return
         dest = getattr(args, "output", ".") or "."
-        result = install_recipe(query, dest=dest)
-        if result:
+        from castor.hub import RecipeInstallError
+
+        try:
+            result = install_recipe(query, dest=dest)
+        except RecipeInstallError as exc:
+            print(f"  ❌ {exc}")
+            sys.exit(1)
+        if result and result.exists():
             print(f"  ✅ Installed to {result}")
         else:
             print(f"  ❌ Recipe '{query}' not found.")
+            sys.exit(1)
 
     elif action == "share":
         config = getattr(args, "config", None)
@@ -7578,6 +7597,12 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_doctor.add_argument("--config", default=None, help="RCAN config file to validate")
+    p_doctor.add_argument(
+        "--home",
+        default=None,
+        help="Robot home to check (default: $ROBOT_HOME, the single robot the "
+        "systemd user units describe, or ~/robot)",
+    )
     p_doctor.add_argument(
         "--auto-fix",
         action="store_true",

@@ -1,0 +1,106 @@
+# PiCar-X Home Patrol Bot
+#
+# The config `castor hub install picar-home-patrol-e7f3a1` writes. Derived from
+# castor/templates/rc_car/robot.rcan.yaml.tmpl, with this recipe's identity, brain and sensors.
+#
+# Its RRN and robot_uuid are unique to this recipe, not inherited: two owners
+# of the same kit installing the same recipe must not collide on identity.
+# Run `castor doctor` after installing — it will tell you whether the wheels
+# this config describes are the ones that actually turn.
+rcan_version: '3.0'
+metadata:
+  robot_name: PiCar-X Home Patrol Bot
+  robot_uuid: 2be2bead-f91e-55f4-9dcb-d37241126fe8
+  author: robotmike
+  license: Apache-2.0
+  description: Autonomous home patrol using SunFounder PiCar-X with camera pan/tilt and Gemini
+    vision
+  tags:
+  - patrol
+  - home
+  - camera
+  - autonomous
+  - picar
+  rrn: RRN-786167742621
+  rrn_uri: rrn://community/robot/opencastor/picar-home-patrol-e7f3a1
+  recipe_id: picar-home-patrol-e7f3a1
+  manufacturer: SunFounder
+  model: PiCar-X v2.0
+agent:
+  provider: google
+  model: gemini-2.5-flash
+  vision_enabled: true
+  safety_stop: true
+physics:
+  type: ackermann
+  dof: 2
+camera:
+  type: picam
+  resolution:
+  - 640
+  - 480
+  framerate: 30
+  depth_enabled: false
+drivers:
+- id: wheels
+  protocol: simulation
+  backend: mock
+channels:
+  whatsapp:
+    enabled: true
+network:
+  telemetry_stream: true
+rcan_protocol:
+  port: 8081
+  enable_mdns: false
+  capabilities:
+  - drive.set
+  - drive.stop
+  - drive.envelope.open
+  - drive.envelope.revoke
+  - status.report
+safety:
+  estop_enabled: true
+  obstacle_stop_cm: 30
+  max_linear_speed_mps: 0.5
+tiered_brain:
+  fast_provider: ollama
+  fast_model: gemma3:1b
+  slow_provider: google
+  slow_model: gemini-2.5-flash
+  planner_interval: 10
+p66:
+  enabled: true
+  loa_enforcement: true
+  consent_required: true
+consent:
+  required: true
+  mode: explicit
+  scope_threshold: control
+security:
+  replay_protection:
+    enabled: true
+    window_s: 30
+  signing:
+    enabled: true
+    algorithm: Ed25519
+loa:
+  enforcement: true
+  min_loa_for_control: 1
+notes:
+  recipe: "Servo steering + ESC. Built from castor/templates/rc_car/, not from a differential\
+    \ preset: no preset in config/presets has this shape, and a differential config on an\
+    \ Ackermann car steers by trying to spin one side faster than the other, which a steering\
+    \ servo cannot do. Real wheels are a deliberate later flip in <robot home>/gateway-policy.env\
+    \ (OPENCASTOR_DRIVE=pca9685) after the on-stand checks \u2014 never a setup default."
+  use_case: Patrols my apartment at night, looking for anything unusual. Sends alerts via
+    WhatsApp if it spots something unexpected like an open window or water on the floor.
+  hardware_bill:
+  - SunFounder PiCar-X v2.0
+  - Raspberry Pi 4B (4GB)
+  - Pi Camera Module v3
+  - 32GB microSD
+  budget: $120
+firmware_hash: null
+attestation_ref: null
+fria_ref: null
