@@ -9518,6 +9518,7 @@ def main() -> None:
         epilog=(
             "Examples:\n"
             "  castor init\n"
+            "  castor init --shape rc-car --non-interactive\n"
             "  castor init --robot-name bob --manufacturer SeeedStudio \\\n"
             "              --model SO-ARM101 --non-interactive\n"
             "  castor init --path /home/pi/bob/ROBOT.md --force\n"
@@ -9526,6 +9527,16 @@ def main() -> None:
     )
     p_init.add_argument(
         "--path", default="ROBOT.md", help="Output ROBOT.md path (default: ROBOT.md)"
+    )
+    p_init.add_argument(
+        "--shape",
+        default=None,
+        choices=["arm", "rc-car", "sim"],
+        help=(
+            "What kind of robot this is. Seeds the name/model/device-id defaults "
+            "and the manifest's bring-up section. Asked first when interactive; "
+            "defaults to 'arm' with --non-interactive"
+        ),
     )
     p_init.add_argument("--robot-name", dest="robot_name", default=None, help="Robot name")
     p_init.add_argument("--manufacturer", default=None, help="Manufacturer / vendor")

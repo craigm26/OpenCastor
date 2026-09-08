@@ -42,14 +42,38 @@ Point it at any LLM (Gemini, GPT-4.1, Claude, Ollama, and 13 more) and any robot
 ### 1. Install
 
 ```bash
-pip install opencastor==2026.4.1.0
+pip install "opencastor>=3.1"
 ```
 
-### 2. Run the setup wizard
+> **The `>=3.1` is load-bearing, not decoration.** A bare `pip install
+> opencastor` resolves the old CalVer line (`2026.4.23.0`), because under
+> PEP 440 a date sorts above `3.x` — and that wheel has no `castor up` in it.
+> Every install instruction in this repository uses this exact string. See
+> [docs/setup/pairing.md](docs/setup/pairing.md#which-install-command).
+
+### 2. Bring the robot up
 
 ```bash
-castor setup
+castor up            # one command: scans the bus, writes the units, prints a pairing QR
 ```
+
+`castor up` is the path the OpenCastor iOS app and the
+[flashable Pi image](docs/IMAGE.md) both use. It detects what is on the
+I²C bus, picks an archetype, writes four systemd **user** units, and prints a QR
+to scan. It starts on **simulated wheels** by design — turning on real PWM is a
+deliberate later edit in `gateway-policy.env`.
+
+Prefer the long-form wizard, or have no robot to detect yet?
+
+```bash
+castor setup                 # 4-step wizard, writes an rcan.yaml
+castor init --shape rc-car   # just a ROBOT.md, shaped like a car
+```
+
+`castor init` asks what shape the robot is before anything else — `arm`,
+`rc-car` or `sim` — because every default it used to offer described an arm.
+The `rc-car` manifest points at `castor up`, which is the only bring-up program
+that knows that shape.
 
 The wizard will:
 - Name your robot and assign an RRN (Robot Registration Number)
@@ -68,12 +92,30 @@ The wizard will:
 ### 3. Start your robot
 
 ```bash
-# Start the AI brain + REST API (port 8000)
+# Start the AI brain + REST API (port 8000 standalone; 8081 under `castor up`)
 castor gateway --config ~/.config/opencastor/bob.rcan.yaml
 
 # Start the cloud bridge (connects robot to Fleet UI — outbound-only)
 castor bridge --config ~/.config/opencastor/bob.rcan.yaml
 ```
+
+#### Ports — the one table
+
+Every port below comes from `castor/up.py`: three adjacent services at
+`--base-port` (default **8080**), plus one fixed helper. Nothing else in this
+repository should quote a different number for a `castor up` robot.
+
+| Service | systemd user unit | Port | Answers |
+|---|---|---|---|
+| Gateway (`robot-md-gateway`) | `<name>-gateway.service` | **8080** (`base + 0`) | `/v1/invoke` with signed receipts — **the port in the pairing QR** |
+| Runtime (OpenCastor) | `<name>-castor.service` | **8081** (`base + 1`) | `/health`, `/api/stop`, `/ws/telemetry` |
+| Console | `<name>-console.service` | **8082** (`base + 2`) | chat brains, `/surface`, `/gaps` |
+| RRF key-resolver stub | `<name>-rrf-stub.service` | **8090** (fixed) | loopback `kid` lookup |
+
+`castor up --base-port 8110` moves the first three to 8110/8111/8112; the RRF
+stub does not move, so a second robot on one host needs the stub's port
+adjusted by hand. Standalone `castor gateway` (no `castor up`) still defaults to
+**8000** — that is a different program on a different port, not this table.
 
 ### 4. One-command systemd setup
 
@@ -229,7 +271,7 @@ Robots connect via `castor bridge` (outbound-only Firestore). No open ports on t
 The LeRobot SO-ARM101 6-DOF serial bus servo arm is auto-detected via USB VID/PID (CH340, `0x1A86/0x7523`).
 
 ```bash
-pip install opencastor[lerobot]
+pip install "opencastor[lerobot]>=3.1"
 castor scan                          # detects arm + suggests preset
 castor wizard --preset so_arm101     # guided config: follower / leader / bimanual
 castor gateway --config so_arm101.rcan.yaml

@@ -4,11 +4,11 @@ The fastest way to use Claude Code with an OpenCastor robot. No harness config, 
 
 ## What this is
 
-Claude Code reads a `ROBOT.md` (RCAN protocol frontmatter + markdown prose; see [live compatibility matrix](https://rcan.dev/compatibility)) through an MCP server — [`robot-md-mcp`](https://github.com/RobotRegistryFoundation/robot-md-mcp). Claude now has your robot's identity, capabilities, and safety gates as MCP resources. From there, Claude's Bash tool dispatches commands through OpenCastor's gateway (port 8001) via RCAN.
+Claude Code reads a `ROBOT.md` (RCAN protocol frontmatter + markdown prose; see [live compatibility matrix](https://rcan.dev/compatibility)) through an MCP server — [`robot-md-mcp`](https://github.com/RobotRegistryFoundation/robot-md-mcp). Claude now has your robot's identity, capabilities, and safety gates as MCP resources. From there, Claude's Bash tool dispatches commands through OpenCastor's runtime (port 8081 on a `castor up` robot; the enforcement gateway is 8080) via RCAN.
 
 ## Prerequisites
 
-- OpenCastor gateway running (`castor gateway`) — verify with `curl -s http://localhost:8001/health`
+- An OpenCastor robot running (`castor up`, or `castor gateway` by hand) — verify with `curl -s http://localhost:8081/health`. Ports: [README.md](../README.md#ports--the-one-table)
 - Node 18.20+ (for `npx`)
 - Claude Code installed (`claude --version`)
 - A `ROBOT.md` for your robot — the [`robot-md`](https://github.com/RobotRegistryFoundation/robot-md) CLI generates a draft:
@@ -60,7 +60,7 @@ Dispatch tools (`invoke_skill`, `query_status`) arrive with `robot-md-mcp` v0.2,
 While `invoke_skill` is deferred to v0.2, Claude Code can dispatch via its Bash tool directly against the OpenCastor gateway. Example:
 
 ```bash
-curl -sS -X POST http://localhost:8001/api/arm/pick_place \
+curl -sS -X POST http://localhost:8081/api/arm/pick_place \
   -H 'Content-Type: application/json' \
   -d '{"target":"red_cube","destination":"bowl"}'
 ```

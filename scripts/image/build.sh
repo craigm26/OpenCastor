@@ -52,9 +52,43 @@ BASE_IMG="${OPENCASTOR_BASE_IMG:-$OC_INVOKER_HOME/image-build/raspios-lite-arm64
 OLLAMA_TAR="${OPENCASTOR_OLLAMA_TAR:-$OC_INVOKER_HOME/image-build/ollama-linux-arm64.tar.zst}"
 WHEELHOUSE="${OPENCASTOR_WHEELHOUSE:-$OC_INVOKER_HOME/image-build/wheelhouse}"
 MODEL_STORE="${OPENCASTOR_MODEL_STORE:-$OC_INVOKER_HOME/.ollama/models}"
-MODEL="${OPENCASTOR_MODEL:-qwen3.5:2b}"
+# THE MODEL IS THE RELEASE'S SIZE BUDGET, AND THAT IS WHY THIS DEFAULT MOVED.
+# GitHub allows 2 GiB per release asset. Measured on the 2026-08-17 build:
+# the .xz was 3,321,684,768 bytes, of which 2,741,192,820 were qwen3.5:2b's
+# blobs -- already-compressed weights that xz cannot touch. Everything else in
+# the image (base rootfs, venv, ollama binary) compressed to 580,491,948, so
+# the model budget for a single downloadable file is
+#
+#     2,147,483,648 - 580,491,948 = 1,566,991,700 bytes
+#
+# qwen3.5:2b (2,741,192,820) misses that by 1.17 GB and even its q4_K_M quant
+# (1,945,323,638) misses by 378 MB, which is why the last release shipped in
+# two parts the owner had to `cat` back together in a terminal the whole path
+# claims not to have. No amount of package-stripping closes a 1.17 GB gap out
+# of a 580 MB compressible pool: the model IS the release size, so the model is
+# what moved.
+#
+# qwen3:1.7b projects to 1,939,785,392 bytes, 198 MiB under the cap, and takes
+# 1.38 GB off the DOWNLOAD -- which is now inside the stopwatch, because the
+# stopwatch starts at "click the download link". It does not shrink the flash:
+# MIN_GROW_MIB dominates the uncompressed size. Use --shrink for that.
+#
+# 198 MiB of margin is about 10%. If the venv grows into it the preflight
+# below says so before the build starts; the next models down are
+# qwen2.5:1.5b (986,061,892) and gemma3:1b (815,319,791). Pull it first:
+#
+#     ollama pull qwen3:1.7b
+#
+MODEL="${OPENCASTOR_MODEL:-qwen3:1.7b}"
 WORK="${OPENCASTOR_IMAGE_WORK:-$OC_INVOKER_HOME/image-build/work}"
 XZ_PRESET="${OPENCASTOR_XZ_PRESET:-6}"
+# One release asset, one download link, no terminal. GitHub's per-asset cap.
+ASSET_BUDGET="${OPENCASTOR_ASSET_BUDGET:-2147483648}"
+# What everything EXCEPT the model compressed to on the 2026-08-17 build:
+# 3,321,684,768 total .xz minus 2,741,192,820 of model blobs. Used to project
+# the release size at minute zero instead of minute twenty-five. Re-measure it
+# whenever the base image or the wheelhouse changes shape, and say so here.
+XZ_OTHER_MEASURED="${OPENCASTOR_XZ_OTHER_BYTES:-580491948}"
 
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 
@@ -85,8 +119,14 @@ build.sh — bake opencastor-pi.img.xz. Needs root (loop devices, mount, chroot)
                    ten minutes; this is the lever that shortens it. Untested
                    at root as of this writing — see docs/IMAGE.md.
   --xz-preset N    xz compression preset, 0-9 with an optional 'e' suffix
-                   (default 6; -9 buys little on a payload that is mostly an
-                   already-compressed 2.7 GB model).
+                   (default 6; -9 buys little on a payload that is mostly
+                   already-compressed model weights).
+  --asset-budget N the largest .xz this build is allowed to emit, in bytes.
+                   Default 2147483648 -- GitHub's per-release-asset cap, which
+                   is what makes the release ONE file the owner clicks rather
+                   than two parts they `cat` in a terminal. Checked in
+                   preflight from measured inputs AND again on the real file.
+                   The build refuses to split; it tells you what to shrink.
   -h, --help       this
 
 Inputs (override with the matching OPENCASTOR_* environment variable):
@@ -94,7 +134,8 @@ Inputs (override with the matching OPENCASTOR_* environment variable):
   ollama       OPENCASTOR_OLLAMA_TAR    ~/image-build/ollama-linux-arm64.tar.zst
   wheelhouse   OPENCASTOR_WHEELHOUSE    ~/image-build/wheelhouse
   model store  OPENCASTOR_MODEL_STORE   ~/.ollama/models
-  model        OPENCASTOR_MODEL         qwen3.5:2b
+  model        OPENCASTOR_MODEL         qwen3:1.7b
+  asset cap    OPENCASTOR_ASSET_BUDGET  2147483648 (2 GiB, GitHub per asset)
   workdir      OPENCASTOR_IMAGE_WORK    ~/image-build/work
 EOF
 }
@@ -115,6 +156,17 @@ check_xz_preset() {
 # The default can arrive from the environment, which no flag parser ever sees.
 check_xz_preset "$XZ_PRESET" "OPENCASTOR_XZ_PRESET"
 
+# Same reasoning as check_xz_preset: a budget of "2GB" or "" would otherwise
+# turn into an arithmetic error inside a `[ ]` twenty-five minutes from now.
+check_asset_budget() {
+  case "$1" in
+    ''|*[!0-9]*) die "$2 must be a whole number of BYTES (got '$1')" ;;
+  esac
+  [ "$1" -gt 0 ] || die "$2 must be greater than zero (got '$1')"
+}
+check_asset_budget "$ASSET_BUDGET" "OPENCASTOR_ASSET_BUDGET"
+check_asset_budget "$XZ_OTHER_MEASURED" "OPENCASTOR_XZ_OTHER_BYTES"
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
@@ -128,6 +180,10 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || die "--xz-preset needs a value: 0-9, optionally followed by 'e'"
       check_xz_preset "$2" "--xz-preset"
       XZ_PRESET="$2"; shift 2 ;;
+    --asset-budget)
+      [ $# -ge 2 ] || die "--asset-budget needs a value: a whole number of bytes"
+      check_asset_budget "$2" "--asset-budget"
+      ASSET_BUDGET="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1 (try --help)" ;;
   esac
@@ -274,6 +330,40 @@ VENV_EST=$(( WHEEL_BYTES * 3 ))
 PAYLOAD=$(( MODEL_BYTES + OLLAMA_BYTES + VENV_EST ))
 GROW_MIB=$(( PAYLOAD / 1048576 + SLACK_MIB ))
 if [ "$GROW_MIB" -lt "$MIN_GROW_MIB" ]; then GROW_MIB="$MIN_GROW_MIB"; fi
+
+# -- ONE FILE, decided now rather than after the xz ---------------------------
+# The 2026-08-17 release shipped as opencastor-pi.img.xz.part-00 and .part-01
+# with a `cat` and a `sha256sum -c` in the release body -- three terminal steps
+# on the one path whose whole claim is "there is no terminal", and three steps
+# the ten-minute stopwatch did not count because it started at "click Write".
+# The artifact is one file or it is not a release, so the size question is
+# asked HERE, off measured inputs, and not twenty-five minutes from now.
+#
+# Only the model's bytes move this number in practice: they are already
+# compressed, so xz passes them through almost unchanged, while the rootfs and
+# the venv compress by roughly 4x. XZ_OTHER_MEASURED is what all of that came
+# to on the last real build; see its definition for the arithmetic.
+PROJECTED_XZ=$(( MODEL_BYTES + XZ_OTHER_MEASURED ))
+say "release    ~$(oc_human "$PROJECTED_XZ") projected .xz (model $(oc_human "$MODEL_BYTES") + $(oc_human "$XZ_OTHER_MEASURED") measured) vs a $(oc_human "$ASSET_BUDGET") cap"
+if [ "$NO_COMPRESS" -eq 0 ] && [ "$PROJECTED_XZ" -gt "$ASSET_BUDGET" ]; then
+  die "$MODEL would not ship as ONE file.
+
+  projected .xz   $(oc_human "$PROJECTED_XZ")  = model $(oc_human "$MODEL_BYTES") + $(oc_human "$XZ_OTHER_MEASURED") of rootfs/venv/ollama
+  asset budget    $(oc_human "$ASSET_BUDGET")  (GitHub allows this much per release asset)
+  over by         $(oc_human "$(( PROJECTED_XZ - ASSET_BUDGET ))")
+
+  Splitting is not the answer: two parts put a \`cat\` and a \`sha256sum -c\` in
+  front of an owner the whole image path promises will never open a terminal.
+
+  Pick a model whose blobs fit under $(oc_human "$(( ASSET_BUDGET - XZ_OTHER_MEASURED ))"):
+    OPENCASTOR_MODEL=qwen3:1.7b     (1.27 GiB)  the default
+    OPENCASTOR_MODEL=qwen2.5:1.5b   (940 MiB)
+    OPENCASTOR_MODEL=gemma3:1b      (778 MiB)
+  or, if the model is genuinely fixed, shrink the other side and re-measure
+  OPENCASTOR_XZ_OTHER_BYTES: fewer wheels in requirements-image.txt, or a
+  higher --xz-preset. --asset-budget overrides this check for a build that is
+  not going to a GitHub release at all."
+fi
 
 say "ollama     $(oc_human "$OLLAMA_BYTES") after dropping cuda_v12/cuda_v13"
 say "wheelhouse $(oc_human "$WHEEL_BYTES") of wheels -> ~$(oc_human "$VENV_EST") installed"
@@ -688,6 +778,23 @@ xz -T0 "-$XZ_PRESET" --keep --force "$OUT_IMG"
 # next rootless step (copying it to a laptop, checking it) needs sudo too.
 chown "$OC_INVOKER" "$OUT_IMG" "$OUT_XZ" "$OUT_XZ.sha256" 2>/dev/null || true
 
+# The projection above is an estimate; this is the file. A release that needs
+# splitting must fail HERE, loudly, while the operator is still at the keyboard
+# -- not silently at upload time, where the only tool to hand is `split`.
+XZ_BYTES="$(stat -c%s "$OUT_XZ")"
+if [ "$XZ_BYTES" -gt "$ASSET_BUDGET" ]; then
+  die "$OUT_XZ is $(oc_human "$XZ_BYTES"), over the $(oc_human "$ASSET_BUDGET") per-asset cap by $(oc_human "$(( XZ_BYTES - ASSET_BUDGET ))").
+
+  The file is on disk and is a perfectly good image; it is not a releasable
+  one. Do NOT split it. Rebuild with a smaller OPENCASTOR_MODEL (see --help),
+  and while you are here update OPENCASTOR_XZ_OTHER_BYTES in build.sh: the
+  projection said $(oc_human "$PROJECTED_XZ") and reality said $(oc_human "$XZ_BYTES"), so the
+  measured constant is $(oc_human "$(( XZ_BYTES - MODEL_BYTES ))") now."
+fi
+if [ "$(( PROJECTED_XZ > XZ_BYTES ? PROJECTED_XZ - XZ_BYTES : XZ_BYTES - PROJECTED_XZ ))" -gt 104857600 ]; then
+  warn "the size projection was off by more than 100 MiB (said $(oc_human "$PROJECTED_XZ"), got $(oc_human "$XZ_BYTES")). Set OPENCASTOR_XZ_OTHER_BYTES=$(( XZ_BYTES - MODEL_BYTES )) in build.sh so the next preflight tells the truth."
+fi
+
 stage "done"
 ok "$OUT_XZ  $(oc_human "$(stat -c%s "$OUT_XZ")")"
 ok "$OUT_XZ.sha256  $(cut -d' ' -f1 < "$OUT_XZ.sha256")"
@@ -698,6 +805,17 @@ cat <<NEXT
   does not touch those, and the robot takes its NAME from the hostname you type.
 
   What is in it: $OUT_PROV (and /etc/opencastor-image.json on the robot).
+
+  Release it as ONE asset -- this is the whole publish step:
+
+    gh release create image-vX.Y.Z --repo craigm26/OpenCastor \\
+      --title "OpenCastor Pi image X.Y.Z" \\
+      "$OUT_XZ" "$OUT_XZ.sha256" "$OUT_PROV"
+
+  $(basename "$OUT_XZ") is $(oc_human "$XZ_BYTES"), under the $(oc_human "$ASSET_BUDGET")
+  per-asset cap, so the owner clicks one link and drops it into the Imager.
+  Never `split` it: the two-part release put a terminal in front of the one
+  path that promises there is not one.
 
   Then: docs/IMAGE.md, "The measured ten minutes".
 NEXT

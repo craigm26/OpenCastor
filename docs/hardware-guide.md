@@ -127,7 +127,7 @@ Did you find a robot kit?
 │   └─► Any ESP32 dev board? → esp32_generic.rcan.yaml
 │
 ├─► Is it a small purple/blue board with "Cytron"?
-│   └─► Maker Pi RP2040 label? → cytron_maker_pi.rcan.yaml
+│   └─► Maker Pi RP2040 label? → esp32_generic.rcan.yaml (no Cytron preset ships yet)
 │
 └─► None of the above?
     └─► See "Identifying Your Hardware's Driver Protocol" below, then

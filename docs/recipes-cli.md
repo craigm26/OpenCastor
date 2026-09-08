@@ -29,7 +29,7 @@ curl http://192.168.1.10:8000/health
 
 ```bash
 # Step 1: Record a 60-second session
-castor record --config config/presets/rpi_rc_car.rcan.yaml --duration 60
+castor record --config config/presets/sunfounder_picar.rcan.yaml --duration 60
 
 # Step 2: Run improvement from the latest episode
 castor improve --from-latest-episode
@@ -187,7 +187,7 @@ castor lint --config robot.rcan.yaml
 ### Diff two config files
 
 ```bash
-castor diff config/presets/rpi_rc_car.rcan.yaml my_custom.rcan.yaml
+castor diff config/presets/sunfounder_picar.rcan.yaml my_custom.rcan.yaml
 
 # Shows: added keys, removed keys, changed values
 ```

@@ -23,13 +23,6 @@
       "description": "Arduino_L298N_Generic preset"
     },
     {
-      "name": "cytron_maker_pi",
-      "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/cytron_maker_pi.rcan.yaml",
-      "tags": ["mobile", "rp2040", "micropython", "cytron", "makerspace", "stem", "second-hand"],
-      "author": "OpenCastor Default",
-      "description": "Cytron_Maker_Pi_RP2040 preset"
-    },
-    {
       "name": "dynamixel_arm",
       "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/dynamixel_arm.rcan.yaml",
       "tags": ["arm", "manipulator", "dynamixel", "6dof"],
@@ -77,13 +70,6 @@
       "tags": ["mobile", "educational", "makeblock", "mbot", "arduino", "stem", "second-hand"],
       "author": "OpenCastor Default",
       "description": "Makeblock_mBot preset"
-    },
-    {
-      "name": "rpi_rc_car",
-      "url": "https://raw.githubusercontent.com/craigm26/OpenCastor/main/config/presets/rpi_rc_car.rcan.yaml",
-      "tags": ["mobile", "rc_car", "raspberry_pi", "pca9685", "csi_camera", "whatsapp", "claude"],
-      "author": "OpenCastor",
-      "description": "Castor_RC_Car preset"
     },
     {
       "name": "sunfounder_picar",

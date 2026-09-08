@@ -12,7 +12,16 @@ OpenCastor is an open-source **productized open-core RCAN runtime** — Layer 4 
 
 ## Quick Start
 
+Users install the published wheel; contributors install the tree.
+
 ```bash
+# users — the ONE install line this project documents anywhere
+pip install "opencastor>=3.1"     # `>=3.1` because a bare name resolves the
+                                  # old CalVer wheel (2026.4.23.0), which has
+                                  # no `castor up` in it
+castor up                         # scan the bus, write the units, print a QR
+
+# contributors
 git clone https://github.com/craigm26/OpenCastor.git
 cd OpenCastor
 pip install -e ".[channels]"
@@ -20,6 +29,14 @@ cp .env.example .env
 castor wizard        # interactive setup
 castor gateway       # start API gateway
 ```
+
+**Ports** for a `castor up` robot are three adjacent services at `--base-port`
+(default 8080) plus one fixed helper — gateway **8080**, runtime **8081**,
+console **8082**, RRF stub **8090** (`castor/up.py`, `GATEWAY_OFF`/`RUNTIME_OFF`/
+`CONSOLE_OFF`/`RRF_STUB_PORT`). The table lives in
+[README.md](README.md#ports--the-one-table); do not restate the numbers
+elsewhere. Standalone `castor gateway` still defaults to 8000 and is a
+different thing.
 
 ## Repository Layout
 
@@ -204,7 +221,7 @@ metadata:
   robot_name: my-robot
   rrn: RRN-000000000001
   rrn_uri: rrn://org/robot/model/id
-  rcan_uri: rcan://robot.local:8000/my-robot
+  rcan_uri: rcan://robot.local:8081/my-robot   # runtime port; 8000 only for a standalone `castor gateway`
   version: 2026.3.21.1
 agent:
   provider: google
@@ -300,7 +317,7 @@ Versioning: `YYYY.MM.DD.patch` — bump patch for each commit, date when date ch
 - **RRN**: `RRN-000000000003` / `rrn://craigm26/robot/opencastor-rpi5-hailo-soarm101/bob-001`
 - **Config**: `~/opencastor/bob.rcan.yaml` (gitignored — see [live protocol matrix](https://rcan.dev/compatibility))
 - **Host**: `robot.local`
-- **RURI**: `rcan://robot.local:8001/bob`
+- **RURI**: `rcan://robot.local:8081/bob` — the runtime port (`base_port + 1`); the gateway Bob's app talks to is 8080
 - **Agent**: `claude-sonnet-4-6` via Claude Max/Pro (OAuth token at `~/.opencastor/anthropic-token`)
 - **Servos**: Feetech STS3215 ×6 on `/dev/ttyUSB0`
 - **Camera**: DepthAI OAK-D (`type: depthai` in config)

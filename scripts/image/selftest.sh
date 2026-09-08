@@ -132,10 +132,46 @@ assert "the QR page binds :80 via an ambient capability, not as root" \
 assert "the QR page runs as the opencastor user" \
   grep -q '^User=opencastor' "$HERE/firstboot/opencastor-qr.service"
 
-# Nothing anywhere may write to the Imager's partition.
-assert "no script writes to cmdline.txt/config.txt/firstrun.sh/userconf.txt" \
+# -- the Imager's partition: one sanctioned writer, and it is not us ---------
+# This used to be a single blanket "nothing writes to the boot partition", and
+# that blanket cost the product its wheels: Raspberry Pi OS ships
+# dtparam=i2c_arm=on commented out, so /dev/i2c-1 does not exist on a fresh
+# card, so `castor up` finds no PCA9685 and provisions a robot that pairs
+# and cannot move. The prohibition was there to protect the IMAGER's
+# customisation — hostname, Wi-Fi, firstrun.sh, cmdline.txt — never the
+# dtparam line. So it is now stated precisely instead of broadly.
+#
+# The build still writes nothing at all:
+assert "the BUILD writes nothing to cmdline.txt/config.txt/firstrun.sh/userconf.txt" \
   not grep -rnE '(cp|install|sed|tee|>>?)[^|]*(boot/firmware|/boot/)(cmdline|config|firstrun|userconf)' \
-    "$HERE/build.sh" "$HERE/lib/common.sh" "$HERE/lib/chroot-stage.sh" "$HERE/firstboot/firstboot.sh"
+    "$HERE/build.sh" "$HERE/lib/common.sh" "$HERE/lib/chroot-stage.sh"
+# …and neither does first boot, by hand. Every byte that changes on that
+# partition changes through raspi-config, which knows how to set one key.
+assert "firstboot never hand-edits a boot-partition file either" \
+  not grep -rnE '(cp|install|sed|tee|>>?)[^|]*(boot/firmware|/boot/)(cmdline|config|firstrun|userconf)' \
+    "$HERE/firstboot/firstboot.sh"
+# Comment lines are excluded on purpose: the header EXPLAINS that firstrun.sh
+# is the Imager's, and that sentence is why this assertion exists. What must
+# not appear is a line of code that names one of those files.
+assert "no CODE in firstboot names the Imager's own files (hostname/Wi-Fi stay its job)" \
+  not grep -qnE '^[^#]*(firstrun|userconf|cmdline)' "$HERE/firstboot/firstboot.sh"
+assert "the ONE exception is raspi-config's own non-interactive I2C switch" \
+  grep -q 'raspi-config nonint do_i2c 0' "$HERE/firstboot/firstboot.sh"
+assert "…and it is reached only when the bus is actually missing" \
+  grep -q 'if \[ -e "\$I2C_DEV" \]; then' "$HERE/firstboot/firstboot.sh"
+assert "…and only as root, so a rootless run can never reboot a dev box" \
+  grep -q 'elif \[ "\$(id -u)" -ne 0 \]; then' "$HERE/firstboot/firstboot.sh"
+assert "the extra reboot is one-shot: the stamp is both written and read" \
+  test "$(grep -c 'I2C_REBOOT' "$HERE/firstboot/firstboot.sh")" -ge 3
+assert "…and it is --no-block, so the unit is not waiting on its own shutdown" \
+  grep -q 'systemctl --no-block reboot' "$HERE/firstboot/firstboot.sh"
+# Order is the whole point: reboot BEFORE the 90 s ollama wait and `castor up`,
+# not after them, or the retry pays for a whole provisioning pass twice.
+I2C_LINE="$(grep -n '^PHASE="i2c"' "$HERE/firstboot/firstboot.sh" | cut -d: -f1)"
+UP_LINE="$(grep -n '^PHASE="castor-up"' "$HERE/firstboot/firstboot.sh" | cut -d: -f1)"
+BRAIN_LINE="$(grep -n '^PHASE="brain"' "$HERE/firstboot/firstboot.sh" | cut -d: -f1)"
+assert "the I2C decision is made before the brain wait and before castor up (i2c@$I2C_LINE brain@$BRAIN_LINE up@$UP_LINE)" \
+  test "$I2C_LINE" -lt "$BRAIN_LINE" -a "$BRAIN_LINE" -lt "$UP_LINE"
 assert "build.sh mounts the boot partition READ-ONLY" \
   grep -q 'mount -o ro "\$BOOTDEV"' "$HERE/build.sh"
 assert "build.sh refuses a non-aarch64 host before it touches anything" \
@@ -195,12 +231,41 @@ fi
 # ===========================================================================
 stage "5. build.sh --dry-run (rootless, validates every staged input)"
 # ===========================================================================
+# WHICH MODEL THIS STAGE RUNS WITH, AND WHY IT IS NOT SIMPLY THE DEFAULT.
+# build.sh's default model has to be PULLED before a build; a host that has
+# not pulled it fails preflight for a reason that has nothing to do with the
+# code under test. So the input/flag checks run against the smallest model
+# this host actually has staged, and the default gets its own check below.
+STORE="${OPENCASTOR_MODEL_STORE:-$HOME/.ollama/models}"
+STAGED_MODEL="$(python3 - "$STORE" <<'PYEOF'
+import json, os, sys
+store = sys.argv[1]
+lib = os.path.join(store, "manifests", "registry.ollama.ai", "library")
+best = None
+for repo in sorted(os.listdir(lib)) if os.path.isdir(lib) else []:
+    d = os.path.join(lib, repo)
+    for tag in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        try:
+            m = json.load(open(os.path.join(d, tag)))
+            n = sum(os.path.getsize(os.path.join(store, "blobs", l["digest"].replace(":", "-")))
+                    for l in [m["config"], *m["layers"]])
+        except Exception:
+            continue
+        if best is None or n < best[0]:
+            best = (n, f"{repo}:{tag}")
+print(best[1] if best else "")
+PYEOF
+)"
 DRY="$TMP/dry.out"
-"$HERE/build.sh" --dry-run > "$DRY" 2>&1
-check $? "build.sh --dry-run exits clean" "$(tail -5 "$DRY")"
+if [ -z "$STAGED_MODEL" ]; then
+  skip "no ollama model is staged in $STORE — build.sh --dry-run cannot run here"
+  : > "$DRY"
+else
+env OPENCASTOR_MODEL="$STAGED_MODEL" "$HERE/build.sh" --dry-run > "$DRY" 2>&1
+check $? "build.sh --dry-run exits clean (model $STAGED_MODEL)" "$(tail -5 "$DRY")"
 assert "--dry-run reports every input present" grep -q 'dry run: every input is present' "$DRY"
 assert "--dry-run prints the computed growth" grep -q 'grow by' "$DRY"
-assert "--dry-run names the model it will stage" grep -q 'qwen3.5:2b' "$DRY"
+assert "--dry-run names the model it will stage" grep -q "$STAGED_MODEL" "$DRY"
 assert "--dry-run states the boot partition is read-only" grep -q 'READ-ONLY' "$DRY"
 # Refusing to run as root is not the same as running: prove nothing was made.
 assert "--dry-run created no work image" \
@@ -239,6 +304,55 @@ assert "a bad OPENCASTOR_XZ_PRESET is caught too" \
   not env OPENCASTOR_XZ_PRESET=99 "$HERE/build.sh" -h
 assert "a good OPENCASTOR_XZ_PRESET still works" \
   env OPENCASTOR_XZ_PRESET=0 "$HERE/build.sh" -h
+
+# -- ONE FILE: the release-size budget, both ways ---------------------------
+# The 2026-08-17 release shipped as .part-00 and .part-01 with a `cat` and a
+# `sha256sum -c` in the release body — three terminal steps on the path whose
+# central claim is that there is no terminal, and three steps the ten-minute
+# stopwatch never counted because it started at "click Write". So the build
+# now refuses to emit something that cannot be one asset, and it refuses at
+# minute zero rather than after the xz.
+assert "--dry-run projects the release size against the per-asset cap" \
+  grep -q 'projected .xz' "$DRY"
+assert "…and says it fits, for a model that fits" \
+  not grep -q 'would not ship as ONE file' "$DRY"
+env OPENCASTOR_MODEL="$STAGED_MODEL" "$HERE/build.sh" --dry-run --asset-budget 1 \
+  >"$TMP/budget.out" 2>&1
+check "$([ $? -ne 0 ] && echo 0 || echo 1)" \
+  "a model that cannot ship as one asset FAILS the dry run"
+assert "…naming the shortfall, not just the failure" \
+  grep -q 'over by' "$TMP/budget.out"
+assert "…and refusing the split rather than suggesting it" \
+  grep -q 'Splitting is not the answer' "$TMP/budget.out"
+assert "…and offering models that do fit" \
+  grep -q 'OPENCASTOR_MODEL=' "$TMP/budget.out"
+fi   # STAGED_MODEL
+
+assert "--asset-budget with no value errors instead of \$2-unbound" \
+  not "$HERE/build.sh" --asset-budget
+assert "--asset-budget 2GB is rejected — it is BYTES" \
+  not "$HERE/build.sh" --asset-budget 2GB -h
+assert "--asset-budget 0 is rejected" not "$HERE/build.sh" --asset-budget 0 -h
+assert "--asset-budget 2147483648 is accepted" \
+  "$HERE/build.sh" --asset-budget 2147483648 -h
+assert "a bad OPENCASTOR_ASSET_BUDGET is caught too" \
+  not env OPENCASTOR_ASSET_BUDGET=lots "$HERE/build.sh" -h
+# Nothing in the rail may reintroduce the split, in code or in the runbook.
+# A CALL to split(1), not the word: build.sh's own help text and its refusal
+# message both talk about splitting, which is exactly the point of them.
+assert "build.sh never calls split(1) on its own artifact" \
+  not grep -qE '(^|[[:space:];|&(])split[[:space:]]+-' "$HERE/build.sh"
+# The runbook still QUOTES the two-part release, as the thing that must not
+# come back; what it must not contain is a line telling anyone to do it. So
+# the check is for an instruction at the start of a line, not for the words.
+assert "the runbook no longer INSTRUCTS a cat/sha256sum of image parts" \
+  not grep -qE '^(cat|sha256sum).*(part-|img\.xz)' "$HERE/../../docs/IMAGE.md"
+assert "…and states the one-file rule instead" \
+  grep -q 'one file or it is not a release' "$HERE/../../docs/IMAGE.md"
+assert "…and the stopwatch starts at the download, not at Write" \
+  grep -q 'Click the release.s download link' "$HERE/../../docs/IMAGE.md"
+assert "build.sh carries the arithmetic behind the default model, not a bare number" \
+  grep -q '2,147,483,648 - 580,491,948' "$HERE/build.sh"
 
 # ===========================================================================
 stage "6. wheelhouse completeness — a venv built with the network refused"
@@ -371,6 +485,90 @@ assert "…with phase=done" \
 import json
 s = json.load(open('$D/status.json'))
 assert s['phase'] == 'done', s['phase']"
+
+# ---------------------------------------------------------------------------
+# Cases E, F and G: the I2C exception, which is the only thing this project
+# changes on the boot partition and therefore the thing most worth rehearsing.
+#
+# Three outcomes have to be distinguishable: the bus comes up without a reboot
+# (the common case, zero seconds on the ten-minute clock), the bus needs the
+# one reboot this script is allowed to take, and the script is not root — in
+# which case it must do NOTHING, because that is the case a developer running
+# this self-test on their own machine is in, and a stray `systemctl reboot`
+# there is the worst bug this file could ship.
+I2CBIN="$TMP/i2cbin"; mkdir -p "$I2CBIN"
+cp "$BIN/runuser" "$BIN/curl" "$I2CBIN/"
+# `id -u` with no argument decides rootness; `id -u USER` must stay real.
+cat > "$I2CBIN/id" <<'EOS'
+#!/bin/sh
+if [ "$1" = "-u" ] && [ $# -eq 1 ]; then echo 0; exit 0; fi
+exec /usr/bin/id "$@"
+EOS
+cat > "$I2CBIN/raspi-config" <<'EOS'
+#!/bin/sh
+echo "raspi-config $*" >> "$OC_I2C_CALLS"
+exit 0
+EOS
+cat > "$I2CBIN/systemctl" <<'EOS'
+#!/bin/sh
+echo "systemctl $*" >> "$OC_I2C_CALLS"
+exit 1
+EOS
+printf '#!/bin/sh\nexit 0\n' > "$I2CBIN/modprobe"
+# The dtparam stub is the switch between case E and case F: creating the node
+# is exactly what a working runtime overlay apply does.
+cat > "$I2CBIN/dtparam" <<'EOS'
+#!/bin/sh
+echo "dtparam $*" >> "$OC_I2C_CALLS"
+[ -n "${OC_I2C_MAKES_NODE:-}" ] && : > "$OC_I2C_DEV"
+exit 0
+EOS
+chmod +x "$I2CBIN"/*
+
+E="$TMP/caseE"; mkdir -p "$E/robot"
+PATH="$I2CBIN:$PATH" OC_USER="$(id -un)" OC_STATE="$E" VENV="$FAKEVENV" \
+  ROBOT_HOME="$E/robot" OLLAMA_WAIT=1 USERBUS_WAIT=1 \
+  OC_I2C_DEV="$E/i2c-1" OC_I2C_CALLS="$E/calls" \
+  "$HERE/firstboot/firstboot.sh" >"$E/out" 2>&1
+check $? "a boot with no I2C bus exits 0 and hands the machine to the reboot"
+assert "…having enabled it through raspi-config's own switch, not by editing config.txt" \
+  grep -qx 'raspi-config nonint do_i2c 0' "$E/calls"
+assert "…and asked systemd for exactly one non-blocking reboot" \
+  grep -qx 'systemctl --no-block reboot' "$E/calls"
+assert "…leaving the one-shot stamp so it can never loop" test -f "$E/.i2c-reboot"
+assert "…and NO .provisioned stamp, so provisioning runs again after the reboot" \
+  not test -f "$E/.provisioned"
+assert "…with a page that says a reboot is happening, not that something broke" \
+  python3 -c "
+import json
+s = json.load(open('$E/status.json'))
+assert s['phase'] == 'rebooting', s['phase']
+assert any(d.startswith('i2c-reboot') for d in s['degraded']), s['degraded']"
+assert "…and it never reached castor up, which is the point of rebooting early" \
+  not grep -q 'running: castor up' "$E/firstboot.log"
+
+F="$TMP/caseF"; mkdir -p "$F/robot"
+printf 'PNG-ish bytes\n' > "$F/robot/pair-qr.png"
+PATH="$I2CBIN:$PATH" OC_USER="$(id -un)" OC_STATE="$F" VENV="$FAKEVENV" \
+  ROBOT_HOME="$F/robot" OLLAMA_WAIT=1 USERBUS_WAIT=1 \
+  OC_I2C_DEV="$F/i2c-1" OC_I2C_CALLS="$F/calls" OC_I2C_MAKES_NODE=1 \
+  "$HERE/firstboot/firstboot.sh" >"$F/out" 2>&1
+check $? "a runtime dtparam that works costs the clock zero extra boots"
+assert "…so nothing asked for a reboot" not grep -q 'reboot' "$F/calls"
+assert "…no one-shot stamp was spent" not test -f "$F/.i2c-reboot"
+assert "…and the boot ran through to castor up and stamped" test -f "$F/.provisioned"
+
+G="$TMP/caseG"; mkdir -p "$G/robot"
+printf 'PNG-ish bytes\n' > "$G/robot/pair-qr.png"
+PATH="$BIN:$PATH" OC_USER="$(id -un)" OC_STATE="$G" VENV="$FAKEVENV" \
+  ROBOT_HOME="$G/robot" OLLAMA_WAIT=1 USERBUS_WAIT=1 \
+  OC_I2C_DEV="$G/i2c-1" \
+  "$HERE/firstboot/firstboot.sh" >"$G/out" 2>&1
+check $? "a rootless run finishes normally"
+assert "…and says so rather than touching the bus" \
+  grep -q 'is missing and this is not root' "$G/firstboot.log"
+assert "…having enabled nothing and rebooted nothing" \
+  not grep -qE 'raspi-config|reboot' "$G/firstboot.log"
 
 # ===========================================================================
 stage "8. the pairing page — served by plain python3, curled for real"

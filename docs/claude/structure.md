@@ -236,10 +236,8 @@ OpenCastor/
 │       ├── waveshare_alpha.rcan.yaml
 │       ├── sunfounder_picar.rcan.yaml
 │       ├── dynamixel_arm.rcan.yaml
-│       ├── rpi_rc_car.rcan.yaml
 │       ├── arduino_l298n.rcan.yaml
 │       ├── esp32_generic.rcan.yaml
-│       ├── cytron_maker_pi.rcan.yaml
 │       ├── elegoo_tumbller.rcan.yaml
 │       ├── freenove_4wd.rcan.yaml
 │       ├── lego_mindstorms_ev3.rcan.yaml
