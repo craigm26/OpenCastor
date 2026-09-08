@@ -4,7 +4,17 @@ RCAN mDNS Discovery.
 Opt-in service broadcasting and peer discovery over mDNS.
 Enabled when ``rcan_protocol.enable_mdns: true`` in the RCAN config.
 
-Advertises as ``_rcan._tcp.local`` with TXT records containing:
+ONE SERVICE TYPE, TWO PUBLISHERS. This module used to advertise on
+``_rcan._tcp.local.`` while the OpenCastor app browsed for
+``_opencastor._tcp.local.``, so a robot with mDNS switched on was publishing
+into a channel nobody listened to, and the flag was documented as "leave it
+off" because the record it produced could not be acted on anyway. Both now
+publish :data:`castor.discovery.SERVICE_TYPE` and both carry the same
+app-facing keys, so turning the flag on makes a robot findable instead of
+merely audible. The legacy type is still BROWSED, so peers running older builds
+are not lost.
+
+Advertises with TXT records containing the RCAN peer fields:
 
 - ``ruri``    -- Robot's RCAN URI
 - ``model``   -- Robot model name
@@ -13,6 +23,14 @@ Advertises as ``_rcan._tcp.local`` with TXT records containing:
 - ``version`` -- RCAN protocol version
 - ``name``    -- Human-readable robot name
 - ``status``  -- Current status (active, idle, estop)
+
+plus the client-facing record from :mod:`castor.discovery` (``rrn``,
+``gateway_port``, ``castor_port``, ``console_port``, ``manifest_path``, ``v``)
+whenever this process can work out its own identity — which it can whenever
+``ROBOT_HOME`` or ``ROBOT_RRN`` is set, i.e. under any unit `castor up` writes.
+Without an ``rrn`` a client cannot match a found robot to credentials it holds,
+so a record missing it is deliberately reported as unusable by
+``castor discovery check`` rather than quietly published as if it were fine.
 
 Requires ``zeroconf>=0.131.0`` (pure Python, ~800KB).
 """
@@ -26,6 +44,16 @@ import time
 from collections.abc import Callable
 from typing import Optional
 
+#: Shared with :mod:`castor.discovery` on purpose — see the module docstring.
+#: Importing rather than restating it makes a future divergence a syntax-level
+#: impossibility instead of a two-file, silent, LAN-only bug.
+from castor.discovery import (
+    LEGACY_SERVICE_TYPE,
+    SERVICE_TYPE,
+    RobotRecord,
+    record_from_env,
+)
+
 logger = logging.getLogger("OpenCastor.RCAN.mDNS")
 
 try:
@@ -35,7 +63,21 @@ try:
 except ImportError:
     HAS_ZEROCONF = False
 
-SERVICE_TYPE = "_rcan._tcp.local."
+#: Both types are browsed: the current one, and the one older robots publish.
+BROWSE_TYPES = [SERVICE_TYPE, LEGACY_SERVICE_TYPE]
+
+
+def _record_from_environment() -> RobotRecord | None:
+    """This robot's client-facing record, when the environment names it.
+
+    Never raises. A runtime that cannot say who it is still advertises a
+    perfectly good RCAN peer record; it just cannot be re-addressed by a phone,
+    which is exactly what the missing ``rrn`` will tell anyone who looks.
+    """
+    try:
+        return record_from_env()
+    except ValueError:
+        return None
 
 
 class RCANServiceBroadcaster:
@@ -58,7 +100,11 @@ class RCANServiceBroadcaster:
         capabilities: Optional[list[str]] = None,
         model: str = "unknown",
         status_fn: Optional[Callable[[], str]] = None,
+        record: Optional["RobotRecord"] = None,
     ):
+        #: The client-facing half of the record. Passed in by a caller that
+        #: knows it, else read from the environment the units already set.
+        self.record = record if record is not None else _record_from_environment()
         self.ruri = ruri
         self.robot_name = robot_name
         self.port = port
@@ -79,7 +125,11 @@ class RCANServiceBroadcaster:
             return
 
         try:
-            # Use a sanitized service name
+            # Use a sanitized service name. Deliberately NOT the RRN-keyed
+            # instance name the discovery unit uses: a robot running both
+            # publishes two records for one machine rather than fighting over
+            # one name, and every client keys on the `rrn` in TXT, which is the
+            # same in both.
             service_name = self.robot_name.replace(".", "_").replace(" ", "_")
             full_name = f"{service_name}.{SERVICE_TYPE}"
 
@@ -93,6 +143,15 @@ class RCANServiceBroadcaster:
                 "name": self.robot_name,
                 "status": self._status_fn(),
             }
+            if self.record is not None:
+                txt_props.update(self.record.txt())
+                # `name` stays the robot's own name and `castor_port` stays the
+                # port THIS process is listening on: the record's copy is a
+                # configured value, and a record that disagrees with the socket
+                # it was published from is how "the robot answered but nothing
+                # could reach it" happens.
+                txt_props["name"] = self.robot_name
+                txt_props["castor_port"] = str(self.port)
 
             # Get local IP
             local_ip = _get_local_ip()
@@ -171,10 +230,10 @@ class RCANServiceBrowser:
             self._zeroconf = Zeroconf()
             self._browser = ServiceBrowser(
                 self._zeroconf,
-                SERVICE_TYPE,
+                list(BROWSE_TYPES),
                 handlers=[self._on_state_change],
             )
-            logger.info("mDNS browser started (looking for %s)", SERVICE_TYPE)
+            logger.info("mDNS browser started (looking for %s)", ", ".join(BROWSE_TYPES))
         except Exception as e:
             logger.warning("mDNS browser failed: %s", e)
 
@@ -242,6 +301,10 @@ def _parse_service_info(info) -> dict:
 
     return {
         "name": info.name,
+        "rrn": props.get("rrn", ""),
+        "gateway_port": props.get("gateway_port", ""),
+        "console_port": props.get("console_port", ""),
+        "manifest_path": props.get("manifest_path", ""),
         "ruri": props.get("ruri", ""),
         "model": props.get("model", ""),
         "capabilities": props.get("caps", "").split(",") if props.get("caps") else [],

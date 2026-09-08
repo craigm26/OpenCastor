@@ -494,6 +494,24 @@ def cmd_up(args) -> int:
     return 0
 
 
+def cmd_discovery(args) -> int:
+    """castor discovery check — prove the robot is findable, in one command.
+
+    The point is that a newcomer can SEE the record. Every discovery failure
+    this project has had was a record that existed and said the wrong thing —
+    the wrong service type, no RRN, ports the phone does not sweep — and none
+    of them is visible from `systemctl status`, which reports a happily running
+    advertiser either way. `avahi-browse` is not the tool: it reports nothing
+    for records python-zeroconf resolves in a second.
+    """
+    from castor.discovery import check
+
+    if args.discovery_action != "check":  # argparse already constrains this
+        print(f"unknown discovery action {args.discovery_action!r}", file=sys.stderr)
+        return 2
+    return check(timeout=args.timeout)
+
+
 def cmd_wizard(args) -> None:
     """Run the interactive setup wizard."""
     # Web-based wizard
@@ -9639,6 +9657,7 @@ def main() -> None:
             "  castor up --home ~/car --name car --base-port 8110\n"
             "  castor up --real-wheels           # PCA9685 live — WHEELS OFF THE GROUND\n"
             "  castor up --simulated-wheels      # never ask, never move\n"
+            "  castor up --home ~/car --name car --base-port 8110  # a SECOND robot on one host\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -9656,8 +9675,11 @@ def main() -> None:
     p_up.add_argument(
         "--base-port",
         type=int,
-        default=8080,
-        help="Gateway port; runtime and console follow (+1, +2)",
+        default=None,
+        help="Gateway port; runtime and console follow (+1, +2). Default 8080 "
+        "for a new robot; an existing robot keeps the ports its QR already "
+        "pinned. Use 8110 for a second robot on one host — the app sweeps "
+        "both layouts.",
     )
     p_up.add_argument(
         "--python", default=None, help="Python for the services (default: this interpreter's env)"
@@ -9741,6 +9763,27 @@ def main() -> None:
     p_manifest.add_argument("--kid", default=None)
     p_manifest.add_argument(
         "--pub-file", default=None, help="Verify key PEM (default <home>/keys/rrf/<kid>.pem)"
+    )
+
+    p_discovery = sub.add_parser(
+        "discovery",
+        help="Prove this robot is findable — browse the LAN and print the mDNS record",
+        epilog=(
+            "Examples:\n"
+            "  castor discovery check              # what is advertising right now\n"
+            "  castor discovery check --timeout 6  # a slow or busy network\n"
+            "\n"
+            "Exit codes: 0 a usable robot was found, 1 nothing is advertising,\n"
+            "2 something is advertising but carries no RRN (the app ignores it).\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_discovery.add_argument("discovery_action", choices=["check"])
+    p_discovery.add_argument(
+        "--timeout",
+        type=float,
+        default=3.0,
+        help="Seconds to browse (default 3)",
     )
 
     p_gaps = sub.add_parser(
@@ -10193,6 +10236,7 @@ def main() -> None:
         # iOS app pairing QR + gateway attestation wiring (T-002)
         "pair": cmd_pair,
         "up": cmd_up,
+        "discovery": cmd_discovery,
         "gaps": cmd_gaps,
         "capability": cmd_capability,
         "manifest": cmd_manifest,

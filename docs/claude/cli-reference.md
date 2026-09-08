@@ -274,11 +274,33 @@ castor token --verify <token>
 ```
 
 ### castor discover
-Auto-discover local robots via mDNS.
+Auto-discover local robots via mDNS (RCAN peers, from a running runtime).
 
 ```bash
 castor discover
 ```
+
+### castor discovery check
+Prove THIS robot is findable, and print the record a phone would read.
+
+`castor up` writes a `<name>-discovery.service` unit that publishes an
+`_opencastor._tcp` record: the RRN, the robot's name, the gateway, runtime and
+console ports, and the path to its signed `ROBOT.md`. That record is the only
+thing that survives a DHCP move — the pairing QR pins an address, and a home
+lease does not stay put.
+
+```bash
+castor discovery check              # what is advertising right now
+castor discovery check --timeout 6  # a slow or busy network
+```
+
+Exit codes are the answer: `0` a usable robot was found, `1` nothing is
+advertising, `2` something is advertising but carries no `rrn`, which the app
+ignores.
+
+Use this and not `avahi-browse`: avahi reports nothing for records
+python-zeroconf resolves in a second, so it will tell you a working advertiser
+is broken.
 
 ### castor safety
 Safety controls and e-stop management.

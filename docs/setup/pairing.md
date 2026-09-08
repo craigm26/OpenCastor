@@ -108,6 +108,25 @@ robot-md-gateway serve \
 Now scan the QR from the app's **Set Up** screen. The first `/v1/invoke` returns a
 signed receipt (`envelope_signature: {kid, alg, sig}`) the app verifies offline.
 
+## After pairing: staying findable
+
+The QR pins an IP address, and a home DHCP lease moves. `castor up` writes a
+fifth systemd user unit, `<name>-discovery.service`, which publishes an
+`_opencastor._tcp` mDNS record carrying this robot's RRN, name, gateway,
+runtime and console ports, and the path to its signed `ROBOT.md` — enough for
+an app that already holds this robot's credentials to find it at its new
+address without a second scan. The record carries no credential.
+
+Prove it in one command:
+
+```bash
+castor discovery check
+```
+
+It prints the record a phone would read. Use it and not `avahi-browse`, which
+reports nothing for records python-zeroconf resolves in a second. If nothing is
+advertising: `systemctl --user status <name>-discovery`.
+
 ## Notes
 
 - The install command is pinned (`opencastor==3.*`). A bare `pip install opencastor`
