@@ -33,6 +33,18 @@ runs the packaged console on **`:8004`**. The app learns the address and the
 token from the pairing QR (`console_url` / `console_token`) and does not invent
 either.
 
+### Live on this bench (verified 2026-09-08)
+
+| Robot | Console | Serves `/eval/*` | How |
+|---|---|---|---|
+| rover (`rover-spec-a-drive`) | `:8004` | yes | packaged `castor.console`, editable install — a `systemctl --user restart rover-console` was all it took |
+| Bob (`SO-ARM 101`) | `:8002` | yes | `~/bob/console_service.py` is a bench file, not the package; it now **imports** this router (`from castor.console.eval_eyes import router as eval_router`) rather than carrying a copy |
+
+Both have `EVAL_REFERENCE_PATH` pointed at sacpaint's asset, so
+`GET /eval/reference.png` answers 200 with the real 4520-byte PNG on either.
+Bob is the robot that actually draws, so it is the one an embodiment should
+target first.
+
 Auth is the **console bearer**, the same read-only credential every other console
 route takes, in either form:
 
