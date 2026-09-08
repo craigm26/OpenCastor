@@ -132,10 +132,46 @@ assert "the QR page binds :80 via an ambient capability, not as root" \
 assert "the QR page runs as the opencastor user" \
   grep -q '^User=opencastor' "$HERE/firstboot/opencastor-qr.service"
 
-# Nothing anywhere may write to the Imager's partition.
-assert "no script writes to cmdline.txt/config.txt/firstrun.sh/userconf.txt" \
+# -- the Imager's partition: one sanctioned writer, and it is not us ---------
+# This used to be a single blanket "nothing writes to the boot partition", and
+# that blanket cost the product its wheels: Raspberry Pi OS ships
+# dtparam=i2c_arm=on commented out, so /dev/i2c-1 does not exist on a fresh
+# card, so `castor up` finds no PCA9685 and provisions a robot that pairs
+# and cannot move. The prohibition was there to protect the IMAGER's
+# customisation — hostname, Wi-Fi, firstrun.sh, cmdline.txt — never the
+# dtparam line. So it is now stated precisely instead of broadly.
+#
+# The build still writes nothing at all:
+assert "the BUILD writes nothing to cmdline.txt/config.txt/firstrun.sh/userconf.txt" \
   not grep -rnE '(cp|install|sed|tee|>>?)[^|]*(boot/firmware|/boot/)(cmdline|config|firstrun|userconf)' \
-    "$HERE/build.sh" "$HERE/lib/common.sh" "$HERE/lib/chroot-stage.sh" "$HERE/firstboot/firstboot.sh"
+    "$HERE/build.sh" "$HERE/lib/common.sh" "$HERE/lib/chroot-stage.sh"
+# …and neither does first boot, by hand. Every byte that changes on that
+# partition changes through raspi-config, which knows how to set one key.
+assert "firstboot never hand-edits a boot-partition file either" \
+  not grep -rnE '(cp|install|sed|tee|>>?)[^|]*(boot/firmware|/boot/)(cmdline|config|firstrun|userconf)' \
+    "$HERE/firstboot/firstboot.sh"
+# Comment lines are excluded on purpose: the header EXPLAINS that firstrun.sh
+# is the Imager's, and that sentence is why this assertion exists. What must
+# not appear is a line of code that names one of those files.
+assert "no CODE in firstboot names the Imager's own files (hostname/Wi-Fi stay its job)" \
+  not grep -qnE '^[^#]*(firstrun|userconf|cmdline)' "$HERE/firstboot/firstboot.sh"
+assert "the ONE exception is raspi-config's own non-interactive I2C switch" \
+  grep -q 'raspi-config nonint do_i2c 0' "$HERE/firstboot/firstboot.sh"
+assert "…and it is reached only when the bus is actually missing" \
+  grep -q 'if \[ -e "\$I2C_DEV" \]; then' "$HERE/firstboot/firstboot.sh"
+assert "…and only as root, so a rootless run can never reboot a dev box" \
+  grep -q 'elif \[ "\$(id -u)" -ne 0 \]; then' "$HERE/firstboot/firstboot.sh"
+assert "the extra reboot is one-shot: the stamp is both written and read" \
+  test "$(grep -c 'I2C_REBOOT' "$HERE/firstboot/firstboot.sh")" -ge 3
+assert "…and it is --no-block, so the unit is not waiting on its own shutdown" \
+  grep -q 'systemctl --no-block reboot' "$HERE/firstboot/firstboot.sh"
+# Order is the whole point: reboot BEFORE the 90 s ollama wait and `castor up`,
+# not after them, or the retry pays for a whole provisioning pass twice.
+I2C_LINE="$(grep -n '^PHASE="i2c"' "$HERE/firstboot/firstboot.sh" | cut -d: -f1)"
+UP_LINE="$(grep -n '^PHASE="castor-up"' "$HERE/firstboot/firstboot.sh" | cut -d: -f1)"
+BRAIN_LINE="$(grep -n '^PHASE="brain"' "$HERE/firstboot/firstboot.sh" | cut -d: -f1)"
+assert "the I2C decision is made before the brain wait and before castor up (i2c@$I2C_LINE brain@$BRAIN_LINE up@$UP_LINE)" \
+  test "$I2C_LINE" -lt "$BRAIN_LINE" -a "$BRAIN_LINE" -lt "$UP_LINE"
 assert "build.sh mounts the boot partition READ-ONLY" \
   grep -q 'mount -o ro "\$BOOTDEV"' "$HERE/build.sh"
 assert "build.sh refuses a non-aarch64 host before it touches anything" \
@@ -371,6 +407,90 @@ assert "…with phase=done" \
 import json
 s = json.load(open('$D/status.json'))
 assert s['phase'] == 'done', s['phase']"
+
+# ---------------------------------------------------------------------------
+# Cases E, F and G: the I2C exception, which is the only thing this project
+# changes on the boot partition and therefore the thing most worth rehearsing.
+#
+# Three outcomes have to be distinguishable: the bus comes up without a reboot
+# (the common case, zero seconds on the ten-minute clock), the bus needs the
+# one reboot this script is allowed to take, and the script is not root — in
+# which case it must do NOTHING, because that is the case a developer running
+# this self-test on their own machine is in, and a stray `systemctl reboot`
+# there is the worst bug this file could ship.
+I2CBIN="$TMP/i2cbin"; mkdir -p "$I2CBIN"
+cp "$BIN/runuser" "$BIN/curl" "$I2CBIN/"
+# `id -u` with no argument decides rootness; `id -u USER` must stay real.
+cat > "$I2CBIN/id" <<'EOS'
+#!/bin/sh
+if [ "$1" = "-u" ] && [ $# -eq 1 ]; then echo 0; exit 0; fi
+exec /usr/bin/id "$@"
+EOS
+cat > "$I2CBIN/raspi-config" <<'EOS'
+#!/bin/sh
+echo "raspi-config $*" >> "$OC_I2C_CALLS"
+exit 0
+EOS
+cat > "$I2CBIN/systemctl" <<'EOS'
+#!/bin/sh
+echo "systemctl $*" >> "$OC_I2C_CALLS"
+exit 1
+EOS
+printf '#!/bin/sh\nexit 0\n' > "$I2CBIN/modprobe"
+# The dtparam stub is the switch between case E and case F: creating the node
+# is exactly what a working runtime overlay apply does.
+cat > "$I2CBIN/dtparam" <<'EOS'
+#!/bin/sh
+echo "dtparam $*" >> "$OC_I2C_CALLS"
+[ -n "${OC_I2C_MAKES_NODE:-}" ] && : > "$OC_I2C_DEV"
+exit 0
+EOS
+chmod +x "$I2CBIN"/*
+
+E="$TMP/caseE"; mkdir -p "$E/robot"
+PATH="$I2CBIN:$PATH" OC_USER="$(id -un)" OC_STATE="$E" VENV="$FAKEVENV" \
+  ROBOT_HOME="$E/robot" OLLAMA_WAIT=1 USERBUS_WAIT=1 \
+  OC_I2C_DEV="$E/i2c-1" OC_I2C_CALLS="$E/calls" \
+  "$HERE/firstboot/firstboot.sh" >"$E/out" 2>&1
+check $? "a boot with no I2C bus exits 0 and hands the machine to the reboot"
+assert "…having enabled it through raspi-config's own switch, not by editing config.txt" \
+  grep -qx 'raspi-config nonint do_i2c 0' "$E/calls"
+assert "…and asked systemd for exactly one non-blocking reboot" \
+  grep -qx 'systemctl --no-block reboot' "$E/calls"
+assert "…leaving the one-shot stamp so it can never loop" test -f "$E/.i2c-reboot"
+assert "…and NO .provisioned stamp, so provisioning runs again after the reboot" \
+  not test -f "$E/.provisioned"
+assert "…with a page that says a reboot is happening, not that something broke" \
+  python3 -c "
+import json
+s = json.load(open('$E/status.json'))
+assert s['phase'] == 'rebooting', s['phase']
+assert any(d.startswith('i2c-reboot') for d in s['degraded']), s['degraded']"
+assert "…and it never reached castor up, which is the point of rebooting early" \
+  not grep -q 'running: castor up' "$E/firstboot.log"
+
+F="$TMP/caseF"; mkdir -p "$F/robot"
+printf 'PNG-ish bytes\n' > "$F/robot/pair-qr.png"
+PATH="$I2CBIN:$PATH" OC_USER="$(id -un)" OC_STATE="$F" VENV="$FAKEVENV" \
+  ROBOT_HOME="$F/robot" OLLAMA_WAIT=1 USERBUS_WAIT=1 \
+  OC_I2C_DEV="$F/i2c-1" OC_I2C_CALLS="$F/calls" OC_I2C_MAKES_NODE=1 \
+  "$HERE/firstboot/firstboot.sh" >"$F/out" 2>&1
+check $? "a runtime dtparam that works costs the clock zero extra boots"
+assert "…so nothing asked for a reboot" not grep -q 'reboot' "$F/calls"
+assert "…no one-shot stamp was spent" not test -f "$F/.i2c-reboot"
+assert "…and the boot ran through to castor up and stamped" test -f "$F/.provisioned"
+
+G="$TMP/caseG"; mkdir -p "$G/robot"
+printf 'PNG-ish bytes\n' > "$G/robot/pair-qr.png"
+PATH="$BIN:$PATH" OC_USER="$(id -un)" OC_STATE="$G" VENV="$FAKEVENV" \
+  ROBOT_HOME="$G/robot" OLLAMA_WAIT=1 USERBUS_WAIT=1 \
+  OC_I2C_DEV="$G/i2c-1" \
+  "$HERE/firstboot/firstboot.sh" >"$G/out" 2>&1
+check $? "a rootless run finishes normally"
+assert "…and says so rather than touching the bus" \
+  grep -q 'is missing and this is not root' "$G/firstboot.log"
+assert "…having enabled nothing and rebooted nothing" \
+  not grep -qE 'raspi-config|reboot' "$G/firstboot.log"
 
 # ===========================================================================
 stage "8. the pairing page — served by plain python3, curled for real"

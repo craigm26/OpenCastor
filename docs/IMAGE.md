@@ -172,13 +172,53 @@ would not have noticed `sed -i s/x/y/` on `cmdline.txt`, i.e. exactly the file
 the claim is about. Hostname, Wi-Fi, locale and SSH are the Imager's job, and
 the image stays out of the way of that entirely.
 
-### The Pi boots twice, and that is normal
+### The one exception: I2C, switched on at first boot
+
+Raspberry Pi OS ships `dtparam=i2c_arm=on` commented out, so a freshly flashed
+card has **no `/dev/i2c-1`**. The PCA9685 that drives an RC car lives on that
+bus. Without it `castor up` scans, finds nothing, picks the `sim` archetype,
+and the owner gets a robot that pairs, signs receipts, shows a green badge and
+never moves — on a path whose whole claim is that there is no terminal to type
+`sudo raspi-config` into.
+
+So first boot switches it on, and the exception is narrow on purpose:
+
+- **The build still writes nothing.** The read-only mount and the fingerprint
+  are unchanged and still asserted.
+- **The write is raspi-config's, not ours.** `raspi-config nonint do_i2c 0` is
+  the Pi's own supported editor of `config.txt`: it sets exactly one key
+  (`dtparam=i2c_arm`) and adds `i2c-dev` to `/etc/modules`. It is idempotent
+  and it cannot touch anything else. `firstboot.sh` never opens `config.txt`,
+  `cmdline.txt`, `firstrun.sh` or `userconf.txt` itself, and the self-test
+  asserts that no line of code in it so much as names them.
+- **It runs only when the bus is missing**, and only as root.
+- **The reboot is the fallback, not the plan.** `dtparam i2c_arm=on` applies
+  the overlay to the running kernel, so the usual case costs zero extra boots
+  and the `config.txt` line is only there to survive the next power cycle. When
+  the runtime apply does not take, one reboot does — guarded by
+  `/var/lib/opencastor/.i2c-reboot` so it can happen at most once, and taken
+  *before* the ollama wait and `castor up`, so it costs one ~30 s boot rather
+  than a whole provisioning pass. No `.provisioned` stamp is written on the way
+  out, so the next boot simply runs the script again from the top.
+
+The old rule was a blanket "no script writes to `config.txt`". It existed to
+protect the Imager's customisation block, and it was doing that job by
+forbidding a line that has nothing to do with the Imager. The self-test now
+states the invariant it actually meant: the build writes nothing, first boot
+hand-edits nothing, and the single sanctioned mutation goes through
+raspi-config.
+
+### The Pi boots twice, sometimes three times, and that is normal
 
 With Imager customization, `cmdline.txt` carries
 `systemd.run=/boot/firstrun.sh … systemd.run_success_action=reboot`. The first
 boot runs only the Imager's own script — hostname, Wi-Fi, the user account —
 and then reboots. **OpenCastor provisions on the second boot.** If the page is
 not there yet, the Pi is probably still on pass one.
+
+A **third** boot happens only if the I2C bus could not be brought up live (see
+the exception above). The page says so while it happens — *setting up
+(rebooting)*, with an `i2c-reboot` caveat — and it costs about 30 seconds.
 
 ---
 
@@ -265,6 +305,8 @@ does, the page must still come up and say which half. Every caveat is tagged:
 
 | Tag | What happened | What to do |
 |---|---|---|
+| `i2c-reboot` | the I2C bus was just enabled and needs one reboot to appear | Nothing. It is automatic, takes ~30 s, and the page comes back on its own. No stamp was written, so provisioning restarts from the top |
+| `i2c` | the bus could not be enabled at all (no `raspi-config`, or still missing after the one allowed reboot) | The robot pairs and drives *simulated* wheels; a PCA9685 stays invisible. By hand: `sudo raspi-config` → Interface Options → I2C → Yes, then reboot |
 | `brain` | ollama did not answer on `:11434` in 90 s | The robot pairs and drives anyway; chat has no local model. `systemctl status ollama` |
 | `user-manager` | systemd started no session for the `opencastor` account, so `castor up` ran `--no-start`: the services are configured but not running | Reboot once. If it persists: `sudo loginctl enable-linger opencastor` |
 | `gaps` | `castor gaps` found something real — a chip on the bus with no driver | Not a failure. It is a skill nobody has written yet; see [SKILL-GAPS.md](SKILL-GAPS.md). A gap never closes itself |
@@ -386,6 +428,14 @@ checks, all green as of this writing:
 - the firstboot degradation path, run for real: a partial boot must still leave
   parseable JSON that names every cause, and no stamp — plus both ends of the
   stamp decision, a boot with a QR (stamps) and one without (must not)
+- **the I2C exception, all three of its outcomes**, with `raspi-config`,
+  `dtparam`, `modprobe` and `systemctl` stubbed so the calls are recorded:
+  a bus that comes up live must cost zero extra boots and stamp normally; a
+  bus that does not must call `raspi-config nonint do_i2c 0` exactly, ask for
+  exactly one `systemctl --no-block reboot`, leave the one-shot stamp, leave
+  **no** `.provisioned` stamp, report phase `rebooting`, and never reach
+  `castor up`; and a **rootless** run must do nothing at all — which is the
+  case a developer running this self-test is in
 - **signals**, which nothing used to exercise: `firstboot.sh` SIGTERM'd inside a
   foreground `sleep` must exit 143, write `ok: false`, carry exactly one
   `aborted` caveat naming the signal and the phase, and leave no stamp; and
@@ -415,5 +465,10 @@ and nothing more:
 - the boot-partition fingerprint against a real mounted FAT partition. The hash
   function is proven rootless; the read-only mount and the compare are not
 - `/etc/opencastor-image.json` actually landing in the image
+- **the I2C switch against a real Pi**: that `raspi-config nonint do_i2c 0`
+  writes the `dtparam` line and nothing else on *this* base image, that
+  `dtparam i2c_arm=on` brings `/dev/i2c-1` up on a running Pi 5 without a
+  reboot, and that when it does not, one reboot is enough. The decision logic
+  is rehearsed above against stubs; the two Pi commands are not
 - **and then, on hardware: flash, boot twice, and run the stopwatch above.**
   The ten minutes is a measurement, not a claim.

@@ -158,6 +158,81 @@ log "service user: $OC_USER (uid $OC_UID)"
 write_status false
 
 # ---------------------------------------------------------------------------
+PHASE="i2c"
+# ---------------------------------------------------------------------------
+# THE ONE THING ON THE BOOT PARTITION THIS PROJECT CHANGES, AND WHY IT IS SAFE.
+#
+# Raspberry Pi OS ships `dtparam=i2c_arm=on` commented out, so a freshly
+# flashed card has no /dev/i2c-1. The PCA9685 that drives an RC car lives on
+# that bus. With the bus absent, `castor up` scans, finds no chip, picks the
+# `sim` archetype, and the owner gets a robot that pairs, signs receipts, shows
+# a green badge and never moves. That is the most expensive failure in the
+# product and it is one config line away — a line that, until now, only a
+# terminal and a sudo could add, on a path whose whole claim is that there is
+# no terminal.
+#
+# THE BUILD STILL WRITES NOTHING TO THAT PARTITION. build.sh mounts it
+# read-only and fails if a byte moved; that invariant is unchanged and still
+# asserted. The exception is here, at first boot, and it is narrow three ways:
+#
+#   1. The write is made by `raspi-config nonint do_i2c 0`, not by us.
+#      raspi-config is the Pi's own supported editor of config.txt: it sets
+#      exactly one key (dtparam=i2c_arm) and adds i2c-dev to /etc/modules. It
+#      is idempotent and it does not know how to touch anything else.
+#   2. It runs only when the bus is actually missing.
+#   3. It never goes near the Imager's customisation — firstrun.sh,
+#      userconf.txt, cmdline.txt. Hostname and Wi-Fi stay entirely the
+#      Imager's job, which is what the prohibition existed to protect.
+#
+# THE REBOOT IS THE FALLBACK, NOT THE PLAN. `dtparam` applies the overlay to
+# the running kernel, so the common case costs zero extra boots and the
+# raspi-config write is only there to survive the next power cycle. When the
+# runtime apply does not take, one reboot does — guarded by a stamp so it can
+# happen at most once, and taken HERE, before the ollama wait and `castor up`,
+# so it costs one ~30 s boot instead of a whole provisioning pass. Nothing
+# stamps .provisioned on the way out, so the next boot simply runs this script
+# again from the top.
+I2C_DEV="${OC_I2C_DEV:-/dev/i2c-1}"
+I2C_REBOOT="$OC_STATE/.i2c-reboot"
+
+if [ -e "$I2C_DEV" ]; then
+  log "i2c: $I2C_DEV is present"
+elif [ "$(id -u)" -ne 0 ]; then
+  log "i2c: $I2C_DEV is missing and this is not root — leaving the bus alone"
+elif ! command -v raspi-config >/dev/null 2>&1; then
+  degrade "i2c: $I2C_DEV is missing and raspi-config is not installed here, so the bus cannot be enabled unattended. The robot still pairs, but a PCA9685 stays invisible and the wheels stay simulated. By hand: sudo raspi-config -> Interface Options -> I2C -> Yes, then reboot"
+else
+  if raspi-config nonint do_i2c 0 >/dev/null 2>&1; then
+    log "i2c: enabled for every future boot (raspi-config nonint do_i2c 0)"
+  else
+    degrade "i2c: \`raspi-config nonint do_i2c 0\` failed, so the bus is off for this boot and the next one. By hand: sudo raspi-config -> Interface Options -> I2C -> Yes, then reboot"
+  fi
+  modprobe i2c-dev >/dev/null 2>&1 || true
+  if command -v dtparam >/dev/null 2>&1; then
+    dtparam i2c_arm=on >/dev/null 2>&1 || true
+  fi
+  # udev makes the node; give it a few seconds before declaring a reboot needed.
+  for _ in 1 2 3 4 5; do
+    [ -e "$I2C_DEV" ] && break
+    sleep 1
+  done
+
+  if [ -e "$I2C_DEV" ]; then
+    log "i2c: $I2C_DEV came up without a reboot"
+  elif [ -f "$I2C_REBOOT" ]; then
+    degrade "i2c: $I2C_DEV is still missing after the one reboot this script is allowed to take. Provisioning continued on simulated wheels. Check that nothing has commented dtparam=i2c_arm out of config.txt again"
+  else
+    date -u +%FT%TZ > "$I2C_REBOOT"
+    degrade "i2c-reboot: the I2C bus was just switched on and needs one reboot to appear. This is automatic, takes about 30 seconds, and this page comes back on its own. No .provisioned stamp was written, so provisioning runs again from the top"
+    PHASE="rebooting"
+    log "i2c: rebooting once so $I2C_DEV exists before castor up scans the bus"
+    systemctl --no-block reboot \
+      || degrade "i2c-reboot: systemd refused the reboot request. Power-cycle the Pi once and provisioning continues"
+    exit 0
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 PHASE="user-manager"
 # ---------------------------------------------------------------------------
 # `castor up` installs its three services as systemd USER units and runs
