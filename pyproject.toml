@@ -4,7 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opencastor"
-version = "3.0.3"
+# Epoch 1: ninety-seven CalVer releases (2026.x) sit above any 3.x under PEP 440,
+# so a bare `pip install opencastor` picked an April wheel with no `castor up`.
+# The epoch makes every 1!3.x release sort above them. Keep it.
+version = "1!3.1.0"
 description = "The Universal Runtime for Embodied AI"
 readme = "README.md"
 license = "Apache-2.0"
@@ -37,6 +40,9 @@ dependencies = [
     "openai>=1.0.0",
     # The Body (Hardware)
     "pyserial>=3.5",
+    # The wheels: the gateway actuator castor up wires for an RC car. Core, not
+    # an extra, so resolve_actuator() never silently falls back to noop.
+    "rc-car-actuator>=0.1.1",
     # The Eyes (Vision)
     "opencv-python-headless>=4.9.0",
     # The Voice (TTS via USB speaker)
@@ -89,7 +95,7 @@ core = []
 # `up.resolve_actuator()` falls back to the gateway's built-in `noop` actuator
 # and prints the one command that upgrades it. Move this back into
 # [project] dependencies once the package is on PyPI.
-rc-car = ["rc-car-actuator>=0.1.0"]
+rc-car = ["rc-car-actuator>=0.1.1"]  # kept for old install lines; it is core now
 rpi = [
     "adafruit-circuitpython-pca9685>=3.4.0; sys_platform == 'linux'",
     "adafruit-circuitpython-motor>=3.4.0; sys_platform == 'linux'",

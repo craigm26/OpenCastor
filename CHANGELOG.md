@@ -9,6 +9,46 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-09-08
+
+Published on PyPI as `1!3.1.0`: the epoch is what makes pip prefer this line
+over the ninety-seven 2026.x CalVer releases that sort above `3.x`. Install with
+`pip install "opencastor>=3.1"`.
+
+### Changed — box to driving in under ten minutes
+
+The review at `docs/reviews/rc-car-ten-minutes-2026-09-08.md` timed the
+newcomer's path at three to eight hours. These close the traps it found.
+
+- **`castor up` asks the one question that matters.** When a PCA9685 answers at
+  0x40 it asks, with the wheels-off-the-ground warning, whether to drive real
+  wheels (`--real-wheels` / `--simulated-wheels` for scripts; no terminal means
+  simulated). The template's channels are now throttle 1 / steering 0, matching
+  every reference vehicle. A rerun never re-asks or reverses.
+- **`rc-car-actuator` is a core dependency** (0.1.1 on PyPI), so the actuator
+  the gateway needs is always installed.
+- **The manifest cannot draft a stop.** `duration_s` is required with no
+  default; an absent value is the deadman's 400 ms lease, zero is still a stop.
+- **Discovery ships.** `castor up` writes a fifth unit that advertises
+  `_opencastor._tcp` with rrn, ports, name and manifest path; `castor discovery
+  check` proves it from the wire. `zeroconf` is a core dependency.
+- **`castor doctor` reads the robot it provisioned**: real ports from the unit
+  files, `/dev/i2c-1`, "your wheels are simulated" when a chip answers, mDNS,
+  USB current versus a streaming camera, every `castor gaps` gap, each with a
+  pasteable fix, and a non-zero exit when the car cannot move.
+- **The PCA9685 driver no longer falls back to mock** unless asked
+  (`OPENCASTOR_PCA9685_ALLOW_MOCK=1` or `allow_mock: true`).
+- **`castor hub install` fails loudly** and the seven community recipes now ship
+  the `config.rcan.yaml` they name (a `.gitignore` rule had swallowed them).
+- **The Pi image enables I2C on first boot** (`raspi-config nonint do_i2c 0`,
+  one-shot reboot only if the node does not appear) and ships as one file
+  under GitHub's 2 GiB asset cap; the stopwatch now starts at the download.
+- **One install line, one port table.** `pip install "opencastor>=3.1"`;
+  gateway 8080, runtime 8081, console 8082 (base + 0/1/2). `castor init` asks
+  the robot's shape first and routes an RC car to `castor up`.
+- `docs/hardware/pca9685-bringup.md`: the ordered bring-up checklist the
+  policy template has pointed at since August.
+
 ### Added — the Microduck
 
 OpenCastor drives Pollen Robotics' Microduck: a 25 cm walking biped whose
