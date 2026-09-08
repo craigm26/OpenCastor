@@ -28,11 +28,19 @@ safety:
   estop_enabled: true
 rcan_protocol:
   port: {port_runtime}
-  # Off, for the same reason it is off on Bob: castor advertises the RUNTIME
-  # port while the gateway is on another, and the TXT record carries no
-  # manifest_path/rrn — a Bonjour-found robot could never invoke. The QR is the
-  # only complete pairing path.
-  enable_mdns: false
+  # On. It was off for a concrete reason, now fixed: castor advertised the
+  # RUNTIME port on a service type the app does not browse, with a TXT record
+  # carrying no rrn and no manifest_path, so a Bonjour-found robot could never
+  # invoke and the flag only added noise. The record now carries the gateway
+  # port, the console port, the rrn and the manifest path, on
+  # _opencastor._tcp — the type the app browses.
+  #
+  # This is the RUNTIME's copy of that record, and it is the redundant one:
+  # {name}-discovery.service publishes the same thing from its own process, so
+  # a robot stays findable even when the runtime is down. Prove either with
+  # `castor discovery check`. Pairing is still the QR; this record carries no
+  # credential and only answers "where is this RRN now?".
+  enable_mdns: true
   capabilities:
     - drive.set
     - drive.stop

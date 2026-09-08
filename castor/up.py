@@ -55,6 +55,46 @@ ARCHETYPES = ("rc-car", "sim")
 GATEWAY_OFF, RUNTIME_OFF, CONSOLE_OFF = 0, 1, 2
 RRF_STUB_PORT = 8090
 
+#: THE DEFAULT BASE PORT IS PART OF THE DISCOVERY CONTRACT, and it is
+#: DELIBERATELY UNCHANGED. When mDNS is blocked — plenty of consumer routers
+#: drop multicast between wireless clients — the app falls back to sweeping the
+#: /24 for a runtime answering /health, against a fixed list of ports. That
+#: list used to be the hand-built bench's (8001, 8003, 8002, 8000) and matched
+#: none of these three, so a robot answering perfectly was reported as "no
+#: robots found".
+#:
+#: Moving this to 8000 would have fixed that from this side, and it is the
+#: wrong side to fix it from. Three reasons, in order of weight:
+#:
+#:   1. It is not one number, it is two. A second robot on a host uses
+#:      --base-port 8110 (this command's own help text says so), and no single
+#:      default can put both layouts in a fixed list. The app has to know the
+#:      LAYOUT — base + 0/1/2 — not a set of ports, and once it does, the base
+#:      itself stops mattering.
+#:   2. 8080 is in every doc, every runbook and both live robots' units. A
+#:      default that moves silently relocates services behind QR codes that
+#:      have already been scanned, to buy nothing the app cannot buy itself.
+#:   3. 8000 is the single most contended port on a developer's machine.
+#:
+#: The app side is where it landed: CastorKit's `RobotPorts` derives its sweep
+#: from `upBases = [8080, 8110]` through the same base + 0/1/2 layout this file
+#: defines, and cites these lines as the authority. If this number ever does
+#: change, that is the file that changes with it.
+DEFAULT_BASE_PORT = 8080
+
+#: The second robot on one host, and the value this command's help text has
+#: always printed for it. Named rather than open-coded because the app sweeps
+#: this layout too: an operator who takes the collision message below gets a
+#: robot the phone can still find.
+SECOND_BASE_PORT = 8110
+
+#: Where the discovery unit reads its record from. Its own file, like
+#: console.env, and REGENERATED every run: unlike gateway-policy.env it holds
+#: no operator decision, only this robot's identity and ports, and a stale copy
+#: would advertise ports that moved — a confidently wrong record, which is
+#: worse than none.
+DISCOVERY_ENV = "discovery.env"
+
 #: Where the console's read-only bearer lives. Its own file, not tokens.env:
 #: tokens.env is written once and never touched again, so a robot brought up
 #: before the console existed would never have received a token at all.
@@ -164,6 +204,7 @@ Environment=ROBOT_NAME={name}
 Environment=ROBOT_GATEWAY_URL=http://127.0.0.1:{plan.gateway_port}
 Environment=ROBOT_MANIFEST={home}/ROBOT.md
 Environment=ROBOT_RUNTIME_PORT={plan.runtime_port}
+Environment=ROBOT_CONSOLE_PORT={plan.console_port}
 Environment=OPENCASTOR_CONFIG={home}/robot.rcan.yaml
 ExecStart={python} {home}/runtime.py
 Restart=on-failure
@@ -196,6 +237,30 @@ RestartSec=2
 [Install]
 WantedBy=default.target
 """
+    # THE FIFTH UNIT, and the one whose absence produced "I can't find the
+    # robot even though it's on the same network". Everything else `up` writes
+    # answers when you know where the robot is; this is the only one that says
+    # where it is. It is deliberately last in the order the units are started
+    # and first in the order a newcomer notices it missing.
+    #
+    # EnvironmentFile with NO leading dash, like every other unit here. A `-`
+    # would make discovery.env optional, and a missing file would leave a
+    # service that starts, reports active (running), and advertises nothing —
+    # the exact shape of the failure this unit exists to end. Absent file,
+    # failed unit, visible in `systemctl --user status`.
+    units[f"{name}-discovery.service"] = f"""[Unit]
+Description=mDNS advertisement for {name} — publishes _opencastor._tcp so the app can find it after a DHCP move
+After=network-online.target {name}-castor.service
+
+[Service]
+EnvironmentFile={home}/{DISCOVERY_ENV}
+ExecStart={python} -m castor.discovery
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+"""
     units[f"{name}-rrf-stub.service"] = f"""[Unit]
 Description=RRF key resolver stub for {name} (loopback kid lookup)
 
@@ -209,6 +274,66 @@ Restart=on-failure
 WantedBy=default.target
 """
     return units
+
+
+def discovery_env(plan: UpPlan) -> str:
+    """The environment the discovery unit advertises from.
+
+    Every value here is also written somewhere else — the QR, ROBOT.md, the
+    other units — and that is the point: this file is the one place a person
+    can read what the robot is TELLING THE NETWORK, without a packet capture.
+    Names match `castor/discovery.py`'s reader, which also accepts the
+    ROBOT_MANIFEST / ROBOT_RUNTIME_PORT spellings the other units use.
+    """
+    return (
+        "# What this robot publishes on the LAN — written by `castor up`,\n"
+        "# regenerated on every run. No credential is in this file and none\n"
+        "# belongs here: the record answers \"where is this RRN now?\" and\n"
+        "# nothing else. Pairing still happens through the QR.\n"
+        f"ROBOT_RRN={plan.rrn}\n"
+        f"ROBOT_NAME={plan.name}\n"
+        f"ROBOT_HOME={plan.home}\n"
+        f"ROBOT_GATEWAY_PORT={plan.gateway_port}\n"
+        f"ROBOT_CASTOR_PORT={plan.runtime_port}\n"
+        f"ROBOT_CONSOLE_PORT={plan.console_port}\n"
+        f"ROBOT_MANIFEST_PATH={plan.home / 'ROBOT.md'}\n"
+        "#\n"
+        "# Optional. Left unset because the app derives\n"
+        "#   http://<host>:$ROBOT_CASTOR_PORT/api/stop\n"
+        "# which is exactly what the pairing QR carries. Writing a host in here\n"
+        "# would pin an address into the one record whose job is to survive that\n"
+        "# address changing. Set it only if your stop lives somewhere else.\n"
+        "#ROBOT_ESTOP_URL=\n"
+    )
+
+
+def resolve_base_port(requested: int | None, stored: int | None) -> int:
+    """Which base port this run uses.
+
+    Reuse-don't-refuse, the same contract identity follows. An existing robot's
+    ports are pinned in a QR somebody already scanned, so a rerun must not move
+    them just because the DEFAULT moved — a rerun is most often triggered by a
+    stale QR, and silently relocating the services behind it would be the same
+    class of bug as rotating the token inside it.
+    """
+    if requested is not None:
+        return requested
+    if stored is not None:
+        return stored
+    return DEFAULT_BASE_PORT
+
+
+def occupied_ports(base: int, probe) -> list[int]:
+    """Which of this robot's three ports something else already answers on.
+
+    Only meaningful for a robot that does not exist yet: a rerun finds its OWN
+    services listening, which is health, not a collision.
+    """
+    return [
+        base + offset
+        for offset in (GATEWAY_OFF, RUNTIME_OFF, CONSOLE_OFF)
+        if probe(base + offset)
+    ]
 
 
 def ensure_console_token(home: Path) -> tuple[str, bool]:
@@ -321,12 +446,16 @@ def run_up(
     home: Path,
     name: str | None = None,
     archetype: str | None = None,
-    base_port: int = 8080,
+    base_port: int | None = None,
     python: str | None = None,
     start_services: bool = True,
     link: bool = True,
 ) -> UpPlan:
     """The whole bring-up. Prints progress; returns the plan for callers/tests.
+
+    ``base_port`` of None means "decide": an existing robot keeps the ports its
+    QR already pinned, and a new one gets :data:`DEFAULT_BASE_PORT`, which is
+    inside the set the app sweeps when mDNS is blocked.
 
     ``link`` (default on, same as ``castor pair``) makes the pairing QR a
     universal link — a phone camera opens the app, or the /pair explainer page
@@ -355,13 +484,32 @@ def run_up(
 
     # -- identity (reused on rerun, generated once) -------------------------
     state_file = home / ".castor-up.json"
+    stored_base: int | None = None
     if state_file.exists():
         state = json.loads(state_file.read_text())
         rrn, robot_uuid = state["rrn"], state["uuid"]
+        # The ports are identity too, in the sense that matters: they are in a
+        # QR somebody scanned. Reused unless the operator asks for others.
+        stored_base = state.get("base_port")
         _say("identity: reused existing", started)
     else:
         rrn, robot_uuid = derive_identity(name)
         _say(f"identity: {rrn} (local — `castor register` upgrades it)", started)
+
+    base_port = resolve_base_port(base_port, stored_base)
+    if stored_base is None:
+        # A fresh robot only: a rerun finds its own services on these ports.
+        taken = occupied_ports(base_port, _port_answers)
+        if taken:
+            raise SystemExit(
+                f"ports {', '.join(str(p) for p in taken)} are already answering on "
+                "this host, so this robot's services would collide with whatever "
+                "owns them.\n"
+                "Give it its own range: `castor up --home "
+                f"{home} --base-port {SECOND_BASE_PORT if base_port == DEFAULT_BASE_PORT else base_port + 30}` "
+                "(gateway, runtime and console are base + 0, 1, 2 — and the app "
+                "sweeps that layout, so a robot moved this way is still findable)."
+            )
 
     plan = UpPlan(
         name=name,
@@ -391,6 +539,7 @@ def run_up(
         # silently reverse that decision — or make it.
         policy.write_text(render("gateway-policy.env.tmpl", plan))
     (home / "runtime.py").write_text(render("runtime.py.tmpl", plan))
+    (home / DISCOVERY_ENV).write_text(discovery_env(plan))
 
     # -- bearers + runtime tokens (reused: rotating them un-pairs the phone) --
     bearers = home / "bearers.yaml"
@@ -508,6 +657,12 @@ def run_up(
     for unit_name, content in rendered.items():
         (unit_dir / unit_name).write_text(content)
     _say(f"services written: {', '.join(rendered)}", started)
+    _say(
+        f"discovery: advertising {rrn} as _opencastor._tcp "
+        f"(gateway {plan.gateway_port}, runtime {plan.runtime_port}, "
+        f"console {plan.console_port}) — prove it with `castor discovery check`",
+        started,
+    )
 
     if start_services:
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)

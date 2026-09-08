@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+import castor.up as up
 from castor.up import (
     UpPlan,
     derive_identity,
@@ -118,7 +119,8 @@ def test_units_reference_only_the_robots_own_home():
     units = unit_files(plan(), python="/venv/bin/python",
                        gateway_bin="/venv/bin/robot-md-gateway")
     assert set(units) == {"testbot-gateway.service", "testbot-castor.service",
-                          "testbot-console.service", "testbot-rrf-stub.service"}
+                          "testbot-console.service", "testbot-rrf-stub.service",
+                          "testbot-discovery.service"}
     for content in units.values():
         assert "/home/pi/testbot" in content
         assert "craigm26" not in content and "rover" not in content
@@ -143,6 +145,88 @@ def test_THEBUG_console_env_is_applied_after_the_generated_defaults():
         "a hand-set CONSOLE_PORT in console.env must beat the generated default")
     assert unit.index("Environment=ROBOT_HOME=/home/pi/testbot") < unit.index(
         "EnvironmentFile=/home/pi/testbot/console.env")
+
+
+def test_THEFIFTHUNIT_up_writes_an_advertiser_and_it_is_mandatory():
+    # `up` wrote four units and no advertiser, so nothing it produced was ever
+    # findable on the network. The unit that fixes it must also not be able to
+    # start empty: `EnvironmentFile=-` would leave a service reporting
+    # "active (running)" while publishing nothing, which is the same failure in
+    # a costume the operator cannot see through.
+    units = unit_files(plan(), python="/venv/bin/python",
+                       gateway_bin="/venv/bin/robot-md-gateway")
+    unit = units["testbot-discovery.service"]
+    assert "EnvironmentFile=/home/pi/testbot/discovery.env" in unit
+    assert "EnvironmentFile=-" not in unit
+    assert "ExecStart=/venv/bin/python -m castor.discovery" in unit
+    assert "WantedBy=default.target" in unit
+
+
+def test_the_advertiser_env_carries_every_key_the_record_needs(tmp_path):
+    from castor.discovery import record_from_env
+
+    p = plan(home=tmp_path, base_port=8000)  # any base; the record must follow it
+    env = dict(
+        line.split("=", 1)
+        for line in up.discovery_env(p).splitlines()
+        if line and not line.startswith("#")
+    )
+    # Parsed back through the real reader: a key renamed on either side fails
+    # here rather than on a LAN nobody is watching.
+    got = record_from_env(env)
+    assert got.rrn == p.rrn
+    assert got.name == "testbot" or got.name == tmp_path.name
+    assert (got.gateway_port, got.castor_port, got.console_port) == (8000, 8001, 8002)
+    assert got.manifest_path == str(tmp_path / "ROBOT.md")
+
+
+def test_the_advertiser_env_holds_no_credential():
+    # The record answers "where is this RRN now?" and nothing else. Pairing
+    # still happens through the QR, and this file is world-readable by design.
+    text = up.discovery_env(plan())
+    for secret in ("TOKEN", "BEARER", "KEY", "SECRET"):
+        assert secret not in text.upper().replace("ROBOT_RRN", "")
+
+
+def test_the_runtime_unit_knows_the_console_port_so_its_own_record_is_whole():
+    # The runtime publishes the same record from its own process (enable_mdns).
+    # Without this it would guess the console port and advertise a wrong one on
+    # any robot not using the default base.
+    unit = unit_files(plan(base_port=8300), python="/venv/bin/python",
+                      gateway_bin="/gw")["testbot-castor.service"]
+    assert "Environment=ROBOT_CONSOLE_PORT=8302" in unit
+
+
+# ---------------------------------------------------------------------------
+# Ports — the half of "cannot find the robot" that mDNS does not fix
+# ---------------------------------------------------------------------------
+
+
+def test_THEDEFAULT_base_port_did_not_move_and_the_app_owns_the_sweep():
+    # The mDNS-blocked fallback sweeps a fixed list of ports, and it did not
+    # include any of these three, which is the second half of "cannot find the
+    # robot". It was fixed on the app side — CastorKit's `RobotPorts` derives
+    # the sweep from `upBases = [8080, 8110]` through this file's base + 0/1/2
+    # layout — because no single default here can cover BOTH robots on a host.
+    # This test exists so that a later "helpful" nudge of the default has to
+    # go and change the Swift that cites it.
+    assert up.DEFAULT_BASE_PORT == 8080
+    assert up.SECOND_BASE_PORT == 8110
+    p = plan(base_port=up.DEFAULT_BASE_PORT)
+    assert (p.gateway_port, p.runtime_port, p.console_port) == (8080, 8081, 8082)
+
+
+def test_an_existing_robot_keeps_the_ports_its_QR_pinned():
+    # Reuse-don't-refuse, the contract identity already follows: moving the
+    # default must not relocate the services behind a QR somebody scanned.
+    assert up.resolve_base_port(None, 8080) == 8080
+    assert up.resolve_base_port(None, None) == up.DEFAULT_BASE_PORT
+    assert up.resolve_base_port(8110, 8080) == 8110, "an explicit flag still wins"
+
+
+def test_a_new_robot_notices_a_port_that_is_already_taken():
+    assert up.occupied_ports(8000, lambda port: port == 8001) == [8001]
+    assert up.occupied_ports(8000, lambda port: False) == []
 
 
 def test_port_layout_is_adjacent_and_derived():

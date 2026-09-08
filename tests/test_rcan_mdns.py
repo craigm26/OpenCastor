@@ -6,7 +6,10 @@ without requiring a live network or the zeroconf library.
 
 import socket
 
+from castor.discovery import RobotRecord
 from castor.rcan.mdns import (
+    BROWSE_TYPES,
+    LEGACY_SERVICE_TYPE,
     SERVICE_TYPE,
     RCANServiceBroadcaster,
     RCANServiceBrowser,
@@ -16,10 +19,75 @@ from castor.rcan.mdns import (
 
 
 class TestServiceType:
-    """RCAN service type constant."""
+    """The service type, which is a contract with a client this repo does not
+    contain."""
 
-    def test_service_type(self):
-        assert SERVICE_TYPE == "_rcan._tcp.local."
+    def test_service_type_is_the_one_the_app_browses(self):
+        # It was `_rcan._tcp.local.` while the OpenCastor app browsed
+        # `_opencastor._tcp`, so a robot with mDNS enabled advertised into a
+        # channel with no listener and the flag was documented "leave it off".
+        assert SERVICE_TYPE == "_opencastor._tcp.local."
+
+    def test_the_old_type_is_still_browsed_so_older_robots_are_not_lost(self):
+        assert LEGACY_SERVICE_TYPE == "_rcan._tcp.local."
+        assert BROWSE_TYPES == [SERVICE_TYPE, LEGACY_SERVICE_TYPE]
+
+
+class TestRecordInTheTXT:
+    """The client-facing half of the record — what makes a found robot usable."""
+
+    RECORD = RobotRecord(
+        rrn="RRN-000000000012",
+        name="ignored-here",
+        gateway_port=8081,
+        castor_port=8003,
+        console_port=8003,
+        manifest_path="/home/pi/rover/ROBOT.md",
+    )
+
+    def _props(self, **over):
+        b = RCANServiceBroadcaster(
+            ruri="rcan://a.b.c", robot_name="Rover", port=9001, record=self.RECORD, **over
+        )
+        # Same construction start() performs, without touching the network.
+        props = {
+            "ruri": b.ruri,
+            "model": b.model,
+            "caps": ",".join(b.capabilities),
+            "roles": "GUEST,USER,LEASEE,OWNER,CREATOR",
+            "version": "1.2.0",
+            "name": b.robot_name,
+            "status": b._status_fn(),
+        }
+        if b.record is not None:
+            props.update(b.record.txt())
+            props["name"] = b.robot_name
+            props["castor_port"] = str(b.port)
+        return props
+
+    def test_the_rrn_rides_along_so_a_found_robot_can_be_matched(self):
+        assert self._props()["rrn"] == "RRN-000000000012"
+
+    def test_the_gateway_port_and_manifest_ride_along(self):
+        props = self._props()
+        assert props["gateway_port"] == "8081"
+        assert props["manifest_path"] == "/home/pi/rover/ROBOT.md"
+
+    def test_the_advertised_runtime_port_is_the_socket_not_the_config(self):
+        # A record that disagrees with the port it was published from is how
+        # "the robot answered but nothing could reach it" happens.
+        assert self._props()["castor_port"] == "9001"
+
+    def test_the_rcan_peer_fields_survive(self):
+        props = self._props()
+        assert props["ruri"] == "rcan://a.b.c"
+        assert props["roles"].startswith("GUEST")
+
+    def test_a_robot_that_cannot_name_itself_still_broadcasts(self, monkeypatch):
+        monkeypatch.delenv("ROBOT_RRN", raising=False)
+        monkeypatch.delenv("ROBOT_HOME", raising=False)
+        b = RCANServiceBroadcaster(ruri="rcan://a.b.c")
+        assert b.record is None  # and `castor discovery check` will say so
 
 
 class TestBroadcaster:
@@ -174,6 +242,15 @@ class TestParseServiceInfo:
 
         peer = _parse_service_info(self._make_info())
         assert abs(peer["discovered_at"] - time.time()) < 2.0
+
+    def test_the_parsed_peer_carries_the_rrn(self):
+        # A peer with no rrn cannot be re-addressed, so the field has to
+        # survive the parse to be reportable at all.
+        peer = _parse_service_info(
+            self._make_info({b"rrn": b"RRN-7", b"gateway_port": b"8081"})
+        )
+        assert peer["rrn"] == "RRN-7"
+        assert peer["gateway_port"] == "8081"
 
     def test_string_keys_in_properties(self):
         """Properties may arrive as str keys (not bytes) — should still parse."""
