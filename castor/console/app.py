@@ -27,6 +27,11 @@ routers every robot can honestly answer:
   * memory       — /memory/recall, the robot's own long-term memory searched by
                    MEANING rather than printed whole. Read-only, and the same
                    ranker `castor memory recall` uses.
+  * eval_eyes    — /eval/*, the one surface that runs the other way: the phone
+                   PUSHES frames, corner marks and what the operator said, and an
+                   Inspect Robots embodiment on this host pulls them. Portable
+                   for the same reason the camera routes are not — it needs no
+                   hardware on the robot at all.
 
 ``/camera/list`` answers with an empty list rather than 404, because the app asks
 every console what it can see, and "nothing — the phone is my eye" is an answer,
@@ -42,6 +47,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 
 from .capabilities import router as capabilities_router
 from .config import console_token, robot_home
+from .eval_eyes import router as eval_router
 from .memory import router as memory_router
 from .models import read_active
 from .models import router as models_router
@@ -111,6 +117,10 @@ def build_app() -> FastAPI:
     app.include_router(models_router, dependencies=[Depends(require_console_auth)])
     app.include_router(capabilities_router, dependencies=[Depends(require_console_auth)])
     app.include_router(memory_router, dependencies=[Depends(require_console_auth)])
+    # The eval surface: a phone PUSHES what it sees and an Inspect Robots
+    # embodiment on this host PULLS it. Behind the same read-only bearer as the
+    # rest — it moves pictures and sentences, never a joint.
+    app.include_router(eval_router, dependencies=[Depends(require_console_auth)])
     return app
 
 
