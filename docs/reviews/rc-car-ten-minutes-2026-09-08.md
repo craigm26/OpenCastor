@@ -536,3 +536,22 @@ envelope, the deadman, the tier gates and the 5 s / 10 % first approval
   `--base-port` (`castor/up.py:56`), so a second robot on one host collides and
   is handled by a fallback that looks for `~/bob/keys/rrf`, a bench path
   (`castor/up.py:497-507`).
+
+## Addendum, same day: what shipped
+
+Fixes 1 to 15 landed in OpenCastor 3.1.0 (`1!3.1.0` on PyPI, tag v3.1.0),
+`rc-car-actuator` 0.1.1 (PyPI, now a core dependency), and the iOS app's
+`main` (port sweep, gateway error text, actuator routing; ships in the build
+after 76). The website hero now reads `pip install "opencastor>=3.1"`.
+
+| Route | Before | After (projected, unverified on hardware) |
+|---|---|---|
+| A: `pip install "opencastor>=3.1"` then `castor up` | never | install 5 to 12 min, `castor up` asks one wheels question, prints the QR; 8 to 15 min to a paired car with live wheels |
+| B: flashable image | 13.5 to 38 min to paired, then nothing moves | download one file, flash, two boots (I2C on), scan, approve; 7 min fast path, 21 min slow path, wheels live if the operator answered yes at first boot |
+| Newcomer following the checklist | 3 to 8 h | the checklist ships in `docs/hardware/pca9685-bringup.md`; `castor doctor` names every remaining trap with a fix line |
+
+What is still unverified because no PCA9685 was on this bench today: that
+`castor up --real-wheels` drives a real car, the corrected channel defaults
+against a real ESC and servo, the first-boot I2C enable on a Pi 5, the 1.94 GB
+image projection, and the phone finding a `castor up` robot through the new
+advertiser. Each has a test on fakes and none has met hardware.
