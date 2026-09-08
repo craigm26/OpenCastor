@@ -64,10 +64,10 @@ swarm:
 
 ```bash
 # Robot 1
-castor gateway --config config/presets/rpi_rc_car.rcan.yaml
+castor gateway --config config/presets/sunfounder_picar.rcan.yaml
 
 # Robot 2 (same command, different config file or same)
-castor gateway --config config/presets/rpi_rc_car.rcan.yaml
+castor gateway --config config/presets/sunfounder_picar.rcan.yaml
 ```
 
 Both robots will:

@@ -215,14 +215,17 @@ const bodies = [
           <div class="cta-install">
             <div class="install">
               <div class="install-lines">
-                <pre id="install-cmd">pip install opencastor
+                <pre id="install-cmd">pip install &quot;opencastor&gt;=3.1&quot;
 castor up</pre>
                 <button class="copy" type="button" data-copy="install-cmd">copy</button>
               </div>
             </div>
             <p class="beta" style="max-width:34ch">
-              Python 3.10 to 3.13. <code>castor up</code> takes a bare host to a
-              paired robot printing its pairing QR.
+              Python 3.10 to 3.13. The <code>&gt;=3.1</code> matters: a bare
+              <code>pip install opencastor</code> resolves an older CalVer wheel
+              with no <code>castor up</code> in it. <code>castor up</code> takes
+              a bare host to a paired robot printing its pairing QR, on
+              simulated wheels.
             </p>
           </div>
 
@@ -781,14 +784,17 @@ OpenCastor C6 heartbeat #1 tag=ALPHA uptime=2s free_heap=456464`}</pre>
         <div class="cta-install">
           <div class="install">
             <div class="install-lines">
-              <pre id="install-cmd-2">pip install opencastor
+              <pre id="install-cmd-2">pip install &quot;opencastor&gt;=3.1&quot;
 castor up</pre>
               <button class="copy" type="button" data-copy="install-cmd-2">copy</button>
             </div>
           </div>
           <p class="beta" style="max-width:34ch">
-            Python 3.10 to 3.13. <code>castor up</code> takes a bare host to a
-            paired robot printing its pairing QR.
+            Python 3.10 to 3.13. The <code>&gt;=3.1</code> matters: a bare
+            <code>pip install opencastor</code> resolves an older CalVer wheel
+            with no <code>castor up</code> in it. <code>castor up</code> takes a
+            bare host to a paired robot printing its pairing QR, on simulated
+            wheels.
           </p>
         </div>
         <div>

@@ -10,7 +10,7 @@ back as a signed, verifiable receipt.
 
 1. A robot with a `ROBOT.md` manifest and the gateway installed:
    ```bash
-   pip install "opencastor==3.*"          # the runtime (ships `castor pair`)
+   pip install "opencastor>=3.1"           # the runtime (ships `castor pair` and `castor up`)
    pip install robot-md-gateway            # the enforcement gateway
    ```
 2. Bearer tokens for the gateway. Generate them once with the gateway wizard:
@@ -50,7 +50,7 @@ castor pair \
   "bearer": "actuate-token-abc",
   "manifest_path": "/home/pi/ROBOT.md",
   "rrn": "RRN-000000000011",
-  "estop_url": "http://robot.local:8001/api/stop"
+  "estop_url": "http://robot.local:8081/api/stop"
 }
 ```
 
@@ -110,7 +110,19 @@ signed receipt (`envelope_signature: {kid, alg, sig}`) the app verifies offline.
 
 ## Notes
 
-- The install command is pinned (`opencastor==3.*`). A bare `pip install opencastor`
-  can resolve a stale CalVer release — see [pypi-versioning](../pypi-versioning.md).
+### Which install command
+
+- **`pip install "opencastor>=3.1"`, everywhere, with the quotes.** This is the
+  one install line the project documents; README, CLAUDE.md and the website
+  hero all use this exact string.
+- The floor is not decoration. A bare `pip install opencastor` resolves the
+  CalVer line (`2026.4.23.0`), which under PEP 440 sorts *above* `3.x` — and
+  that wheel contains no `castor up` and no `castor pair`. `==3.*` was the
+  earlier attempt; it dodges CalVer but still accepts `3.0.3`, which predates
+  `castor up` by two weeks. `>=3.1` is the first pin that means what the docs
+  say. See [pypi-versioning](../pypi-versioning.md).
+- Gateway port **8080** below is the `castor up` default (`base_port + 0`) and
+  the port that rides in the pairing QR. The full table is in
+  [README.md](../../README.md#ports--the-one-table).
 - Re-running `castor pair` refuses to overwrite an existing key unless you pass
   `--force` (which rotates the attestation identity).

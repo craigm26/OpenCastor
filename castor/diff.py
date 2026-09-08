@@ -6,7 +6,7 @@ a raw text diff. Useful after ``castor migrate`` or ``castor configure``.
 
 Usage:
     castor diff robot.rcan.yaml robot.rcan.yaml.bak
-    castor diff --config robot.rcan.yaml --baseline config/presets/rpi_rc_car.rcan.yaml
+    castor diff --config robot.rcan.yaml --baseline config/presets/sunfounder_picar.rcan.yaml
 """
 
 import os

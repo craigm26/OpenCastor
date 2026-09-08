@@ -528,3 +528,25 @@ class TestHubIndexJson:
         for preset in index["presets"]:
             missing = required_fields - set(preset.keys())
             assert not missing, f"Preset {preset.get('name')} missing fields: {missing}"
+
+    def test_every_indexed_preset_has_a_file_behind_it(self):
+        """An index entry whose raw URL 404s is a promise the hub cannot keep.
+
+        `rpi_rc_car` and `cytron_maker_pi` were both listed here with no
+        `config/presets/*.rcan.yaml` behind them, and `castor hub install`
+        reports success either way — so the failure was invisible on the
+        preset most likely to be picked by anyone holding an RC car. The
+        RC-car shape lives in `castor/templates/rc_car/` and is reached
+        through `castor up`, not through the hub.
+        """
+        import json
+        from pathlib import Path
+
+        root = Path(__file__).parent.parent
+        index = json.loads((root / "config" / "hub_index.json").read_text())
+        missing = [
+            e["name"]
+            for e in index["presets"]
+            if not (root / "config" / "presets" / f"{e['name']}.rcan.yaml").exists()
+        ]
+        assert not missing, f"hub_index.json lists presets with no YAML: {missing}"

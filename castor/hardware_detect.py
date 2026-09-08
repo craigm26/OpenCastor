@@ -1216,10 +1216,26 @@ def suggest_preset(hw: dict) -> tuple:
         return "lego_spike_prime", "medium", "LEGO USB device detected (likely SPIKE Prime hub)"
 
     # ── PCA9685 + RPi → rover kit ─────────────────────────────────────────
+    # `rpi_rc_car` is the one preset id in the catalog with NO backing YAML in
+    # config/presets/, and this ladder is where it comes from. The RC-car shape
+    # lives in castor/templates/rc_car/ and is reachable only through
+    # `castor up`, so the reason string says so: whatever surface prints this
+    # is telling somebody with a car what to do next, and "pick this preset"
+    # is not it.
     if "0x40" in i2c_addrs and is_rpi:
         if has_camera:
-            return "rpi_rc_car", "high", "PCA9685 at 0x40 + RPi + camera detected"
-        return "rpi_rc_car", "medium", "PCA9685 at 0x40 + RPi detected (no camera)"
+            return (
+                "rpi_rc_car",
+                "high",
+                "PCA9685 at 0x40 + RPi + camera detected — run `castor up`, "
+                "which owns this shape (there is no rpi_rc_car preset file)",
+            )
+        return (
+            "rpi_rc_car",
+            "medium",
+            "PCA9685 at 0x40 + RPi detected (no camera) — run `castor up`, "
+            "which owns this shape (there is no rpi_rc_car preset file)",
+        )
 
     # ── ESP32 ─────────────────────────────────────────────────────────────
     if has_serial and any(token in usb_desc for token in ("esp32", "cp210", "ch340")):
@@ -1233,7 +1249,12 @@ def suggest_preset(hw: dict) -> tuple:
     if is_rpi:
         return "amazon_kit_generic", "low", "Raspberry Pi detected, no specific hardware found"
 
-    return "rpi_rc_car", "low", "No specific hardware detected, using default preset"
+    return (
+        "rpi_rc_car",
+        "low",
+        "No specific hardware detected — `castor up` provisions a simulated "
+        "robot you can pair with today",
+    )
 
 
 # ---------------------------------------------------------------------------
