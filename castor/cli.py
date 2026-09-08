@@ -489,6 +489,7 @@ def cmd_up(args) -> int:
         python=args.python,
         start_services=not args.no_start,
         link=getattr(args, "link", True),
+        real_wheels=getattr(args, "real_wheels", None),
     )
     return 0
 
@@ -9636,6 +9637,8 @@ def main() -> None:
             "Examples:\n"
             "  castor up                        # ~/robot, auto-detected archetype\n"
             "  castor up --home ~/car --name car --base-port 8110\n"
+            "  castor up --real-wheels           # PCA9685 live — WHEELS OFF THE GROUND\n"
+            "  castor up --simulated-wheels      # never ask, never move\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -9661,6 +9664,28 @@ def main() -> None:
     )
     p_up.add_argument(
         "--no-start", action="store_true", help="Generate everything but do not start systemd units"
+    )
+    # Real wheels: the one decision `up` will ask about, and the two flags that
+    # answer it without a terminal. Default None = ask if a PCA9685 is on the
+    # bus and stdin is a tty, otherwise simulated.
+    g_wheels = p_up.add_mutually_exclusive_group()
+    g_wheels.add_argument(
+        "--real-wheels",
+        dest="real_wheels",
+        action="store_const",
+        const=True,
+        default=None,
+        help="Write the PCA9685 drive variables UNCOMMENTED (the robot can move "
+        "as soon as the gateway starts). Wheels off the ground first — see "
+        "docs/hardware/pca9685-bringup.md",
+    )
+    g_wheels.add_argument(
+        "--simulated-wheels",
+        dest="real_wheels",
+        action="store_const",
+        const=False,
+        help="Never write live drive variables, and comment them out if a "
+        "previous run enabled them (the default on any host with no terminal)",
     )
     p_up.add_argument(
         "--no-link",

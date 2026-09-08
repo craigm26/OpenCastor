@@ -170,6 +170,13 @@ i2cdetect -y 1
 
 **Used by:** Waveshare AlphaBot, Adeept, Freenove, Yahboom ROSMASTER, SunFounder PiCar
 
+> **Driving an RC car (one ESC plus one steering servo)?** The preset below is
+> the differential-drive surface. An RC car is brought up through `castor up`,
+> which configures `rc-car-actuator` from `OPENCASTOR_DRIVE*` in the robot's
+> `gateway-policy.env` — a different surface for the same chip. The ordered
+> bring-up, wheels off the ground, is
+> [docs/hardware/pca9685-bringup.md](hardware/pca9685-bringup.md).
+
 **Preset setting:**
 ```yaml
 drivers:

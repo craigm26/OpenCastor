@@ -258,6 +258,30 @@ sudo -u opencastor XDG_RUNTIME_DIR=/run/user/$(id -u opencastor) \
 
 ---
 
+## Real wheels are not on by default, and this is the step that turns them on
+
+A freshly flashed card pairs, opens envelopes, signs receipts and moves a
+**simulated** vehicle. That is deliberate — a robot that could move because
+somebody flashed a card is the one outcome this project will not ship — but it
+is also the step most likely to be mistaken for a fault: the stick moves, the
+badge is green, the receipts sign, and the car sits still.
+
+Two things stand between a flashed card and a moving car, and neither can be
+done from the image:
+
+1. **The I2C bus is off.** Raspberry Pi OS ships `dtparam=i2c_arm=on` commented
+   out and no script in this image may write `config.txt` (`selftest.sh` asserts
+   it). `sudo raspi-config nointeractive do_i2c 0 && sudo reboot`.
+2. **The drive variables are commented out.** With the bus on and the board
+   answering at 0x40, `castor up --real-wheels` writes them live —
+   **wheels off the ground** — and `castor up --simulated-wheels` puts them
+   back. Run interactively with a chip on the bus, `castor up` asks once
+   instead; firstboot has no terminal, so it never does.
+
+Do the ordered bench steps first: [docs/hardware/pca9685-bringup.md](hardware/pca9685-bringup.md).
+
+---
+
 ## What the page says when something degraded
 
 `castor up` reports honestly, so first boot can succeed partially — and when it
