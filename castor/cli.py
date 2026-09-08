@@ -6219,11 +6219,18 @@ def cmd_hub(args) -> None:
             print("  Usage: castor hub install <recipe-id>")
             return
         dest = getattr(args, "output", ".") or "."
-        result = install_recipe(query, dest=dest)
-        if result:
+        from castor.hub import RecipeInstallError
+
+        try:
+            result = install_recipe(query, dest=dest)
+        except RecipeInstallError as exc:
+            print(f"  ❌ {exc}")
+            sys.exit(1)
+        if result and result.exists():
             print(f"  ✅ Installed to {result}")
         else:
             print(f"  ❌ Recipe '{query}' not found.")
+            sys.exit(1)
 
     elif action == "share":
         config = getattr(args, "config", None)

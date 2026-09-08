@@ -1,0 +1,229 @@
+# Pet Companion Bot
+#
+# The config `castor hub install pet-companion-b7d1e6` writes. Derived from
+# config/presets/sunfounder_picar_x.rcan.yaml, with this recipe's identity, brain and sensors.
+#
+# Its RRN and robot_uuid are unique to this recipe, not inherited: two owners
+# of the same kit installing the same recipe must not collide on identity.
+# Run `castor doctor` after installing — it will tell you whether the wheels
+# this config describes are the ones that actually turn.
+rcan_version: '3.0'
+metadata:
+  robot_name: Pet Companion Bot
+  robot_uuid: d2999468-1dd9-5c29-88f9-646a3ee3fa11
+  manufacturer: SunFounder
+  model: PiCar-X v2.0
+  author: catdad_marco
+  license: Apache-2.0
+  tags:
+  - pets
+  - home
+  - cat
+  - dog
+  - companion
+  - treat-dispenser
+  - gpio
+  description: Interactive robot that plays with cats and dogs using camera-based pet detection,
+    random movement, and a treat dispenser
+  rrn: RRN-663060317063
+  rrn_uri: rrn://community/robot/opencastor/pet-companion-b7d1e6
+  recipe_id: pet-companion-b7d1e6
+agent:
+  provider: anthropic
+  model: claude-sonnet-4-20250514
+  vision_enabled: true
+  latency_budget_ms: 120
+  safety_stop: true
+  offline_provider: ollama
+  confidence_gates:
+  - scope: control
+    min_confidence: 0.75
+    on_fail: block
+  - scope: safety
+    min_confidence: 0.9
+    on_fail: block
+physics:
+  type: ackermann
+  dof: 2
+  chassis:
+    wheelbase_mm: 141
+    track_width_mm: 120
+    wheel_radius_mm: 33
+camera:
+  type: picam
+  resolution:
+  - 640
+  - 480
+  framerate: 30
+  depth_enabled: false
+drivers:
+- id: motor_driver
+  protocol: gpio
+  interface: i2c
+  address: '0x14'
+  left_motor_channel: 0
+  right_motor_channel: 1
+  max_speed: 100
+- id: steering_servo
+  protocol: gpio
+  interface: i2c
+  address: '0x14'
+  sensor_type: servo
+  channel: 0
+  center_angle_deg: 0
+  min_angle_deg: -30
+  max_angle_deg: 30
+- id: camera_pan_servo
+  protocol: gpio
+  interface: i2c
+  address: '0x14'
+  sensor_type: servo
+  channel: 1
+  center_angle_deg: 0
+  min_angle_deg: -90
+  max_angle_deg: 90
+- id: camera_tilt_servo
+  protocol: gpio
+  interface: i2c
+  address: '0x14'
+  sensor_type: servo
+  channel: 2
+  center_angle_deg: 0
+  min_angle_deg: -35
+  max_angle_deg: 65
+- id: ultrasonic_sensor
+  protocol: gpio
+  sensor_type: hcsr04
+  trigger_gpio: 27
+  echo_gpio: 22
+  max_range_m: 4.0
+- id: camera
+  protocol: picam
+  enabled: true
+  url: http://localhost:8080/stream
+- id: treat_dispenser_servo
+  protocol: gpio
+  sensor_type: servo
+  gpio: 25
+  min_us: 500
+  max_us: 2500
+  center_angle_deg: 0
+connection:
+  type: local
+network:
+  telemetry_stream: true
+  sim_to_real_sync: false
+  allow_remote_override: false
+rcan_protocol:
+  port: 8000
+  capabilities:
+  - status
+  - nav
+  - teleop
+  - chat
+  - vision
+  enable_mdns: true
+  enable_jwt: false
+safety:
+  obstacle_stop_cm: 20
+  estop_on_startup: false
+  max_linear_speed_mps: 0.3
+  local_safety_wins: true
+  emergency_stop_distance: 0.4
+  estop_bypass_rate_limit: true
+  watchdog:
+    timeout_s: 10
+tiered_brain:
+  fast_provider: ollama
+  fast_model: gemma3:1b
+  slow_provider: anthropic
+  slow_model: claude-sonnet-4-20250514
+  planner_interval: 10
+agent_roster:
+- id: nav_specialist
+  provider: ollama
+  model: gemma3:4b
+  scope: nav
+- id: chat_specialist
+  provider: anthropic
+  model: claude-sonnet-4-5
+  scope: chat
+geofence:
+  enabled: false
+  boundary:
+    type: none
+reactive:
+  min_obstacle_m: 0.3
+  fallback_provider: ollama
+hardware_safety:
+  physical_estop: false
+  hardware_watchdog_mcu: false
+p66:
+  enabled: true
+  loa_enforcement: true
+  consent_required: true
+  manifest:
+    estop_qos_bypass: true
+consent:
+  required: true
+  mode: explicit
+  scope_threshold: control
+security:
+  replay_protection:
+    enabled: true
+    window_s: 30
+  signing:
+    enabled: false
+    algorithm: Ed25519
+loa:
+  enforcement: true
+  min_loa_for_control: 1
+human_identity:
+  loa_required: 1
+transport:
+  supported:
+  - http
+  - mqtt
+  constrained_enabled: false
+multimodal:
+  enabled: true
+  max_chunk_bytes: 1048576
+offline:
+  enabled: true
+  fallback_provider: ollama
+r2ram:
+  scopes:
+  - discover
+  - status
+  - chat
+  - control
+  - safety
+federation:
+  enabled: true
+  consent_bridge: false
+notes:
+  setup: "Install picar-x library: pip3 install picar-x Enable I2C on Pi: sudo raspi-config\
+    \ \u2192 Interfaces \u2192 I2C \u2192 Enable Run calibration: cd /opt/picar-x && python3\
+    \ calibration.py Library docs: https://docs.sunfounder.com/projects/picar-x\n"
+  hardware:
+    compute: Raspberry Pi 4 or 3B+
+    camera: Raspberry Pi Camera Module v2 (5MP)
+    ultrasonic: HC-SR04 (4m range)
+    battery: 7.4V Li-ion 2000mAh
+    motor_hat: SunFounder Robot HAT (I2C, PCA9685)
+  recipe: SunFounder PiCar-X plus one SG90 on the treat hopper.
+  use_case: Keeps my two cats entertained while I'm at work. Drives around randomly, detects
+    when a cat is nearby via camera, and dispenses treats from a small hopper mounted on top.
+    Claude Sonnet decides when to move, when to pause, and when to dispense based on what
+    it sees.
+  hardware_bill:
+  - SunFounder PiCar-X v2.0
+  - Raspberry Pi 4B (4GB)
+  - Pi Camera Module v3
+  - SG90 micro servo (treat dispenser)
+  - Small treat hopper (3D printed or cardboard)
+  - 32GB microSD
+  budget: $85
+firmware_hash: null
+attestation_ref: null
+fria_ref: null

@@ -1,0 +1,246 @@
+# Research Data Collection Platform
+#
+# The config `castor hub install research-data-collector-c9f4a3` writes. Derived from
+# config/presets/freenove_4wd.rcan.yaml, with this recipe's identity, brain and sensors.
+#
+# Its RRN and robot_uuid are unique to this recipe, not inherited: two owners
+# of the same kit installing the same recipe must not collide on identity.
+# Run `castor doctor` after installing — it will tell you whether the wheels
+# this config describes are the ones that actually turn.
+rcan_version: '3.0'
+metadata:
+  robot_name: Research Data Collection Platform
+  robot_uuid: c387e93d-ed6f-5ce0-899b-cddea8339b99
+  manufacturer: Freenove
+  model: 4WD Smart Car Kit
+  author: dr_fieldbot
+  license: Apache-2.0
+  tags:
+  - research
+  - data-collection
+  - fleet
+  - sensors
+  - gps
+  - environmental
+  - advanced
+  description: Multi-sensor mobile platform for field research with fleet coordination, structured
+    logging, and Gemini Robotics ER for autonomous navigation
+  rrn: RRN-788371838857
+  rrn_uri: rrn://community/robot/opencastor/research-data-collector-c9f4a3
+  recipe_id: research-data-collector-c9f4a3
+agent:
+  provider: google
+  model: gemini-2.5-flash
+  vision_enabled: true
+  latency_budget_ms: 100
+  safety_stop: true
+  offline_provider: ollama
+  confidence_gates:
+  - scope: control
+    min_confidence: 0.75
+    on_fail: block
+  - scope: safety
+    min_confidence: 0.9
+    on_fail: block
+  secondary_model: gemini-robotics-er-1.5
+physics:
+  type: differential
+  dof: 4
+  chassis:
+    wheel_base_mm: 130
+    track_width_mm: 150
+    wheel_radius_mm: 30
+camera:
+  type: picam
+  resolution:
+  - 1280
+  - 720
+  framerate: 15
+cameras:
+  main:
+    type: http
+    url: http://127.0.0.1:8765/snapshot
+drivers:
+- id: motor_driver
+  protocol: arduino_serial_json
+  port: /dev/ttyUSB0
+  baud_rate: 115200
+  channels:
+    fl_pwm: 5
+    fl_dir: 4
+    fr_pwm: 6
+    fr_dir: 7
+    rl_pwm: 10
+    rl_dir: 9
+    rr_pwm: 11
+    rr_dir: 12
+  deadband_pwm: 30
+  max_pwm: 200
+- id: ultrasonic_sensor
+  protocol: arduino_serial_json
+  port: /dev/ttyUSB0
+  baud_rate: 115200
+  sensor_type: hcsr04
+  trigger_gpio: 2
+  echo_gpio: 3
+  max_range_m: 4.0
+- id: line_sensor
+  protocol: arduino_serial_json
+  port: /dev/ttyUSB0
+  baud_rate: 115200
+  sensor_type: ir_line
+  sensor_pins:
+  - A0
+  - A1
+  - A2
+- id: servo_pan
+  protocol: arduino_serial_json
+  port: /dev/ttyUSB0
+  baud_rate: 115200
+  sensor_type: servo
+  gpio: 8
+  min_us: 500
+  max_us: 2500
+- id: environment
+  protocol: i2c
+  sensor_type: bme680
+  address: '0x77'
+- id: gps
+  protocol: serial
+  sensor_type: nmea
+  port: /dev/ttyAMA0
+  baud_rate: 9600
+- id: microphone
+  protocol: alsa
+  sensor_type: usb_mic
+connection:
+  type: serial
+  port: /dev/ttyUSB0
+  baud_rate: 115200
+  reconnect_interval_ms: 2000
+network:
+  telemetry_stream: true
+  sim_to_real_sync: false
+  allow_remote_override: false
+rcan_protocol:
+  port: 8000
+  capabilities:
+  - status
+  - nav
+  - teleop
+  - chat
+  enable_mdns: false
+  enable_jwt: false
+safety:
+  obstacle_stop_cm: 15
+  estop_on_startup: false
+  max_linear_speed_mps: 0.4
+  local_safety_wins: true
+  emergency_stop_distance: 0.4
+  estop_bypass_rate_limit: true
+  watchdog:
+    timeout_s: 10
+tiered_brain:
+  fast_provider: ollama
+  fast_model: gemma3:1b
+  slow_provider: google
+  slow_model: gemini-2.5-flash
+  planner_interval: 10
+agent_roster:
+- id: nav_specialist
+  provider: ollama
+  model: gemma3:4b
+  scope: nav
+- id: chat_specialist
+  provider: anthropic
+  model: claude-sonnet-4-5
+  scope: chat
+swarm:
+  enabled: true
+  role: member
+  fleet_size: 3
+geofence:
+  enabled: false
+  boundary:
+    type: none
+reactive:
+  min_obstacle_m: 0.3
+  fallback_provider: ollama
+hardware_safety:
+  physical_estop: false
+  hardware_watchdog_mcu: false
+p66:
+  enabled: true
+  loa_enforcement: true
+  consent_required: true
+  manifest:
+    estop_qos_bypass: true
+consent:
+  required: true
+  mode: explicit
+  scope_threshold: control
+security:
+  replay_protection:
+    enabled: true
+    window_s: 30
+  signing:
+    enabled: false
+    algorithm: Ed25519
+loa:
+  enforcement: true
+  min_loa_for_control: 1
+human_identity:
+  loa_required: 1
+transport:
+  supported:
+  - http
+  - mqtt
+  constrained_enabled: false
+multimodal:
+  enabled: true
+  max_chunk_bytes: 1048576
+offline:
+  enabled: true
+  fallback_provider: ollama
+r2ram:
+  scopes:
+  - discover
+  - status
+  - chat
+  - control
+  - safety
+federation:
+  enabled: true
+  consent_bridge: false
+notes:
+  firmware: "Flash Arduino IDE sketch from Freenove tutorial code. Sketch must accept JSON\
+    \ commands on Serial:\n  {\"cmd\":\"drive\",\"fl\":150,\"fr\":150,\"rl\":150,\"rr\":150,\"\
+    ms\":500}\n  {\"cmd\":\"stop\"}\n  {\"cmd\":\"sensor\",\"id\":\"hcsr04\"}\nESP32 variant:\
+    \ change motor_driver protocol to esp32_websocket and set host: \"192.168.4.1\" (AP mode)\
+    \ or your router-assigned IP.\n"
+  hardware:
+    mcu_option_1: Arduino Uno R3 (serial via USB)
+    mcu_option_2: ESP32-WROOM-32 (WiFi WebSocket)
+    motor_driver: L298N dual H-bridge
+    ultrasonic: HC-SR04
+    line_sensors: "3\xD7 IR reflective sensor (TCRT5000)"
+    battery: "7.4V 2S LiPo or 6\xD7 AA"
+  purchase: "Kit available on Amazon (~$30\u201350). Includes all hardware, chassis, Freenove\
+    \ tutorial code, and detailed PDF guide. Great first robot.\n"
+  recipe: Freenove 4WD in a fleet of three, each on its own grid section.
+  use_case: Fleet of 3 robots collecting environmental data across a university research meadow.
+    Each robot covers a grid section, logging GPS-tagged photos, air quality readings (BME680),
+    ambient sound levels, and ground cover classification. Data syncs to a central server
+    for analysis. Gemini Robotics ER handles autonomous waypoint navigation.
+  hardware_bill:
+  - Freenove 4WD Car Kit
+  - Raspberry Pi 5 (8GB)
+  - Pi Camera Module v3 (wide-angle)
+  - BME680 environmental sensor
+  - GPS module (NEO-6M)
+  - USB microphone
+  - 64GB microSD
+  budget: $220
+firmware_hash: null
+attestation_ref: null
+fria_ref: null

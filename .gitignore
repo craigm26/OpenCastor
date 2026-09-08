@@ -10,6 +10,12 @@ dist/
 build/
 *.rcan.yaml
 !config/**/*.rcan.yaml
+# Recipe configs are SHIPPED CONTENT, not a local robot's operating config.
+# Without this line `*.rcan.yaml` above silently swallowed every
+# community-recipes/*/config.rcan.yaml — which is why all seven recipes
+# named a config file the repository did not contain, and why
+# `castor hub install` printed a tick for a file it never wrote.
+!community-recipes/**/*.rcan.yaml
 firebase-debug.log
 response.mp3
 node_modules/

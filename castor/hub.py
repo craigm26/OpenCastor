@@ -340,21 +340,43 @@ def get_recipe(recipe_id: str) -> dict | None:
     return None
 
 
+class RecipeInstallError(RuntimeError):
+    """A recipe named a file it does not ship.
+
+    `install_recipe` used to return the DESTINATION path whether or not it had
+    copied anything into it, so `castor hub install` printed
+    "✅ Installed to ./config.rcan.yaml" for a file that was never written and
+    the owner discovered it one command later, from `castor run`. A tool that
+    reports success for work it did not do is worse than one that fails.
+    """
+
+
 def install_recipe(recipe_id: str, dest: str = ".") -> Path | None:
-    """Copy a recipe's config to the current directory."""
+    """Copy a recipe's config to *dest*.
+
+    Returns the written config path, or None when no recipe has that id.
+    Raises :class:`RecipeInstallError` when the recipe exists but its config
+    file does not — the case that used to print a tick.
+    """
     recipe = get_recipe(recipe_id)
     if not recipe:
         return None
 
     recipe_dir = Path(recipe["_dir"])
+    config_name = recipe["files"]["config"]
+    config_src = recipe_dir / config_name
+    if not config_src.exists():
+        raise RecipeInstallError(
+            f"recipe '{recipe_id}' names {config_name} in its recipe.json, but "
+            f"{config_src} does not exist. Nothing was installed. "
+            "Report it at https://github.com/craigm26/OpenCastor/issues, or run "
+            "`castor wizard` to build a config for your hardware."
+        )
+
     dest_path = Path(dest)
     dest_path.mkdir(parents=True, exist_ok=True)
-
-    # Copy config
-    config_src = recipe_dir / recipe["files"]["config"]
-    config_dest = dest_path / recipe["files"]["config"]
-    if config_src.exists():
-        shutil.copy2(config_src, config_dest)
+    config_dest = dest_path / config_name
+    shutil.copy2(config_src, config_dest)
 
     # Copy readme
     readme_src = recipe_dir / "README.md"
@@ -362,11 +384,17 @@ def install_recipe(recipe_id: str, dest: str = ".") -> Path | None:
     if readme_src.exists():
         shutil.copy2(readme_src, readme_dest)
 
-    # Copy docs
+    # Copy docs — named but absent is a warning, not a failure: the config is
+    # what makes the robot run, and the owner already has it.
+    missing_docs = []
     for doc in recipe["files"].get("docs", []):
         doc_src = recipe_dir / doc
         if doc_src.exists():
             shutil.copy2(doc_src, dest_path / doc)
+        else:
+            missing_docs.append(doc)
+    if missing_docs:
+        print(f"  ⚠️  recipe '{recipe_id}' names docs it does not ship: {', '.join(missing_docs)}")
 
     return config_dest
 
