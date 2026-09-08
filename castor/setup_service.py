@@ -1036,10 +1036,22 @@ def verify_setup_config(
                     f"Driver {idx} uses {protocol}, which is typically unsupported on {host}."
                 )
         if not errors:
-            driver = resolve_driver(config)
-            if driver is None:
-                errors.append("Driver factory returned no driver for generated config.")
+            # A DRY RUN of the driver factory on a host that may not be the
+            # robot. "The libraries are not installed here" is a warning about
+            # this machine, not an error in the config: the PCA9685 drivers now
+            # raise rather than silently mocking, and a config author on a
+            # laptop must still be able to verify a config for a Pi.
+            try:
+                driver = resolve_driver(config)
+            except Exception as exc:  # noqa: BLE001
+                warnings.append(
+                    f"Driver could not be constructed on this host: {exc.__class__.__name__}: {exc}"
+                )
+                driver = None
             else:
+                if driver is None:
+                    errors.append("Driver factory returned no driver for generated config.")
+            if driver is not None:
                 with contextlib.suppress(Exception):
                     driver.close()
 

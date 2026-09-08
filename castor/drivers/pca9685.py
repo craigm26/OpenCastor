@@ -10,14 +10,81 @@ PCA9685 PWM driver supporting two modes:
 The mode is selected by the ``protocol`` field in your RCAN driver config:
   - ``pca9685_i2c``  -> PCA9685Driver  (differential drive)
   - ``pca9685_rc``   -> PCA9685RCDriver (servo + ESC)
+
+WHICH SURFACE DRIVES A CAR
+--------------------------
+This module is NOT the surface that drives an OpenCastor RC car. The car is
+driven by ``rc-car-actuator`` inside ``robot-md-gateway``, configured through
+``<robot home>/gateway-policy.env`` (``OPENCASTOR_DRIVE=pca9685``), because
+that is where the deadman thread and the envelope budget live. A second,
+independent path to the same chip -- which is what this module is -- can write
+a pulse that no lease, no envelope and no deadman is watching.
+
+Use this module for a differential-drive kit that has no actuator package, or
+on the bench. If you have a servo-plus-ESC car, use ``rc-car-actuator``. See
+docs/hardware-guide.md.
+
+MOCK MODE IS OPT-IN, NOT A FALLBACK
+-----------------------------------
+This driver used to answer every failure -- no Adafruit libraries, no I2C bus,
+no chip at the address -- by setting ``self.pca = None``, logging "Falling back
+to mock mode", and then accepting move() calls forever. Nothing above it could
+tell that apart from a working driver except by reading a log, and the
+symptom presented to the owner was a stick that moves and a car that does not.
+
+Now a failure is a failure. Mock mode happens only when it is asked for:
+
+    OPENCASTOR_PCA9685_ALLOW_MOCK=1        (environment), or
+    drivers: [{protocol: pca9685_rc, allow_mock: true}]   (RCAN config)
+
+Without one of those, construction raises :class:`PCA9685Unavailable`.
 """
 
 import logging
+import os
 import time
 
 from castor.drivers.base import DriverBase
 
 logger = logging.getLogger("OpenCastor.PCA9685")
+
+#: Environment opt-in for mock mode. Config key ``allow_mock`` does the same.
+ALLOW_MOCK_ENV = "OPENCASTOR_PCA9685_ALLOW_MOCK"
+
+_REAL_SURFACE_HINT = (
+    "If this is a servo+ESC RC car, the surface that drives it is "
+    "rc-car-actuator in robot-md-gateway (OPENCASTOR_DRIVE=pca9685 in "
+    "<robot home>/gateway-policy.env), not this driver. "
+    "To run this driver without hardware anyway, set "
+    f"{ALLOW_MOCK_ENV}=1 or allow_mock: true in the driver config."
+)
+
+
+class PCA9685Unavailable(RuntimeError):
+    """The chip (or its library) is not there and mock mode was not requested.
+
+    Raised instead of silently degrading. A caller that genuinely wants a
+    pretend robot opts in; a caller that wanted a robot finds out here rather
+    than from a car that will not move.
+    """
+
+
+def _mock_allowed(config: dict) -> bool:
+    """Explicit opt-in only: config key first, then the environment."""
+    if "allow_mock" in config:
+        value = config["allow_mock"]
+        if isinstance(value, str):
+            return value.strip().lower() in ("1", "true", "yes", "on")
+        return bool(value)
+    return os.environ.get(ALLOW_MOCK_ENV, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _unavailable(config: dict, reason: str) -> None:
+    """Raise unless mock mode was explicitly requested; warn loudly if it was."""
+    if _mock_allowed(config):
+        logger.warning("PCA9685 mock mode (explicitly allowed): %s", reason)
+        return
+    raise PCA9685Unavailable(f"{reason}. {_REAL_SURFACE_HINT}")
 
 # ---------------------------------------------------------------------------
 # Hardware imports (graceful degradation)
@@ -30,7 +97,11 @@ try:
     HAS_PCA9685 = True
 except ImportError:
     HAS_PCA9685 = False
-    logger.warning("Adafruit PCA9685 libraries not found. Running in mock mode.")
+    logger.warning(
+        "Adafruit PCA9685 libraries not found. Constructing a PCA9685 driver will "
+        "RAISE unless mock mode is explicitly allowed (%s=1 or allow_mock: true).",
+        "OPENCASTOR_PCA9685_ALLOW_MOCK",
+    )
 
 try:
     from adafruit_motor import motor
@@ -130,7 +201,11 @@ class PCA9685RCDriver(DriverBase):
                 )
 
         if not HAS_PCA9685:
-            logger.warning("PCA9685 unavailable -- RC driver in mock mode")
+            _unavailable(
+                config,
+                "adafruit-pca9685 / busio / board are not installed "
+                "(pip install adafruit-circuitpython-pca9685)",
+            )
             self.pca = None
             return
 
@@ -143,7 +218,12 @@ class PCA9685RCDriver(DriverBase):
             self.pca.frequency = self.freq
             logger.info(f"PCA9685 RC driver online at {hex(addr)}, {self.freq} Hz")
         except (ValueError, OSError) as exc:
-            logger.error(f"PCA9685 init failed: {exc}. Falling back to mock mode.")
+            _unavailable(
+                config,
+                f"PCA9685 init failed: {exc} "
+                "(is I2C enabled? sudo raspi-config nonint do_i2c 0; check the address with "
+                "i2cdetect -y 1)",
+            )
             self.pca = None
             return
 
@@ -265,7 +345,11 @@ class PCA9685Driver(DriverBase):
         self.config = config
 
         if not HAS_PCA9685 or not HAS_MOTOR:
-            logger.warning("PCA9685/motor libs unavailable, driver in mock mode")
+            _unavailable(
+                config,
+                "adafruit-pca9685 / adafruit-motor are not installed "
+                "(pip install adafruit-circuitpython-pca9685 adafruit-circuitpython-motor)",
+            )
             self.pca = None
             self.motor_left = None
             self.motor_right = None
@@ -279,8 +363,12 @@ class PCA9685Driver(DriverBase):
             self.pca = PCA9685(i2c, address=addr)
             self.pca.frequency = config.get("frequency", 50)
             logger.info(f"PCA9685 Connected at {hex(addr)}")
-        except (ValueError, OSError):
-            logger.error("PCA9685 Not Found. Check wiring or I2C toggle in raspi-config.")
+        except (ValueError, OSError) as exc:
+            _unavailable(
+                config,
+                f"PCA9685 not found at the configured address: {exc} "
+                "(is I2C enabled? sudo raspi-config nonint do_i2c 0; check with i2cdetect -y 1)",
+            )
             self.pca = None
             self.motor_left = None
             self.motor_right = None

@@ -127,6 +127,11 @@ class TestDriverBase:
 class TestPCA9685DriverMockMode:
     """Test PCA9685Driver when Adafruit libraries are NOT installed."""
 
+    @pytest.fixture(autouse=True)
+    def _allow_mock(self, monkeypatch):
+        """Mock mode is opt-in now. These tests are the opt-in."""
+        monkeypatch.setenv("OPENCASTOR_PCA9685_ALLOW_MOCK", "1")
+
     def _make_driver(self, config=None):
         """Construct a PCA9685Driver that will operate in mock mode."""
         from castor.drivers.pca9685 import PCA9685Driver
@@ -207,6 +212,11 @@ class TestPCA9685DriverMockMode:
 # =====================================================================
 class TestPCA9685RCDriverMockMode:
     """Test PCA9685RCDriver when Adafruit libraries are NOT installed."""
+
+    @pytest.fixture(autouse=True)
+    def _allow_mock(self, monkeypatch):
+        """Mock mode is opt-in now. These tests are the opt-in."""
+        monkeypatch.setenv("OPENCASTOR_PCA9685_ALLOW_MOCK", "1")
 
     def _make_driver(self, config=None):
         from castor.drivers.pca9685 import PCA9685RCDriver
@@ -580,6 +590,10 @@ class TestPCA9685RCSetPulse:
 
     These tests require a real PCA9685 object, so we mock it.
     """
+
+    @pytest.fixture(autouse=True)
+    def _allow_mock(self, monkeypatch):
+        monkeypatch.setenv("OPENCASTOR_PCA9685_ALLOW_MOCK", "1")
 
     def test_set_pulse_clamps_below_minimum(self):
         from castor.drivers.pca9685 import PCA9685RCDriver
