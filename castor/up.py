@@ -257,6 +257,9 @@ EnvironmentFile={home}/{DISCOVERY_ENV}
 ExecStart={python} -m castor.discovery
 Restart=always
 RestartSec=5
+# 78 is "no restart will fix this" (zeroconf absent). Looping on it every five
+# seconds forever buries the one line that says what to install.
+RestartPreventExitStatus=78
 
 [Install]
 WantedBy=default.target

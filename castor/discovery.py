@@ -540,11 +540,28 @@ def run_forever(record: RobotRecord, *, poll: float = 5.0) -> int:
     return 0
 
 
+#: Exit code for a condition no restart can fix. The unit pairs it with
+#: RestartPreventExitStatus, so a host missing zeroconf shows one failed unit
+#: with a readable reason instead of looping every five seconds forever.
+EX_UNFIXABLE = 78  # EX_CONFIG
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     argv = list(argv if argv is not None else [])
     if argv and argv[0] == "check":
         return check()
+    try:
+        import zeroconf  # noqa: F401
+    except ImportError:
+        logger.error(
+            "zeroconf is not installed, so this robot cannot advertise itself and "
+            "the app will only find it by QR or subnet sweep. Fix: "
+            "`pip install zeroconf` in the environment this unit runs from, then "
+            "`systemctl --user restart` it. (It is a dependency of opencastor; a "
+            "host without it was installed from something older.)"
+        )
+        return EX_UNFIXABLE
     try:
         record = record_from_env()
     except ValueError as exc:

@@ -160,6 +160,11 @@ def test_THEFIFTHUNIT_up_writes_an_advertiser_and_it_is_mandatory():
     assert "EnvironmentFile=-" not in unit
     assert "ExecStart=/venv/bin/python -m castor.discovery" in unit
     assert "WantedBy=default.target" in unit
+    # An absent zeroconf is not fixable by restarting; looping on it every five
+    # seconds buries the one log line that says what to install.
+    from castor.discovery import EX_UNFIXABLE
+
+    assert f"RestartPreventExitStatus={EX_UNFIXABLE}" in unit
 
 
 def test_the_advertiser_env_carries_every_key_the_record_needs(tmp_path):

@@ -72,6 +72,12 @@ dependencies = [
     "rcan>=3.3,<4",
     # Gateway Authority enforcement (Plan 6 Track 2 / Plan 7 open-core)
     "robot-md-gateway>=0.4.0a1",
+    # The robot saying where it is. HARD dep, not an extra, for the same reason
+    # fastapi is one: `castor up` ALWAYS writes <name>-discovery.service, and a
+    # host that arrives without zeroconf arrives with a unit that restart-loops
+    # and a phone that can never find the robot after its address moves. Pure
+    # Python, about 800 KB.
+    "zeroconf>=0.131.0",
 ]
 
 [project.optional-dependencies]
