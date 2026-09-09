@@ -555,3 +555,49 @@ What is still unverified because no PCA9685 was on this bench today: that
 against a real ESC and servo, the first-boot I2C enable on a Pi 5, the 1.94 GB
 image projection, and the phone finding a `castor up` robot through the new
 advertiser. Each has a test on fakes and none has met hardware.
+
+## Addendum, evening: first contact with the hardware
+
+The car and the arm were connected to the Pi at 19:13. Zero-motion checks first.
+
+**`castor doctor --home ~/rover` on real hardware said exactly what this review
+predicted:** PCA9685 answering at 0x40, I2C on, `OPENCASTOR_DRIVE=simulated`
+(blocking, with the one-line fix), and the USB power budget unset while two
+cameras stream. Bob's new `arm.state` read live joint angles from the servo
+bus; `arm.home` and `arm.reach ready` then moved the arm through the gateway
+with signed receipts.
+
+**Then the wheels were enabled and a new trap appeared, one no test on fakes
+could have found.** With `OPENCASTOR_DRIVE=pca9685` the gateway logged `REAL
+DRIVE HARDWARE ... ESC arming: held neutral for 0.50s`, `status.report` said
+`hardware: PCA9685Drive, hardware_reachable: true`, and the rover's own
+`smoke.sh` passed 27 of 27. The chip's registers, sampled at 25 Hz for 40 s
+through the whole smoke run, never left power-on defaults: `MODE1=0x11`
+(SLEEP), prescale 30 (197 Hz, not the driver's 50 Hz), both channels 0 us.
+Three seconds after bring-up the driver's deadman stop had raised
+`[Errno 121] Remote I/O error` on a write.
+
+A direct test with the gateway stopped settled it. Writing the full
+configuration by hand (sleep, prescale 121, auto-increment, restart, neutral
+1500 us on both channels) read back correctly at once, then one second later
+the chip was at power-on defaults again, at three seconds the bus returned
+`Errno 121`, and from six seconds on the registers held `0x0101` garbage.
+**The PCA9685 resets itself within a second of being configured.** That is a
+power or wiring fault on the board (logic VCC dropping when the servo rail or
+ESC draws, or a marginal supply), not software, and it means every layer above
+it was truthfully reporting a driver that had written into a chip that then
+forgot. Nothing in the stack reads the chip back.
+
+Two consequences:
+
+1. **`castor doctor` needs a "does the configuration persist" check**: write
+   the driver's prescale and read it back a second later, and read MODE1's
+   SLEEP bit. Today doctor says the wheels are real while the chip is asleep.
+2. **The bring-up checklist needs a step before the first pulse:** measure the
+   PCA9685 logic VCC and V+ with the ESC connected and arming, and expect
+   VCC to hold. `docs/hardware/pca9685-bringup.md` gets that step.
+
+Wheels remain enabled in `~/rover/gateway-policy.env` (backup
+`gateway-policy.env.bak-realwheels-20260908`); the car cannot move until the
+board holds a configuration. Wall clock from "plugged in" to this diagnosis:
+about 45 minutes, most of it proving the software was not lying.
