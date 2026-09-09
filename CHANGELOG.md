@@ -9,6 +9,34 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+### Added — the ten-minute goal is a command now
+
+`castor bench ten-minutes --robot microduck` runs the goal and writes a JSON
+record, as specified in the second half of
+`docs/reviews/microduck-ten-minutes-2026-09-08.md`. Seven checkpoints, six
+mandatory, in order, with `C6.t - T0 < 600 s`. See
+`docs/benchmarks/ten-minutes.md`.
+
+- **C3 reads identity off the wire and fails on an absent key** rather than
+  printing `?`. Every key it reads is a constant in `castor/bench/wire.py`,
+  transcribed from `duck-ipc-proto` at rev `5620aa2` with its source line. This
+  is what would have caught the four wrong wire keys the review found.
+- **Mock targets can never pass.** A run against a mock robotd, or with a
+  scripted brain, reports `ci-pass`, and `verdict_reason` says why. A skipped
+  checkpoint is a fail, not an omission. Wi-Fi onboarding is excluded and
+  always reported with a reason.
+- **C6 names which of the three deadmen fired** — the driver's 1.5 s TTL,
+  duck-studio's bridge at 700 ms, or robotd's own 500 ms. A run in which only
+  robotd's fires is a failure, not a pass.
+- **Three targets**: `--ci` (a mock robotd with real-shaped replies, for CI on
+  every push), `--sim` (Pollen's `scripts/duck-sim`, the real `robotd` on a
+  MuJoCo body), and a real duck over `unix`, `ssh` or `tcp`.
+- **`--evallog` exports the run as inspect-robots EvalLog v1**, verified against
+  the real `inspect-robots==0.58.0`: read, re-dumped byte for byte and rendered.
+  No success scorer is written without a motion-evidence scorer beside it.
+- `--robot rc-car` is a stub that prints the checkpoint list it would use and
+  refuses, because C3 and C7 have no honest source on that robot yet.
+
 ## [3.1.0] - 2026-09-08
 
 Published on PyPI as `1!3.1.0`: the epoch is what makes pip prefer this line
