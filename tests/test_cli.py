@@ -1107,6 +1107,7 @@ class TestCmdDoctor:
         args = _make_args(config=None, home=None)
         mock_run = MagicMock(return_value=[(True, "Test", "ok")])
         mock_robot = MagicMock(return_value=MagicMock(can_move=True, exit_code=0))
+        mock_duck = MagicMock(return_value=MagicMock(checks=[], can_move=True))
         mock_print = MagicMock()
         with patch.dict(
             "sys.modules",
@@ -1114,6 +1115,7 @@ class TestCmdDoctor:
                 "castor.doctor": MagicMock(
                     run_all_checks=mock_run,
                     run_robot_checks=mock_robot,
+                    run_duck_checks=mock_duck,
                     print_report=mock_print,
                 )
             },
@@ -1121,6 +1123,9 @@ class TestCmdDoctor:
             cmd_doctor(args)
         mock_run.assert_called_once_with(config_path=None)
         mock_robot.assert_called_once_with(home=None)
+        # Two reports, not three: this host has no duck, so the duck section is
+        # silent rather than printing a header over nothing.
+        mock_duck.assert_called_once_with(config_path=None)
         assert mock_print.call_count == 2
 
     def test_exits_non_zero_when_the_robot_cannot_move(self):
@@ -1133,6 +1138,9 @@ class TestCmdDoctor:
                 "castor.doctor": MagicMock(
                     run_all_checks=MagicMock(return_value=[]),
                     run_robot_checks=mock_robot,
+                    run_duck_checks=MagicMock(
+                        return_value=MagicMock(checks=[], can_move=True)
+                    ),
                     print_report=MagicMock(),
                 )
             },
@@ -1152,11 +1160,39 @@ class TestCmdDoctor:
                     run_robot_checks=MagicMock(
                         return_value=MagicMock(can_move=True, exit_code=0)
                     ),
+                    run_duck_checks=MagicMock(
+                        return_value=MagicMock(checks=[], can_move=True)
+                    ),
                     print_report=MagicMock(),
                 )
             },
         ):
             cmd_doctor(args)  # no SystemExit
+
+    def test_a_duck_that_cannot_walk_also_sets_the_exit_code(self):
+        """A duck that cannot walk is the same failure as a car that cannot drive."""
+        args = _make_args(config=None, home=None)
+        mock_print = MagicMock()
+        duck_report = MagicMock(can_move=False)
+        duck_report.checks = [object()]
+        with patch.dict(
+            "sys.modules",
+            {
+                "castor.doctor": MagicMock(
+                    run_all_checks=MagicMock(return_value=[]),
+                    run_robot_checks=MagicMock(
+                        return_value=MagicMock(can_move=True, exit_code=0)
+                    ),
+                    run_duck_checks=MagicMock(return_value=duck_report),
+                    print_report=mock_print,
+                )
+            },
+        ):
+            with pytest.raises(SystemExit) as exc:
+                cmd_doctor(args)
+        assert exc.value.code == 1
+        # Three sections when there IS a duck.
+        assert mock_print.call_count == 3
 
     def test_prints_header(self, capsys):
         """cmd_doctor should print a header before results."""

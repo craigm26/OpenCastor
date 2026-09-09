@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import glob
 import importlib
+import json
 import os
 import shutil
 import socket
@@ -1710,6 +1711,806 @@ def run_robot_checks(home=None, unit_dir=None) -> DoctorReport:
     add(_check_mdns_advertiser())
     add(_check_usb_power_budget())
     for result in _check_gaps(robot):
+        add(result)
+
+    return report
+
+
+# ── The duck ─────────────────────────────────────────────────────────────────
+#
+# `castor doctor` knew nothing about ducks: zero matches for "duck" or "robotd"
+# in this file, so a Microduck OpenCastor could not reach got a clean bill of
+# health.  Everything below answers, for a duck, the one question the car
+# section answers for a car: CAN IT MOVE, and if not, what is the one line that
+# fixes it.
+#
+# Two rules carried over from the car section, both learned the hard way:
+#
+#   * Every reading comes off the WIRE, not off our own logs.  robotd reports
+#     the loop, the battery and the loaded policies itself, so nothing here is
+#     a check reading its own writes.  The wire keys are read straight from
+#     Pollen's `duck-ipc-proto`: `control_loop` (not `loop`), whose rate field
+#     is `achieved_hz` (not `hz`), and `battery` on `robot.health` (there is no
+#     battery on `robot.state` at all).
+#   * A mock is a FAILURE, never a pass.  `MicroduckDriver` degrades to mock on
+#     any connect failure and then answers `{"ok": True}` to everything, which
+#     is the RC car's simulated-wheels trap wearing a beak.
+
+#: robotd's control socket on the robot.
+DUCK_SOCKET = "/run/robotd.sock"
+
+#: The local end of the `ssh -L` forward, and the port duck-studio's bridge
+#: binds.  Same number on purpose (castor/drivers/microduck_driver.py).
+DUCK_LOCAL_PORT = 7788
+
+#: mediad's two listeners.  BOTH BIND 0.0.0.0 AND NEITHER AUTHENTICATES —
+#: see docs/hardware/microduck.md.  Probed here because a duck with no mediad
+#: has no camera and no browser console, which is most of what an owner would
+#: otherwise reach for when OpenCastor cannot see the robot.
+MEDIAD_SIGNALLING_PORT = 8443
+MEDIAD_CONSOLE_PORT = 8080
+
+#: The floor the choreographer aborts a performance at
+#: (castor/microduck_choreography.py).  A duck under this cannot finish a plan.
+DUCK_BATTERY_FLOOR_PCT = 12.0
+
+#: A loop this far under its target is a robot that will not hold a gait.
+DUCK_LOOP_TOLERANCE = 0.8
+
+#: robotd's own deadman.  A last tick older than this means a wedged loop.
+DUCK_DEADMAN_MS = 500
+
+
+@dataclass
+class DuckTarget:
+    """The duck this run of doctor is about, as its RCAN config describes it."""
+
+    name: str
+    config_path: Optional[Path] = None
+    driver: dict = field(default_factory=dict)
+    config: dict = field(default_factory=dict)
+
+    @property
+    def transport(self) -> str:
+        return str(self.driver.get("transport", "unix")).lower()
+
+    @property
+    def socket_path(self) -> str:
+        return str(self.driver.get("socket", DUCK_SOCKET))
+
+    @property
+    def ssh_host(self) -> Optional[str]:
+        return self.driver.get("ssh_host")
+
+    @property
+    def ssh_user(self) -> Optional[str]:
+        return self.driver.get("ssh_user")
+
+    @property
+    def local_port(self) -> int:
+        return int(self.driver.get("local_port", DUCK_LOCAL_PORT))
+
+    @property
+    def tcp_host(self) -> str:
+        return str(self.driver.get("host") or "127.0.0.1")
+
+    @property
+    def tcp_port(self) -> int:
+        return int(self.driver.get("port", self.local_port))
+
+    @property
+    def bridge_token(self) -> Optional[str]:
+        """The bridge hello token, when one is configured.
+
+        duck-studio's `bridge/microduck-bridge.py` refuses any client whose
+        first line is not `{"microduck":"v1","token":...}`.  The shipped
+        `MicroduckDriver` does not send it — `transport: tcp` reaches the
+        bridge's port and is then dropped — so doctor sends it when the config
+        names a token and says so when it does not.
+        """
+        token = self.driver.get("token")
+        if token:
+            return str(token)
+        token_file = self.driver.get("token_file")
+        if token_file:
+            try:
+                return Path(str(token_file)).expanduser().read_text().strip()
+            except OSError:
+                return None
+        return None
+
+    @property
+    def probe_host(self) -> str:
+        """Where mediad would be listening, given how we reach robotd."""
+        if self.transport == "ssh" and self.ssh_host:
+            return str(self.ssh_host)
+        if self.transport == "tcp":
+            return self.tcp_host
+        host = ((self.config or {}).get("connection") or {}).get("host")
+        return str(host) if host else "127.0.0.1"
+
+    @property
+    def harness_enabled(self) -> bool:
+        agent = (self.config or {}).get("agent") or {}
+        return bool((agent.get("harness") or {}).get("enabled", False))
+
+
+def _duck_driver_block(config: dict) -> Optional[dict]:
+    """The `microduck` driver in an RCAN config, if it has one."""
+    for driver in (config or {}).get("drivers") or []:
+        if isinstance(driver, dict) and str(driver.get("protocol", "")).lower() == "microduck":
+            return driver
+    return None
+
+
+def duck_config_dir() -> Path:
+    """Where `castor duck` writes, per castor/microduck.py."""
+    return Path.home() / ".config" / "opencastor"
+
+
+def find_duck_config(config_path=None, config_dir=None) -> Optional[DuckTarget]:
+    """The duck config this host has, if any.
+
+    `--config` wins; otherwise every `*.rcan.yaml` in ~/.config/opencastor is
+    read and the first one carrying a `microduck` driver is the duck.  Returns
+    None on a host with no duck, so the whole section stays silent on a car.
+    """
+    import yaml as _yaml
+
+    def _load(path: Path) -> Optional[DuckTarget]:
+        try:
+            data = _yaml.safe_load(path.read_text()) or {}
+        except Exception:  # noqa: BLE001 — an unreadable file is simply not a duck
+            return None
+        if not isinstance(data, dict):
+            return None
+        driver = _duck_driver_block(data)
+        if driver is None:
+            return None
+        name = str(((data.get("metadata") or {}).get("robot_name")) or path.stem)
+        return DuckTarget(name=name, config_path=path, driver=driver, config=data)
+
+    if config_path:
+        p = Path(config_path).expanduser()
+        return _load(p) if p.exists() else None
+
+    directory = Path(config_dir) if config_dir is not None else duck_config_dir()
+    if not directory.is_dir():
+        return None
+    candidates = sorted(directory.glob("*.rcan.yaml")) + sorted(directory.glob("*.rcan.yml"))
+    for path in candidates:
+        target = _load(path)
+        if target is not None:
+            return target
+    return None
+
+
+# ── Talking to robotd ────────────────────────────────────────────────────────
+
+
+def open_duck_link(target: DuckTarget, timeout: float = 3.0):
+    """Open robotd's socket the way the driver would; return (sock, close).
+
+    Raises on failure, and the exception text is what the check prints — an
+    owner debugging a duck needs "Connection refused" verbatim, not "failed".
+    """
+    transport = target.transport
+    if transport == "unix":
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        sock.connect(target.socket_path)
+        return sock, sock.close
+
+    if transport == "tcp":
+        sock = socket.create_connection((target.tcp_host, target.tcp_port), timeout=timeout)
+        token = target.bridge_token
+        if token:
+            sock.sendall(
+                (json.dumps({"microduck": "v1", "token": token}) + "\n").encode()
+            )
+        return sock, sock.close
+
+    if transport == "ssh":
+        if not target.ssh_host:
+            raise RuntimeError("transport 'ssh' with no ssh_host in the config")
+        if shutil.which("ssh") is None:
+            raise RuntimeError("ssh not found on PATH")
+        dest = f"{target.ssh_user}@{target.ssh_host}" if target.ssh_user else str(target.ssh_host)
+        proc = subprocess.Popen(
+            [
+                "ssh", "-N", "-T",
+                "-o", "ExitOnForwardFailure=yes",
+                "-o", "BatchMode=yes",
+                "-o", "ConnectTimeout=5",
+                "-L", f"127.0.0.1:{target.local_port}:{target.socket_path}",
+                dest,
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+
+        def _close_proc() -> None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=1.0)
+            except Exception:  # noqa: BLE001
+                try:
+                    proc.kill()
+                except Exception:  # noqa: BLE001
+                    pass
+
+        deadline = time.monotonic() + max(3.0, timeout * 2)
+        while time.monotonic() < deadline:
+            if proc.poll() is not None:
+                err = b""
+                if proc.stderr is not None:
+                    err = proc.stderr.read() or b""
+                raise RuntimeError(
+                    f"ssh forward exited: {err.decode(errors='replace').strip() or 'no output'}"
+                )
+            try:
+                sock = socket.create_connection(("127.0.0.1", target.local_port), timeout=0.3)
+            except OSError:
+                time.sleep(0.05)
+                continue
+            sock.settimeout(timeout)
+
+            def _close() -> None:
+                try:
+                    sock.close()
+                finally:
+                    _close_proc()
+
+            return sock, _close
+        _close_proc()
+        raise RuntimeError("ssh forward did not come up in time")
+
+    raise RuntimeError(f"unknown transport {transport!r} — use unix, ssh or tcp")
+
+
+def duck_rpc(sock, methods, timeout: float = 3.0) -> dict:
+    """One NDJSON JSON-RPC round trip per method. Returns {method: result}.
+
+    Deliberately does NOT call `robot.subscribe`: that opens a 50 Hz state
+    stream, and a health check has no business starting one.  `robot.health`
+    and `robot.policies` are both request/response and both report what the
+    robot actually loaded rather than what was configured.
+    """
+    out: dict = {}
+    ids = {}
+    sock.settimeout(timeout)
+    for index, method in enumerate(methods, start=1):
+        ids[index] = method
+        payload = json.dumps({"jsonrpc": "2.0", "id": index, "method": method})
+        sock.sendall((payload + "\n").encode())
+
+    buf = b""
+    pending = set(ids)
+    deadline = time.monotonic() + timeout
+    while pending and time.monotonic() < deadline:
+        try:
+            chunk = sock.recv(65536)
+        except socket.timeout:
+            break
+        if not chunk:
+            break
+        buf += chunk
+        while b"\n" in buf:
+            line, buf = buf.split(b"\n", 1)
+            if not line.strip():
+                continue
+            try:
+                msg = json.loads(line)
+            except ValueError:
+                continue
+            mid = msg.get("id")
+            if mid not in pending:
+                continue  # a notification, or something we did not ask for
+            pending.discard(mid)
+            if "error" in msg and msg.get("error") is not None:
+                out[ids[mid]] = {"__error__": msg["error"]}
+            else:
+                out[ids[mid]] = msg.get("result")
+    for mid in pending:
+        out[ids[mid]] = {"__error__": "no answer within the timeout"}
+    return out
+
+
+def probe_duck(target: DuckTarget, connect=None, timeout: float = 3.0) -> dict:
+    """Everything the wire can tell us, in one connection.
+
+    Returns ``{"ok", "error", "health", "policies", "target"}``.  `connect` is
+    the seam the tests use: a fake socket goes in here.
+    """
+    connect = connect or open_duck_link
+    result = {"ok": False, "error": "", "health": None, "policies": None, "target": ""}
+    try:
+        sock, close = connect(target, timeout)
+    except Exception as exc:  # noqa: BLE001 — every failure is the same answer: no duck
+        result["error"] = f"{type(exc).__name__}: {exc}"
+        return result
+    try:
+        answers = duck_rpc(sock, ["robot.health", "robot.policies"], timeout=timeout)
+    except Exception as exc:  # noqa: BLE001
+        result["error"] = f"{type(exc).__name__}: {exc}"
+        return result
+    finally:
+        try:
+            close()
+        except Exception:  # noqa: BLE001
+            pass
+
+    health = answers.get("robot.health")
+    policies = answers.get("robot.policies")
+    if not isinstance(health, dict) or "__error__" in health:
+        detail = health.get("__error__") if isinstance(health, dict) else repr(health)
+        result["error"] = f"robot.health did not answer: {detail}"
+        return result
+    result["ok"] = True
+    result["health"] = health
+    result["policies"] = policies if isinstance(policies, dict) else None
+    if target.transport == "ssh":
+        result["target"] = f"ssh://{target.ssh_host}{target.socket_path}"
+    elif target.transport == "tcp":
+        result["target"] = f"{target.tcp_host}:{target.tcp_port}"
+    else:
+        result["target"] = target.socket_path
+    return result
+
+
+def duck_login_groups(target: DuckTarget, run=None, timeout: float = 6.0):
+    """The groups the login that opens robotd's socket is in, or None.
+
+    `unix` means this machine's own login; `ssh` means the remote one, and
+    those are different logins with different group lists.  None means the
+    check could not run, which is reported as a skip and never as a pass.
+    """
+    transport = target.transport
+    if transport == "unix":
+        if run is not None:
+            return run(target)
+        try:
+            import grp
+
+            gids = os.getgroups()
+            return sorted({grp.getgrgid(g).gr_name for g in gids})
+        except Exception:  # noqa: BLE001
+            return None
+    if transport == "ssh":
+        if not target.ssh_host:
+            return None
+        if run is not None:
+            return run(target)
+        dest = f"{target.ssh_user}@{target.ssh_host}" if target.ssh_user else str(target.ssh_host)
+        try:
+            proc = subprocess.run(  # noqa: S603
+                ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", dest, "id -nG"],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except Exception:  # noqa: BLE001
+            return None
+        if proc.returncode != 0:
+            return None
+        return proc.stdout.split()
+    return None
+
+
+# ── Individual duck checks ───────────────────────────────────────────────────
+
+
+def _check_duck_config(target: Optional[DuckTarget]) -> CheckResult:
+    if target is None:
+        return CheckResult(
+            "Duck config",
+            "skip",
+            f"no microduck driver in any {duck_config_dir()}/*.rcan.yaml",
+            fix="castor duck",
+        )
+    detail = (
+        f"{target.config_path} ({target.name}, transport {target.transport}"
+        f"{', ' + str(target.ssh_host) if target.ssh_host else ''})"
+    )
+    if not target.harness_enabled:
+        return CheckResult(
+            "Duck config",
+            "warn",
+            f"{detail} — agent.harness.enabled is off, so duck_vocabulary and "
+            "duck_perform never reach the brain: it can describe the duck and cannot "
+            "sequence it",
+            fix=f"$EDITOR {target.config_path}   # agent: {{harness: {{enabled: true}}}}",
+        )
+    return CheckResult("Duck config", "ok", detail)
+
+
+def _check_robotd(target: Optional[DuckTarget], probe: Optional[dict]) -> CheckResult:
+    """Is robotd answering at all? Nothing else on this list matters first."""
+    if target is None or probe is None:
+        return CheckResult("robotd", "skip", "no duck config to reach")
+    if probe.get("ok"):
+        return CheckResult("robotd", "ok", f"answered robot.health on {probe['target']}")
+    if target.transport == "tcp" and target.bridge_token is None:
+        hint = (
+            " — note transport 'tcp' points at duck-studio's bridge, which drops any client "
+            "whose first line is not its hello; no token/token_file is in this config"
+        )
+    else:
+        hint = ""
+    fixes = {
+        "unix": f"ssh to the duck and run: systemctl status robotd   # socket {target.socket_path}",
+        "ssh": f"ssh {target.ssh_user or 'radxa'}@{target.ssh_host} 'systemctl status robotd'",
+        "tcp": f"check the bridge on {target.tcp_host}:{target.tcp_port}"
+        " — systemctl --user status microduck-bridge",
+    }
+    return CheckResult(
+        "robotd",
+        "fail",
+        f"no answer over {target.transport}: {probe.get('error', 'unknown')}{hint}",
+        fix=fixes.get(target.transport, "castor duck --host <ip>"),
+        blocking=True,
+    )
+
+
+def _check_duck_mock_mode(target: Optional[DuckTarget], probe: Optional[dict]) -> CheckResult:
+    """"Your duck is a mock."
+
+    The car's simulated-wheels trap in a new costume.  `MicroduckDriver`
+    degrades to mock mode on ANY connect failure and then answers
+    `{"ok": True, "mode": "mock"}` from `health_check()` and success from every
+    command — so a brain drives happily and the duck never moves.  Only
+    `castor duck health` guarded against it; now doctor does too.
+    """
+    if target is None or probe is None:
+        return CheckResult("Duck drive mode", "skip", "no duck config to reach")
+    if probe.get("ok"):
+        return CheckResult(
+            "Duck drive mode",
+            "ok",
+            f"hardware — robotd answered on {probe['target']}, so the driver connects for real",
+        )
+    return CheckResult(
+        "Duck drive mode",
+        "fail",
+        "MOCK — MicroduckDriver could not reach robotd here, and a MicroduckDriver that "
+        "cannot connect does not raise: it silently becomes a mock, answers ok:True to "
+        "health_check() and accepts every move. Nothing moves and nothing says so",
+        fix="fix the robotd row above; then: castor duck health   # refuses a mock explicitly",
+        blocking=True,
+    )
+
+
+def _check_duck_group(target: Optional[DuckTarget], groups=None, run=None) -> CheckResult:
+    """robotd's socket is 0660 root:robot — the login must be in that group."""
+    if target is None:
+        return CheckResult("robot group", "skip", "no duck config to reach")
+    if target.transport == "tcp":
+        return CheckResult(
+            "robot group",
+            "skip",
+            "transport tcp — the bridge opens the socket, so this login's groups do not apply",
+        )
+    if groups is None:
+        groups = duck_login_groups(target, run=run)
+    if groups is None:
+        return CheckResult(
+            "robot group",
+            "skip",
+            "could not read the login's groups",
+            fix=(
+                f"ssh {target.ssh_user or '<user>'}@{target.ssh_host} 'id -nG'"
+                if target.transport == "ssh"
+                else "id -nG"
+            ),
+        )
+    who = (
+        f"{target.ssh_user or '<user>'}@{target.ssh_host}"
+        if target.transport == "ssh"
+        else "this login"
+    )
+    if "robot" in groups:
+        return CheckResult("robot group", "ok", f"{who} is in the robot group")
+    add = (
+        f"ssh {target.ssh_user or '<user>'}@{target.ssh_host} "
+        "'sudo usermod -aG robot $USER && sudo reboot'"
+        if target.transport == "ssh"
+        else "sudo usermod -aG robot $USER && sudo reboot"
+    )
+    return CheckResult(
+        "robot group",
+        "fail",
+        f"{who} is not in the robot group — robotd's socket is mode 0660 root:robot, "
+        "so nothing this login runs can open it (and a new group needs a REBOOT, "
+        "not a new shell, to reach an already-running session)",
+        fix=add,
+        blocking=True,
+    )
+
+
+def _check_mediad(target: Optional[DuckTarget], probe_port=None) -> CheckResult:
+    """mediad, which is the camera AND the browser console AND the datachannel.
+
+    Bundled on purpose upstream: the control datachannel rides with the video
+    track, so a duck whose camera or GStreamer plugins are missing loses its
+    whole WebRTC control surface with the picture.  Never blocking — OpenCastor
+    drives over robotd, not over mediad — but its absence is the difference
+    between "I can at least drive it from a browser" and no fallback at all.
+    """
+    if target is None:
+        return CheckResult("mediad", "skip", "no duck config to reach")
+    probe_port = probe_port or _probe_port
+    host = target.probe_host
+    signalling = probe_port(MEDIAD_SIGNALLING_PORT, host=host)
+    console = probe_port(MEDIAD_CONSOLE_PORT, host=host)
+    if signalling and console:
+        return CheckResult(
+            "mediad",
+            "ok",
+            f"{host}:{MEDIAD_SIGNALLING_PORT} (signalling) and :{MEDIAD_CONSOLE_PORT} "
+            f"(console) answer — and NEITHER AUTHENTICATES: anyone who reaches this "
+            f"host can drive the duck and see its camera",
+        )
+    if signalling or console:
+        up = MEDIAD_SIGNALLING_PORT if signalling else MEDIAD_CONSOLE_PORT
+        down = MEDIAD_CONSOLE_PORT if signalling else MEDIAD_SIGNALLING_PORT
+        return CheckResult(
+            "mediad",
+            "warn",
+            f"{host}:{up} answers but :{down} does not — half a mediad",
+            fix=f"ssh {host} 'systemctl status mediad; journalctl -u mediad -n 40'",
+        )
+    return CheckResult(
+        "mediad",
+        "warn",
+        f"nothing on {host}:{MEDIAD_SIGNALLING_PORT} or :{MEDIAD_CONSOLE_PORT} — no camera, "
+        "no browser console at http://<duck>:8080/, and no WebRTC fallback when robotd is "
+        "unreachable. mediad fails to start when the GStreamer plugins are missing",
+        fix=f"ssh {host} 'systemctl status mediad' ; sudo /usr/local/sbin/robot-setup-gstreamer",
+    )
+
+
+def _check_duck_control_loop(probe: Optional[dict]) -> CheckResult:
+    """`robot.health` → `control_loop`, read off the wire keys that exist.
+
+    The keys are `control_loop.achieved_hz` / `.missed` / `.last_tick_age_ms`
+    (duck-ipc-proto).  The driver read `loop` and `hz`, which are `robot.state`
+    keys, and printed `loop ? Hz` on a duck running at 50 Hz.
+    """
+    if probe is None or not probe.get("ok"):
+        return CheckResult("Control loop", "skip", "robotd did not answer")
+    health = probe.get("health") or {}
+    healthy = health.get("healthy")
+    reason = health.get("reason") or ""
+    loop = health.get("control_loop")
+    if not isinstance(loop, dict):
+        if healthy is False:
+            return CheckResult(
+                "Control loop",
+                "fail",
+                f"robotd reports unhealthy and sent no control_loop block: {reason or 'no reason'}",
+                fix="ssh the duck: journalctl -u robotd -n 80",
+                blocking=True,
+            )
+        return CheckResult(
+            "Control loop",
+            "warn",
+            "robot.health carried no control_loop block — an older robotd, or the loop has "
+            "not reported yet",
+            fix="ssh the duck: robotctl health",
+        )
+    target_hz = loop.get("target_hz")
+    achieved = loop.get("achieved_hz")
+    missed = loop.get("missed", 0)
+    age_ms = loop.get("last_tick_age_ms", 0)
+    numbers = (
+        f"{achieved:.1f} Hz of {target_hz} Hz target"
+        if isinstance(achieved, (int, float))
+        else f"target {target_hz} Hz, achieved not reported yet"
+    )
+    numbers += f", {missed} missed, last tick {age_ms} ms ago"
+
+    if isinstance(age_ms, (int, float)) and age_ms > DUCK_DEADMAN_MS:
+        return CheckResult(
+            "Control loop",
+            "fail",
+            f"WEDGED — {numbers}; robotd's deadman is {DUCK_DEADMAN_MS} ms, so the duck is "
+            "already zeroed",
+            fix="ssh the duck: systemctl restart robotd && journalctl -u robotd -n 80",
+            blocking=True,
+        )
+    if (
+        isinstance(achieved, (int, float))
+        and isinstance(target_hz, (int, float))
+        and target_hz
+        and achieved < target_hz * DUCK_LOOP_TOLERANCE
+    ):
+        return CheckResult(
+            "Control loop",
+            "fail",
+            f"{numbers} — under {int(DUCK_LOOP_TOLERANCE * 100)}% of target; the gait will "
+            "not hold",
+            fix="ssh the duck: top -b -n1 | head -15   # something else is on the A55 cores",
+            blocking=True,
+        )
+    if healthy is False:
+        degraded = bool(health.get("degraded"))
+        return CheckResult(
+            "Control loop",
+            "warn" if degraded else "fail",
+            f"robotd reports {'degraded' if degraded else 'unhealthy'}: "
+            f"{reason or 'no reason given'} ({numbers})",
+            fix="ssh the duck: journalctl -u robotd -n 80",
+            blocking=not degraded,
+        )
+    return CheckResult("Control loop", "ok", numbers)
+
+
+def _check_duck_policies(probe: Optional[dict]) -> CheckResult:
+    """`robot.policies` — what is LOADED, per slot, not what was configured.
+
+    The policies are nine ONNX files fetched from Hugging Face at install; a
+    board that could not reach the Hub gets no gait, non-fatally.  The duck
+    then stands, holds its pose, and will not walk, and nothing said why.
+    """
+    if probe is None or not probe.get("ok"):
+        return CheckResult("Policies", "skip", "robotd did not answer")
+    policies = probe.get("policies")
+    if not isinstance(policies, dict):
+        return CheckResult(
+            "Policies",
+            "warn",
+            "robot.policies did not answer — cannot tell which slots are loaded",
+            fix="ssh the duck: robotctl policies",
+        )
+    mode = policies.get("mode") or "?"
+    enabled = policies.get("enabled")
+    slots = policies.get("slots") or []
+    filled = {}
+    for slot in slots:
+        if isinstance(slot, dict) and slot.get("slot"):
+            filled[str(slot["slot"])] = slot.get("path")
+    rendered = ", ".join(f"{k}={v or 'empty'}" for k, v in filled.items()) or "no slots reported"
+    skills = policies.get("skills") or []
+    detail = f"mode {mode}: {rendered}"
+    if skills:
+        detail += f"; skills {', '.join(str(s) for s in skills)}"
+
+    if enabled is False:
+        return CheckResult(
+            "Policies",
+            "fail",
+            f"policies are DISABLED ([policy] enabled = false) — {detail}. Nothing drives the "
+            "servos, so the duck holds its pose and will not walk",
+            fix="ssh the duck: $EDITOR the robotd params, set [policy] enabled = true",
+            blocking=True,
+        )
+    if not filled.get("walk"):
+        return CheckResult(
+            "Policies",
+            "fail",
+            f"the walk slot is EMPTY — {detail}. A board that could not reach Hugging Face at "
+            "install has no gait, and says so nowhere: it stands, holds its pose, and will "
+            "not walk",
+            fix="ssh the duck: sudo /usr/local/sbin/robot-seed-policies   # needs the Hub",
+            blocking=True,
+        )
+    errors = [
+        f"{s.get('slot')}: {s.get('error')}"
+        for s in slots
+        if isinstance(s, dict) and s.get("error")
+    ]
+    change_error = policies.get("change_error")
+    if errors or change_error:
+        problems = "; ".join(errors + ([str(change_error)] if change_error else []))
+        return CheckResult(
+            "Policies",
+            "warn",
+            f"{detail} — a slot fell back to its default: {problems}",
+            fix="ssh the duck: robotctl policies   # then reload the override that failed",
+        )
+    return CheckResult("Policies", "ok", detail)
+
+
+def _check_duck_battery(probe: Optional[dict]) -> CheckResult:
+    """`robot.health` → `battery.percent`.  There is no battery on robot.state.
+
+    The choreographer's documented abort ("a battery under 12% stops the run")
+    reads `robot.state["battery"]`, a key `RobotState` does not have, so the
+    guard has never fired.  This reads the place the number actually is.
+    """
+    if probe is None or not probe.get("ok"):
+        return CheckResult("Battery", "skip", "robotd did not answer")
+    battery = (probe.get("health") or {}).get("battery")
+    if not isinstance(battery, dict):
+        return CheckResult(
+            "Battery",
+            "warn",
+            "robot.health carried no battery — not known yet (the first second after "
+            "startup, or a bus that cannot answer). Absent is not zero volts",
+            fix="ssh the duck: robotctl health",
+        )
+    percent = battery.get("percent")
+    volts = battery.get("volts")
+    if not isinstance(percent, (int, float)):
+        return CheckResult("Battery", "warn", f"battery reported without a percent: {battery}")
+    detail = f"{percent:.0f}%" + (f" ({volts:.2f} V)" if isinstance(volts, (int, float)) else "")
+    if percent < DUCK_BATTERY_FLOOR_PCT:
+        return CheckResult(
+            "Battery",
+            "fail",
+            f"{detail} — under the {DUCK_BATTERY_FLOOR_PCT:.0f}% floor the choreographer "
+            "aborts a performance at. Every plan stops between steps",
+            fix="swap the NP-F550 pack, or charge it",
+            blocking=True,
+        )
+    if percent < 25:
+        return CheckResult(
+            "Battery", "warn", f"{detail} — close to the {DUCK_BATTERY_FLOOR_PCT:.0f}% abort floor"
+        )
+    return CheckResult("Battery", "ok", detail)
+
+
+def _check_duck_gaps(target: Optional[DuckTarget], collect=None) -> list:
+    """Ask `castor gaps` about the duck too.
+
+    gaps knew nothing about ducks either.  Cheap and file-only: a configured
+    Microduck whose harness is off is a capability the robot has and the brain
+    cannot reach, which is exactly what a gap is for.
+    """
+    if target is None:
+        return []
+    if collect is None:
+        try:
+            from castor.gaps import duck_gaps as collect  # noqa: PLC0414
+        except Exception as exc:  # noqa: BLE001
+            return [CheckResult("Duck gaps", "skip", f"castor.gaps unavailable: {exc}")]
+    try:
+        gaps = collect(target.config, config_path=target.config_path)
+    except Exception as exc:  # noqa: BLE001
+        return [CheckResult("Duck gaps", "skip", f"gap scan failed: {exc}")]
+    if not gaps:
+        return [CheckResult("Duck gaps", "ok", "none — the duck's tools reach the brain")]
+    return [
+        CheckResult(f"gap:{gap.id}", "warn", gap.evidence, fix=gap.suggestion) for gap in gaps
+    ]
+
+
+def run_duck_checks(
+    config_path=None,
+    config_dir=None,
+    probe=None,
+    connect=None,
+    groups=None,
+    group_run=None,
+    probe_port=None,
+    timeout: float = 3.0,
+) -> DoctorReport:
+    """The whole duck section, in the order an owner debugs in.
+
+    Config first (is there a duck at all), then the one connection everything
+    else reads from, then the physical truths robotd reports about itself.
+    Returns an EMPTY report on a host with no duck config, so `castor doctor`
+    on a car prints nothing about ducks.
+    """
+    report = DoctorReport()
+    target = find_duck_config(config_path=config_path, config_dir=config_dir)
+    if target is None:
+        return report
+    add = report.checks.append
+
+    if probe is None:
+        probe = probe_duck(target, connect=connect, timeout=timeout)
+
+    add(_check_duck_config(target))
+    add(_check_robotd(target, probe))
+    add(_check_duck_mock_mode(target, probe))
+    add(_check_duck_group(target, groups=groups, run=group_run))
+    add(_check_mediad(target, probe_port=probe_port))
+    add(_check_duck_control_loop(probe))
+    add(_check_duck_policies(probe))
+    add(_check_duck_battery(probe))
+    for result in _check_duck_gaps(target):
         add(result)
 
     return report

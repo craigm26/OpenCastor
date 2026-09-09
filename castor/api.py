@@ -458,6 +458,36 @@ def _register_duck_tools_if_present(state, tool_registry) -> None:
         logger.warning("could not register duck choreography tools: %s", exc)
 
 
+def harness_enabled(config) -> bool:
+    """Whether the agent harness runs for this config.
+
+    Opt-in, and the one thing that decides whether a robot's tools exist at
+    all: ``duck_vocabulary`` and ``duck_perform`` are registered inside the
+    harness block and nowhere else, so a duck whose config leaves this off has
+    a brain that can describe the duck and cannot sequence it. The shipped
+    Microduck profile and preset therefore set ``agent.harness.enabled: true``
+    (see castor/profiles/pollen/microduck.yaml).
+    """
+    return bool(((config or {}).get("agent", {}) or {}).get("harness", {}).get("enabled", False))
+
+
+def build_tool_registry(state, agent_config=None):
+    """The tool registry a brain gets for this robot, robot tools included.
+
+    Split out of the request path so the question the hardware guide answers —
+    "does a Microduck config yield a registry containing ``duck_perform``?" —
+    is one a test can ask directly, rather than one that can only be answered
+    by driving a whole chat request.
+    """
+    from castor.tools import ToolRegistry
+
+    if agent_config is None:
+        agent_config = (getattr(state, "config", None) or {}).get("agent", {}) or {}
+    registry = getattr(state, "tool_registry", None) or ToolRegistry(agent_config)
+    _register_duck_tools_if_present(state, registry)
+    return registry
+
+
 @app.post("/auth/token")
 async def auth_token(req: UserLoginRequest):
     """Issue a JWT access token using username + password (multi-user auth).
@@ -699,18 +729,15 @@ async def send_command(cmd: CommandRequest, request: Request):
 
     # ── Agent Harness (when enabled in RCAN config) ──────────────────────────
     _agent_cfg = (state.config or {}).get("agent", {})
-    _harness_cfg = _agent_cfg.get("harness", {})
-    _harness_enabled = _harness_cfg.get("enabled", False)  # opt-in
+    _harness_enabled = harness_enabled(state.config)  # opt-in; the duck profile opts in
 
     if _harness_enabled:
         try:
             from castor.harness import AgentHarness, HarnessContext
-            from castor.tools import ToolRegistry
 
             _harness = getattr(state, "_harness", None)
             if _harness is None:
-                _tool_reg = getattr(state, "tool_registry", None) or ToolRegistry(_agent_cfg)
-                _register_duck_tools_if_present(state, _tool_reg)
+                _tool_reg = build_tool_registry(state, _agent_cfg)
                 _harness = AgentHarness(
                     provider=active,
                     config=_agent_cfg,
