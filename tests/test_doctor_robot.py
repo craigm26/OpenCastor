@@ -533,6 +533,10 @@ def test_run_robot_checks_on_a_real_car_can_move(monkeypatch, unit_dir, robot_ho
     monkeypatch.setattr(doctor, "_read_boot_config", lambda *a, **k: (None, "usb_max_current_enable=1"))
     monkeypatch.setattr(doctor, "usb_video_devices", lambda *a, **k: [])
     monkeypatch.setattr(doctor, "_check_gaps", lambda robot: [CheckResult("gaps", "ok")])
+    # A configured chip: awake (no SLEEP bit) at the 50 Hz prescale. Without
+    # this the fake bus of a fake car would be read on the REAL bus of the
+    # host running the tests.
+    monkeypatch.setattr(doctor, "_read_pca9685_registers", lambda address, bus=1: (0x20, 121))
     monkeypatch.setattr(Path, "exists", lambda self: True)
 
     report = doctor.run_robot_checks(home=str(robot_home), unit_dir=unit_dir)
