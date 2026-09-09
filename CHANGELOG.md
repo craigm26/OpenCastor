@@ -38,6 +38,58 @@ update, and its `control` datachannel carries the same JSON-RPC as the socket.
   sentence verbatim, a four-row transport table, what turning `mediad` off
   costs, and the calls `route.rs` refuses over this transport.
 
+### Added — `castor doctor` knows what a duck is
+
+From `docs/reviews/microduck-ten-minutes-2026-09-08.md` (fixes 5, 9, 13, 15).
+
+- **A duck section in `castor doctor`.** It was silent about ducks: zero
+  matches for `duck` or `robotd` in `castor/doctor.py`, so a Microduck
+  OpenCastor could not reach got a clean bill of health. `run_duck_checks()`
+  now reads every number OFF THE WIRE, in the order an owner debugs in — the
+  duck config, robotd answering (`unix`, `ssh` or the bridge over `tcp`), the
+  login's `robot` group, mediad's two ports, `robot.health`'s `control_loop`,
+  `robot.policies` slot by slot, and the battery — each with a one-line fix,
+  and **exits non-zero when the duck cannot walk**. Silent on a host with no
+  duck config, so a car owner never sees a word about ducks.
+- **A mock is a failure, never a pass.** `MicroduckDriver` degrades to mock on
+  any connect failure and then answers `ok: True` to `health_check()` and
+  success to every command. Only `castor duck health` guarded against it;
+  doctor's **Duck drive mode** row now does too, and calls it blocking. This is
+  the RC car's simulated-wheels trap wearing a beak.
+- The wire keys are the ones `duck-ipc-proto` defines: `control_loop` (not
+  `loop`), `achieved_hz` (not `hz`), and `battery` on `robot.health` — there is
+  no battery on `robot.state` at all. `achieved_hz: null` is reported as "not
+  reported yet", never as 0 Hz.
+- **`castor gaps` learned one duck gap**, `duck.tools.gated`: a configured
+  Microduck whose `agent.harness.enabled` is off.
+
+### Fixed — the duck's LLM tools were behind a flag no profile set
+
+- `duck_vocabulary` and `duck_perform` are registered at exactly one call site,
+  inside the `agent.harness.enabled` block in `castor/api.py`, and neither
+  `castor/profiles/pollen/microduck.yaml` nor
+  `config/presets/pollen_microduck.rcan.yaml` set it. The guide's claim that
+  they register "automatically whenever a Microduck is the attached robot" was
+  true of the function and false of the product. **Both now set
+  `agent.harness.enabled: true`**, and `castor.api.build_tool_registry()` makes
+  the question testable: a Microduck config yields a registry containing
+  `duck_perform`, and `duck_perform` is invoked in a test rather than merely
+  counted.
+- `docs/hardware/microduck.md` now says the harness is what carries the tools,
+  and shows the YAML.
+
+### Changed — the duck is open on your network, and the guide says so
+
+- A new section in `docs/hardware/microduck.md`: **`mediad` binds
+  `0.0.0.0:8443` and `0.0.0.0:8080` and neither authenticates**, enabled on
+  every install and every update, because the BLE pairing PIN is a shared
+  `000000`. It records what turning it off costs (camera, browser console,
+  WebRTC datachannel, `duckctl open`; nothing OpenCastor uses) and that
+  `hooks/postinstall` re-enables it on every update.
+- The guide's install line carries the `>=3.1` pin the README calls
+  load-bearing.
+
+
 ## [3.1.0] - 2026-09-08
 
 Published on PyPI as `1!3.1.0`: the epoch is what makes pip prefer this line

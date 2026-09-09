@@ -157,6 +157,49 @@ def _brain_gaps() -> list[Gap]:
     return []
 
 
+def duck_gaps(config: dict, config_path=None) -> list[Gap]:
+    """Gaps a Microduck's own RCAN config shows, from files alone.
+
+    `castor gaps` knew nothing about ducks — zero matches for `duck` or
+    `robotd` in this module — so the one robot in the project whose hardware
+    is entirely present out of the box had no way to report the one thing that
+    IS missing on it: the brain's route to its skills.
+
+    Cheap on purpose. No socket is opened here; `castor doctor`'s duck section
+    is where the wire gets read.
+    """
+    driver = None
+    for d in (config or {}).get("drivers") or []:
+        if isinstance(d, dict) and str(d.get("protocol", "")).lower() == "microduck":
+            driver = d
+            break
+    if driver is None:
+        return []
+
+    gaps: list[Gap] = []
+    agent = (config or {}).get("agent") or {}
+    if not (agent.get("harness") or {}).get("enabled", False):
+        where = str(config_path) if config_path else "this duck's config"
+        gaps.append(
+            Gap(
+                id="duck.tools.gated",
+                kind="unclaimed-peripheral",
+                evidence=(
+                    f"{where} configures a Microduck but leaves agent.harness.enabled off; "
+                    "duck_vocabulary and duck_perform are registered inside the harness block "
+                    "and nowhere else, so the brain can describe the duck and cannot sequence it"
+                ),
+                suggestion=(
+                    f"$EDITOR {where}   # agent: {{harness: {{enabled: true}}}} — the shipped "
+                    "pollen/microduck profile sets it"
+                ),
+                skill_hint="castor/api.py build_tool_registry; castor/microduck_choreography.py",
+                detail={"protocol": "microduck", "transport": str(driver.get("transport", "unix"))},
+            )
+        )
+    return gaps
+
+
 def _declared_capabilities(manifest: Path) -> list[str]:
     try:
         import yaml

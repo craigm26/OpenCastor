@@ -6079,7 +6079,7 @@ def cmd_doctor(args) -> None:
     code: doctor exits non-zero when a check says the robot cannot move, and
     zero otherwise, so `castor doctor && castor pair` means something.
     """
-    from castor.doctor import print_report, run_all_checks, run_robot_checks
+    from castor.doctor import print_report, run_all_checks, run_duck_checks, run_robot_checks
 
     print("  🩺 OpenCastor Doctor\n")
     config_path = getattr(args, "config", None)
@@ -6095,8 +6095,19 @@ def cmd_doctor(args) -> None:
     print("\n  🚗 The robot on this host\n")
     robot_report = run_robot_checks(home=getattr(args, "home", None))
     print_report(robot_report)
-    if not robot_report.can_move:
-        sys.exit(robot_report.exit_code)
+
+    # Third section, and silent on a host with no duck: `run_duck_checks`
+    # returns an empty report unless a `microduck` driver is configured
+    # somewhere, so a car owner never sees a word about ducks. When there IS a
+    # duck it decides the exit code alongside the car, because a duck that
+    # cannot walk is the same failure as a car that cannot drive.
+    duck_report = run_duck_checks(config_path=config_path)
+    if duck_report.checks:
+        print("\n  🦆 The duck this host is configured for\n")
+        print_report(duck_report)
+
+    if not robot_report.can_move or not duck_report.can_move:
+        sys.exit(1)
 
 
 def cmd_export(args) -> None:

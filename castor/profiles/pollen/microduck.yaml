@@ -34,6 +34,13 @@ agent:
   latency_budget_ms: 150
   safety_stop: true
   offline_provider: ollama
+  # On, and load-bearing. `duck_vocabulary` and `duck_perform` are only handed
+  # to a model through the agent harness (castor/api.py), so with this off the
+  # brain can talk about the duck and cannot sequence it — which is the exact
+  # gap docs/hardware/microduck.md used to claim did not exist. A duck's whole
+  # value to an LLM is composing its atomic skills, so this profile opts in.
+  harness:
+    enabled: true
 physics:
   type: legged
   dof: 14

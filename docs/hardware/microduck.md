@@ -3,9 +3,13 @@
 The easiest setup in OpenCastor. One command:
 
 ```bash
-pip install opencastor
+pip install "opencastor>=3.1"
 castor duck
 ```
+
+The `>=3.1` is load-bearing and [README.md](../../README.md) explains why: a
+bare `pip install opencastor` can resolve the old CalVer wheel, which has no
+`castor duck` in it.
 
 That's the whole thing. `castor duck` finds the duck, checks it can reach it, asks
 robotd how it's feeling, and writes a working RCAN config.
@@ -194,6 +198,46 @@ the same group Pollen's own setup guide creates.
 `transport: webrtc` needs neither of them. That is the whole reason it exists,
 and the reason it is not the default is one section up.
 
+## The duck is open on your network
+
+**`mediad` binds `0.0.0.0:8443` (WebRTC signalling) and `0.0.0.0:8080` (a full
+drive console), and neither authenticates.** It is enabled on every install and
+every update. Anyone who can reach the duck's IP can open
+`http://<duck>:8080/` in a browser and drive it, look through its camera, load
+a policy, and shut it down.
+
+This is upstream's stated decision rather than an oversight. From
+`mediad/src/main.rs`: "anyone who reaches the signalling port can drive the
+robot and see its camera. That is a decision, not an omission" — because the
+BLE pairing PIN is a shared `000000` printed on every duck, so "a gate would
+add a step to every connection and prove nothing."
+
+OpenCastor's default path does not use either port: robotd's unix socket over
+an SSH forward, which costs an SSH key and the `robot` group and is real
+protection. The optional `transport: webrtc` (section above) uses the 8443
+signalling port on purpose, trading that protection for no key, no group edit
+and no reboot. Either way, putting the duck on your Wi-Fi so OpenCastor can
+reach it puts `mediad` on your Wi-Fi too, and this guide inherits that fact.
+
+What to do about it, in the order most people should:
+
+- **Nothing, on a home LAN you trust.** The browser console is the fastest way
+  to drive a duck, and losing it costs more than it saves. `castor doctor`
+  prints the ports and the words "NEITHER AUTHENTICATES" next to them, so it
+  is at least never a surprise.
+- **Put the duck on a guest or IoT VLAN** if the LAN is shared. This keeps the
+  console for you and removes it from everyone else.
+- **Turn it off**, and know the bill: `sudo systemctl disable --now mediad`
+  costs you the camera stream, the browser console at `:8080`, the WebRTC
+  datachannel, and `duckctl open`. It does **not** affect OpenCastor, robotd,
+  the gamepad, or anything in this guide — the duck still walks. It also means
+  that when robotd is unreachable you have no second way in except a gamepad
+  or a serial cable, and `hooks/postinstall` re-enables every unit with an
+  `[Install]` section on **every update**, so this does not survive an upgrade.
+
+Do not put a duck on a public network, and do not port-forward `8080` or
+`8443`.
+
 ## Wire protocol
 
 The driver speaks robotd's contract directly: **JSON-RPC 2.0, one object per line
@@ -310,6 +354,19 @@ castor duck --brain ollama       # choose the LLM provider while configuring
 
 Add `--json` to any of them for machine-readable output.
 
+`castor doctor` also has a duck section now, and it is the one to run when
+something is wrong rather than when you are setting up. It prints nothing about
+ducks on a host with no duck config; when there is one it reads every number
+off the wire — robotd answering, the login's `robot` group, mediad's two
+ports, `robot.health`'s `control_loop`, `robot.policies` slot by slot, and the
+battery — and **exits non-zero when the duck cannot walk**, so
+`castor doctor && castor duck test` means something.
+
+The row worth knowing about before you need it is **Duck drive mode**. A
+`MicroduckDriver` that cannot reach robotd does not raise: it silently becomes
+a mock, answers `ok: True` to `health_check()` and accepts every move. Doctor
+calls that a blocking failure, never a pass.
+
 ## Stringing it together
 
 The duck's own vocabulary is atomic. `robot.do` runs exactly one skill, and a
@@ -339,9 +396,26 @@ cannot sequence around one. **A routine name and a literal JSON plan need no
 model at all**: a duck that can only be choreographed by an LLM is a duck that
 stops working offline.
 
-The same two tools (`duck_vocabulary`, `duck_perform`) are registered with the
-brain automatically whenever a Microduck is the attached robot, so the model
-can discover the verbs mid-conversation and use them.
+The same two tools (`duck_vocabulary`, `duck_perform`) reach the brain through
+the **agent harness**, and the harness is opt-in. The shipped Microduck profile
+and preset therefore set it:
+
+```yaml
+agent:
+  harness:
+    enabled: true      # without this the tools are registered nowhere
+```
+
+That line is load-bearing, and it was missing until 2026-09-08: the tools are
+registered at exactly one call site, inside the harness block in
+`castor/api.py`, so a duck whose config left the harness off had a brain that
+could describe the duck and could not sequence it. `castor doctor`'s duck
+section now warns when a duck config has the harness off, and `castor gaps`
+reports it as `duck.tools.gated`.
+
+If you hand-write a duck config rather than letting `castor duck` write one,
+copy that block. `castor duck test` and `castor duck do` need no harness; the
+choreography tools do.
 
 Three things the performer enforces, because a plan is not a promise:
 
@@ -408,4 +482,5 @@ canonical bytes, a hash-chain fold, and a match record nobody can quietly edit.
 - WebRTC transport: `castor/drivers/microduck_webrtc.py` (the signalling
   exchange and the `control` datachannel, transcribed with file and line)
 - Setup: `castor/microduck.py`
+- Health: `castor/doctor.py` (`run_duck_checks`) — `castor doctor`'s duck section
 - Upstream: [pollen-robotics/microduck](https://github.com/pollen-robotics/microduck)
