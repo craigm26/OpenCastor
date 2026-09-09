@@ -9,6 +9,35 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+### Added — a `webrtc` transport for the Microduck
+
+Fix 10 of `docs/reviews/microduck-ten-minutes-2026-09-08.md`. A duck is now
+reachable over the network Pollen already ships, with **no SSH key, no `robot`
+group edit and no reboot** — `mediad` is enabled on every install and every
+update, and its `control` datachannel carries the same JSON-RPC as the socket.
+
+- **`castor/drivers/microduck_webrtc.py`** — `mediad`'s signalling exchange
+  (`gst-plugins-rs` `net/webrtc/protocol`: `welcome` → `list` → `startSession`
+  → `sessionStarted` → `peer`/sdp → `peer`/answer) and the `control`
+  datachannel. Every message shape is transcribed from
+  `mediad/webclient/index.html`, `mediad/src/*.rs` and `duck-ipc-proto` with a
+  file and a line, because a guessed shape on this path produces silence rather
+  than an error.
+- **`transport: webrtc`** in `MicroduckDriver`. The channel is handed to the
+  driver shaped like a socket, so the NDJSON reader, id correlation, intent
+  loop and deadman are used unchanged.
+- **Optional extra `opencastor[microduck-webrtc]`** (aiortc + websockets).
+  Asking for the transport without it stops with the install line instead of
+  degrading to mock mode.
+- **Deadman, stated:** `robotd`'s own 500 ms
+  (`robotd-params/src/lib.rs`, `SafetyParams`) is what fires when a WebRTC
+  session drops, since the driver's zero cannot reach the robot. Nothing new
+  was added.
+- **Security, stated rather than implied:** `mediad` does not authenticate and
+  binds `0.0.0.0`. `docs/hardware/microduck.md` now carries Pollen's own
+  sentence verbatim, a four-row transport table, what turning `mediad` off
+  costs, and the calls `route.rs` refuses over this transport.
+
 ## [3.1.0] - 2026-09-08
 
 Published on PyPI as `1!3.1.0`: the epoch is what makes pip prefer this line

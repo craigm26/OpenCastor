@@ -51,7 +51,24 @@ castor duck --brain anthropic:claude-sonnet-4-5
 Motion comes from RL policies (PPO in MuJoCo → ONNX) executed by the `robotd`
 daemon at 50 Hz. OpenCastor does not replace that — it sends *intents* to it.
 
-## Where to run OpenCastor
+## Transports
+
+Four ways to reach `robotd`. They all carry the same JSON-RPC — the difference
+is what the owner has to set up first, and what protects the robot afterwards.
+
+| `transport` | Reaches | Setup cost on the duck | Who may drive |
+|---|---|---|---|
+| `unix` | `/run/robotd.sock` on the duck itself | membership in the `robot` group (and the logout or reboot that makes it take effect) | anyone with a login on the duck |
+| `ssh` | `/run/robotd.sock` through `ssh -L 7788:...` | an SSH key **and** the `robot` group edit **and** the reboot | anyone holding the private key |
+| `tcp` | a relay already listening on `host:port` (default `7788`) | install and run the relay, plus whatever token it wants | anyone who can reach that port |
+| `webrtc` | `mediad`'s signalling server on `host:8443`, then its `control` datachannel | **nothing** — `mediad` is enabled on every install and every update | **anyone who can reach the duck's port 8443** |
+
+`webrtc` is the only one that costs the owner no setup at all, and the reason it
+is not simply the default is the last column. Read
+[Security: `mediad` is unauthenticated](#security-mediad-is-unauthenticated-on-0000)
+before choosing it.
+
+### Where to run OpenCastor
 
 **Off-board (recommended).** The duck has 1 GB of RAM and a 50 Hz control loop to
 protect. Run OpenCastor on a laptop, a Pi 5, or a NAS, and let the driver open an
@@ -78,6 +95,74 @@ drivers:
   transport: unix
   socket: /run/robotd.sock
 ```
+
+**Off-board with no setup at all.** `transport: webrtc` speaks to `mediad`, the
+daemon that already runs on every duck and already serves the browser console.
+No SSH key, no `robot` group edit, no reboot, nothing installed on the robot.
+It needs one optional extra on *your* machine:
+
+```bash
+pip install 'opencastor[microduck-webrtc]'
+```
+
+```yaml
+drivers:
+- id: duck
+  protocol: microduck
+  transport: webrtc
+  host: radxa-zero3.local    # or the address `duckctl ip` prints
+  # port: 8443               # mediad --port default
+  # webrtc_video: false      # negotiate control only (default)
+```
+
+The extra is `aiortc` plus `websockets`. It is an extra rather than a core
+dependency because it pulls a media stack (`av`, `pylibsrtp`, `cffi`) that a
+duck driven over a Unix socket has no use for; it installs from wheels on a
+Pi 5 (aarch64, Python 3.13, aiortc 1.15.0). Ask for `transport: webrtc`
+without it and the driver stops with the install line rather than quietly
+pretending to be a duck.
+
+### Security: `mediad` is unauthenticated on 0.0.0.0
+
+**This is the price of `transport: webrtc`, and it is a choice, not a
+side effect.** Verbatim from `mediad/src/main.rs:9-13` in Pollen's own tree:
+
+> **It does not authenticate.** Anyone who reaches the signalling port can
+> drive the robot and see its camera. That is a decision, not an omission —
+> §4 has the reasoning, and the short version is that the pairing PIN is a
+> shared `000000`, so a gate would add a step to every connection and prove
+> nothing. The bridge that makes a robot reachable from outside the LAN
+> authenticates on both sides before a session arrives.
+
+`mediad` binds all interfaces by default (`--host 0.0.0.0`, `main.rs:28-36`)
+and its unit is enabled on every install and every update. So this is already
+true of a stock duck whether or not OpenCastor ever connects: `transport: ssh`
+does not protect the duck from the network, it protects *robotd's socket* from
+it, and the camera and the whole `mediad` control surface were open the whole
+time.
+
+What choosing `transport: webrtc` changes is that OpenCastor is now on that
+surface too. Pollen's own summary (`docs/design/remote-webrtc.md` §4) is that it
+is "fine on a bench and in an office. **Not fine in a home**." Weigh it that
+way.
+
+**What turning it off costs.** `sudo systemctl disable --now mediad` on the duck
+closes both ports. You lose: the browser console at `http://<duck>:8080/` (the
+one-minute path from a phone to a moving duck, and the only client a duck in the
+field ships with), the camera stream, the duck detector, and `transport: webrtc`
+itself. You keep: walking, `robotd`, `padd`, Bluetooth, and updates — `mediad`
+is deliberately not on the recovery path (`main.rs:15-17`). If you want the
+console but not OpenCastor on it, that is the same switch; there is no
+finer-grained gate on the robot, which is the point §4 is making.
+
+**What `webrtc` cannot reach.** `mediad/src/route.rs` is an exhaustive
+per-transport match. It refuses `robot.setMode` (a mode switch is a claim about
+hardware only somebody in the room can make), `system.pairingPin` /
+`system.setPairingPin` (they authorise BLE, which is the recovery path) and the
+`update.*` mutations (they would drop the session that asked). Everything this
+driver sends — `robot.move`, `head`, `look`, `pose`, `mouth`, `do`, `sound`,
+`stop`, `enable`, `init`, `relax`, `subscribe`, `health`, `policies`, `skills`,
+`model` — is permitted.
 
 ## Discovery
 
@@ -106,11 +191,22 @@ ssh radxa@duck-01.local 'sudo usermod -aG robot $USER'   # robotd socket access
 The `robot` group is how robotd's socket is shared with unprivileged clients —
 the same group Pollen's own setup guide creates.
 
+`transport: webrtc` needs neither of them. That is the whole reason it exists,
+and the reason it is not the default is one section up.
+
 ## Wire protocol
 
 The driver speaks robotd's contract directly: **JSON-RPC 2.0, one object per line
 (NDJSON)**, over `/run/robotd.sock`. This is the same contract `robotctl`, the
 gamepad daemon and the phone app use, so OpenCastor is a first-class client.
+
+Over `transport: webrtc` it is the *same* JSON-RPC, with one framing
+difference: the `control` datachannel carries **one JSON object per message,
+with no newline** (`mediad` opens it as a string channel and trims each frame
+before forwarding it to the same Unix socket). The transport translates the
+framing at the boundary, so the table below is identical on every transport —
+`mediad` is a dumb pipe by design, and "no per-method work in `mediad` when a
+method is added" (`docs/design/remote-webrtc.md` §5).
 
 | OpenCastor | robotd |
 |---|---|
@@ -160,6 +256,21 @@ with one explicit zero, then goes quiet.
 Two independent deadmen: **ours**, so a wedged brain can't leave the duck
 walking, and **robotd's**, so a wedged driver can't either.
 
+**Which one fires, on which failure** — worth being exact about now that a
+transport can be a network:
+
+| What went wrong | Deadman that fires | How long |
+|---|---|---|
+| The brain stopped asking for motion, transport healthy | **ours** (`command_ttl_s`) — one explicit zero, then quiet | 1.5 s |
+| The driver, the process or the host died | **robotd's** — nothing more arrives, so it zeroes | 500 ms |
+| The WebRTC session dropped, Wi-Fi went, the duck went out of range | **robotd's** — our zero cannot reach the robot | 500 ms |
+
+robotd's is `deadman_ms: 500` in `robotd-params/src/lib.rs` (`SafetyParams`).
+It is the only deadman that survives losing the transport, which is what makes
+a network transport acceptable at all. `transport: webrtc` adds no third
+deadman: one would be a second answer to a question robotd already answers, and
+it would answer it later.
+
 ### Velocity envelope
 
 `max_vx` / `max_vy` / `max_vyaw` scale OpenCastor's normalised `[-1, 1]` into
@@ -176,9 +287,13 @@ detection, limp-fall predictor and battery cutoff. OpenCastor sends intents,
 never raw motor writes — don't bypass the driver to write the servo bus while
 robotd is running.
 
-`init()` and `relax()` are maintenance calls that Pollen deliberately keeps off
-remote transports. They work over `unix` and over an SSH forward (both trusted
-paths), not through the WebRTC/rendezvous bridge.
+`init()`, `relax()` and `enable()` reach the duck over **every** transport this
+driver has, WebRTC included. `mediad/src/route.rs` permits them deliberately,
+and says why: BLE refuses them because it wants "the person doing it to be
+looking at the robot rather than at a screen", and "that condition is met here
+rather than waived. A peer holding this session has the camera: it is looking at
+the robot." What WebRTC refuses instead is listed under
+[Security](#security-mediad-is-unauthenticated-on-0000).
 
 ## Commands
 
@@ -245,11 +360,14 @@ A plan is a proposal. The robot still decides.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `transport` | `unix` | `unix`, `ssh` or `tcp` |
+| `transport` | `unix` | `unix`, `ssh`, `tcp` or `webrtc` |
 | `socket` | `/run/robotd.sock` | robotd socket on the robot |
 | `ssh_host` / `ssh_user` / `ssh_port` | — | SSH forward target |
 | `local_port` | `7788` | Local end of the SSH forward |
-| `host` / `port` | — | Target for `transport: tcp` |
+| `host` / `port` | — | Target for `transport: tcp`; for `webrtc`, `port` defaults to `8443` |
+| `robot` | — | `webrtc`: pick a producer by `meta.name` when a server lists several |
+| `webrtc_video` | `false` | `webrtc`: accept and drain the video track instead of answering `inactive` |
+| `webrtc_timeout_s` | `20` | `webrtc`: how long to wait for a control channel |
 | `max_vx` / `max_vy` / `max_vyaw` | `0.2` / `0.1` / `1.0` | Envelope at full deflection |
 | `intent_hz` | `20` | Intent re-send rate (floored at 2 Hz) |
 | `command_ttl_s` | `1.5` | Driver-side deadman |
@@ -287,5 +405,7 @@ canonical bytes, a hash-chain fold, and a match record nobody can quietly edit.
 - Profile: `castor/profiles/pollen/microduck.yaml` (ships with the package)
 - Preset: `config/presets/pollen_microduck.rcan.yaml`
 - Driver: `castor/drivers/microduck_driver.py`
+- WebRTC transport: `castor/drivers/microduck_webrtc.py` (the signalling
+  exchange and the `control` datachannel, transcribed with file and line)
 - Setup: `castor/microduck.py`
 - Upstream: [pollen-robotics/microduck](https://github.com/pollen-robotics/microduck)

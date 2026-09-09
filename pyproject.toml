@@ -143,6 +143,12 @@ stem-hardware = [
 vertex = ["google-genai>=1.0.0"]
 homeassistant = ["aiohttp>=3.9.0"]
 webrtc = ["aiortc>=1.6.0", "av>=11.0.0"]
+# `transport: webrtc` on the Microduck driver: mediad's signalling server on
+# :8443 and its `control` datachannel. An extra rather than a core dep because
+# aiortc pulls a media stack (av, pylibsrtp, cffi) that a duck driven over a
+# unix socket has no use for. Verified installing from wheels on a Pi 5
+# (aarch64, Python 3.13, aiortc 1.15.0) on 2026-09-08.
+microduck-webrtc = ["aiortc>=1.6.0", "websockets>=12.0"]
 ros2 = []  # rclpy is installed via ROS2 distro, not pip
 onnx = ["onnxruntime>=1.17.0"]
 onnx-gpu = ["onnxruntime-gpu>=1.17.0"]
