@@ -2078,15 +2078,23 @@ def cmd_migrate(args) -> None:
     """castor migrate — one-shot .rcan.yaml → ROBOT.md conversion.
 
     Deprecated at ship (opencastor 3.0.0). Scheduled for removal in 3.1.0.
+
+    Exits non-zero when the conversion would drop a block that describes the robot's
+    body — ``drivers`` above all.  It used to exit 0 having written a manifest with no
+    ``drivers`` key at all, which ``ComponentRegistry.get_driver`` reads as "no robot"
+    (``castor/registry.py:201-202``): a brain that answers and a duck that never moves,
+    with no error anywhere.
     """
     from castor.migrate import migrate_to_robot_md
 
     src = getattr(args, "src", None) or getattr(args, "config", None)
     if not src:
         print("castor migrate: error: <src> (.rcan.yaml file) is required")
-        return
+        raise SystemExit(2)
     out = getattr(args, "out", None) or "ROBOT.md"
-    migrate_to_robot_md(src, out)
+    rc = migrate_to_robot_md(src, out)
+    if rc:
+        raise SystemExit(rc)
 
 
 def cmd_network(args) -> None:
@@ -4006,6 +4014,106 @@ def cmd_duck(args) -> int:
         say("")
         return 0
 
+    # ── how a health reply is put into words ────────────────────────────
+    def loop_line(result: dict) -> str:
+        """``49.8 Hz`` / ``50 Hz (target — no window closed yet)`` / ``no answer``.
+
+        ``LoopHealth.achieved_hz`` is ``Option<f64>``
+        (duck-ipc-proto/src/lib.rs:3152-3166) and is ``None`` until the first window
+        closes.  That is *unknown*, not zero, and printing 0 Hz for the first second
+        of every duck's uptime would be a lie.
+        """
+        loop = result.get("control_loop") or result.get("loop") or {}
+        if not isinstance(loop, dict) or not loop:
+            return "no answer"
+        achieved = loop.get("achieved_hz")
+        if isinstance(achieved, (int, float)):
+            # One decimal. A real robotd answers 49.97344531052467, and the extra
+            # fourteen digits are the loop's jitter, not information.
+            return f"{achieved:.1f} Hz ({loop.get('missed', 0)} missed)"
+        target = loop.get("target_hz")
+        if isinstance(target, (int, float)):
+            return f"{target:.1f} Hz target, not measured yet"
+        return "no answer"
+
+    def battery_line(result: dict) -> str:
+        batt = result.get("battery") or {}
+        if not isinstance(batt, dict) or "percent" not in batt:
+            return "not reported"
+        volts = batt.get("volts")
+        volts_txt = f" ({volts:.1f} V)" if isinstance(volts, (int, float)) else ""
+        percent = batt["percent"]
+        pct_txt = f"{percent:.0f}" if isinstance(percent, (int, float)) else percent
+        return f"{pct_txt}%{volts_txt}"
+
+    def sensor_line(result: dict) -> str:
+        """IMU and motor bus in words, not a repr of two dicts.
+
+        ``ImuHealth`` (:3238-3252) and ``BusHealth`` (:3175-3186); a run of stale IMU
+        blocks is the number worth alarming on, and ``ImuHealth::FROZEN_RUN`` is 25.
+        """
+        imu = result.get("imu")
+        bus = result.get("bus")
+        parts = []
+        if isinstance(imu, dict):
+            run = imu.get("consecutive_stale_blocks", 0)
+            state = "ready" if imu.get("ready") else "not converged"
+            if isinstance(run, int) and run >= 25:
+                state = f"[red]frozen ({run} stale in a row)[/red]"
+            parts.append(f"imu {state}")
+        elif imu is not None:
+            parts.append(f"imu {imu}")
+        if isinstance(bus, dict):
+            errors = bus.get("consecutive_errors", 0)
+            startup = bus.get("startup_failures", 0)
+            if startup:
+                parts.append(f"[yellow]bus never came up ({startup} attempts)[/yellow]")
+            elif errors:
+                parts.append(f"[yellow]bus {errors} errors in a row[/yellow]")
+            else:
+                parts.append("bus ok")
+        elif bus is not None:
+            parts.append(f"bus {bus}")
+        return "    ".join(parts) or "not reported"
+
+    _SLOTS = ("walk", "stand", "sitstand", "ground_pick")
+
+    def policy_line(result: dict) -> str:
+        """Which slots are filled, and why none is if none is.
+
+        `robot.subscribe` answers with named slots, not a list (SubscribeResult,
+        duck-ipc-proto/src/lib.rs:2519-2546). "none loaded" used to print on a duck
+        with nine policies because the driver read a `networks` key that has never
+        existed on that reply.
+        """
+        slots = result.get("policy_slots") or {}
+        filled = [slot for slot in _SLOTS if slots.get(slot)]
+        skills = slots.get("skills") or []
+        unavailable = slots.get("unavailable")
+        parts = []
+        if filled:
+            parts.append(", ".join(filled))
+        if skills:
+            parts.append(f"{len(skills)} skills")
+        if not parts:
+            names = result.get("policies") or []
+            parts.append(", ".join(names) if names else "none loaded")
+        if unavailable:
+            parts.append(f"[yellow]unavailable: {unavailable}[/yellow]")
+        return " · ".join(parts)
+
+    def policy_detail(result: dict) -> list[str]:
+        """One line per filled slot, with the file name robotd reported."""
+        slots = result.get("policy_slots") or {}
+        lines = [f"{slot:<12} {slots[slot]}" for slot in _SLOTS if slots.get(slot)]
+        skills = slots.get("skills") or []
+        if skills:
+            lines.append(f"{'skills':<12} {', '.join(skills)}")
+        unavailable = slots.get("unavailable")
+        if unavailable:
+            lines.append(f"{'unavailable':<12} {unavailable}")
+        return lines
+
     # ── castor duck health ──────────────────────────────────────────────
     if action == "health":
         cand = locate()
@@ -4016,15 +4124,19 @@ def cmd_duck(args) -> int:
         result = md.health(host=cand.host, user=cand.user, transport=cand.transport)
         emit(result)
         if result.get("ok"):
-            loop = result.get("loop") or {}
-            batt = result.get("battery") or {}
             say(f"\n  [green]healthy[/green] — {cand.describe()}")
-            say(f"    loop     {loop.get('hz', '?')} Hz ({loop.get('missed', 0)} missed)")
-            say(f"    battery  {batt.get('percent', '?')}% ({batt.get('volts', '?')} V)")
-            say(f"    imu      {result.get('imu', '?')}    bus {result.get('bus', '?')}")
-            policies = result.get("policies") or []
-            if policies:
-                say(f"    policies {', '.join(policies)}")
+            say(f"    loop     {loop_line(result)}")
+            say(f"    battery  {battery_line(result)}")
+            say(f"    sensors  {sensor_line(result)}")
+            for detail in policy_detail(result) or ["policies    none loaded"]:
+                say(f"    {detail}")
+            env = result.get("envelope") or {}
+            if env:
+                say(
+                    f"    envelope {env.get('max_vx')} m/s forward · "
+                    f"{env.get('max_vyaw')} rad/s yaw "
+                    f"[dim](pad: {env.get('padd_max_linear')} m/s)[/dim]"
+                )
             say("")
             return 0
         say(f"\n  [red]unhealthy[/red] — {result.get('error', 'robotd reports unhealthy')}\n")
@@ -4051,10 +4163,14 @@ def cmd_duck(args) -> int:
         cfg = {"transport": cand.transport}
         if cand.transport == "ssh":
             cfg.update({"ssh_host": cand.host, "ssh_user": cand.user})
+        agent_cfg = _duck_agent_config(
+            robot_name=getattr(args, "name", None) or cand.robot_name,
+            brain=getattr(args, "brain", None),
+        )
         driver = MicroduckDriver(cfg)
         duck = DuckChoreographer(driver)
         try:
-            plan = _duck_plan_from_request(duck, request, say)
+            plan = _duck_plan_from_request(duck, request, say, agent=agent_cfg)
             if plan is None:
                 return 1
 
@@ -4101,18 +4217,45 @@ def cmd_duck(args) -> int:
             say("\n  No reachable duck. Run [cyan]castor duck[/cyan] first.\n")
             return 1
 
-        say("")
-        say("  [bold]This will make the duck stand up and walk forward briefly.[/bold]")
-        say("  [dim]Put it on the floor with clear space around it.[/dim]")
-        if not confirm("Ready?", default=False):
-            say("  Cancelled.\n")
-            return 0
-
         cfg = {"transport": cand.transport}
         if cand.transport == "ssh":
             cfg.update({"ssh_host": cand.host, "ssh_user": cand.user})
         driver = MicroduckDriver(cfg)
         try:
+            env = driver.envelope
+            max_vx = float(env["max_vx"])
+            pad_vx = float(env["padd_max_linear"])
+
+            # --speed is in m/s, the unit the owner can compare to the gamepad.
+            # Default: 30% of the envelope, which is what this command has always
+            # sent — 0.06 m/s. The number was never the problem; the silence was.
+            requested = getattr(args, "speed", None)
+            speed = float(requested) if requested is not None else round(max_vx * 0.3, 4)
+            clamped = max(0.0, min(speed, max_vx))
+            deflection = (clamped / max_vx) if max_vx else 0.0
+
+            say("")
+            say("  [bold]This will make the duck stand up and walk forward briefly.[/bold]")
+            say("  [dim]Put it on the floor with clear space around it.[/dim]")
+            say("")
+            say(
+                f"  walking at [bold]{clamped:g} m/s[/bold] of a {max_vx:g} m/s envelope; "
+                f"the gamepad's own limit is {pad_vx:g}."
+            )
+            if requested is not None and clamped != speed:
+                say(
+                    f"  [yellow]--speed {speed:g} is outside this duck's envelope; "
+                    f"using {clamped:g} m/s.[/yellow]"
+                )
+            elif requested is None:
+                say(
+                    f"  [dim]Faster, up to the envelope: "
+                    f"castor duck test --speed {max_vx:g}[/dim]"
+                )
+            if not confirm("Ready?", default=False):
+                say("  Cancelled.\n")
+                return 0
+
             if driver._mode != "hardware":
                 say("\n  [red]Could not reach robotd.[/red]\n")
                 return 1
@@ -4124,10 +4267,11 @@ def cmd_duck(args) -> int:
             say("  walking…")
             deadline = _time.monotonic() + 1.5
             while _time.monotonic() < deadline:
-                driver.move(0.3, 0.0)
+                driver.move(deflection, 0.0)
                 _time.sleep(0.1)
             driver.stop()
-            say("  [green]✓ it walks.[/green]\n")
+            emit({"ok": True, "speed_ms": clamped, "envelope": env})
+            say(f"  [green]✓ it walks[/green] — 1.5 s at {clamped:g} m/s.\n")
             return 0
         finally:
             driver.close()
@@ -4143,10 +4287,20 @@ def cmd_duck(args) -> int:
         emit({"ok": False, "error": "no duck found"})
         say("        [red]nothing found.[/red]")
         say("")
-        say("        Try one of these:")
-        say("          [cyan]castor duck --deep[/cyan]        scan the local network")
-        say("          [cyan]castor duck --host <ip>[/cyan]   if you know the address")
-        say("          [dim]duckctl ip[/dim]                  ask over Bluetooth")
+        say("        [bold]Give it the address:[/bold]")
+        say("          [cyan]castor duck --host 192.168.1.42[/cyan]")
+        say("")
+        say("        [dim]A stock duck is hard to find on purpose. It publishes no[/dim]")
+        say("        [dim]mDNS, and its name is either radxa-zero3 (the name every[/dim]")
+        say("        [dim]board flashed from one image has) or duck-<4 hex> derived[/dim]")
+        say("        [dim]from the SoC serial, which cannot be guessed.[/dim]")
+        say("")
+        say("        [dim]Ways to learn the address:[/dim]")
+        say("          [dim]duckctl ip[/dim]                 over Bluetooth, from a clone of "
+            "pollen-robotics/microduck")
+        say("          [dim]your router's client list[/dim]  look for radxa-zero3 or duck-*")
+        say("          [cyan]castor duck --deep[/cyan]        sweep this machine's ARP "
+            "neighbours and browse mDNS")
         say("")
         return 1
     say(f"        [green]found[/green] {cand.describe()}")
@@ -4180,18 +4334,17 @@ def cmd_duck(args) -> int:
 
     say("  [bold]3/4[/bold]  Talking to robotd")
     result = md.health(host=cand.host, user=cand.user, transport=cand.transport)
-    if result.get("ok"):
-        loop = result.get("loop") or {}
-        batt = result.get("battery") or {}
-        policies = ", ".join(result.get("policies") or []) or "none loaded"
+    verified = bool(result.get("ok"))
+    if verified:
         say(
-            f"        [green]healthy[/green] · loop {loop.get('hz', '?')} Hz · "
-            f"battery {batt.get('percent', '?')}% · {policies}"
+            f"        [green]healthy[/green] · loop {loop_line(result)} · "
+            f"battery {battery_line(result)}"
         )
+        say(f"        [dim]policies {policy_line(result)}[/dim]")
     else:
         say(f"        [yellow]{result.get('error', 'no answer')}[/yellow]")
         say(
-            "        [dim]Writing the config anyway — you can retry with "
+            "        [dim]Writing the manifest anyway, marked unverified — retry with "
             "`castor duck health`.[/dim]"
         )
 
@@ -4214,7 +4367,7 @@ def cmd_duck(args) -> int:
         transport=cand.transport,
         agent=agent_override,
     )
-    path = md.write_config(config, robot_name=robot_name)
+    path = md.write_manifest(config, robot_name=robot_name, verified=verified)
     say(f"        [cyan]{path}[/cyan]")
 
     provider = (config.get("agent") or {}).get("provider", "")
@@ -4228,10 +4381,13 @@ def cmd_duck(args) -> int:
     emit(
         {
             "ok": True,
+            "verified": verified,
             "host": cand.host,
             "user": cand.user,
             "transport": cand.transport,
             "robot_name": robot_name,
+            "manifest": str(path),
+            # Kept for scripts written against the old key. Same path, new format.
             "config": str(path),
             "health": result,
             "brain": {"provider": provider, "ready": brain_ready},
@@ -4239,6 +4395,20 @@ def cmd_duck(args) -> int:
     )
 
     say("")
+    if not verified:
+        # Never claim a duck is ready on the strength of an SSH login. robot.health
+        # is the only thing that proves a robot is on the other end of this manifest.
+        say("  [bold yellow]Manifest written — the duck did not answer.[/bold yellow]")
+        say(f"    [dim]{result.get('error', 'robot.health did not reply')}[/dim]")
+        say("    Nothing here is proven yet. Check it before you trust it:")
+        say("    [cyan]castor duck health[/cyan]   ask robotd again")
+        say("    [dim]On the duck:[/dim] sudo systemctl status robotd")
+        if getattr(args, "start", False):
+            say("")
+            say("    [yellow]--start skipped:[/yellow] not starting a runtime for a robot")
+            say("    that has not answered once.")
+        say("")
+        return 0
     if brain_ready:
         say("  [bold green]Ready.[/bold green]")
         say(f"    [cyan]castor run --config {path}[/cyan]")
@@ -4263,7 +4433,78 @@ def cmd_duck(args) -> int:
     return 0
 
 
-def _duck_plan_from_request(duck, request: str, say) -> "list | None":
+def _duck_agent_config(robot_name: "str | None" = None, brain: "str | None" = None) -> dict:
+    """The brain this duck is configured with, as a ``get_provider`` config.
+
+    Resolution order, first hit wins:
+
+    1. ``--brain PROVIDER[:MODEL]`` typed right here.
+    2. The ``agent`` block of the manifest ``castor duck`` wrote for this robot.
+    3. The ``agent`` block of the packaged ``pollen/microduck`` profile.
+
+    ``castor duck do`` used to call ``get_provider({})``, and an empty dict means
+    ``config.get("provider", "google")`` (``castor/registry.py:176``) — so the model
+    was Gemini regardless of ``castor duck --brain ollama``, regardless of the
+    profile's own ``agent.provider: anthropic``, and regardless of who
+    ``castor login`` had just signed in.
+    """
+    if brain:
+        provider, _, model = str(brain).partition(":")
+        cfg = {"provider": provider}
+        if model:
+            cfg["model"] = model
+        return cfg
+
+    from castor import microduck as _md
+
+    for candidate in _duck_manifest_candidates(_md, robot_name):
+        try:
+            text = candidate.read_text()
+        except OSError:
+            continue
+        try:
+            from castor.main import _read_manifest_frontmatter
+
+            data = _read_manifest_frontmatter(text.lstrip())
+        except Exception:  # noqa: BLE001
+            data = {}
+        agent = (data or {}).get("agent")
+        if isinstance(agent, dict) and agent.get("provider"):
+            return {k: v for k, v in agent.items() if k != "runtimes"}
+
+    try:
+        agent = (_md.load_profile() or {}).get("agent")
+        if isinstance(agent, dict) and agent.get("provider"):
+            return dict(agent)
+    except Exception:  # noqa: BLE001
+        pass
+    return {}
+
+
+def _duck_manifest_candidates(md_module, robot_name: "str | None") -> list:
+    """Manifests that might describe this duck, most specific first."""
+    from pathlib import Path as _Path
+
+    out: list = []
+    try:
+        directory = _Path(md_module.config_dir())
+    except Exception:  # noqa: BLE001
+        return out
+    if robot_name:
+        named = directory / f"{str(robot_name).replace(' ', '-')}.ROBOT.md"
+        if named.exists():
+            out.append(named)
+    out.extend(
+        sorted(
+            (p for p in directory.glob("*.ROBOT.md") if p not in out),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+    )
+    return out
+
+
+def _duck_plan_from_request(duck, request: str, say, agent: "dict | None" = None) -> "list | None":
     """Turn what the operator typed into a plan.
 
     Three ways in, cheapest first: a routine's own name, a literal JSON plan,
@@ -4296,7 +4537,9 @@ def _duck_plan_from_request(duck, request: str, say) -> "list | None":
         say("  Name a routine instead: " + ", ".join(sorted(ROUTINES)) + "\n")
         return None
 
-    say("  [dim]thinking…[/dim]")
+    agent_cfg = dict(agent or {})
+    provider_name = agent_cfg.get("provider") or "google"
+    say(f"  [dim]thinking… ({provider_name})[/dim]")
     prompt = (
         duck.vocabulary()
         + "\n\nRequest: "
@@ -4304,11 +4547,13 @@ def _duck_plan_from_request(duck, request: str, say) -> "list | None":
         + "\n\nAnswer with ONLY a JSON array of steps. No prose, no code fence."
     )
     try:
-        provider = get_provider({})
+        provider = get_provider(agent_cfg)
         thought = provider.think(prompt)
         text = getattr(thought, "text", None) or str(thought)
     except Exception as exc:  # noqa: BLE001
-        say(f"\n  [yellow]The brain could not answer:[/yellow] {exc}")
+        say(f"\n  [yellow]{provider_name} could not answer:[/yellow] {exc}")
+        say(f"  [dim]Sign in with:[/dim] castor login    [dim]or pick another:[/dim] "
+            f"castor duck do --brain ollama …")
         say("  Name a routine instead: " + ", ".join(sorted(ROUTINES)) + "\n")
         return None
 
@@ -9162,10 +9407,28 @@ def main() -> None:
     p_duck_do.add_argument("--user", default=None, help="SSH login on the duck")
     p_duck_do.add_argument("--yes", "-y", action="store_true", help="Skip the confirmation")
     p_duck_do.add_argument("--json", action="store_true", help="Machine-readable output")
+    p_duck_do.add_argument("--name", default=None, help="Which configured duck to use")
+    p_duck_do.add_argument(
+        "--brain",
+        default=None,
+        metavar="PROVIDER[:MODEL]",
+        help="Override the brain for this request (default: the duck's own manifest)",
+    )
     p_duck_test = p_duck_sub.add_parser("test", help="Stand up and walk forward briefly")
     p_duck_test.add_argument("--host", default=None, help="Duck address")
     p_duck_test.add_argument("--user", default=None, help="SSH login on the duck")
     p_duck_test.add_argument("--yes", "-y", action="store_true", help="Skip the confirmation")
+    p_duck_test.add_argument(
+        "--speed",
+        type=float,
+        default=None,
+        metavar="M/S",
+        help=(
+            "Forward speed in m/s, clamped to the duck's envelope (default 0.06 of "
+            "a 0.2 m/s envelope; Pollen's gamepad allows 0.3)"
+        ),
+    )
+    p_duck_test.add_argument("--json", action="store_true", help="Machine-readable output")
 
     # castor scan — detect connected peripherals
     p_scan = sub.add_parser(

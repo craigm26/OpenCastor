@@ -11,6 +11,8 @@ network:
   rrf_endpoint: https://rcan.dev
   signing_alg: pqc-hybrid-v1
 agent:
+  provider: anthropic
+  model: claude-sonnet-4-6
   runtimes:
   - id: opencastor
     harness: castor-default

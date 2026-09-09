@@ -106,6 +106,72 @@ DEFAULT_MAX_VX = 0.2  # m/s
 DEFAULT_MAX_VY = 0.1  # m/s
 DEFAULT_MAX_VYAW = 1.0  # rad/s
 
+#: What Pollen's own gamepad daemon allows, for comparison when we print our
+#: envelope.  ``padd/src/main.rs:139-163`` — ``--max-linear`` 0.3 m/s,
+#: ``--max-linear-backward`` 0.3, ``--max-angular`` 1.5 rad/s.
+PADD_MAX_LINEAR_MS = 0.3
+PADD_MAX_ANGULAR_RADS = 1.5
+
+#: The named policy slots on ``SubscribeResult`` (``duck-ipc-proto/src/lib.rs:2519-2546``).
+#: Each is an ``Option<String>`` holding a **file name**, absent when that slot is
+#: not loaded.  There is no ``networks`` key on this reply and never was.
+POLICY_SLOTS = ("walk", "stand", "sitstand", "ground_pick")
+
+
+def loop_hz(control_loop: Optional[dict]) -> Optional[float]:
+    """Return the loop rate to show a human, or ``None`` when it is not known yet.
+
+    ``LoopHealth`` (``duck-ipc-proto/src/lib.rs:3152-3166``) carries ``target_hz``
+    (always) and ``achieved_hz`` (``Option<f64>`` — ``None`` until the first window
+    closes, which is *unknown*, not zero).  Prefer the achieved figure and fall back
+    to the configured one; never invent a number when neither is present.
+    """
+    if not isinstance(control_loop, dict):
+        return None
+    achieved = control_loop.get("achieved_hz")
+    if isinstance(achieved, (int, float)):
+        return float(achieved)
+    target = control_loop.get("target_hz")
+    if isinstance(target, (int, float)):
+        return float(target)
+    return None
+
+
+def _policy_slots(subscribe_result: dict) -> dict:
+    """Normalise a ``robot.subscribe`` reply into ``{slot: name}`` plus ``skills``.
+
+    Transcribed from ``SubscribeResult`` (``duck-ipc-proto/src/lib.rs:2519-2546``,
+    handler ``robotd/src/main.rs:4282-4300``)::
+
+        accepted: bool
+        walk, stand, unavailable, sitstand, ground_pick: Option<String>
+        skills: Vec<String>
+
+    ``unavailable`` is *why nothing is driving* when nothing is — a disabled policy
+    or one that failed to load — and is deliberately kept, because a duck that will
+    not walk is the case an owner needs named.
+    """
+    out: dict = {}
+    for slot in POLICY_SLOTS:
+        name = subscribe_result.get(slot)
+        if isinstance(name, str) and name:
+            out[slot] = name
+    skills = subscribe_result.get("skills")
+    out["skills"] = [s for s in skills if isinstance(s, str)] if isinstance(skills, list) else []
+    unavailable = subscribe_result.get("unavailable")
+    if isinstance(unavailable, str) and unavailable:
+        out["unavailable"] = unavailable
+    out["accepted"] = bool(subscribe_result.get("accepted"))
+    return out
+
+
+def _policy_names(subscribe_result: dict) -> list[str]:
+    """Flatten a ``robot.subscribe`` reply to the policy/skill names it reported."""
+    slots = _policy_slots(subscribe_result)
+    names = [slots[slot] for slot in POLICY_SLOTS if slot in slots]
+    names.extend(s for s in slots.get("skills", []) if s not in names)
+    return names
+
 
 def _clamp(value: float, lo: float = -1.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, float(value)))
@@ -131,6 +197,8 @@ class MicroduckDriver(DriverBase):
             - ``intent_hz`` (float): intent re-send rate. Default ``20``.
             - ``command_ttl_s`` (float): driver-side deadman. Default ``1.5``.
             - ``rpc_timeout_s`` (float): request/response timeout. Default ``2.0``.
+            - ``subscribe_hz`` (int): ask robotd for a slower ``robot.state`` stream.
+              Absent means every tick, which is what ``SubscribeParams`` documents.
             - ``auto_init`` (bool): call ``robot.init`` on connect. Default ``False``
               — the duck deliberately does not move on process start.
     """
@@ -194,6 +262,9 @@ class MicroduckDriver(DriverBase):
 
         self._last_state: dict[str, Any] = {}
         self._policies: list[str] = []
+        self._policy_slots: dict[str, Any] = {}
+        self._last_health: dict[str, Any] = {}
+        self._last_health_ts = 0.0
 
         self._connect()
 
@@ -272,13 +343,27 @@ class MicroduckDriver(DriverBase):
         # Subscribe so robot.state notifications start flowing; health, battery and
         # odometry then come from the cached last value rather than a synchronous RPC.
         try:
-            result = self._request("robot.subscribe")
+            # `params` must be an OBJECT, not absent. `SubscribeParams`
+            # (duck-ipc-proto/src/lib.rs:2500-2505) is a struct, and omitting the key
+            # sends `null`, which robotd refuses outright:
+            #   -32602 "invalid type: null, expected struct SubscribeParams"
+            # measured against a real robotd 0.11.0 under Pollen's scripts/duck-sim,
+            # 2026-09-08. So `robot.subscribe` has never once succeeded against a
+            # real duck, on top of the reply then being read for a key it never had.
+            # `{}` means every tick; `subscribe_hz` asks for a slower stream.
+            params: dict[str, Any] = {}
+            hz = self._config.get("subscribe_hz")
+            if hz:
+                params["hz"] = int(hz)
+            result = self._request("robot.subscribe", params)
             if isinstance(result, dict):
-                self._policies = list(result.get("networks") or [])
+                self._policy_slots = _policy_slots(result)
+                self._policies = _policy_names(result)
                 logger.info(
-                    "Microduck ready: status=%s policies=%s",
-                    result.get("status"),
+                    "Microduck ready: accepted=%s policies=%s unavailable=%s",
+                    result.get("accepted"),
                     self._policies,
+                    result.get("unavailable"),
                 )
         except Exception as exc:
             logger.warning("MicroduckDriver robot.subscribe failed: %s", exc)
@@ -630,9 +715,22 @@ class MicroduckDriver(DriverBase):
     def health_check(self) -> dict:
         """Query ``robot.health``.
 
+        The wire contract is ``HealthResult`` (``duck-ipc-proto/src/lib.rs:3089-3147``):
+        ``healthy``, ``degraded``, ``reason``, ``battery`` (``Battery`` — ``volts`` and
+        ``percent``, ``:3263-3266``), ``motors``, ``cpu_temp_c``, ``control_loop``
+        (``LoopHealth`` — ``target_hz``, ``achieved_hz``, ``ticks``, ``missed``,
+        ``last_tick_age_ms``, ``:3152-3166``), ``bus`` and ``imu``.
+
+        The key is ``control_loop``, not ``loop``, and there is no serde rename.
+        ``loop`` with an ``hz`` field is a **different** struct — ``LoopState`` on the
+        ``robot.state`` stream (``:3512-3517``) — and reading one for the other is why
+        a healthy duck used to print ``loop ? Hz``.  ``loop`` is still returned here as
+        an alias so older callers keep working, but it now holds the health struct.
+
         Returns:
-            Dict with ``ok``, ``mode``, ``error``, plus ``loop``, ``battery``,
-            ``imu`` and ``bus`` when connected to real hardware.
+            Dict with ``ok``, ``mode``, ``error``, ``degraded``, ``reason``, plus
+            ``control_loop``, ``loop_hz``, ``battery``, ``imu`` and ``bus`` when
+            connected to real hardware.
         """
         if self._mode == "mock":
             return {"ok": True, "mode": "mock", "error": None, "transport": self._transport}
@@ -651,15 +749,28 @@ class MicroduckDriver(DriverBase):
             return {"ok": False, "mode": "hardware", "error": f"bad health payload: {res!r}"}
 
         healthy = bool(res.get("healthy"))
+        control_loop = res.get("control_loop")
+        battery = res.get("battery")
+        reason = res.get("reason")
+        with self._state_lock:
+            self._last_health = dict(res)
+            self._last_health_ts = time.monotonic()
         return {
             "ok": healthy,
             "mode": "hardware",
-            "error": None if healthy else "robotd reports unhealthy",
+            "error": None if healthy else (reason or "robotd reports unhealthy"),
             "transport": self._transport,
-            "loop": res.get("loop"),
-            "battery": res.get("battery"),
+            "degraded": bool(res.get("degraded")),
+            "reason": reason,
+            "control_loop": control_loop,
+            # Back-compat alias. Same object, correct source.
+            "loop": control_loop,
+            "loop_hz": loop_hz(control_loop),
+            "battery": battery,
             "imu": res.get("imu"),
             "bus": res.get("bus"),
+            "cpu_temp_c": res.get("cpu_temp_c"),
+            "motors": res.get("motors"),
         }
 
     # ------------------------------------------------------------------
@@ -877,17 +988,72 @@ class MicroduckDriver(DriverBase):
         with self._state_lock:
             return dict(self._last_state)
 
-    def get_battery(self) -> dict:
-        """Return ``{"volts": …, "percent": …}`` from the cached state, or ``{}``."""
-        return dict(self.get_state().get("battery") or {})
+    def get_battery(self, max_age_s: float = 2.0) -> dict:
+        """Return ``{"volts": …, "percent": …}`` from ``robot.health``, or ``{}``.
+
+        The battery is **not** on the state stream.  ``RobotState``
+        (``duck-ipc-proto/src/lib.rs:3317-3365``) carries no battery at all, and
+        Pollen's own cheatsheet says so in as many words
+        (``docs/robot/cheatsheet.md:51-53``, "because none of it is on the state
+        stream").  It lives on ``HealthResult.battery`` (``:3117-3118``, ``Battery``
+        at ``:3263-3266``), which is a request/response call — so the answer is
+        cached for *max_age_s* rather than fetched on every read.
+
+        Args:
+            max_age_s: Reuse a cached ``robot.health`` answer younger than this.
+                       ``0`` forces a fresh call.
+        """
+        if self._mode == "mock":
+            return {}
+        with self._state_lock:
+            fresh = self._last_health_ts and (time.monotonic() - self._last_health_ts) <= max_age_s
+            cached = dict(self._last_health) if fresh else None
+        if cached is None:
+            try:
+                self.health_check()
+            except Exception as exc:  # noqa: BLE001 — a missing battery is not fatal
+                logger.debug("microduck get_battery: health call failed: %s", exc)
+            with self._state_lock:
+                cached = dict(self._last_health)
+        battery = cached.get("battery") if isinstance(cached, dict) else None
+        return dict(battery) if isinstance(battery, dict) else {}
 
     def get_odometry(self) -> dict:
-        """Return ``{"position": [x, y], "yaw": θ}`` from the cached state, or ``{}``."""
+        """Return ``{"position": [x, y, z], "yaw": θ}`` from the cached state, or ``{}``.
+
+        ``OdomState.position`` is ``[f64; 3]`` (``duck-ipc-proto/src/lib.rs:3472-3476``)
+        — three components, not two.
+        """
         return dict(self.get_state().get("odom") or {})
 
     def get_policies(self) -> list[str]:
-        """Return the ONNX policies robotd reported at subscribe time."""
+        """Return the policy and skill file names robotd reported at subscribe time."""
         return list(self._policies)
+
+    def get_policy_slots(self) -> dict:
+        """Return ``robot.subscribe``'s named slots: which network is in which role.
+
+        ``{"walk": "alpha_walking.onnx", "stand": …, "sitstand": …, "ground_pick": …,
+        "skills": [...], "unavailable": …, "accepted": bool}`` — absent keys mean that
+        slot is not loaded on this robot.
+        """
+        return dict(self._policy_slots)
+
+    @property
+    def envelope(self) -> dict:
+        """The velocity envelope full stick maps onto, and what Pollen's pad allows.
+
+        ``castor duck test`` prints this: the duck is not struggling at 0.06 m/s, it
+        is being asked for a fifth of what the gamepad asks for, and the owner is
+        entitled to see both numbers.
+        """
+        return {
+            "max_vx": self._max_vx,
+            "max_vy": self._max_vy,
+            "max_vyaw": self._max_vyaw,
+            "padd_max_linear": PADD_MAX_LINEAR_MS,
+            "padd_max_angular": PADD_MAX_ANGULAR_RADS,
+        }
 
     def safe_to_restart(self) -> bool:
         """Whether robotd considers it safe to restart (false while walking)."""

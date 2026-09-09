@@ -2,6 +2,13 @@
 
 Exercises the real robotd wire contract — JSON-RPC 2.0, one object per line
 over a Unix socket — against a fake robotd, so no hardware is required.
+
+Every reply the fake gives comes from :mod:`tests.microduck_wire_fixtures`, which
+is transcribed from ``pollen-robotics/microduck``'s ``duck-ipc-proto/src/lib.rs``
+with the source line written beside each field. That indirection is the point: this
+file used to invent ``{"networks": [...]}`` and ``{"loop": {"hz": ...}}``, which are
+not keys robotd has ever sent, and so it agreed with the driver's bugs instead of
+catching them.
 """
 
 from __future__ import annotations
@@ -16,7 +23,9 @@ import time
 import pytest
 
 from castor.drivers import get_driver, is_supported_protocol
-from castor.drivers.microduck_driver import MicroduckDriver
+from castor.drivers.microduck_driver import MicroduckDriver, loop_hz
+
+import microduck_wire_fixtures as wire
 
 
 class FakeRobotd:
@@ -79,15 +88,13 @@ class FakeRobotd:
             self.requests.append(msg)
 
         if method == "robot.subscribe":
-            result = {"networks": ["walk.onnx", "sit.onnx"], "status": "ready"}
+            result = dict(wire.SUBSCRIBE)
         elif method == "robot.health":
-            result = {
-                "healthy": self.healthy,
-                "loop": {"hz": 49.8, "missed": 0},
-                "battery": {"volts": 7.62, "percent": 64},
-                "imu": "ok",
-                "bus": "ok",
-            }
+            result = {**wire.HEALTH, "healthy": self.healthy}
+            if not self.healthy:
+                result["reason"] = "motor bus down"
+        elif method == "hello":
+            result = dict(wire.HELLO)
         elif method == "robot.safeToRestart":
             result = False
         else:
@@ -189,7 +196,18 @@ def test_ssh_transport_without_host_degrades_to_mock():
 def test_connects_and_subscribes(driver, fake_robotd):
     assert driver._mode == "hardware"
     assert _wait_for(lambda: "robot.subscribe" in fake_robotd.request_methods())
-    assert driver.get_policies() == ["walk.onnx", "sit.onnx"]
+    # The four named slots then the skills, in that order — no `networks` key exists.
+    assert driver.get_policies() == [
+        "alpha_walking.onnx",
+        "alpha_stand.onnx",
+        "alpha_sitstand.onnx",
+        "alpha_ground_pick.onnx",
+        *wire.SUBSCRIBE["skills"],
+    ]
+    slots = driver.get_policy_slots()
+    assert slots["walk"] == "alpha_walking.onnx"
+    assert slots["accepted"] is True
+    assert "unavailable" not in slots
 
 
 # ── Velocity intents ──────────────────────────────────────────────────────────
@@ -293,24 +311,44 @@ def test_head_sends_four_joint_angles(driver, fake_robotd):
 
 def test_state_notifications_are_cached(driver, fake_robotd):
     assert _wait_for(lambda: "robot.subscribe" in fake_robotd.request_methods())
-    fake_robotd.push_state(
-        {
-            "t": 1234.567,
-            "move": {
-                "requested": [0.4, 0, 0],
-                "applied": [0.15, 0, 0],
-                "limited_by": ["max_velocity"],
-            },
-            "policy": "walk",
-            "safety": {"fallen": False, "limp": False},
-            "battery": {"volts": 7.62, "percent": 64},
-            "odom": {"position": [1.0, 2.0], "yaw": 0.5},
-        }
-    )
+    limited = {
+        **wire.STATE,
+        # MoveState travels as `move`: #[serde(rename = "move")] at
+        # duck-ipc-proto/src/lib.rs:3321. Confirmed against a live robotd 0.11.0.
+        "move": {
+            "requested": [0.4, 0.0, 0.0],
+            "applied": [0.15, 0.0, 0.0],
+            "limited_by": ["max_velocity"],
+        },
+    }
+    fake_robotd.push_state(limited)
     assert _wait_for(lambda: driver.get_state().get("policy") == "walk")
-    assert driver.get_battery()["percent"] == 64
-    assert driver.get_odometry()["yaw"] == 0.5
+    # OdomState.position is [f64; 3], not two components (:3472-3476).
+    assert driver.get_odometry()["position"] == wire.STATE["odom"]["position"]
+    assert driver.get_odometry()["yaw"] == wire.STATE["odom"]["yaw"]
     assert driver.get_state()["move"]["limited_by"] == ["max_velocity"]
+    # The state stream's own loop struct is `loop`, with `hz` — a different
+    # struct and a different field name from robot.health's `control_loop`.
+    assert driver.get_state()["loop"]["hz"] == pytest.approx(49.8)
+
+
+def test_state_stream_carries_no_battery(driver, fake_robotd):
+    """RobotState has no battery (duck-ipc-proto/src/lib.rs:3317-3365).
+
+    The old driver read ``state["battery"]``, so ``get_battery()`` was always ``{}``
+    on a real duck and the choreographer's documented 12% abort could never fire.
+    """
+    fake_robotd.push_state(wire.STATE)
+    assert _wait_for(lambda: driver.get_state().get("policy") == "walk")
+    assert "battery" not in driver.get_state()
+
+
+def test_battery_comes_from_health_not_state(driver, fake_robotd):
+    fake_robotd.push_state(wire.STATE)
+    assert _wait_for(lambda: driver.get_state().get("policy") == "walk")
+    assert driver.get_battery(max_age_s=0.0)["percent"] == pytest.approx(64.0)
+    assert driver.get_battery()["volts"] == pytest.approx(7.9)
+    assert "robot.health" in fake_robotd.request_methods()
 
 
 def test_health_check_maps_robotd_health(driver):
@@ -318,15 +356,107 @@ def test_health_check_maps_robotd_health(driver):
     assert health["ok"] is True
     assert health["mode"] == "hardware"
     assert health["error"] is None
-    assert health["battery"]["percent"] == 64
-    assert health["loop"]["hz"] == pytest.approx(49.8)
+    assert health["battery"]["percent"] == pytest.approx(64.0)
+    # `control_loop`, not `loop`; `achieved_hz`, not `hz`.
+    assert health["control_loop"]["achieved_hz"] == pytest.approx(49.978)
+    assert health["control_loop"]["target_hz"] == pytest.approx(50.0)
+    assert health["control_loop"]["missed"] == 0
+    assert health["loop_hz"] == pytest.approx(49.978)
+    assert health["degraded"] is False
 
 
 def test_health_check_reports_unhealthy(driver, fake_robotd):
     fake_robotd.healthy = False
     health = driver.health_check()
     assert health["ok"] is False
-    assert "unhealthy" in health["error"]
+    # robotd's own reason wins over our generic sentence when it gives one.
+    assert health["error"] == "motor bus down"
+
+
+def test_loop_hz_prefers_achieved_and_falls_back_to_target():
+    assert loop_hz(wire.HEALTH["control_loop"]) == pytest.approx(49.978)
+    # achieved_hz is Option<f64> and is None until the first window closes: that is
+    # unknown, and the honest fallback is the configured target, never 0.
+    assert loop_hz(wire.HEALTH_NO_WINDOW_YET["control_loop"]) == pytest.approx(50.0)
+    assert loop_hz(None) is None
+    assert loop_hz({}) is None
+
+
+def test_subscribe_with_no_gait_reports_why(fake_robotd, tmp_path):
+    """A board that could not reach the Hub has no walking policy, non-fatally."""
+    import os as _os
+
+    path = str(tmp_path / "nogait.sock")
+    server = wire.WireRobotd(path, {"robot.subscribe": wire.SUBSCRIBE_NO_GAIT})
+    try:
+        drv = MicroduckDriver({"transport": "unix", "socket": path, "rpc_timeout_s": 1.0})
+        try:
+            assert drv.get_policies() == []
+            assert drv.get_policy_slots()["unavailable"] == (
+                "walking policy disabled in params"
+            )
+        finally:
+            drv.close()
+    finally:
+        server.close()
+        if _os.path.exists(path):
+            _os.unlink(path)
+
+
+def test_subscribe_sends_a_params_object_not_null(tmp_path):
+    """`robot.subscribe` needs `params: {}`; omitting the key sends `null`.
+
+    `SubscribeParams` is a struct (duck-ipc-proto/src/lib.rs:2500-2505) and a real
+    robotd 0.11.0 refuses `null` outright with
+    `-32602 invalid type: null, expected struct SubscribeParams` — measured under
+    Pollen's scripts/duck-sim. So subscribe had never once succeeded against a real
+    duck, on top of the reply being read for a `networks` key it never had.
+    """
+    import os as _os
+
+    path = str(tmp_path / "strict.sock")
+    server = wire.WireRobotd(path)
+    try:
+        drv = MicroduckDriver({"transport": "unix", "socket": path, "rpc_timeout_s": 1.0})
+        try:
+            sub = next(r for r in server.requests if r.get("method") == "robot.subscribe")
+            assert isinstance(sub.get("params"), dict), "params must be an object"
+            # and the subscribe therefore actually landed
+            assert drv.get_policy_slots()["walk"] == "alpha_walking.onnx"
+        finally:
+            drv.close()
+    finally:
+        server.close()
+        if _os.path.exists(path):
+            _os.unlink(path)
+
+
+def test_subscribe_hz_is_passed_through(tmp_path):
+    import os as _os
+
+    path = str(tmp_path / "hz.sock")
+    server = wire.WireRobotd(path)
+    try:
+        drv = MicroduckDriver(
+            {"transport": "unix", "socket": path, "rpc_timeout_s": 1.0, "subscribe_hz": 2}
+        )
+        try:
+            sub = next(r for r in server.requests if r.get("method") == "robot.subscribe")
+            assert sub["params"] == {"hz": 2}
+        finally:
+            drv.close()
+    finally:
+        server.close()
+        if _os.path.exists(path):
+            _os.unlink(path)
+
+
+def test_envelope_reports_our_limit_and_pollens(driver):
+    env = driver.envelope
+    assert env["max_vx"] == pytest.approx(0.2)
+    # padd/src/main.rs:139-163
+    assert env["padd_max_linear"] == pytest.approx(0.3)
+    assert env["padd_max_angular"] == pytest.approx(1.5)
 
 
 def test_safe_to_restart_is_false_while_driving(driver):

@@ -611,25 +611,51 @@ class DuckChoreographer:
         return f"held {seconds:g}s"
 
     def _abort_reason(self) -> Optional[str]:
-        """Whether the duck needs the performance to stop, right now."""
+        """Whether the duck needs the performance to stop, right now.
+
+        Two independent sources, deliberately.  Fall and limp are on the state
+        stream (``SafetyState``, duck-ipc-proto/src/lib.rs:3491-3494); the battery
+        is on ``robot.health`` and nowhere else.  An empty state stream must not
+        silence the battery guard, which is what it used to do.
+        """
         try:
             state = self._driver.get_state()
         except Exception:  # noqa: BLE001 — no state is not a reason to stop
-            return None
-        if not isinstance(state, dict) or not state:
-            return None
+            state = {}
+        if isinstance(state, dict) and state:
+            safety = state.get("safety") or {}
+            if safety.get("fallen"):
+                return "the duck fell over"
+            if safety.get("limp"):
+                return "the duck went limp"
 
-        safety = state.get("safety") or {}
-        if safety.get("fallen"):
-            return "the duck fell over"
-        if safety.get("limp"):
-            return "the duck went limp"
-
-        battery = state.get("battery") or {}
-        percent = battery.get("percent")
+        # The battery is not on the state stream. ``RobotState``
+        # (duck-ipc-proto/src/lib.rs:3317-3365) carries no battery at all — it lives on
+        # ``robot.health`` (:3117-3118). Reading ``state["battery"]`` is why this guard,
+        # documented at docs/hardware/microduck.md as a safety stop, had never fired.
+        percent = self._battery_percent()
         if isinstance(percent, (int, float)) and percent < self._min_battery:
             return f"battery down to {percent:g}%"
         return None
+
+    def _battery_percent(self) -> Optional[float]:
+        """The pack level from ``robot.health``, or ``None`` when the duck did not say.
+
+        ``None`` is not zero and must never be treated as one: a driver that cannot
+        answer is a driver whose battery is *unknown*, and aborting a performance on
+        unknown would stop every mock and every dry run.
+        """
+        getter = getattr(self._driver, "get_battery", None)
+        if getter is None:
+            return None
+        try:
+            battery = getter()
+        except Exception:  # noqa: BLE001 — no battery reading is not a reason to stop
+            return None
+        if not isinstance(battery, dict):
+            return None
+        percent = battery.get("percent")
+        return float(percent) if isinstance(percent, (int, float)) else None
 
     def _safe_stop(self) -> None:
         try:

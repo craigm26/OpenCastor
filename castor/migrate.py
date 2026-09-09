@@ -477,12 +477,39 @@ legacy format is deprecated and will be removed in opencastor 3.1.0.
 """
 
 
+#: Blocks that describe the *body* rather than the brain, and that a migration must
+#: therefore carry across untouched.
+#:
+#: ``drivers`` is the load-bearing one.  ``ComponentRegistry.get_driver`` returns
+#: ``None`` the moment it is missing (``castor/registry.py:201-202``), so a migration
+#: that drops it converts a configured robot into a brain with no body — and does it
+#: silently, which is the worst possible way to fail.  The others are here because a
+#: robot that keeps its driver and loses its velocity envelope or its camera is still
+#: a different robot from the one that was migrated.
+_CARRIED_BLOCKS = (
+    "drivers",
+    "connection",
+    "physics",
+    "sensors",
+    "camera",
+    "task_routing",
+    "tiered_brain",
+    "rcan_protocol",
+)
+
+
 def _convert_to_v32(old: dict) -> dict:
-    """Translate a legacy .rcan.yaml dict to v3.2 ROBOT.md frontmatter."""
+    """Translate a legacy .rcan.yaml dict to v3.2 ROBOT.md frontmatter.
+
+    Everything in :data:`_CARRIED_BLOCKS` is copied across verbatim.  The agent block
+    is restructured into v3.2 ``runtimes``; the body blocks are not restructured at
+    all, because nothing about them changed between the formats and re-shaping a
+    ``drivers`` entry is how you lose one.
+    """
     agent = old.get("agent") or {}
     provider = agent.get("provider", "anthropic")
     model = agent.get("model", "claude-sonnet-4-6")
-    return {
+    out = {
         "rcan_version": "3.2",
         "metadata": old.get("metadata") or {},
         "network": old.get("network")
@@ -491,6 +518,8 @@ def _convert_to_v32(old: dict) -> dict:
             "signing_alg": "pqc-hybrid-v1",
         },
         "agent": {
+            "provider": provider,
+            "model": model,
             "runtimes": [
                 {
                     "id": "opencastor",
@@ -504,6 +533,20 @@ def _convert_to_v32(old: dict) -> dict:
         },
         "safety": old.get("safety") or {},
     }
+    for key in _CARRIED_BLOCKS:
+        value = old.get(key)
+        if value:
+            out[key] = copy.deepcopy(value)
+    return out
+
+
+def dropped_blocks(old: dict, new: dict) -> list[str]:
+    """Blocks present in *old* that did not survive into *new*. Empty means clean.
+
+    A migration is allowed to restructure. It is not allowed to lose a robot's body
+    without saying so, which is what this exists to detect.
+    """
+    return [key for key in _CARRIED_BLOCKS if old.get(key) and not new.get(key)]
 
 
 def migrate_to_robot_md(src, dst) -> int:
@@ -520,8 +563,27 @@ def migrate_to_robot_md(src, dst) -> int:
     )
     old = yaml.safe_load(Path(src).read_text()) or {}
     fm = _convert_to_v32(old)
+
+    dropped = dropped_blocks(old, fm)
+    if dropped:
+        # Fail loudly. A migration that silently drops `drivers` produces a manifest
+        # that loads, answers, and never moves a motor.
+        sys.stderr.write(
+            "[castor migrate] refusing to write a manifest that loses "
+            + ", ".join(dropped)
+            + f" from {src}.\n"
+            "  Nothing was written. This is a bug in the migration, not in your "
+            "config — please report it with the block name above.\n"
+        )
+        return 1
+
     robot_name = (fm["metadata"] or {}).get("robot_name", "robot")
     body = _ROBOT_MD_BODY.format(robot_name=robot_name)
+    if fm.get("drivers"):
+        protocols = ", ".join(
+            str(d.get("protocol") or d.get("class") or "?") for d in fm["drivers"]
+        )
+        body += f"\nDrivers carried across: {protocols}.\n"
     serialized = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True)
     Path(dst).write_text(f"---\n{serialized}---\n\n{body}")
     return 0

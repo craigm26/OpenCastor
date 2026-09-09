@@ -222,16 +222,54 @@ def apply_hardware_overrides(config: dict) -> dict:
 # ---------------------------------------------------------------------------
 # Config loader
 # ---------------------------------------------------------------------------
+def _read_manifest_frontmatter(text: str) -> dict:
+    """Return the YAML frontmatter of a ROBOT.md, or ``{}`` when there is none.
+
+    A ROBOT.md is ``---\\n<yaml>\\n---\\n<markdown>``.  Handing that whole file to
+    ``yaml.safe_load`` raises "expected a single document", which is why a manifest
+    written by ``castor duck`` could not previously be run: the generator and the
+    runner disagreed about the format.  Splitting on the closing fence is the
+    entire fix.
+    """
+    if not text.startswith("---"):
+        return {}
+    rest = text.split("\n", 1)[1] if "\n" in text else ""
+    end = rest.find("\n---")
+    front = rest if end < 0 else rest[:end]
+    loaded = yaml.safe_load(front)
+    return loaded if isinstance(loaded, dict) else {}
+
+
 def load_config(path: str) -> dict:
-    """Loads and validates the RCAN configuration."""
+    """Loads and validates the RCAN configuration.
+
+    Accepts either a plain YAML config or a **ROBOT.md** — the manifest format
+    ``castor duck`` writes and ``castor run`` is told to accept.  A ROBOT.md's
+    frontmatter is the config, ``drivers`` block included; the markdown below it is
+    for humans and agent harnesses and is ignored here.
+    """
     try:
         with open(path) as f:
-            config = yaml.safe_load(f)
-            logger.info(f"Loaded Configuration: {config['metadata']['robot_name']}")
-            return config
+            text = f.read()
     except FileNotFoundError as exc:
         logger.error(f"Config file not found: {path}")
         raise SystemExit(1) from exc
+
+    if text.lstrip().startswith("---"):
+        config = _read_manifest_frontmatter(text.lstrip())
+        if not config:
+            logger.error(f"Manifest has no usable frontmatter: {path}")
+            raise SystemExit(1)
+    else:
+        config = yaml.safe_load(text)
+
+    if not isinstance(config, dict):
+        logger.error(f"Config is not a mapping: {path}")
+        raise SystemExit(1)
+
+    name = (config.get("metadata") or {}).get("robot_name", "unnamed")
+    logger.info(f"Loaded Configuration: {name}")
+    return config
 
 
 # ---------------------------------------------------------------------------
