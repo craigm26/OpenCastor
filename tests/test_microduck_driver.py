@@ -202,11 +202,7 @@ def test_connects_and_subscribes(driver, fake_robotd):
         "alpha_stand.onnx",
         "alpha_sitstand.onnx",
         "alpha_ground_pick.onnx",
-        "ground_pick",
-        "kick_left",
-        "kick_right",
-        "sit_toggle",
-        "roulade",
+        *wire.SUBSCRIBE["skills"],
     ]
     slots = driver.get_policy_slots()
     assert slots["walk"] == "alpha_walking.onnx"
@@ -317,8 +313,9 @@ def test_state_notifications_are_cached(driver, fake_robotd):
     assert _wait_for(lambda: "robot.subscribe" in fake_robotd.request_methods())
     limited = {
         **wire.STATE,
-        # MoveState is `movement`, not `move` (duck-ipc-proto/src/lib.rs:3321).
-        "movement": {
+        # MoveState travels as `move`: #[serde(rename = "move")] at
+        # duck-ipc-proto/src/lib.rs:3321. Confirmed against a live robotd 0.11.0.
+        "move": {
             "requested": [0.4, 0.0, 0.0],
             "applied": [0.15, 0.0, 0.0],
             "limited_by": ["max_velocity"],
@@ -327,9 +324,12 @@ def test_state_notifications_are_cached(driver, fake_robotd):
     fake_robotd.push_state(limited)
     assert _wait_for(lambda: driver.get_state().get("policy") == "walk")
     # OdomState.position is [f64; 3], not two components (:3472-3476).
-    assert driver.get_odometry()["position"] == [1.0, 2.0, 0.31]
-    assert driver.get_odometry()["yaw"] == 0.5
-    assert driver.get_state()["movement"]["limited_by"] == ["max_velocity"]
+    assert driver.get_odometry()["position"] == wire.STATE["odom"]["position"]
+    assert driver.get_odometry()["yaw"] == wire.STATE["odom"]["yaw"]
+    assert driver.get_state()["move"]["limited_by"] == ["max_velocity"]
+    # The state stream's own loop struct is `loop`, with `hz` — a different
+    # struct and a different field name from robot.health's `control_loop`.
+    assert driver.get_state()["loop"]["hz"] == pytest.approx(49.8)
 
 
 def test_state_stream_carries_no_battery(driver, fake_robotd):
@@ -358,10 +358,10 @@ def test_health_check_maps_robotd_health(driver):
     assert health["error"] is None
     assert health["battery"]["percent"] == pytest.approx(64.0)
     # `control_loop`, not `loop`; `achieved_hz`, not `hz`.
-    assert health["control_loop"]["achieved_hz"] == pytest.approx(49.8)
+    assert health["control_loop"]["achieved_hz"] == pytest.approx(49.978)
     assert health["control_loop"]["target_hz"] == pytest.approx(50.0)
     assert health["control_loop"]["missed"] == 0
-    assert health["loop_hz"] == pytest.approx(49.8)
+    assert health["loop_hz"] == pytest.approx(49.978)
     assert health["degraded"] is False
 
 
@@ -374,7 +374,7 @@ def test_health_check_reports_unhealthy(driver, fake_robotd):
 
 
 def test_loop_hz_prefers_achieved_and_falls_back_to_target():
-    assert loop_hz(wire.HEALTH["control_loop"]) == pytest.approx(49.8)
+    assert loop_hz(wire.HEALTH["control_loop"]) == pytest.approx(49.978)
     # achieved_hz is Option<f64> and is None until the first window closes: that is
     # unknown, and the honest fallback is the configured target, never 0.
     assert loop_hz(wire.HEALTH_NO_WINDOW_YET["control_loop"]) == pytest.approx(50.0)
@@ -395,6 +395,54 @@ def test_subscribe_with_no_gait_reports_why(fake_robotd, tmp_path):
             assert drv.get_policy_slots()["unavailable"] == (
                 "walking policy disabled in params"
             )
+        finally:
+            drv.close()
+    finally:
+        server.close()
+        if _os.path.exists(path):
+            _os.unlink(path)
+
+
+def test_subscribe_sends_a_params_object_not_null(tmp_path):
+    """`robot.subscribe` needs `params: {}`; omitting the key sends `null`.
+
+    `SubscribeParams` is a struct (duck-ipc-proto/src/lib.rs:2500-2505) and a real
+    robotd 0.11.0 refuses `null` outright with
+    `-32602 invalid type: null, expected struct SubscribeParams` — measured under
+    Pollen's scripts/duck-sim. So subscribe had never once succeeded against a real
+    duck, on top of the reply being read for a `networks` key it never had.
+    """
+    import os as _os
+
+    path = str(tmp_path / "strict.sock")
+    server = wire.WireRobotd(path)
+    try:
+        drv = MicroduckDriver({"transport": "unix", "socket": path, "rpc_timeout_s": 1.0})
+        try:
+            sub = next(r for r in server.requests if r.get("method") == "robot.subscribe")
+            assert isinstance(sub.get("params"), dict), "params must be an object"
+            # and the subscribe therefore actually landed
+            assert drv.get_policy_slots()["walk"] == "alpha_walking.onnx"
+        finally:
+            drv.close()
+    finally:
+        server.close()
+        if _os.path.exists(path):
+            _os.unlink(path)
+
+
+def test_subscribe_hz_is_passed_through(tmp_path):
+    import os as _os
+
+    path = str(tmp_path / "hz.sock")
+    server = wire.WireRobotd(path)
+    try:
+        drv = MicroduckDriver(
+            {"transport": "unix", "socket": path, "rpc_timeout_s": 1.0, "subscribe_hz": 2}
+        )
+        try:
+            sub = next(r for r in server.requests if r.get("method") == "robot.subscribe")
+            assert sub["params"] == {"hz": 2}
         finally:
             drv.close()
     finally:

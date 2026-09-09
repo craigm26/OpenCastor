@@ -178,6 +178,8 @@ class MicroduckDriver(DriverBase):
             - ``intent_hz`` (float): intent re-send rate. Default ``20``.
             - ``command_ttl_s`` (float): driver-side deadman. Default ``1.5``.
             - ``rpc_timeout_s`` (float): request/response timeout. Default ``2.0``.
+            - ``subscribe_hz`` (int): ask robotd for a slower ``robot.state`` stream.
+              Absent means every tick, which is what ``SubscribeParams`` documents.
             - ``auto_init`` (bool): call ``robot.init`` on connect. Default ``False``
               — the duck deliberately does not move on process start.
     """
@@ -297,7 +299,19 @@ class MicroduckDriver(DriverBase):
         # Subscribe so robot.state notifications start flowing; health, battery and
         # odometry then come from the cached last value rather than a synchronous RPC.
         try:
-            result = self._request("robot.subscribe")
+            # `params` must be an OBJECT, not absent. `SubscribeParams`
+            # (duck-ipc-proto/src/lib.rs:2500-2505) is a struct, and omitting the key
+            # sends `null`, which robotd refuses outright:
+            #   -32602 "invalid type: null, expected struct SubscribeParams"
+            # measured against a real robotd 0.11.0 under Pollen's scripts/duck-sim,
+            # 2026-09-08. So `robot.subscribe` has never once succeeded against a
+            # real duck, on top of the reply then being read for a key it never had.
+            # `{}` means every tick; `subscribe_hz` asks for a slower stream.
+            params: dict[str, Any] = {}
+            hz = self._config.get("subscribe_hz")
+            if hz:
+                params["hz"] = int(hz)
+            result = self._request("robot.subscribe", params)
             if isinstance(result, dict):
                 self._policy_slots = _policy_slots(result)
                 self._policies = _policy_names(result)

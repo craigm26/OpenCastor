@@ -14,9 +14,10 @@ That's the whole thing. `castor duck` finds the duck, checks it can reach it, as
 robotd how it's feeling, and writes a **ROBOT.md** — the manifest `castor run`
 accepts.
 
-Captured from a real run against a robotd whose replies are transcribed from
-Pollen's own `duck-ipc-proto` (`tests/microduck_wire_fixtures.py`), which is what
-made the numbers below reproducible rather than illustrative:
+Captured from a real run against **the actual `robotd` binary**, running under
+Pollen's own `scripts/duck-sim` with `duck_control::sim::RemoteIo` in place of
+the servo bus — the same control loop, the same policies, the same IPC a robot
+has. The loop rate and battery below are that daemon's own numbers:
 
 ```
   🦆 OpenCastor · Microduck
@@ -27,8 +28,8 @@ made the numbers below reproducible rather than illustrative:
   2/4  Checking access
         running on the duck itself — no SSH needed
   3/4  Talking to robotd
-        healthy · loop 49.8 Hz (0 missed) · battery 64% (7.9 V)
-        policies walk, stand, sitstand, ground_pick · 5 skills
+        healthy · loop 50.0 Hz (0 missed) · battery 50% (7.4 V)
+        policies walk, stand, sitstand, ground_pick · 3 skills
   4/4  Writing config
         ~/.config/opencastor/duck.ROBOT.md
 
@@ -57,16 +58,21 @@ which slot:
 
 ```
   healthy — localhost (via local)
-    loop     49.8 Hz (0 missed)
-    battery  64% (7.9 V)
+    loop     50.0 Hz (0 missed)
+    battery  50% (7.4 V)
     sensors  imu ready    bus ok
     walk         alpha_walking.onnx
     stand        alpha_stand.onnx
     sitstand     alpha_sitstand.onnx
     ground_pick  alpha_ground_pick.onnx
-    skills       ground_pick, kick_left, kick_right, sit_toggle, roulade
+    skills       roulade, kick_left, kick_right
     envelope 0.2 m/s forward · 1.0 rad/s yaw (pad: 0.3 m/s)
 ```
+
+The skill list is configuration, not a constant — this duck has three, a stock
+one may have five. That is exactly why `robot.subscribe` answers with a list a
+client reads rather than a field per skill, and why "none loaded" printed on a
+duck with four policies in slots was such a bad answer.
 
 And `castor duck test` says what speed it is asking for, and what that is a
 fraction of:
@@ -81,6 +87,9 @@ fraction of:
   walking…
   ✓ it walks — 1.5 s at 0.06 m/s.
 ```
+
+Under `duck-sim` that run moved the body 21 mm along its own contact odometry
+and did not fall. `--speed 0.2` walks it at the top of the envelope.
 
 If the brain has no credentials yet, the last step says so and points at
 `castor login` instead of pretending you're done. Pick a different brain at
@@ -374,6 +383,8 @@ canonical bytes, a hash-chain fold, and a match record nobody can quietly edit.
 - Preset: `config/presets/pollen_microduck.rcan.yaml`
 - Driver: `castor/drivers/microduck_driver.py`
 - Setup: `castor/microduck.py`
-- Wire fixtures (transcribed from `duck-ipc-proto`, and runnable):
-  `tests/microduck_wire_fixtures.py`
+- Wire fixtures (transcribed from `duck-ipc-proto`, confirmed against a real
+  `robotd`, and runnable as a socket): `tests/microduck_wire_fixtures.py`
+- Pollen's simulator, which is how those were confirmed without hardware:
+  `scripts/duck-sim` in the upstream repo, plus a `microduck_rl` checkout
 - Upstream: [pollen-robotics/microduck](https://github.com/pollen-robotics/microduck)

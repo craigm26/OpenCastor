@@ -3913,10 +3913,12 @@ def cmd_duck(args) -> int:
             return "no answer"
         achieved = loop.get("achieved_hz")
         if isinstance(achieved, (int, float)):
-            return f"{achieved:g} Hz ({loop.get('missed', 0)} missed)"
+            # One decimal. A real robotd answers 49.97344531052467, and the extra
+            # fourteen digits are the loop's jitter, not information.
+            return f"{achieved:.1f} Hz ({loop.get('missed', 0)} missed)"
         target = loop.get("target_hz")
         if isinstance(target, (int, float)):
-            return f"{target:g} Hz target, not measured yet"
+            return f"{target:.1f} Hz target, not measured yet"
         return "no answer"
 
     def battery_line(result: dict) -> str:
@@ -3924,8 +3926,10 @@ def cmd_duck(args) -> int:
         if not isinstance(batt, dict) or "percent" not in batt:
             return "not reported"
         volts = batt.get("volts")
-        volts_txt = f" ({volts:g} V)" if isinstance(volts, (int, float)) else ""
-        return f"{batt['percent']:g}%{volts_txt}"
+        volts_txt = f" ({volts:.1f} V)" if isinstance(volts, (int, float)) else ""
+        percent = batt["percent"]
+        pct_txt = f"{percent:.0f}" if isinstance(percent, (int, float)) else percent
+        return f"{pct_txt}%{volts_txt}"
 
     def sensor_line(result: dict) -> str:
         """IMU and motor bus in words, not a repr of two dicts.

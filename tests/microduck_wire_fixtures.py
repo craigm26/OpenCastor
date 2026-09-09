@@ -2,8 +2,14 @@
 
 Every value below has a citation to ``pollen-robotics/microduck`` (rev ``5620aa2``,
 ``API_VERSION = 25`` at ``duck-ipc-proto/src/lib.rs:304``).  Field *names* and their
-*presence* are the load-bearing part and come straight from the Rust structs; the
-numbers are plausible readings for a healthy duck and are labelled as such.
+*presence* are the load-bearing part and come straight from the Rust structs.
+
+**Then confirmed against a real one.** On 2026-09-08 Pollen's ``scripts/duck-sim``
+was run headless on this machine — the actual ``robotd`` binary (0.11.0) driving a
+MuJoCo body — and ``hello``, ``robot.health``, ``robot.subscribe`` and the
+``robot.state`` stream were captured from it. Where a captured value differs from
+what was transcribed, the capture wins and the difference is noted at the fixture.
+One did: ``RobotState`` renames two fields on the wire and nothing else does.
 
 This file exists because four reads in ``castor/drivers/microduck_driver.py`` were
 wrong for weeks against a test double that invented the same wrong keys.  A fixture
@@ -33,10 +39,13 @@ import time
 #   daemon_version: Option<semver::Version>
 #   revision: Option<String>
 # ---------------------------------------------------------------------------
+#
+# Captured verbatim from a real `robotd` under scripts/duck-sim, 2026-09-08:
+#   {"api_version": 25, "daemon_version": "0.11.0", "revision": null}
 HELLO = {
     "api_version": 25,  # pub const API_VERSION: u32 = 25  (:304)
-    "daemon_version": "0.30.0",
-    "revision": "5620aa2",
+    "daemon_version": "0.11.0",
+    "revision": None,
 }
 
 # ---------------------------------------------------------------------------
@@ -49,13 +58,21 @@ HELLO = {
 # robotd/src/main.rs:4282-4300. The policy file names are the nine seeded by
 # scripts/seed-policies.sh:47-49.
 # ---------------------------------------------------------------------------
+#
+# Captured from a real `robotd` under scripts/duck-sim, 2026-09-08 — the whole
+# reply, with no `networks` and no `status` anywhere in it:
+#   {"accepted": true, "walk": "alpha_walking.onnx", "stand": "alpha_stand.onnx",
+#    "sitstand": "alpha_sitstand.onnx", "ground_pick": "alpha_ground_pick.onnx",
+#    "skills": ["roulade", "kick_left", "kick_right"]}
+# The skill list is config, not a constant — which is why it is a list rather
+# than a field per skill, and why a client learns it here instead of assuming.
 SUBSCRIBE = {
     "accepted": True,
     "walk": "alpha_walking.onnx",
     "stand": "alpha_stand.onnx",
     "sitstand": "alpha_sitstand.onnx",
     "ground_pick": "alpha_ground_pick.onnx",
-    "skills": ["ground_pick", "kick_left", "kick_right", "sit_toggle", "roulade"],
+    "skills": ["roulade", "kick_left", "kick_right"],
 }
 
 #: The same reply from a board that could not reach Hugging Face at install time
@@ -86,21 +103,26 @@ SUBSCRIBE_NO_GAIT = {
 #   missed: u64
 #   last_tick_age_ms: u64
 # ---------------------------------------------------------------------------
+#
+# Captured from a real `robotd` under scripts/duck-sim, 2026-09-08 (the sim's
+# battery is a constant 7.4 V / 50%; the volts and percent below are a charged
+# pack instead, and are the only numbers here that are not from that capture).
+# Note `control_loop`, and note there is no `loop` key on this reply at all.
 HEALTH = {
     "healthy": True,
     "degraded": False,
     "control_loop": {
         "target_hz": 50.0,
-        "achieved_hz": 49.8,
-        "ticks": 124_318,
+        "achieved_hz": 49.978,
+        "ticks": 912,
         "missed": 0,
-        "last_tick_age_ms": 18,
+        "last_tick_age_ms": 2,
     },
     "battery": {"volts": 7.9, "percent": 64.0},
-    "cpu_temp_c": 47.2,
-    "motors": {"hottest": "left_knee", "max_c": 44.0, "mean_c": 38.5},
+    "cpu_temp_c": 57.85,
+    "motors": {"hottest": "left_hip_yaw", "max_c": 32.0, "mean_c": 32.0},
     "bus": {"consecutive_errors": 0, "startup_failures": 0},
-    "imu": {"ready": True, "stale_blocks": 3, "consecutive_stale_blocks": 0},
+    "imu": {"ready": True, "stale_blocks": 0, "consecutive_stale_blocks": 0},
 }
 
 #: A duck in its first second of uptime. ``achieved_hz`` is ``None`` — *unknown*,
@@ -134,35 +156,54 @@ HEALTH_FLAT_BATTERY = {
 #
 # There is NO battery on this struct. docs/robot/cheatsheet.md:51-53 says so
 # outright, "because none of it is on the state stream".
-#   movement: MoveState{requested, applied, limited_by}   (:3480-3485)
+#
+# TWO FIELDS ARE RENAMED ON THIS STRUCT AND ON NO OTHER:
+#   movement -> "move"    #[serde(rename = "move")]  (:3321)
+#   control_loop -> "loop"  #[serde(rename = "loop")] (:3327)
+# which is the trap in full. `robot.health` sends `control_loop` with an
+# `achieved_hz`; `robot.state` sends `loop` with an `hz`. They are different
+# structs with different field names, and the renames make each look like the
+# other's key. Reading the state stream's names off the health reply is exactly
+# the bug this file exists to catch.
+#
+#   move: MoveState{requested, applied, limited_by}   (:3480-3485)
 #   policy: String  ("walk" | "stand" | "held")
-#   safety: SafetyState{fallen, limp, gravity, gain}      (:3491-3508)
-#   control_loop: LoopState{hz, missed}                   (:3512-3517)  <-- has `hz`
-#   odom: OdomState{position: [f64; 3], yaw: f64}         (:3472-3476)
+#   safety: SafetyState{fallen, limp, gravity, gain}  (:3491-3508)
+#   loop: LoopState{hz, missed}                       (:3512-3517)
+#   odom: OdomState{position: [f64; 3], yaw: f64}     (:3472-3476)
+#
+# Confirmed field-for-field against a real `robotd` 0.11.0 under Pollen's
+# scripts/duck-sim on 2026-09-08; the live frame's keys were exactly
+# ['frames', 'head', 'imu', 'joints', 'loop', 'move', 'odom', 'policy',
+#  'safety', 'skeleton', 't', 't_ns', 'targets'] — no battery among them.
 # ---------------------------------------------------------------------------
 STATE = {
     "t": 61.42,
-    "movement": {
+    "move": {
         "requested": [0.06, 0.0, 0.0],
         "applied": [0.06, 0.0, 0.0],
         "limited_by": [],
     },
     "head": [0.0, 0.0, 0.0, 0.0],
     "policy": "walk",
-    "safety": {"fallen": False, "limp": False, "gravity": [0.0, 0.0, -9.81]},
-    # The struct that genuinely has `hz` and `missed`. Reading these names off this
-    # stream and applying them to robot.health is exactly the bug being fixed.
-    "control_loop": {"hz": 49.8, "missed": 0},
+    "safety": {
+        "fallen": False,
+        "limp": False,
+        "gain": 160,
+        "gravity": [0.0055, -0.0012, -0.9999],
+    },
+    # The struct that genuinely has `hz` and `missed`, under the key `loop`.
+    "loop": {"hz": 49.8, "missed": 0},
     "joints": [0.0] * 15,
     "targets": [0.0] * 15,
-    "odom": {"position": [1.0, 2.0, 0.31], "yaw": 0.5},
+    "odom": {"position": [0.0813, 0.0175, 0.1181], "yaw": 0.0868},
     "t_ns": 61_420_000_000,
 }
 
 STATE_FALLEN = {
     **STATE,
     "policy": "held",
-    "safety": {"fallen": True, "limp": False, "gravity": [0.0, -9.7, -1.2]},
+    "safety": {"fallen": True, "limp": False, "gain": 160, "gravity": [0.0, -0.98, -0.12]},
 }
 
 #: robot.stop / robot.enable — IntentResult, :3283-3290: {accepted, reason?}
@@ -249,6 +290,13 @@ class WireRobotd:
                 pass
             self._conn = None
 
+    #: Methods whose ``params`` must be a JSON object, because the Rust side
+    #: deserialises them into a struct and ``null`` is not one.  Measured against a
+    #: real robotd 0.11.0: every other wrapped method accepts an absent ``params``,
+    #: and ``robot.subscribe`` alone answers
+    #: ``-32602 invalid type: null, expected struct SubscribeParams``.
+    STRUCT_PARAMS = ("robot.subscribe",)
+
     def _handle(self, msg: dict) -> None:
         method = msg.get("method")
         if "id" not in msg:
@@ -257,6 +305,20 @@ class WireRobotd:
             return
         with self._lock:
             self.requests.append(msg)
+
+        if method in self.STRUCT_PARAMS and not isinstance(msg.get("params"), dict):
+            self.send(
+                {
+                    "jsonrpc": "2.0",
+                    "id": msg["id"],
+                    "error": {
+                        "code": -32602,
+                        "message": "invalid type: null, expected struct SubscribeParams",
+                    },
+                }
+            )
+            return
+
         self.send(
             {
                 "jsonrpc": "2.0",
