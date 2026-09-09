@@ -144,6 +144,42 @@ Constructing the object writes neutral to both channels before it returns. If
 this raises, read the message: it names the actual cause (no bus, no `smbus2`, no
 device at the address) and it does not fall back.
 
+## 3b. Prove the chip holds a configuration before you trust any pulse
+
+The first real bench (2026-09-08) found a board that answered `i2cdetect`,
+accepted every write, logged "ESC arming: held neutral", passed the rover's
+own 27-check smoke suite, and had **reset itself to power-on defaults within
+one second of being configured**. Nothing above the chip reads it back, so
+every layer reported real wheels while the chip slept. Do this once, with the
+gateway stopped, before step 4:
+
+```bash
+systemctl --user stop <name>-gateway
+python3 - <<'PY'
+import time
+from smbus2 import SMBus
+A = 0x40
+with SMBus(1) as b:
+    b.write_byte_data(A, 0x00, 0x10)      # sleep
+    b.write_byte_data(A, 0xFE, 121)       # prescale for 50 Hz
+    b.write_byte_data(A, 0x00, 0x20)      # wake, auto-increment
+    time.sleep(0.005); b.write_byte_data(A, 0x00, 0xA0)  # restart
+    for t in (0, 1, 3, 10):
+        time.sleep(t and 1 or 0)
+        m, p = b.read_byte_data(A, 0), b.read_byte_data(A, 0xFE)
+        print(f"t+{t}s MODE1=0x{m:02x} prescale={p}  {'OK' if (m & 0x10) == 0 and p == 121 else 'RESET'}")
+PY
+systemctl --user start <name>-gateway
+```
+
+Every line must say `OK`. A `RESET` (MODE1 back to `0x11`, prescale back to
+30) or an `Errno 121` means the board's logic supply is collapsing: measure
+the PCA9685 VCC pin and V+ with a meter while the ESC is connected and
+arming, and expect VCC to hold at 3.3 V (or 5 V) through the arming beep. Fix
+the power before going on; no amount of software will drive a chip that
+forgets. `castor doctor` reports this as "PCA9685 configuration does not
+persist" once that check ships.
+
 ## 4. Measure the oscillator, or accept a creep at rest
 
 🔴 **The calibration most likely to waste a day.** The PCA9685's "25 MHz" is a
