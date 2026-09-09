@@ -431,6 +431,103 @@ def test_subscribe_sends_a_params_object_not_null(tmp_path):
             _os.unlink(path)
 
 
+def test_the_fixture_reproduces_robotds_refusal_verbatim(tmp_path):
+    """Pin the exact -32602 a real robotd answers, so the gate cannot soften.
+
+    Measured against robotd 0.11.0 under Pollen's scripts/duck-sim, 2026-09-08:
+    a `robot.subscribe` whose `params` key is absent (JSON `null`) comes back
+
+        {"code": -32602,
+         "message": "invalid type: null, expected struct SubscribeParams"}
+
+    and the driver only *logs* that, so the state stream never starts: no
+    odometry, no fall detection, no cached state at all. This test speaks the old
+    broken request by hand, so the fixture's fidelity is checked rather than
+    assumed — if someone relaxes WireRobotd.STRUCT_PARAMS, this goes red.
+    """
+    import json as _json
+    import os as _os
+    import socket as _socket
+
+    path = str(tmp_path / "verbatim.sock")
+    server = wire.WireRobotd(path)
+    try:
+        sock = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+        sock.settimeout(2.0)
+        sock.connect(path)
+        # No "params" key at all — exactly what the driver used to send.
+        sock.sendall(b'{"jsonrpc":"2.0","id":1,"method":"robot.subscribe"}\n')
+        reply = _json.loads(sock.makefile("rb").readline())
+        sock.close()
+
+        assert reply["error"]["code"] == -32602
+        assert reply["error"]["message"] == (
+            "invalid type: null, expected struct SubscribeParams"
+        )
+        assert "result" not in reply
+    finally:
+        server.close()
+        if _os.path.exists(path):
+            _os.unlink(path)
+
+
+def test_a_refused_subscribe_leaves_no_state_stream(tmp_path):
+    """The consequence, not just the error: no subscribe means no odometry.
+
+    The driver swallows the RPC error and carries on in `hardware` mode, so
+    nothing upstream can tell a duck that is streaming from one that is silent.
+    Recorded here because it is the reason the bug survived: it fails quietly.
+    """
+    import os as _os
+
+    path = str(tmp_path / "refused.sock")
+    server = wire.WireRobotd(path)
+    try:
+        drv = MicroduckDriver({"transport": "unix", "socket": path, "rpc_timeout_s": 1.0})
+        try:
+            # With the fix, subscribe lands and slots are populated.
+            assert drv.get_policy_slots(), "subscribe did not land"
+            # Simulate the pre-fix world: nothing subscribed, nothing streamed.
+            drv._policy_slots, drv._policies, drv._last_state = {}, [], {}
+            assert drv.get_policies() == []
+            assert drv.get_odometry() == {}
+            assert drv.get_state() == {}
+        finally:
+            drv.close()
+    finally:
+        server.close()
+        if _os.path.exists(path):
+            _os.unlink(path)
+
+
+def test_two_filled_slots_are_two_policies_not_none(tmp_path):
+    """A duck reporting two slots must not read back as "none loaded".
+
+    Observed live: the wire reported two filled slots while `get_policies()`
+    returned `[]` — the `networks` read on top of a subscribe that never landed.
+    """
+    import os as _os
+
+    two = {"accepted": True, "walk": "alpha_walking.onnx", "stand": "alpha_stand.onnx"}
+    path = str(tmp_path / "two.sock")
+    server = wire.WireRobotd(path, {"robot.subscribe": two})
+    try:
+        drv = MicroduckDriver({"transport": "unix", "socket": path, "rpc_timeout_s": 1.0})
+        try:
+            assert drv.get_policies() == ["alpha_walking.onnx", "alpha_stand.onnx"]
+            slots = drv.get_policy_slots()
+            assert slots["walk"] == "alpha_walking.onnx"
+            assert slots["stand"] == "alpha_stand.onnx"
+            assert "sitstand" not in slots and "ground_pick" not in slots
+            assert slots["skills"] == []
+        finally:
+            drv.close()
+    finally:
+        server.close()
+        if _os.path.exists(path):
+            _os.unlink(path)
+
+
 def test_subscribe_hz_is_passed_through(tmp_path):
     import os as _os
 
