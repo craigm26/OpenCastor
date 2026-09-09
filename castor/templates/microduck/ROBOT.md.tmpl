@@ -1,0 +1,165 @@
+---
+rcan_version: '3.0'
+schema: https://robotmd.dev/schema/v1/robot.schema.json
+metadata:
+  robot_name: {name}
+  manufacturer: Pollen Robotics
+  model: Microduck
+  version: '1.0'
+  device_id: {name}
+  rrn: '{rrn}'
+  license: Apache-2.0
+  record_url: https://robotregistryfoundation.org/v2/robots/{rrn}
+  tags:
+    - biped
+    - legged
+    - rl-policy
+    - pollen-robotics
+    - tabletop
+network:
+  rrf_endpoint: https://robotregistryfoundation.org
+  signing_alg: ml-dsa-65
+  transports:
+    - http
+physics:
+  type: legged
+  dof: 14
+  chassis:
+    height_mm: 250
+    mass_g: 800
+  controls:
+    - id: vx
+      units: m/s
+      range:
+        - -0.2
+        - 0.2
+      neutral: 0.0
+      note: "Metres per second, and honestly so: robotd closes a 50 Hz loop over
+        its own odometry, so unlike the rc-car archetype this number is a
+        measurement the hardware can make. Pollen's own gamepad daemon allows
+        0.3; 0.2 is OpenCastor's envelope, not the robot's limit."
+    - id: vy
+      units: m/s
+      range:
+        - -0.1
+        - 0.1
+      neutral: 0.0
+    - id: vyaw
+      units: rad/s
+      range:
+        - -1.0
+        - 1.0
+      neutral: 0.0
+drivers:
+  - id: duck
+    protocol: microduck
+    backend: robotd
+    transport: tcp
+    # PRESENT, and this is the field the rc-car archetype has to write `false`
+    # in. A Microduck out of its box is a robot that already walks: robotd owns
+    # the motor bus, the 50 Hz loop and nine ONNX policies before OpenCastor is
+    # installed at all. What is unverified here is the LINK, not the robot.
+    hardware_present: true
+    control_loop_hz: 50
+    relay: {name}-duckbridge.service
+capabilities:
+  - duck.stop
+  - status.report
+capability_contracts:
+  duck.stop:
+    returns:
+      stopped:
+        kind: bool
+  status.report:
+    returns:
+      loop_hz:
+        kind: float
+      battery_percent:
+        kind: float
+      policies:
+        kind: object
+safety:
+  p66_enabled: true
+  loa_enforcement: true
+  payload_kg: 0.0
+  max_linear_speed_mps: 0.2
+  deadman:
+    lease_timeout_ms: 1500
+    relay_timeout_ms: 700
+    firmware_lease: true
+    firmware_lease_ms: 500
+    layers:
+      - "driver command TTL (castor runtime, 1500 ms)"
+      - "relay silence deadman ({name}-duckbridge, 700 ms)"
+      - "robotd twist deadman (on the robot, 500 ms)"
+  estop:
+    hardware: false
+    software: true
+    response_ms: 100
+  hitl_gates:
+    - scope: destructive
+      require_auth: true
+    - scope: system
+      require_auth: true
+---
+
+# {name}
+
+## Identity
+
+A Pollen Robotics Microduck: about 25 cm, about 800 g, fifteen
+Dynamixel-protocol servos, a camera, a ToF depth sensor, two IMUs and an
+articulated beak, on its own Rockchip RK3566 running `robotd` at 50 Hz.
+
+**The robot is not simulated and it is not ours.** Motion comes from
+reinforcement-learning policies Pollen trained and ships, executed on the duck's
+own compute. OpenCastor sends *intents* over robotd's JSON-RPC socket, the same
+contract Pollen's own gamepad daemon and console use. It never writes the servo
+bus.
+
+## What {name} Can Do
+
+Walk, turn, stand, sit, get back up after a fall, pick an object off the floor,
+kick, roll, look at a point, move its beak and quack, all of which the duck
+could do before OpenCastor was installed. What OpenCastor adds is a model that
+decides *which* of those, *when*, and a signed record of having decided it.
+
+## How A Command Reaches The Servos
+
+    model -> castor runtime -> MicroduckDriver (transport: tcp)
+          -> {name}-duckbridge.service  (token, deadman, byte-transparent)
+          -> robotd on the duck         (50 Hz loop, policies, safety)
+
+The bridge is the sixth unit `castor up` writes for this archetype and the
+reason there is only one relay. It parses nothing: every byte a client sends
+reaches robotd unchanged. It adds exactly two things, and both are safety
+rather than semantics — a first line that authorises the relay, and a stop when
+a client goes quiet.
+
+## Safety Gates
+
+**Three deadmen, three different failures.** 1500 ms is the driver's own
+command TTL: the last `move()` expires and the intent loop stops renewing a
+twist nobody asked for again. 700 ms is the relay's: the *client* vanished, and
+the bridge sends one `robot.stop`. 500 ms is robotd's own twist deadman on the
+robot: *this whole machine* vanished. Only the first two are OpenCastor's, and
+nothing here can raise, lower or disable the third — which is precisely why it
+is the one that counts.
+
+**The token is not a security boundary**, and the bridge's own documentation
+says so on the screen that asks for it. It keeps a television and a housemate's
+laptop out of the robot. It does not stop anybody who can read the same Wi-Fi.
+Bind the bridge to your own network and do not port-forward it.
+
+**One thing this manifest does not claim.** Pollen's `mediad` serves an
+unauthenticated WebRTC console and drive surface on `0.0.0.0:8443` and
+`0.0.0.0:8080` of the duck itself, enabled on every install and every update.
+That is Pollen's stated decision, not an omission, and it is not something
+OpenCastor turns on or off. Anyone who can reach the duck's address can drive
+it and see its camera, whatever this gateway's bearers say.
+
+## What Is Not Verified
+
+This manifest is generated by `castor up` before anything has been driven. It
+describes the link OpenCastor builds, not a run that happened. `castor duck
+health` is the command that turns any of it into evidence.

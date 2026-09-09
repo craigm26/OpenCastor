@@ -490,6 +490,8 @@ def cmd_up(args) -> int:
         start_services=not args.no_start,
         link=getattr(args, "link", True),
         real_wheels=getattr(args, "real_wheels", None),
+        host=getattr(args, "host", None),
+        user=getattr(args, "user", None),
     )
     return 0
 
@@ -3803,6 +3805,115 @@ def cmd_setup(args) -> None:
     _print("")
 
 
+def _duck_bridge(args, say, emit) -> int:
+    """castor duck --bridge — the relay, its token, and its unit. Nothing started.
+
+    ONE COMMAND, THREE FILES, AND NOTHING RUNNING. It mints (or reuses) the
+    token, writes the systemd user unit and its EnvironmentFile, and prints the
+    token. It deliberately does NOT start the service: a relay to a robot is a
+    thing a person should be looking at the first time it comes up, and the one
+    command that starts it is printed.
+
+    THE TOKEN IS REUSED, NEVER ROTATED. It has already been typed into a phone.
+    A rerun that minted a new one would unpair Microduck Studio silently, and
+    the person holding the phone would reasonably blame the robot.
+    """
+    from pathlib import Path as _P
+
+    from castor.microduck_bridge import (
+        DEFAULT_DEADMAN_MS,
+        DEFAULT_PORT,
+        DEFAULT_SOCKET,
+        DEFAULT_TOKEN_FILE,
+        VERSION,
+        hello_line,
+        mint_token,
+    )
+    from castor.up import DUCKBRIDGE_ENV, MICRODUCK, UpPlan, duckbridge_env
+
+    host = getattr(args, "host", None)
+    user = getattr(args, "user", None)
+    name = (getattr(args, "name", None) or "duck").replace(" ", "-")
+    home = _P.home() / ".config" / "opencastor" / name
+    home.mkdir(parents=True, exist_ok=True)
+
+    token_path = str(_P(DEFAULT_TOKEN_FILE).expanduser())
+    token, reused = mint_token(token_path)
+
+    plan = UpPlan(
+        name=name,
+        home=home,
+        archetype=MICRODUCK,
+        rrn="",
+        robot_uuid="",
+        base_port=8080,
+        duck_host=host,
+        duck_user=user,
+        bridge_token_file=token_path,
+    )
+    (home / DUCKBRIDGE_ENV).write_text(duckbridge_env(plan))
+
+    python = sys.executable or "python3"
+    unit_dir = _P.home() / ".config" / "systemd" / "user"
+    unit_dir.mkdir(parents=True, exist_ok=True)
+    unit_name = f"{name}-duckbridge.service"
+    (unit_dir / unit_name).write_text(
+        f"""[Unit]
+Description=robotd relay for {name} — one token, one deadman, the phone and OpenCastor on the same port
+After=network-online.target
+
+[Service]
+EnvironmentFile={home}/{DUCKBRIDGE_ENV}
+ExecStart={python} -m castor.microduck_bridge
+Restart=always
+RestartSec=5
+RestartPreventExitStatus=2
+
+[Install]
+WantedBy=default.target
+"""
+    )
+
+    emit(
+        {
+            "ok": True,
+            "unit": str(unit_dir / unit_name),
+            "env": str(home / DUCKBRIDGE_ENV),
+            "token_file": token_path,
+            "token_reused": reused,
+            "port": DEFAULT_PORT,
+            "deadman_ms": DEFAULT_DEADMAN_MS,
+            "socket": DEFAULT_SOCKET,
+            "ssh": plan.ssh_dest or None,
+            "hello": hello_line(token).decode().strip(),
+        }
+    )
+
+    say("")
+    say(f"  [bold]🦆 {VERSION}[/bold] — one relay, one token, both clients")
+    say("")
+    say(f"    unit    [cyan]{unit_dir / unit_name}[/cyan]")
+    say(f"    env     [cyan]{home / DUCKBRIDGE_ENV}[/cyan]")
+    say(
+        f"    token   [cyan]{token}[/cyan]  "
+        + ("[dim](reused — the app already has this one)[/dim]" if reused else "[dim](new)[/dim]")
+    )
+    say(f"            [dim]{token_path}, mode 0600[/dim]")
+    say(f"    port    {DEFAULT_PORT}   [dim]robotd at {plan.ssh_dest or ''}{DEFAULT_SOCKET}[/dim]")
+    say(f"    deadman {DEFAULT_DEADMAN_MS} ms of client silence sends one robot.stop")
+    say("")
+    say("  [dim]The token keeps a television out of your robot. It is not a security[/dim]")
+    say("  [dim]boundary and it does not stop anybody who can read the same Wi-Fi.[/dim]")
+    say("  [dim]Bind it to your own network; never port-forward it.[/dim]")
+    say("")
+    say("  Nothing was started. When you are ready to watch it come up:")
+    say("    [cyan]systemctl --user daemon-reload[/cyan]")
+    say(f"    [cyan]systemctl --user enable --now {unit_name}[/cyan]")
+    say(f"    [cyan]systemctl --user status {unit_name}[/cyan]")
+    say("")
+    return 0
+
+
 def cmd_duck(args) -> int:
     """castor duck — find, verify and configure a Pollen Microduck in one command."""
     import json as _json
@@ -3872,6 +3983,10 @@ def cmd_duck(args) -> int:
             if cand.is_duck:
                 return cand
         return candidates[0]
+
+    # ── castor duck --bridge ────────────────────────────────────────────
+    if bool(getattr(args, "bridge", False)) and action == "setup":
+        return _duck_bridge(args, say, emit)
 
     # ── castor duck find ────────────────────────────────────────────────
     if action == "find":
@@ -8974,6 +9089,7 @@ def main() -> None:
             "  castor duck                      # find, verify and configure (start here)\n"
             "  castor duck --deep               # also sweep the local network\n"
             "  castor duck --host 192.168.1.42  # skip discovery\n"
+            "  castor duck --bridge --host 192.168.1.42   # the relay the app dials too\n"
             "  castor duck --start              # configure, then run it\n"
             "  castor duck find                 # just list candidates\n"
             "  castor duck health               # live loop rate + battery\n"
@@ -8991,6 +9107,13 @@ def main() -> None:
         default=None,
         metavar="PROVIDER[:MODEL]",
         help="LLM provider for this duck (e.g. ollama, anthropic:claude-sonnet-4-5)",
+    )
+    p_duck.add_argument(
+        "--bridge",
+        action="store_true",
+        help="Write the robotd relay's unit, mint (or reuse) its token, and print it. "
+        "The same relay the phone app dials and `transport: tcp` dials: one deadman, "
+        "one token, both clients. Nothing is started.",
     )
     p_duck.add_argument("--deep", action="store_true", help="Sweep the ARP neighbour table too")
     p_duck.add_argument("--yes", "-y", action="store_true", help="Assume yes to prompts")
@@ -9691,6 +9814,7 @@ def main() -> None:
             "Examples:\n"
             "  castor up                        # ~/robot, auto-detected archetype\n"
             "  castor up --home ~/car --name car --base-port 8110\n"
+            "  castor up --archetype microduck --host 192.168.1.42 --user radxa\n"
             "  castor up --real-wheels           # PCA9685 live — WHEELS OFF THE GROUND\n"
             "  castor up --simulated-wheels      # never ask, never move\n"
             "  castor up --home ~/car --name car --base-port 8110  # a SECOND robot on one host\n"
@@ -9706,7 +9830,25 @@ def main() -> None:
         "--name", default=None, help="Robot name (default: the home directory's name)"
     )
     p_up.add_argument(
-        "--archetype", default=None, choices=["rc-car", "sim"], help="Override hardware detection"
+        "--archetype",
+        default=None,
+        choices=["rc-car", "sim", "microduck"],
+        help="Override detection. `microduck` is the one that is not a bus scan: a "
+        "Pollen Microduck has its own computer and is reached over the network, so "
+        "pair it with --host",
+    )
+    p_up.add_argument(
+        "--host",
+        default=None,
+        help="A Pollen Microduck's address. Implies --archetype microduck. A stock "
+        "duck's hostname is `radxa-zero3` and it publishes no mDNS at all, so this "
+        "flag is the reliable route; `duckctl ip` over Bluetooth finds the address.",
+    )
+    p_up.add_argument(
+        "--user",
+        default=None,
+        help="SSH login on the duck, for the relay's forward. Needs key auth and "
+        "membership of the duck's `robot` group (robotd's socket is 0660).",
     )
     p_up.add_argument(
         "--base-port",

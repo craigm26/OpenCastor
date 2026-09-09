@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""{name}'s castor runtime: the phone-facing surface of a duck whose motor bus
+lives on the duck's own computer.
+
+THIS FILE IS DELIBERATELY SHORT, and the reason is the interesting part.
+
+The rc-car archetype's runtime.py replaces two routes, because on a car the
+wheels belong to the rc-car actuator inside the *gateway* process: the runtime's
+own driver is a mock, so the stock POST /api/stop would answer 200 having
+stopped nothing, and the stock telemetry frame describes a perception loop
+rather than the drive envelope the phone needs.
+
+Neither is true here. `state.driver` on a duck IS a real `MicroduckDriver`,
+constructed by the stock runtime from OPENCASTOR_CONFIG, holding a live
+connection through {name}-duckbridge to robotd. `driver.stop()` reaches the
+servos. So the stock runtime is correct as written, and replacing a route to
+make it look more finished would be replacing a working stop with a copy of a
+working stop.
+
+What this file does, therefore, is refuse to start in the three states where
+the stock runtime would come up looking healthy and be useless:
+
+  * OPENCASTOR_API_TOKEN unset  — every protected endpoint answers to anybody,
+                                  and the app's security probe would correctly
+                                  show this robot as UNSECURED.
+  * the config missing          — get_driver() returns None and every command
+                                  succeeds against nothing.
+  * the driver in MOCK MODE     — trap 7 of the Microduck review. MicroduckDriver
+                                  degrades to a mock on ANY connect failure and
+                                  keeps answering: health_check() returns
+                                  {"ok": True, "mode": "mock"}, move() returns
+                                  success, and the duck stands there. A runtime
+                                  that starts in that state is a robot that
+                                  reports itself healthy while being unreachable,
+                                  which is the single most expensive failure
+                                  shape in this whole project.
+
+The third check is the one worth the file. It is also why it is a WARNING and
+not an exit by default: a duck that is merely switched off should not leave a
+Pi in a crash-loop, and `castor doctor` and the console both need a runtime
+alive to explain the problem through. Set OPENCASTOR_DUCK_REQUIRE_HARDWARE=1
+to make it fatal instead — the right setting for a demo, a benchmark run, or
+anything whose result would be a lie if the duck were not there.
+"""
+from __future__ import annotations
+
+import contextlib
+import logging
+import os
+import sys
+from pathlib import Path
+
+HOME_DIR = Path(os.environ["ROBOT_HOME"])
+
+# Must be set BEFORE castor.api is imported: it reads OPENCASTOR_API_TOKEN into a
+# module-level constant at import time, and an unset one means the runtime answers
+# every protected endpoint 200 to anybody.
+os.environ.setdefault("OPENCASTOR_CONFIG", str(HOME_DIR / "robot.rcan.yaml"))
+
+logger = logging.getLogger("robot.runtime")
+
+if not os.environ.get("OPENCASTOR_API_TOKEN"):
+    raise SystemExit(
+        "FATAL: OPENCASTOR_API_TOKEN is unset. The runtime would answer every "
+        "protected endpoint to anybody, and the app's security probe would "
+        "report this robot as UNSECURED. Refusing to start."
+    )
+
+CONFIG = Path(os.environ["OPENCASTOR_CONFIG"])
+if not CONFIG.is_file():
+    raise SystemExit(
+        f"FATAL: {CONFIG} does not exist. Without it get_driver() returns None "
+        "and every command this robot accepts would succeed against nothing. "
+        "Re-run `castor up --archetype microduck`."
+    )
+
+from castor.api import app, state  # noqa: E402
+
+
+def _report_link() -> None:
+    """Say, once, on the record, whether the duck actually answered.
+
+    Read off the driver rather than off our own config: the config says what we
+    ASKED for, and this whole check exists because the two can differ silently.
+    """
+    driver = getattr(state, "driver", None)
+    mode = getattr(driver, "_mode", None)
+    target = getattr(driver, "_target", "<none>")
+    if driver is None:
+        message = ("no driver was constructed from "
+                   f"{CONFIG} — this runtime can serve health and nothing else")
+    elif mode == "hardware":
+        logger.info("duck link: hardware, %s", target)
+        return
+    else:
+        message = (
+            f"the Microduck driver is in {mode!r} mode, not 'hardware': it could not "
+            f"reach {target}. Every command will SUCCEED and nothing will move. "
+            f"Check `systemctl --user status {name}-duckbridge`, then `castor duck health`."
+        )
+    if os.environ.get("OPENCASTOR_DUCK_REQUIRE_HARDWARE", "").strip().lower() in ("1", "true", "yes"):
+        print(f"FATAL: {message}", file=sys.stderr)
+        raise SystemExit(1)
+    logger.warning("duck link: %s", message)
+
+
+# WRAPPING THE LIFESPAN, NOT @app.on_event("startup"), and the difference is a
+# silent one. `castor.api` builds its FastAPI with `lifespan=lifespan`, and when
+# a lifespan context is given Starlette runs THAT and ignores `router.on_startup`
+# entirely — so an `@app.on_event("startup")` handler here would be registered,
+# would never run, and would leave this file looking like it checked something.
+# The check has to happen inside the same context that constructed the driver,
+# and after it, which is what this does.
+_inner_lifespan = app.router.lifespan_context
+
+
+@contextlib.asynccontextmanager
+async def _lifespan_with_link_report(scope_app):
+    async with _inner_lifespan(scope_app):
+        try:
+            _report_link()
+        except SystemExit:
+            raise
+        except Exception:  # noqa: BLE001 - a reporting bug must not stop the robot
+            logger.warning("duck link: could not be reported", exc_info=True)
+        yield
+
+
+app.router.lifespan_context = _lifespan_with_link_report
+
+
+def main() -> None:
+    import uvicorn
+
+    host = os.environ.get("ROBOT_RUNTIME_HOST", "0.0.0.0")
+    port = int(os.environ["ROBOT_RUNTIME_PORT"])
+    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
+if __name__ == "__main__":
+    main()

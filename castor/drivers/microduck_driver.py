@@ -59,6 +59,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import socket
 import subprocess
@@ -127,6 +128,11 @@ class MicroduckDriver(DriverBase):
         self._local_port = int(self._config.get("local_port", 7788))
         self._host: Optional[str] = self._config.get("host", "127.0.0.1")
         self._port = int(self._config.get("port", self._local_port))
+        # The bridge handshake, and the only two config keys it needs. Read
+        # here, used in exactly one place (`_bridge_hello`), touched by nothing
+        # else in this driver.
+        self._bridge_token: Optional[str] = self._config.get("bridge_token")
+        self._bridge_token_file: Optional[str] = self._config.get("bridge_token_file")
 
         self._max_vx = float(self._config.get("max_vx", DEFAULT_MAX_VX))
         self._max_vy = float(self._config.get("max_vy", DEFAULT_MAX_VY))
@@ -201,6 +207,7 @@ class MicroduckDriver(DriverBase):
                 sock = socket.create_connection(
                     (self._host, self._port), timeout=self._rpc_timeout_s
                 )
+                self._bridge_hello(sock)
                 target = f"{self._host}:{self._port}"
             else:
                 logger.warning("MicroduckDriver: unknown transport %r — mock mode", self._transport)
@@ -238,6 +245,64 @@ class MicroduckDriver(DriverBase):
                 )
         except Exception as exc:
             logger.warning("MicroduckDriver robot.subscribe failed: %s", exc)
+
+    def _bridge_hello(self, sock: socket.socket) -> None:
+        """Say hello to a `microduck-bridge`, if this `tcp` target is one.
+
+        WHY THIS IS ONE SMALL METHOD AND NOT A TRANSPORT. `transport: tcp`
+        already reached the bridge's port — 7788 is this driver's `local_port`
+        default and the bridge's bind port and StudioKit's
+        `BridgeHandshake.defaultPort`, three files that agreed before anybody
+        connected them. The ONLY thing missing was the first line. So the
+        change is a first line, sent at connect time, and nothing about framing,
+        parsing, intents or the request/response split moves.
+
+        THE HANDSHAKE IS SKIPPED WHEN THERE IS NO TOKEN, deliberately. A
+        `transport: tcp` pointed at a plain forward (`socat`, an `ssh -L` an
+        operator opened by hand, `robotd` behind anything else) has worked for
+        as long as this driver has existed, and a hello line would be the first
+        thing that broke it. No token configured and no token file on disk means
+        the previous behaviour, unchanged.
+
+        Raises on a refusal rather than continuing: `_connect` catches it and
+        degrades to mock mode with the bridge's own sentence in the log, which
+        is the difference between "wrong token" and a driver that reports
+        healthy while every command falls into a closed socket.
+        """
+        from castor.microduck_bridge import (
+            DEFAULT_TOKEN_FILE,
+            Refusal,
+            hello_line,
+            read_greeting,
+            read_token,
+        )
+
+        token = self._bridge_token
+        if not token:
+            path = self._bridge_token_file or DEFAULT_TOKEN_FILE
+            try:
+                token = read_token(os.path.expanduser(str(path)))
+            except Refusal as why:
+                if self._bridge_token_file:
+                    # Named a file explicitly and it is not usable: that is a
+                    # configuration error, not a plain-relay target.
+                    raise RuntimeError(f"bridge token: {why}") from why
+                logger.debug("MicroduckDriver: no bridge token (%s) — sending no hello", why)
+                return
+
+        sock.sendall(hello_line(token))
+        line = b""
+        while not line.endswith(b"\n") and len(line) < 4096:
+            chunk = sock.recv(1)
+            if not chunk:
+                raise RuntimeError("the bridge closed the connection without answering the hello")
+            line += chunk
+        greeting = read_greeting(line)
+        logger.info(
+            "MicroduckDriver: bridge %s, deadman %s ms",
+            greeting.get("bridge", "?"),
+            greeting.get("deadman_ms", "unstated"),
+        )
 
     def _start_ssh_forward(self) -> None:
         """Spawn ``ssh -N -L <local_port>:<robotd.sock>`` and wait for it to listen."""
