@@ -58,6 +58,12 @@ class Target:
             for the mock.
         why_not_real: One sentence, carried into ``verdict_reason``.
         supports_odometry: Whether C7 can be attempted at all.
+        expects_battery: Whether ``robot.health`` on this target must carry a
+            ``battery``. A real duck has one and an absent key is the review's
+            trap 1; a simulated body has none, and ``robot.health`` correctly
+            omits it. **The exemption is declared by the operator's choice of
+            target, never inferred from a key being missing** — a real duck that
+            omits its battery still fails C3.
     """
 
     kind: str
@@ -66,6 +72,7 @@ class Target:
     counts_as_real: bool = True
     why_not_real: str = ""
     supports_odometry: bool = True
+    expects_battery: bool = True
     notes: list[str] = field(default_factory=list)
 
     def setup(self, record: Record) -> None:  # pragma: no cover - overridden
@@ -214,6 +221,10 @@ class SimTarget(Target):
             is what ``scripts/duck-sim`` itself reads.
         state: ``$DUCK_SIM_STATE``; the socket lives under it, and a Unix path
             is capped at ~108 bytes, so it has to be short.
+        port: ``$DUCK_SIM_PORT``, the body server's TCP port. Default 7801.
+            Give a second sim its own port and its own state directory and two
+            can run side by side; sharing either makes ``duck-sim up`` refuse
+            with "something is still listening".
     """
 
     def __init__(
@@ -222,6 +233,7 @@ class SimTarget(Target):
         repo: Optional[str] = None,
         rl: Optional[str] = None,
         state: Optional[str] = None,
+        port: Optional[int] = None,
     ) -> None:
         self.repo = Path(repo or os.environ.get("DUCK_SIM_REPO", "")).expanduser()
         self.rl = Path(
@@ -233,15 +245,25 @@ class SimTarget(Target):
         # `duck_name 0` is "duck-a" (scripts/duck-sim:583), and robotd binds
         # "$STATE/<name>.sock". The state directory has to be short: a Unix
         # socket path is capped at about 108 bytes.
+        self.port = int(port or os.environ.get("DUCK_SIM_PORT", 7801))
         sock = str(self.state / "duck-a.sock")
         self._proc: Optional[subprocess.Popen] = None
         super().__init__(
             kind="sim",
             driver_config={"transport": "unix", "socket": sock},
-            transport={"kind": "unix", "target": sock, "sim": "pollen scripts/duck-sim"},
+            transport={
+                "kind": "unix",
+                "target": sock,
+                "sim": "pollen scripts/duck-sim",
+                "body_port": self.port,
+            },
             counts_as_real=True,
             why_not_real="",
             supports_odometry=True,
+            # A simulated body has no cells. robot.health carries `battery: null`
+            # here (measured against robotd 0.11.0 under scripts/duck-sim), and
+            # C3 is told that by the target rather than shrugging at a null.
+            expects_battery=False,
             notes=[
                 "duck-sim runs the real robotd binary with duck_control::sim::RemoteIo in "
                 "place of the servo bus. Everything above that seam is the code a robot runs. "
@@ -284,11 +306,12 @@ class SimTarget(Target):
             # is no DUCK_SIM_HEADLESS, and setting one would silently open a
             # viewer on a machine with no display and hang the run.
             "DUCK_SIM_VIEWER": "0",
+            "DUCK_SIM_PORT": str(self.port),
         }
         cmd = [str(self.repo / "scripts" / "duck-sim"), "up"]
         record.typed(
             f"DUCK_SIM_RL={self.rl} DUCK_SIM_STATE={self.state} "
-            f"DUCK_SIM_VIEWER=0 {' '.join(cmd)}"
+            f"DUCK_SIM_VIEWER=0 DUCK_SIM_PORT={self.port} {' '.join(cmd)}"
         )
         self._proc = subprocess.Popen(
             cmd, env=env, cwd=str(self.repo), stdout=subprocess.PIPE,
@@ -317,7 +340,12 @@ class SimTarget(Target):
             subprocess.run(
                 [str(self.repo / "scripts" / "duck-sim"), "down"],
                 cwd=str(self.repo),
-                env={**os.environ, "DUCK_SIM_STATE": str(self.state)},
+                env={
+                    **os.environ,
+                    "DUCK_SIM_STATE": str(self.state),
+                    "DUCK_SIM_RL": str(self.rl),
+                    "DUCK_SIM_PORT": str(self.port),
+                },
                 capture_output=True,
                 timeout=30,
                 check=False,

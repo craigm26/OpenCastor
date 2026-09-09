@@ -30,6 +30,7 @@ rather than defaulting to ``"?"``.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import threading
@@ -61,6 +62,11 @@ OPTIONAL = ("C7",)
 
 #: How far the duck must move for C7 to count, in metres.
 C7_MIN_DISPLACEMENT_M = 0.030
+
+#: How long C3 will wait for a daemon that has just started to report healthy.
+#: Spent on the clock, and counted in the record.
+HEALTH_READY_TIMEOUT_S = 20.0
+HEALTH_READY_POLL_S = 0.5
 
 #: What the runner asks the brain for, when the operator does not say.
 DEFAULT_REQUEST = "walk forward a little, then stop"
@@ -360,12 +366,14 @@ def build_target(
     mock_cmd: Optional[str] = None,
     sim_repo: Optional[str] = None,
     sim_rl: Optional[str] = None,
+    sim_state: Optional[str] = None,
+    sim_port: Optional[int] = None,
     in_process_mock: bool = False,
     mock_replies: Optional[dict] = None,
 ) -> Target:
     """Pick the target the flags describe, refusing the mock unless ``--ci``."""
     if sim:
-        return SimTarget(repo=sim_repo, rl=sim_rl)
+        return SimTarget(repo=sim_repo, rl=sim_rl, state=sim_state, port=sim_port)
     if transport == "mock":
         if not ci:
             raise BenchError(
@@ -467,12 +475,16 @@ def run(
             + json.dumps(target.driver_config, separators=(",", ":"))
             + ")'"
         )
-        driver = MicroduckDriver(dict(target.driver_config))
+        with _driver_warnings() as caught:
+            driver = MicroduckDriver(dict(target.driver_config))
+        for line in caught:
+            if wire.M_SUBSCRIBE in line:
+                record.environment["driver_subscribe_log"] = line
         tap = WireTap(driver, record)
         hello = _c2_reachable(record, driver, tap, target, say)
 
         # ── C3 ──────────────────────────────────────────────────────────
-        _c3_identity(record, driver, hello, say)
+        _c3_identity(record, driver, tap, hello, target, say)
 
         # ── C4 ──────────────────────────────────────────────────────────
         plan = _c4_brain(record, driver, brain, request, say)
@@ -516,6 +528,29 @@ def run(
 # ---------------------------------------------------------------------------
 # C1
 # ---------------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def _driver_warnings():
+    """Collect the driver's own warning lines while it connects.
+
+    ``MicroduckDriver.__init__`` opens the socket and subscribes, so a wire tap
+    cannot be installed before it. What it does at connect is therefore visible
+    only through what it logged, and the record labels it as such.
+    """
+    caught: list[str] = []
+
+    class _Catch(logging.Handler):
+        def emit(self, record_: logging.LogRecord) -> None:
+            caught.append(record_.getMessage())
+
+    handler = _Catch(level=logging.WARNING)
+    driver_logger = logging.getLogger("OpenCastor.MicroduckDriver")
+    driver_logger.addHandler(handler)
+    try:
+        yield caught
+    finally:
+        driver_logger.removeHandler(handler)
 
 
 def _c1_package(record: Record, fresh_venv: Optional[str], say) -> None:
@@ -612,7 +647,9 @@ def _c2_reachable(record: Record, driver: Any, tap: WireTap, target: Target, say
 # ---------------------------------------------------------------------------
 
 
-def _c3_identity(record: Record, driver: Any, hello: Any, say) -> None:
+def _c3_identity(
+    record: Record, driver: Any, tap: WireTap, hello: Any, target: Target, say
+) -> None:
     """Read identity off the wire, and fail on an absent key rather than print '?'.
 
     This is the checkpoint the review's traps 1, 3 and 4 would have failed on
@@ -639,13 +676,37 @@ def _c3_identity(record: Record, driver: Any, hello: Any, say) -> None:
     }
 
     # -- robot.health -------------------------------------------------
-    try:
-        health = driver.call(wire.M_HEALTH)
-    except Exception as exc:  # noqa: BLE001
-        health = None
-        problems.append(f"{wire.M_HEALTH} did not answer: {exc}")
+    # A daemon that has just started has not closed its first control window,
+    # and `healthy` is honestly false until it has. That is a wait, not a
+    # failure, so it is spent ON THE CLOCK and counted, the way an owner waiting
+    # for a robot to come up spends it. It is bounded: past the deadline an
+    # unhealthy robot is an unhealthy robot.
+    health = None
+    attempts = 0
+    deadline = time.monotonic() + HEALTH_READY_TIMEOUT_S
+    while True:
+        attempts += 1
+        try:
+            health = driver.call(wire.M_HEALTH)
+        except Exception as exc:  # noqa: BLE001
+            health = None
+            problems.append(f"{wire.M_HEALTH} did not answer: {exc}")
+            break
+        healthy_now = isinstance(health, dict) and health.get(wire.HEALTH_HEALTHY) is True
+        if not isinstance(health, dict) or healthy_now:
+            break
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(HEALTH_READY_POLL_S)
+    evidence["health_attempts"] = attempts
+    evidence["health_ready_timeout_s"] = HEALTH_READY_TIMEOUT_S
 
-    gone = wire.missing_keys(health, wire.HEALTH_REQUIRED)
+    required = (
+        wire.HEALTH_REQUIRED
+        if target.expects_battery
+        else tuple(k for k in wire.HEALTH_REQUIRED if k != wire.HEALTH_BATTERY)
+    )
+    gone = wire.missing_keys(health, required)
     if gone:
         problems.append(f"{wire.M_HEALTH} is missing {gone} ({wire.SOURCES['HealthResult']})")
     health_d = health if isinstance(health, dict) else {}
@@ -657,9 +718,19 @@ def _c3_identity(record: Record, driver: Any, hello: Any, say) -> None:
             f"{wire.HEALTH_CONTROL_LOOP} is missing {gone} ({wire.SOURCES['LoopHealth']})"
         )
     battery = health_d.get(wire.HEALTH_BATTERY)
-    gone = wire.missing_keys(battery, wire.BATTERY_REQUIRED)
-    if battery is not None and gone:
-        problems.append(f"{wire.HEALTH_BATTERY} is missing {gone} ({wire.SOURCES['Battery']})")
+    battery_note: Optional[str] = None
+    if battery is None and not target.expects_battery:
+        battery_note = (
+            f"the {target.kind} target declares no battery, and {wire.M_HEALTH} omitted it. "
+            "A real duck that omitted it would fail here: the exemption is the operator's "
+            "choice of target, not a missing key."
+        )
+    else:
+        gone = wire.missing_keys(battery, wire.BATTERY_REQUIRED)
+        if battery is not None and gone:
+            problems.append(
+                f"{wire.HEALTH_BATTERY} is missing {gone} ({wire.SOURCES['Battery']})"
+            )
 
     if health_d and health_d.get(wire.HEALTH_HEALTHY) is not True:
         problems.append(
@@ -682,6 +753,8 @@ def _c3_identity(record: Record, driver: Any, hello: Any, say) -> None:
         wire.HEALTH_BUS: health_d.get(wire.HEALTH_BUS),
         wire.HEALTH_IMU: health_d.get(wire.HEALTH_IMU),
     }
+    if battery_note:
+        evidence["battery_note"] = battery_note
 
     # -- robot.policies -----------------------------------------------
     try:
@@ -729,6 +802,48 @@ def _c3_identity(record: Record, driver: Any, hello: Any, say) -> None:
     except Exception:  # noqa: BLE001
         driver_policies = []
     evidence["driver_get_policies"] = driver_policies
+
+    # -- robot.subscribe, sent the way the proto says ------------------
+    # SubscribeParams is a struct (duck-ipc-proto/src/lib.rs:2500-2505) with
+    # `#[serde(default, deny_unknown_fields)]`, so `{}` is valid and `null` is
+    # not. The driver sends no params at all at connect
+    # (microduck_driver.py:233), which robotd refuses; this call is what a
+    # correct one looks like, and its result is the second reading of the
+    # policy slots.
+    try:
+        subscribed = driver.call(wire.M_SUBSCRIBE, {})
+    except Exception as exc:  # noqa: BLE001
+        subscribed = None
+        problems.append(f"{wire.M_SUBSCRIBE} did not answer: {exc}")
+    gone = wire.missing_keys(subscribed, wire.SUBSCRIBE_REQUIRED)
+    if gone:
+        problems.append(
+            f"{wire.M_SUBSCRIBE} is missing {gone} ({wire.SOURCES['SubscribeResult']})"
+        )
+    subscribed_d = subscribed if isinstance(subscribed, dict) else {}
+    evidence["subscribe"] = {
+        key: subscribed_d.get(key)
+        for key in (wire.SUB_ACCEPTED, *wire.SUBSCRIBE_SLOTS, wire.SUB_UNAVAILABLE,
+                    wire.SUB_SKILLS)
+    }
+    if "networks" in subscribed_d:
+        record.note(
+            "robot.subscribe answered with a `networks` key. SubscribeResult "
+            f"({wire.SOURCES['SubscribeResult']}) has none, so this daemon is not the one "
+            "this benchmark was written against."
+        )
+
+    driver_subscribe_log = record.environment.get("driver_subscribe_log")
+    if driver_subscribe_log:
+        evidence["driver_subscribe_log"] = driver_subscribe_log
+        record.note(
+            "the driver's own robot.subscribe at connect was refused, and the driver "
+            f"logged rather than raised: {driver_subscribe_log}. It sends no params "
+            "(microduck_driver.py:233); SubscribeParams is a struct "
+            f"({wire.PROTO_FILE}:2500-2505) serde will not build from null, so `{{}}` is "
+            "the fix. Read from the driver's own log line, not from the wire: the tap "
+            "cannot be installed before a constructor that connects."
+        )
     slot_names = [s.get(wire.SLOT_PATH) for s in slots if isinstance(s, dict)]
     if slot_names and not driver_policies:
         record.note(
@@ -1031,17 +1146,22 @@ def _c5_c6_c7(
 
     odom_after = _odom(driver)
     if not odom_before or not odom_after:
-        record.mark(
-            "C7",
-            None,
-            {
-                "reason": (
-                    f"no {wire.STATE_ODOM} on the state stream "
-                    f"({wire.SOURCES['OdomState']}); nothing measured the duck"
-                ),
-                "stepped": None,
-            },
+        reason = (
+            f"no {wire.STATE_ODOM} on the state stream "
+            f"({wire.SOURCES['OdomState']}); nothing measured the duck"
         )
+        c3 = record.checkpoint("C3")
+        if c3 is not None and c3.evidence.get("driver_subscribe_log"):
+            # The causal chain, said out loud: no subscribe, no state stream,
+            # no odometry, no C7. One refused frame at connect costs the only
+            # checkpoint that proves motion.
+            reason += (
+                f". The driver's {wire.M_SUBSCRIBE} at connect was refused, so robotd "
+                f"never started pushing {wire.M_STATE}: "
+                f"{c3.evidence['driver_subscribe_log']}"
+            )
+        record.mark("C7", None, {"reason": reason, "stepped": None})
+        say("  C7 step: not measured (no odometry reached this process)")
         return
 
     p0 = list(odom_before.get(wire.ODOM_POSITION) or [])

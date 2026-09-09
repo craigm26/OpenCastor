@@ -111,6 +111,19 @@ def add_parser(sub: Any) -> Any:
     p10.add_argument("--sim-repo", default=None, help="The microduck checkout, for --sim")
     p10.add_argument("--sim-rl", default=None, help="The microduck_rl checkout, for --sim")
     p10.add_argument(
+        "--sim-state",
+        default=None,
+        help="duck-sim's state directory. Keep it short: a Unix socket path is capped "
+        "at about 108 bytes",
+    )
+    p10.add_argument(
+        "--sim-port",
+        type=int,
+        default=None,
+        help="The body server's TCP port (default 7801). A second sim needs its own port "
+        "and its own --sim-state",
+    )
+    p10.add_argument(
         "--floor",
         action="store_true",
         help="Enable C7. Asks once before the duck moves",
@@ -190,6 +203,8 @@ def cmd_ten_minutes(args: Any) -> int:
             mock_cmd=getattr(args, "mock_cmd", None),
             sim_repo=getattr(args, "sim_repo", None),
             sim_rl=getattr(args, "sim_rl", None),
+            sim_state=getattr(args, "sim_state", None),
+            sim_port=getattr(args, "sim_port", None),
         )
     except BenchError as exc:
         _say(f"castor bench: {exc}")

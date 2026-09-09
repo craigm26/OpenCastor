@@ -420,3 +420,59 @@ def test_the_cli_registers_bench_ten_minutes():
     assert args.bench_cmd == "ten-minutes"
     assert args.ci is True
     assert args.budget_s == 600.0
+
+
+# ---------------------------------------------------------------------------
+# what the sim taught this benchmark
+# ---------------------------------------------------------------------------
+
+
+def test_only_a_target_that_declares_no_battery_is_excused_one():
+    """A simulated body has no cells; a real duck that omits its battery fails."""
+    from castor.bench.targets import SimTarget
+
+    assert SimTarget(repo="/nonexistent").expects_battery is False
+    assert MockTarget(in_process=True).expects_battery is True
+    assert RealTarget(transport_kind="ssh", host="1.2.3.4").expects_battery is True
+
+
+def test_a_target_declaring_no_battery_passes_c3_without_one():
+    replies = copy.deepcopy(mock_robotd.REPLIES)
+    del replies[wire.M_HEALTH][wire.HEALTH_BATTERY]
+    target = MockTarget(in_process=True, replies=replies)
+    target.expects_battery = False
+    record = _run(target=target)
+
+    c3 = record.checkpoint("C3")
+    assert c3.ok is True, c3.evidence.get("problems")
+    assert "declares no battery" in c3.evidence["battery_note"]
+    assert record.duck["health"][wire.HEALTH_BATTERY] is None
+
+
+def test_c3_waits_for_a_daemon_that_has_not_closed_its_first_window():
+    """`healthy: false, control loop has not completed a cycle yet` is a wait, on the clock."""
+    from castor.bench import ten_minutes as tm
+
+    replies = copy.deepcopy(mock_robotd.REPLIES)
+    replies[wire.M_HEALTH][wire.HEALTH_HEALTHY] = False
+    replies[wire.M_HEALTH][wire.HEALTH_REASON] = "control loop has not completed a cycle yet"
+
+    original_timeout, original_poll = tm.HEALTH_READY_TIMEOUT_S, tm.HEALTH_READY_POLL_S
+    tm.HEALTH_READY_TIMEOUT_S, tm.HEALTH_READY_POLL_S = 0.4, 0.05
+    try:
+        record = _run(target=MockTarget(in_process=True, replies=replies))
+    finally:
+        tm.HEALTH_READY_TIMEOUT_S = original_timeout
+        tm.HEALTH_READY_POLL_S = original_poll
+
+    c3 = record.checkpoint("C3")
+    assert c3.ok is False, "a robot still unhealthy at the deadline is unhealthy"
+    assert c3.evidence["health_attempts"] > 1, "C3 asked once and gave up"
+
+
+def test_c3_records_a_subscribe_result_read_with_params():
+    """SubscribeParams is a struct; `{}` is valid and `null` is not."""
+    record = _run()
+    subscribed = record.checkpoint("C3").evidence["subscribe"]
+    assert subscribed[wire.SUB_ACCEPTED] is True
+    assert subscribed[wire.SUB_WALK] == "alpha_walking.onnx"

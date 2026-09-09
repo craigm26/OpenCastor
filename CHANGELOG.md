@@ -37,6 +37,20 @@ mandatory, in order, with `C6.t - T0 < 600 s`. See
 - `--robot rc-car` is a stub that prints the checkpoint list it would use and
   refuses, because C3 and C7 have no honest source on that robot yet.
 
+### Found by running it — `robot.subscribe` is refused by a real robotd
+
+The first `--sim` run, against `robotd 0.11.0` on a MuJoCo body, found a fifth
+wire bug beside the review's four. `MicroduckDriver` subscribes at connect with
+**no params** (`microduck_driver.py:233`), and `SubscribeParams` is a struct
+(`duck-ipc-proto/src/lib.rs:2500-2505`) that serde will not build from `null`,
+so the daemon answers `-32602 invalid type: null, expected struct
+SubscribeParams` and the driver logs it rather than raising. Sending `{}` is
+the fix. Not fixed here: `castor/drivers/microduck_driver.py` is owned by
+another branch. The benchmark records it as a note, and names it as the reason
+C7 cannot be answered — a client that never subscribed never sees `robot.state`,
+so no odometry ever arrives and the only checkpoint that proves motion has no
+source.
+
 ## [3.1.0] - 2026-09-08
 
 Published on PyPI as `1!3.1.0`: the epoch is what makes pip prefer this line

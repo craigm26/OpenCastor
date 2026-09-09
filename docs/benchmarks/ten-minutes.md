@@ -150,7 +150,8 @@ should say so before it starts.
 
 ```sh
 castor bench ten-minutes --robot microduck --sim \
-  --sim-repo ~/Pollen/microduck --sim-rl ~/Pollen/microduck_rl --floor
+  --sim-repo ~/Pollen/microduck --sim-rl ~/Pollen/microduck_rl \
+  --sim-state ~/.cache/duck-sim --sim-port 7801 --floor
 ```
 
 Pollen's `scripts/duck-sim` runs **the real `robotd` binary** with
@@ -173,6 +174,25 @@ It needs, and the benchmark checks each before it starts anything:
 
 A machine that cannot meet one of those gets a single line naming it, and the
 run refuses. It never reports a pass because the thing it measures was absent.
+
+Two more things this target taught the benchmark, both measured against
+`robotd 0.11.0` under `scripts/duck-sim` on a Raspberry Pi 5:
+
+- **A simulated body has no battery**, and `robot.health` honestly answers
+  `battery: null`. So `Target.expects_battery` is a property of the target:
+  the sim declares it has none and C3 records a `battery_note` saying so.
+  **A real duck that omitted its battery still fails C3** — the exemption is the
+  operator's choice of target, never a key being missing.
+- **A daemon that has just started has not closed its first control window**,
+  and says so: `healthy: false, control loop has not completed a cycle yet`.
+  C3 waits for it, bounded, and spends that wait **on the clock**, the way an
+  owner waiting for a robot to come up spends it. `health_attempts` and
+  `health_ready_timeout_s` are in the evidence. Past the deadline an unhealthy
+  robot is an unhealthy robot.
+
+Two sims can run side by side only with **both** their own `--sim-port` and
+their own `--sim-state`; sharing either makes `duck-sim up` refuse with
+"something is still listening".
 
 ### A real duck, for the number that counts
 
@@ -255,9 +275,22 @@ rather than logged that it did, which is the exact class of bug the review's
 traps 1, 3 and 4 belong to.
 
 **`notes`** is where the benchmark says out loud what it noticed. A run against
-today's driver prints one: the wire reported filled policy slots and
-`MicroduckDriver.get_policies()` returned `[]`, because `microduck_driver.py:233`
-reads `result["networks"]` and `SubscribeResult` has no such key.
+today's driver prints two, and the second was found by the benchmark itself on
+its first sim run:
+
+- the wire reported filled policy slots and `MicroduckDriver.get_policies()`
+  returned `[]`, because `microduck_driver.py:233` reads `result["networks"]`
+  and `SubscribeResult` has no such key — the review's trap 3;
+- **the driver's own `robot.subscribe` at connect is refused by a real
+  `robotd`**: it is sent with no params, and `SubscribeParams` is a struct
+  (`duck-ipc-proto/src/lib.rs:2500-2505`) that serde will not build from
+  `null`. The daemon answers
+  `{"code": -32602, "message": "invalid type: null, expected struct SubscribeParams"}`,
+  and the driver logs it rather than raising. Sending `{}` is the fix.
+
+  That one frame costs C7: no subscribe means robotd never pushes
+  `robot.state`, so no odometry ever reaches this process, and the only
+  checkpoint that proves motion cannot be answered. The C7 reason says so.
 
 ---
 
@@ -321,6 +354,28 @@ the record, the pass rule and the EvalLog export are robot-agnostic already.
 | mock | CI, on every push |
 | duck-sim | a nightly |
 | a real duck | a recorded bench run whose JSON is committed |
+
+## What it says today
+
+Measured on 2026-09-08, on a Raspberry Pi 5 (aarch64, 4 cores).
+
+| Target | Brain | Verdict | Clock | What stopped it |
+|---|---|---|---|---|
+| mock (`--ci`) | scripted | `ci-pass` | 1.6 s | nothing; it is a wiring test |
+| `--transport mock --ci` | scripted | `ci-fail` | 2.0 s | C2: the driver degraded to mock mode |
+| duck-sim | scripted | `ci-pass` | 15.6 s | nothing through C6; C7 unreachable, see below |
+| duck-sim | the registry's default | `fail` | 97.1 s | C4: `get_provider({})` resolved to Google and `google-generativeai` is not installed |
+
+The sim run is the interesting one. Seven policy slots filled from Hugging
+Face, `hello` answering `api_version 25` from `robotd 0.11.0`, a 50 Hz loop, a
+`robot.move` of `{"vx": 0.12, "vy": 0.0, "vyaw": 0.0}` accepted with the intent
+loop re-sending 44 ms later, and the driver's own 1.5 s TTL zeroing it 1464 ms
+after the runner went quiet. **C7 could not be answered at all**, and the reason
+in the record is the subscribe bug above: a client that never subscribed never
+sees the state stream, so nothing measured the duck.
+
+No hardware run exists yet. Until one does, nothing here is a pass of the
+ten-minute goal.
 
 ## Proving it
 
