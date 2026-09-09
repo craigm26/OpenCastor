@@ -758,6 +758,27 @@ def test_mdns_is_not_advertised_as_a_way_to_find_a_stock_duck():
     assert "mdns" in md.DEEP_METHODS
 
 
+def test_deep_still_browses_mdns(monkeypatch):
+    """--deep is where the mDNS wait is paid for on purpose."""
+    browsed: list[bool] = []
+
+    monkeypatch.setattr(md, "local_socket_present", lambda *a, **k: False)
+    monkeypatch.setattr(md, "probe_hostnames", lambda **k: [])
+    monkeypatch.setattr(md, "duckctl_ip", lambda **k: None)
+    monkeypatch.setattr(md, "arp_neighbours", lambda: [])
+    monkeypatch.setattr(
+        md, "mdns_hosts", lambda **k: (browsed.append(True), ["duck-c51b.local"])[1]
+    )
+
+    assert md.discover() == [], "the default ladder must not browse"
+    assert browsed == []
+
+    found = md.discover(deep=True)
+    assert browsed == [True]
+    assert [c.host for c in found] == ["duck-c51b.local"]
+    assert found[0].source == "mdns"
+
+
 def test_not_found_message_leads_with_host(monkeypatch, capsys):
     from castor import cli
 
