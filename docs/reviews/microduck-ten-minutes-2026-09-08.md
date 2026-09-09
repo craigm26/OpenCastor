@@ -1016,3 +1016,28 @@ Honestly, against a real duck on a floor, with the code as it stands:
 With fixes 1 through 6 landed, Route A passes C1 through C6 in four to seven
 minutes on a duck that is already on Wi-Fi, and the number becomes something the
 project can publish because a machine produced it.
+
+## Addendum, same night: what shipped, and what the benchmark says now
+
+Fixes 1 to 15 landed in OpenCastor 3.2.0 (`1!3.2.0` on PyPI, tag v3.2.0) and
+Microduck Studio build 66. The benchmark in the second half of this document
+exists as `castor bench ten-minutes --robot microduck` with mock, `--sim` and
+real targets, and was run on the merged tree:
+
+| Target | C1 | C2 | C3 | C4 | C5 | C6 | C7 | Elapsed | Verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| mock robotd (wire-shaped) | ok | hardware | 49.8 Hz, 64% | scripted | re-sent +46 ms | driver_ttl 1450 ms | n/a | 1.6 s | ci-pass |
+| Pollen `duck-sim`, real `robotd` 0.11.0 on MuJoCo | ok | hardware | 50.0 Hz | scripted | re-sent +46 ms | driver_ttl 1454 ms | not measured | 3.5 s | ci-pass |
+
+Two agents, working independently, both got `duck-sim` running headless on
+this Pi (cargo build of `robotd` 3m34s; `microduck_rl` wheels exist for
+aarch64) and both found the same fifth wire fault the review missed:
+`robot.subscribe` had never succeeded. That is the benchmark doing its job
+before it existed.
+
+Still open, honestly: C7 has never been satisfied (no odometry reached the
+bench process even after the subscribe fix; next step is wiring the driver's
+state stream into the bench's C7 reader); C1 has timed an import, not a
+`--fresh-venv` install; C4 has only run a scripted brain because this box has
+no API credits; no physical duck has been touched. Route A's projected clock
+with a duck on Wi-Fi is now 4 to 7 minutes, unmeasured.

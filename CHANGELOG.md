@@ -9,6 +9,47 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-09-08
+
+Published on PyPI as `1!3.2.0`. **The Microduck becomes the reference robot for
+the ten-minute goal, and the goal becomes a command.** The review at
+`docs/reviews/microduck-ten-minutes-2026-09-08.md` found that `castor duck` had
+never been run against a real `robotd` (four wire keys wrong, the battery abort
+could never fire, the printed next command exited 1). Everything below was
+proven against Pollen's real `robotd` 0.11.0 running headless under their
+`duck-sim` on this Pi, and against a mock robotd that answers in the wire's own
+shape. Nothing has touched a physical duck yet.
+
+- **`castor bench ten-minutes --robot microduck`**: checkpoints C1 to C7
+  (package, reachable, identity off the wire, first brain turn, first
+  `robot.move` re-sent, `robot.stop` after silence naming which deadman fired,
+  optional measured step), a JSON record with versions, shas, duck identity,
+  every wire line and every operator command, an EvalLog v1 export that
+  `inspect-robots` reads back byte for byte, and three targets: mock (CI),
+  `--sim` (the real robotd on MuJoCo), and a real duck. Today: mock C1-C6 in
+  1.6 s, sim C1-C6 in 3.5 s, verdict `ci-pass` because the brain was scripted.
+- **Five wire faults fixed**, not four: `robot.subscribe` had never once
+  succeeded (it sent `null` where robotd wants a struct), found by two agents
+  independently against the live daemon. Fixtures transcribed from
+  `duck-ipc-proto` with line numbers, then corrected by the daemon itself.
+- **`castor up --archetype microduck`**: six units including the bridge as
+  `{name}-duckbridge.service`, one token file the app and OpenCastor share,
+  port 7788 agreed in four places.
+- **`transport: webrtc`**: drive a duck over `mediad`'s own network transport,
+  no SSH key, no `robot` group, no reboot (`opencastor[microduck-webrtc]`).
+- **`castor doctor` knows ducks** and calls a mock driver a failure; the duck's
+  LLM tools finally register (`agent.harness.enabled` in the shipped profile).
+- **`castor duck`** writes a manifest `castor run` accepts, finds a stock duck
+  (`radxa-zero3.local`, `duck-*`), uses the brain you configured, never prints
+  "Duck ready." for a duck that did not answer, and says its envelope
+  ("walking at 0.06 m/s of a 0.20 m/s envelope; the gamepad's own limit is
+  0.30") with `--speed`.
+- Microduck Studio build 66 drives a real duck over the bridge; the wire shape
+  is pinned in both projects.
+- RC car: `castor doctor` reads the PCA9685 back and reports a chip that
+  forgets its configuration (found on the first hardware contact); the bring-up
+  checklist gained "prove the chip holds a configuration" as step 3b.
+
 ### Added — a `webrtc` transport for the Microduck
 
 Fix 10 of `docs/reviews/microduck-ten-minutes-2026-09-08.md`. A duck is now
