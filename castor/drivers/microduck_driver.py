@@ -24,6 +24,19 @@ Transports
 ``tcp``
     Connect to an already-established forward or bridge at ``host:port``.
 
+``webrtc``
+    Off-board over the network the duck already ships: ``mediad``'s signalling
+    server on ``<host>:8443`` and the ``control`` datachannel, which carries
+    the same JSON-RPC as the socket.  No SSH key, no ``robot`` group edit, no
+    reboot, nothing installed on the duck.  Needs the optional extra::
+
+        pip install 'opencastor[microduck-webrtc]'
+
+    **``mediad`` does not authenticate and binds all interfaces.**  Choosing
+    this transport is choosing that; ``castor/drivers/microduck_webrtc.py``
+    and ``docs/hardware/microduck.md`` carry the reasoning verbatim from
+    ``mediad/src/main.rs:9-13``.
+
 RCAN config::
 
     drivers:
@@ -50,9 +63,11 @@ Velocity commands go through ``_move()``, so they are routed through
 OpenCastor's SafetyLayer when one is attached.  ``robotd`` applies its own
 limits on top and reports them in ``robot.state`` as ``limited_by`` — the
 authoritative envelope lives on the robot, not here.  ``init()``, ``relax()``
-and ``enable()`` are maintenance calls that Pollen deliberately keeps off remote
-transports; they work over ``unix`` and over an SSH forward (both are trusted
-paths), not through the WebRTC/rendezvous bridge.
+and ``enable()`` reach the duck over every transport this driver has, WebRTC
+included: ``mediad/src/route.rs:86-91`` permits them precisely because "a peer
+holding this session has the camera: it is looking at the robot".  What WebRTC
+refuses is ``robot.setMode``, the pairing PIN and the ``update.*`` mutations
+(``route.rs:100-104``, ``:22-27``).
 """
 
 from __future__ import annotations
@@ -101,12 +116,15 @@ class MicroduckDriver(DriverBase):
     Args:
         config: RCAN driver config dict. Relevant keys:
 
-            - ``transport`` (str): ``"unix"``, ``"ssh"`` or ``"tcp"``.
-              Default: ``"unix"``.
+            - ``transport`` (str): ``"unix"``, ``"ssh"``, ``"tcp"`` or
+              ``"webrtc"``. Default: ``"unix"``.
             - ``socket`` (str): robotd socket path. Default ``/run/robotd.sock``.
             - ``ssh_host`` / ``ssh_user`` / ``ssh_port`` (str/int): SSH forward target.
             - ``local_port`` (int): local end of the SSH forward. Default ``7788``.
-            - ``host`` / ``port``: target for ``transport: tcp``.
+            - ``host`` / ``port``: target for ``transport: tcp``, and for
+              ``transport: webrtc`` (where ``port`` defaults to ``8443``).
+            - ``robot`` / ``webrtc_video`` / ``webrtc_timeout_s``: see
+              :mod:`castor.drivers.microduck_webrtc`.
             - ``max_vx`` / ``max_vy`` / ``max_vyaw`` (float): velocity envelope at
               full deflection.
             - ``intent_hz`` (float): intent re-send rate. Default ``20``.
@@ -202,10 +220,29 @@ class MicroduckDriver(DriverBase):
                     (self._host, self._port), timeout=self._rpc_timeout_s
                 )
                 target = f"{self._host}:{self._port}"
+            elif self._transport == "webrtc":
+                # mediad's `control` datachannel, shaped like a socket so the
+                # NDJSON reader, writer, id correlation and intent loop below
+                # are used unchanged. See castor/drivers/microduck_webrtc.py.
+                from castor.drivers.microduck_webrtc import (
+                    DEFAULT_SIGNALLING_PORT,
+                    connect_webrtc,
+                )
+
+                sock = connect_webrtc(self._config)
+                target = (
+                    f"webrtc://{self._host}:"
+                    f"{self._config.get('port') or DEFAULT_SIGNALLING_PORT}"
+                )
             else:
                 logger.warning("MicroduckDriver: unknown transport %r — mock mode", self._transport)
                 return
         except Exception as exc:
+            # A missing optional extra is a config error, not a duck that is
+            # off: degrading to mock mode would hide the one line that fixes it.
+            if type(exc).__name__ == "WebRTCUnavailable":
+                self._kill_ssh()
+                raise
             logger.warning(
                 "MicroduckDriver connect failed (%s): %s — mock mode", self._transport, exc
             )
