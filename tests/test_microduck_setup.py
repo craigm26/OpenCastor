@@ -7,9 +7,13 @@ every subprocess and socket call is monkeypatched.
 
 from __future__ import annotations
 
+import pytest
+import sys
+
 import yaml
 
 import castor.microduck as md
+from castor.main import _read_manifest_frontmatter
 from castor.microduck import PRESET_ID, DuckCandidate
 
 
@@ -380,7 +384,13 @@ def test_cli_duck_setup_writes_config(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(
         md,
         "health",
-        lambda **k: {"ok": True, "loop": {"hz": 49.8}, "battery": {"percent": 64}, "policies": []},
+        lambda **k: {
+            "ok": True,
+            "control_loop": {"target_hz": 50.0, "achieved_hz": 49.8, "missed": 0},
+            "battery": {"volts": 7.9, "percent": 64.0},
+            "policies": ["alpha_walking.onnx"],
+            "policy_slots": {"walk": "alpha_walking.onnx", "skills": []},
+        },
     )
     monkeypatch.setattr(md, "config_dir", lambda: tmp_path)
 
@@ -395,11 +405,17 @@ def test_cli_duck_setup_writes_config(monkeypatch, tmp_path, capsys):
         json = False
 
     assert cli.cmd_duck(Args()) == 0
-    written = tmp_path / "quacky.rcan.yaml"
+    # A ROBOT.md, because that is what `castor run` accepts. The legacy
+    # <name>.rcan.yaml it used to write is refused by cmd_run's own guard.
+    written = tmp_path / "quacky.ROBOT.md"
     assert written.exists()
-    cfg = yaml.safe_load(written.read_text())
+    assert not (tmp_path / "quacky.rcan.yaml").exists()
+    cfg = _read_manifest_frontmatter(written.read_text())
     assert cfg["drivers"][0]["ssh_host"] == "duck.local"
-    assert "castor duck health" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "castor duck health" in out
+    assert "49.8 Hz" in out, "the real loop rate, read from control_loop.achieved_hz"
+    assert "64%" in out
 
 
 def test_cli_duck_setup_end_to_end_against_a_fake_robotd(monkeypatch, tmp_path):
@@ -441,7 +457,7 @@ def test_cli_duck_setup_end_to_end_against_a_fake_robotd(monkeypatch, tmp_path):
     finally:
         server.close()
 
-    cfg = yaml.safe_load((tmp_path / "fake-duck.rcan.yaml").read_text())
+    cfg = _read_manifest_frontmatter((tmp_path / "fake-duck.ROBOT.md").read_text())
     assert cfg["drivers"][0]["transport"] == "unix"
     assert cfg["connection"]["type"] == "local"
     assert "robot.subscribe" in server.request_methods()
@@ -457,7 +473,16 @@ def _ready_duck(monkeypatch, tmp_path):
     cand.in_robot_group = True
     monkeypatch.setattr(md, "discover", lambda **k: [cand])
     monkeypatch.setattr(md, "verify", lambda c, **k: c)
-    monkeypatch.setattr(md, "health", lambda **k: {"ok": True, "loop": {}, "battery": {}})
+    monkeypatch.setattr(
+        md,
+        "health",
+        lambda **k: {
+            "ok": True,
+            "control_loop": {"target_hz": 50.0, "achieved_hz": 49.8, "missed": 0},
+            "battery": {"volts": 7.9, "percent": 64.0},
+            "policy_slots": {"walk": "alpha_walking.onnx", "skills": []},
+        },
+    )
     monkeypatch.setattr(md, "config_dir", lambda: tmp_path)
 
 
@@ -482,7 +507,7 @@ def test_cli_duck_brain_flag_sets_provider_and_model(monkeypatch, tmp_path):
         brain = "ollama:gemma3:4b"
 
     assert cli.cmd_duck(Args()) == 0
-    cfg = yaml.safe_load((tmp_path / "duck.rcan.yaml").read_text())
+    cfg = _read_manifest_frontmatter((tmp_path / "duck.ROBOT.md").read_text())
     assert cfg["agent"]["provider"] == "ollama"
     assert cfg["agent"]["model"] == "gemma3:4b"
 
@@ -526,4 +551,391 @@ def test_cli_duck_json_reports_brain_readiness(monkeypatch, tmp_path, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is True
     assert payload["brain"]["ready"] is True
-    assert payload["config"].endswith("duck.rcan.yaml")
+    assert payload["verified"] is True
+    assert payload["manifest"].endswith("duck.ROBOT.md")
+    assert payload["config"] == payload["manifest"]
+
+
+# ── The printed command has to work ───────────────────────────────────────────
+
+
+def _duck_manifest(monkeypatch, tmp_path, sock: str) -> str:
+    """Run the whole `castor duck` flow against a wire-shaped robotd.
+
+    Returns the exact string the setup command told the operator to run.
+    """
+    import castor.drivers.microduck_driver as drv
+    from castor import cli
+
+    original_init = drv.MicroduckDriver.__init__
+
+    def _init_with_fake_socket(self, config):
+        config = dict(config)
+        config["socket"] = sock
+        original_init(self, config)
+
+    monkeypatch.setattr(drv.MicroduckDriver, "__init__", _init_with_fake_socket)
+    monkeypatch.setattr(md, "local_socket_present", lambda *a, **k: True)
+    monkeypatch.setattr(md, "config_dir", lambda: tmp_path)
+
+    class Args:
+        duck_cmd = None
+        host = None
+        user = None
+        name = "quacky"
+        brain = None
+        deep = False
+        yes = True
+        start = False
+        json = False
+
+    assert cli.cmd_duck(Args()) == 0
+    return str(tmp_path / "quacky.ROBOT.md")
+
+
+def test_the_command_castor_duck_prints_is_one_castor_run_accepts(monkeypatch, tmp_path):
+    """`castor duck` used to end by printing a command that exits 1.
+
+    It wrote `<name>.rcan.yaml` (castor/microduck.py:624) and printed
+    `castor run --config <that>`, which cmd_run rejects on the suffix alone
+    (castor/cli.py:57-67, :207). The two halves of the product disagreed about the
+    format and the half that generates was losing. This proves they now agree:
+    the printed path clears the guard, loads, and yields a real driver.
+    """
+    import argparse
+
+    from castor import cli
+    from castor.drivers import get_driver
+    from castor.main import load_config
+    from microduck_wire_fixtures import WireRobotd
+
+    sock = str(tmp_path / "robotd.sock")
+    server = WireRobotd(sock)
+    try:
+        path = _duck_manifest(monkeypatch, tmp_path, sock)
+
+        # 1. cmd_run's legacy guard lets it through.
+        assert cli._legacy_rcan_yaml_guard(path) is False
+
+        # 2. cmd_run itself reaches the runtime rather than exiting 1.
+        ran: list[str] = []
+        monkeypatch.setattr("castor.main.main", lambda: ran.append(sys.argv[2]))
+        args = argparse.Namespace(
+            config=path, manifest=None, simulate=False, behavior=None, dashboard=False
+        )
+        assert cli.cmd_run(args) is None
+        assert ran == [path]
+
+        # 3. The manifest carries a body: a driver comes back, connected.
+        config = load_config(path)
+        assert config["drivers"], "no drivers block => registry.get_driver returns None"
+        config["drivers"][0]["socket"] = sock
+        driver = get_driver(config)
+        try:
+            assert driver is not None, "the manifest yielded no driver"
+            assert driver._mode == "hardware"
+        finally:
+            driver.close()
+    finally:
+        server.close()
+
+
+def test_the_manifest_records_that_health_answered(monkeypatch, tmp_path):
+    from microduck_wire_fixtures import WireRobotd
+
+    sock = str(tmp_path / "robotd.sock")
+    server = WireRobotd(sock)
+    try:
+        path = _duck_manifest(monkeypatch, tmp_path, sock)
+    finally:
+        server.close()
+    text = open(path).read()
+    assert "`robot.health` answered during setup" in text
+    assert "did not answer" not in text
+
+
+# ── Never claim a duck is ready on the strength of an SSH login ───────────────
+
+
+def _unreachable_duck(monkeypatch, tmp_path):
+    cand = DuckCandidate(host="duck.local", source="hostname", user="radxa")
+    cand.is_duck = True
+    cand.ssh_auth = True
+    cand.ssh_open = True
+    cand.in_robot_group = True
+    monkeypatch.setattr(md, "discover", lambda **k: [cand])
+    monkeypatch.setattr(md, "verify", lambda c, **k: c)
+    monkeypatch.setattr(
+        md,
+        "health",
+        lambda **k: {"ok": False, "mode": "mock", "error": "could not reach robotd"},
+    )
+    monkeypatch.setattr(md, "config_dir", lambda: tmp_path)
+
+
+def test_a_duck_that_did_not_answer_is_never_called_ready(monkeypatch, tmp_path, capsys):
+    from castor import cli
+
+    _unreachable_duck(monkeypatch, tmp_path)
+    monkeypatch.setattr("castor.auth.check_provider_ready", lambda *a, **k: True)
+
+    assert cli.cmd_duck(_DuckArgs()) == 0
+    out = capsys.readouterr().out
+    assert "Duck ready" not in out
+    assert "Ready." not in out
+    assert "did not answer" in out
+    assert "castor duck health" in out
+    # The manifest is still written, and it says so about itself.
+    assert "**`robot.health` did not answer" in (tmp_path / "duck.ROBOT.md").read_text()
+
+
+def test_an_unverified_duck_reports_verified_false(monkeypatch, tmp_path, capsys):
+    import json
+
+    from castor import cli
+
+    _unreachable_duck(monkeypatch, tmp_path)
+
+    class Args(_DuckArgs):
+        json = True
+
+    assert cli.cmd_duck(Args()) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["verified"] is False
+
+
+def test_start_is_refused_for_a_duck_that_did_not_answer(monkeypatch, tmp_path, capsys):
+    from castor import cli
+
+    _unreachable_duck(monkeypatch, tmp_path)
+    called: list = []
+    monkeypatch.setattr(cli, "cmd_run", lambda a: called.append(a))
+
+    class Args(_DuckArgs):
+        start = True
+
+    assert cli.cmd_duck(Args()) == 0
+    assert called == [], "must not start a runtime for a robot that never answered"
+    assert "--start skipped" in capsys.readouterr().out
+
+
+# ── Discovery, for a duck that actually exists ────────────────────────────────
+
+
+def test_the_stock_hostname_is_tried_first():
+    """`radxa-zero3` is the name on every board flashed from one image.
+
+    Pollen's docs/design/webrtc-console.md:27. The old ladder was
+    duck.local, duck-01.local, microduck.local, duckling.local — none of which a
+    stock duck answers to.
+    """
+    assert md.CANDIDATE_HOSTNAMES[0] == "radxa-zero3.local"
+    assert "duck-01.local" in md.CANDIDATE_HOSTNAMES
+
+
+def test_duck_hostname_prefix_matching():
+    """configd names a duck `duck-<4 hex>` off the SoC serial (identity.rs:84).
+
+    65536 possibilities: it cannot be probed, so it is recognised instead.
+    """
+    assert md.looks_like_duck_hostname("duck-c51b")
+    assert md.looks_like_duck_hostname("duck-c51b.local")
+    assert md.looks_like_duck_hostname("radxa-zero3")
+    assert md.looks_like_duck_hostname("microduck.local")
+    assert not md.looks_like_duck_hostname("printer")
+    assert not md.looks_like_duck_hostname("ducky-mcduckface"), "prefix, not substring"
+
+
+def test_mdns_is_not_advertised_as_a_way_to_find_a_stock_duck():
+    """A stock duck publishes no mDNS: no Avahi file, no zeroconf, anywhere.
+
+    Pollen's own scripts route around name resolution (scripts/dev-push.sh:80,
+    scripts/provision-board.sh:8). Browsing still finds a duck someone has added a
+    record to, so it lives in the --deep path where its 2 s wait is deliberate.
+    """
+    assert "mdns" not in md.ALL_METHODS
+    assert "mdns" not in md.FAST_METHODS
+    assert "mdns" in md.DEEP_METHODS
+
+
+def test_not_found_message_leads_with_host(monkeypatch, capsys):
+    from castor import cli
+
+    monkeypatch.setattr(md, "discover", lambda **k: [])
+
+    assert cli.cmd_duck(_DuckArgs()) == 1
+    out = capsys.readouterr().out
+    head = out.split("nothing found.")[1]
+    # --host is the first thing offered, before duckctl or --deep.
+    assert head.index("--host") < head.index("--deep")
+    assert head.index("--host") < head.index("duckctl")
+    assert "publishes no" in head and "mDNS" in head
+
+
+# ── castor duck do uses the duck's own brain ─────────────────────────────────
+
+
+def test_duck_do_uses_the_manifest_brain_not_gemini(monkeypatch, tmp_path):
+    """get_provider({}) means provider="google" (castor/registry.py:176).
+
+    So `castor duck --brain ollama`, the profile's own agent.provider and whoever
+    `castor login` signed in were all ignored, and the duck was planned by Gemini
+    whatever the operator chose.
+    """
+    from castor import cli
+
+    monkeypatch.setattr(md, "config_dir", lambda: tmp_path)
+    cfg = md.build_config(host="d.local", agent={"provider": "anthropic", "model": "claude-x"})
+    md.write_manifest(cfg, robot_name="duck", path=tmp_path / "duck.ROBOT.md")
+
+    resolved = cli._duck_agent_config(robot_name="duck")
+    assert resolved["provider"] == "anthropic"
+    assert resolved["model"] == "claude-x"
+
+
+def test_duck_do_brain_flag_wins(monkeypatch, tmp_path):
+    from castor import cli
+
+    monkeypatch.setattr(md, "config_dir", lambda: tmp_path)
+    assert cli._duck_agent_config(brain="ollama:gemma3:4b") == {
+        "provider": "ollama",
+        "model": "gemma3:4b",
+    }
+
+
+def test_duck_do_falls_back_to_the_packaged_profile(monkeypatch, tmp_path):
+    """With no manifest written yet, the profile's brain is still not google."""
+    from castor import cli
+
+    monkeypatch.setattr(md, "config_dir", lambda: tmp_path)
+    resolved = cli._duck_agent_config()
+    profile_agent = (md.load_profile() or {}).get("agent") or {}
+    assert resolved.get("provider") == profile_agent.get("provider")
+
+
+def test_duck_plan_hands_the_agent_config_to_get_provider(monkeypatch):
+    from castor import cli
+    from castor.microduck_choreography import DuckChoreographer
+
+    seen: list[dict] = []
+
+    class _Thought:
+        text = '[{"move": "nod"}]'
+
+    class _Provider:
+        def think(self, prompt):
+            return _Thought()
+
+    def _get_provider(config):
+        seen.append(dict(config))
+        return _Provider()
+
+    monkeypatch.setattr("castor.providers.get_provider", _get_provider)
+
+    duck = DuckChoreographer(object())
+    plan = cli._duck_plan_from_request(
+        duck, "wander about", lambda *a, **k: None, agent={"provider": "ollama"}
+    )
+    assert plan == [{"move": "nod"}]
+    assert seen == [{"provider": "ollama"}]
+
+
+# ── castor duck test says what speed it is asking for ────────────────────────
+
+
+class _TestArgs:
+    duck_cmd = "test"
+    host = "duck.local"
+    user = "radxa"
+    yes = True
+    json = False
+    speed = None
+
+
+def _wired_test_command(monkeypatch, tmp_path, sock: str):
+    """Point `castor duck test` at a wire-shaped robotd, with no sleeping."""
+    import castor.drivers.microduck_driver as drv
+
+    cand = DuckCandidate(host="duck.local", source="manual", user="radxa")
+    cand.is_duck = True
+    cand.ssh_auth = True
+    cand.in_robot_group = True
+    monkeypatch.setattr(md, "verify", lambda c, **k: cand)
+
+    original_init = drv.MicroduckDriver.__init__
+
+    def _init_with_fake_socket(self, config):
+        config = dict(config)
+        config["transport"] = "unix"
+        config["socket"] = sock
+        original_init(self, config)
+
+    monkeypatch.setattr(drv.MicroduckDriver, "__init__", _init_with_fake_socket)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+
+
+def test_duck_test_prints_the_envelope_and_pollens_own_limit(monkeypatch, tmp_path, capsys):
+    """"it walks" printed, and the duck barely moved, and nothing said why.
+
+    driver.move(0.3) times max_vx 0.2 is 0.06 m/s — a fifth of what padd allows
+    (padd/src/main.rs:139-163). The number is a deliberate envelope; the silence
+    about it is what lost the demo.
+    """
+    from castor import cli
+    from microduck_wire_fixtures import WireRobotd
+
+    sock = str(tmp_path / "robotd.sock")
+    server = WireRobotd(sock)
+    try:
+        _wired_test_command(monkeypatch, tmp_path, sock)
+        assert cli.cmd_duck(_TestArgs()) == 0
+    finally:
+        server.close()
+
+    out = capsys.readouterr().out
+    assert "0.06 m/s" in out
+    assert "0.2 m/s envelope" in out
+    assert "gamepad's own limit is 0.3" in out
+
+
+def test_duck_test_speed_flag_changes_what_goes_on_the_wire(monkeypatch, tmp_path, capsys):
+    from castor import cli
+    from microduck_wire_fixtures import WireRobotd
+
+    sock = str(tmp_path / "robotd.sock")
+    server = WireRobotd(sock)
+    try:
+        _wired_test_command(monkeypatch, tmp_path, sock)
+
+        class Args(_TestArgs):
+            speed = 0.2
+
+        assert cli.cmd_duck(Args()) == 0
+        vxs = [m["params"]["vx"] for m in server.notifications_for("robot.move")]
+        assert vxs, "nothing was sent"
+        # The last one is stop()'s zeroing move; the walk itself is the max.
+        assert max(vxs) == pytest.approx(0.2)
+        assert vxs[-1] == pytest.approx(0.0)
+    finally:
+        server.close()
+    assert "0.2 m/s" in capsys.readouterr().out
+
+
+def test_duck_test_clamps_speed_to_the_envelope_and_says_so(monkeypatch, tmp_path, capsys):
+    from castor import cli
+    from microduck_wire_fixtures import WireRobotd
+
+    sock = str(tmp_path / "robotd.sock")
+    server = WireRobotd(sock)
+    try:
+        _wired_test_command(monkeypatch, tmp_path, sock)
+
+        class Args(_TestArgs):
+            speed = 5.0
+
+        assert cli.cmd_duck(Args()) == 0
+        vxs = [m["params"]["vx"] for m in server.notifications_for("robot.move")]
+        assert max(vxs) == pytest.approx(0.2), "clamped to the envelope, not 5 m/s"
+    finally:
+        server.close()
+    assert "outside this duck's envelope" in capsys.readouterr().out

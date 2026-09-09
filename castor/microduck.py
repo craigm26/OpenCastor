@@ -7,9 +7,11 @@ It does four things, in order, and each one is independently useful:
 
 1. **Find it.**  :func:`discover` checks, cheapest first: a local
    ``/run/robotd.sock`` (OpenCastor running on the duck itself), well-known
-   hostnames, mDNS, ``duckctl ip`` over Bluetooth, and — with ``deep=True`` —
-   the ARP neighbour table.  Pollen's own docs warn that mDNS on the stock image
-   "resolves when it feels like it", so no single method is trusted alone.
+   hostnames starting with the stock image's own ``radxa-zero3.local``,
+   ``duckctl ip`` over Bluetooth, and — with ``deep=True`` — an mDNS browse and
+   the ARP neighbour table.  **A stock duck publishes no mDNS at all**, so mDNS
+   is not on the default ladder and is not advertised as a way to find one; the
+   address the operator already knows, ``--host``, is the reliable answer.
 2. **Reach it.**  :func:`resolve_ssh_user` finds which account answers key auth,
    and :func:`check_robot_group` verifies that account can actually open the
    robotd socket.  Both failures have exact one-line fixes
@@ -17,8 +19,12 @@ It does four things, in order, and each one is independently useful:
 3. **Prove it.**  :func:`health` opens the real driver and calls ``robot.health``,
    so setup reports live loop rate and battery rather than "probably fine".
 4. **Configure it.**  :func:`build_config` materialises the packaged
-   ``pollen/microduck`` profile with the discovered host, and :func:`write_config`
-   drops it in ``~/.config/opencastor/``.
+   ``pollen/microduck`` profile with the discovered host, and
+   :func:`write_manifest` drops a ROBOT.md in ``~/.config/opencastor/`` — the
+   format ``castor run`` accepts.  :func:`write_config` still writes the legacy
+   ``.rcan.yaml`` for callers that want one, but nothing prints that path any
+   more: ``castor run`` refuses a ``.rcan.yaml`` (``castor/cli.py:57-67``), and a
+   setup command whose last line is a command that exits 1 is not a setup command.
 
 Everything here is import-safe and side-effect free: no scanning happens until
 you call a function.
@@ -55,6 +61,9 @@ __all__ = [
     "health",
     "build_config",
     "write_config",
+    "build_manifest",
+    "write_manifest",
+    "looks_like_duck_hostname",
     "resolve_ssh_user",
     "check_robot_group",
     "robot_group_command",
@@ -68,14 +77,41 @@ PROFILE_ID = "pollen/microduck"
 #: Flat preset id (repo checkouts, ``castor setup`` numeric menu).
 PRESET_ID = "pollen_microduck"
 
-#: Hostnames worth trying before anything expensive.  ``duck-01`` is the name
-#: Pollen's own setup guide assigns in ``robotctl system set-name``.
+#: Hostnames worth trying before anything expensive, best-first.
+#:
+#: ``radxa-zero3.local`` comes first because it is what a **stock** duck answers to:
+#: Pollen's ``docs/design/webrtc-console.md:27`` calls ``radxa-zero3`` "the hostname on
+#: every board flashed from one image", so an out-of-the-box duck has that name and no
+#: other.  ``duck-01`` is what Pollen's setup guide renames it to with
+#: ``robotctl system set-name``, and the rest are names people pick.
+#:
+#: What cannot be guessed is ``configd``'s own default robot name: ``duck-<4 hex>``
+#: derived from the SoC serial (``configd/src/identity.rs:84``).  That is 65536
+#: hostnames, so it is matched (:func:`looks_like_duck_hostname`) rather than probed.
 CANDIDATE_HOSTNAMES = (
+    "radxa-zero3.local",
     "duck.local",
     "duck-01.local",
     "microduck.local",
     "duckling.local",
 )
+
+#: Hostname shapes that mean "this is probably a duck" when we meet one we did not
+#: pick — an mDNS record, a reverse lookup, a name the operator typed.
+DUCK_HOSTNAME_PREFIXES = ("duck", "microduck", "duckling", "radxa-zero3")
+
+
+def looks_like_duck_hostname(name: str) -> bool:
+    """True when *name* has the shape of a Microduck's hostname.
+
+    Covers ``configd``'s default ``duck-<4 hex>`` (``configd/src/identity.rs:84``),
+    the stock image's ``radxa-zero3`` and the names Pollen's guide suggests.  It is a
+    hint for ordering candidates, never proof: :func:`verify` proves a duck by finding
+    robotd's socket.
+    """
+    stem = str(name or "").strip().lower().split(".")[0]
+    return any(stem == pre or stem.startswith(pre + "-") for pre in DUCK_HOSTNAME_PREFIXES)
+
 
 #: Login accounts to try, in order.  ``radxa`` is the Armbian Radxa Zero 3 default.
 CANDIDATE_USERS = ("duck", "radxa", "pi", "ubuntu", "armbian")
@@ -229,7 +265,13 @@ def probe_hostnames(
 
 
 def mdns_hosts(timeout: float = 2.0) -> list[str]:
-    """Browse mDNS for anything duck-shaped. Returns [] when zeroconf is absent."""
+    """Browse mDNS for anything duck-shaped. Returns [] when zeroconf is absent.
+
+    A **stock duck publishes nothing here** — this finds a duck that someone has
+    added a record to, which in practice means duck-studio's bridge installer
+    (``bridge/install.sh``, an Avahi ``_robotd._tcp`` record).  Both service types
+    are browsed for that reason.
+    """
     try:
         from zeroconf import ServiceBrowser, Zeroconf  # type: ignore[import]
     except ImportError:
@@ -242,9 +284,10 @@ def mdns_hosts(timeout: float = 2.0) -> list[str]:
 
     class _Handler:
         def add_service(self, zc, type_, name):  # noqa: D102, ANN001
-            if "duck" not in name.lower():
+            stem = name.split(".")[0]
+            if not (looks_like_duck_hostname(stem) or "duck" in name.lower()):
                 return
-            host = name.split(".")[0] + ".local"
+            host = stem + ".local"
             with lock:
                 if host not in found:
                     found.append(host)
@@ -258,7 +301,10 @@ def mdns_hosts(timeout: float = 2.0) -> list[str]:
     zc = None
     try:
         zc = Zeroconf()
-        ServiceBrowser(zc, "_ssh._tcp.local.", _Handler())
+        handler = _Handler()
+        # _robotd._tcp is duck-studio's bridge record; _ssh._tcp is whatever else is
+        # advertising a login. Neither is published by a stock duck.
+        ServiceBrowser(zc, ["_robotd._tcp.local.", "_ssh._tcp.local."], handler)
         threading.Event().wait(timeout)
     except Exception as exc:  # pragma: no cover - environment dependent
         logger.debug("microduck mDNS browse failed: %s", exc)
@@ -289,9 +335,19 @@ def arp_neighbours() -> list[str]:
 
 
 #: Discovery methods, cheapest first. ``castor scan`` uses only :data:`FAST_METHODS`
-#: so a routine hardware scan never pays for Bluetooth or mDNS waits.
-ALL_METHODS = ("local", "hostname", "duckctl", "mdns")
+#: so a routine hardware scan never pays for a Bluetooth wait.
+#:
+#: **mDNS is not in this list, because a stock duck does not publish any.** There is no
+#: Avahi service file and no zeroconf registration anywhere in Pollen's repo, and their
+#: own scripts route around name resolution rather than rely on it
+#: (``scripts/dev-push.sh:80``, ``scripts/provision-board.sh:8``).  Browsing for one is
+#: still worth doing when the operator has asked us to look hard — a duck running
+#: duck-studio's bridge *does* register ``_robotd._tcp`` — so it lives in
+#: :data:`DEEP_METHODS` and runs under ``--deep``, where its two-second wait is paid for
+#: on purpose.
+ALL_METHODS = ("local", "hostname", "duckctl")
 FAST_METHODS = ("local", "hostname")
+DEEP_METHODS = ("mdns",)
 
 
 def discover(
@@ -340,7 +396,7 @@ def discover(
         if ip:
             _add(ip, "duckctl")
 
-    if "mdns" in methods:
+    if "mdns" in methods or (deep and "mdns" in DEEP_METHODS):
         for host in mdns_hosts(timeout=min(timeout, 2.0)):
             _add(host, "mdns")
 
@@ -493,6 +549,8 @@ def health(
             return {"ok": False, "mode": "mock", "error": "could not reach robotd"}
         result = driver.health_check()
         result["policies"] = driver.get_policies()
+        result["policy_slots"] = driver.get_policy_slots()
+        result["envelope"] = driver.envelope
         return result
     except Exception as exc:
         return {"ok": False, "mode": "error", "error": str(exc)}
@@ -601,6 +659,123 @@ def build_config(
         conn["host"] = host
 
     return config
+
+
+#: The body of the generated ROBOT.md.  Frontmatter above it is the machine's half;
+#: this is the half a human or an agent harness reads at session start.
+_MANIFEST_BODY = """\
+# {robot_name}
+
+A Pollen Robotics Microduck, configured by `castor duck` on {created}.
+
+It is a robot before OpenCastor arrives: its own compute, its own 50 Hz control
+loop, its own trained policies and its own safety envelope. OpenCastor supplies
+the brain and nothing else.
+
+- Reach it: `{reach}`
+- Make it walk, no brain needed: `castor duck test`
+- Ask robotd how it is: `castor duck health`
+- Run it under the brain: `castor run --config {manifest_path}`
+
+## Velocity envelope
+
+Full deflection maps to **{max_vx} m/s** forward, {max_vy} m/s lateral and
+{max_vyaw} rad/s of yaw. Pollen's own gamepad daemon allows 0.3 m/s and
+1.5 rad/s (`padd/src/main.rs:139-163`), so this is a deliberately smaller
+envelope, not a robot that is struggling. `castor duck test --speed` walks it
+anywhere inside the envelope.
+
+## What is not verified here
+
+{verification}
+"""
+
+
+def build_manifest(config: dict, manifest_path: str = "<manifest>", verified: bool = False) -> str:
+    """Render *config* as a ROBOT.md — the manifest ``castor run`` accepts.
+
+    ``castor duck`` used to write ``<name>.rcan.yaml`` and print
+    ``castor run --config <that file>``, which ``cmd_run`` rejects on the suffix
+    alone (``castor/cli.py:57-67``, ``:207``).  The two halves of the product
+    disagreed about the config format and the half that generates was losing.
+    This is that fix: one file, written by the setup command, accepted by the run
+    command, carrying **the whole config including the ``drivers`` block** — without
+    which ``ComponentRegistry.get_driver`` returns ``None``
+    (``castor/registry.py:201-202``) and a configured duck becomes no robot.
+
+    Args:
+        config: The dict from :func:`build_config`.
+        manifest_path: Where this manifest will live, for the body's own example.
+        verified: Whether ``robot.health`` actually answered during setup.
+
+    Returns:
+        The complete ROBOT.md text, frontmatter and body.
+    """
+    fm = {k: v for k, v in config.items() if v is not None}
+    fm.setdefault("rcan_version", "3.2")
+
+    meta = fm.get("metadata") or {}
+    robot_name = meta.get("robot_name", "duck")
+
+    driver_cfg: dict = {}
+    for entry in fm.get("drivers") or []:
+        if entry.get("protocol") == "microduck":
+            driver_cfg = entry
+            break
+
+    transport = driver_cfg.get("transport", "unix")
+    if transport == "ssh":
+        host = driver_cfg.get("ssh_host", "<host>")
+        user = driver_cfg.get("ssh_user")
+        reach = f"ssh {user}@{host}" if user else f"ssh {host}"
+    elif transport == "tcp":
+        reach = f"{driver_cfg.get('host', '<host>')}:{driver_cfg.get('port', 7788)}"
+    else:
+        reach = driver_cfg.get("socket", "/run/robotd.sock") + " (this machine is the duck)"
+
+    verification = (
+        "`robot.health` answered during setup: the loop rate, battery and policy\n"
+        "slots recorded above were read off the wire, not assumed."
+        if verified
+        else "**`robot.health` did not answer during setup.** Nothing below the\n"
+        "transport has been proven about this robot. Run `castor duck health`\n"
+        "before trusting any of it."
+    )
+
+    body = _MANIFEST_BODY.format(
+        robot_name=robot_name,
+        created=meta.get("created_at", "an unrecorded date"),
+        reach=reach,
+        manifest_path=manifest_path,
+        max_vx=driver_cfg.get("max_vx", 0.2),
+        max_vy=driver_cfg.get("max_vy", 0.1),
+        max_vyaw=driver_cfg.get("max_vyaw", 1.0),
+        verification=verification,
+    )
+    serialized = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True, width=95)
+    return f"---\n{serialized}---\n\n{body}"
+
+
+def manifest_path_for(robot_name: str = "duck") -> Path:
+    """Where :func:`write_manifest` puts a duck's ROBOT.md by default."""
+    return config_dir() / f"{robot_name}.ROBOT.md"
+
+
+def write_manifest(
+    config: dict,
+    robot_name: str = "duck",
+    path: Optional[Path] = None,
+    verified: bool = False,
+) -> Path:
+    """Write *config* as ``~/.config/opencastor/<robot_name>.ROBOT.md``.
+
+    Returns:
+        The path written — the exact path ``castor run --config`` should be given.
+    """
+    target = Path(path) if path else manifest_path_for(robot_name)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(build_manifest(config, manifest_path=str(target), verified=verified))
+    return target
 
 
 def config_dir() -> Path:
