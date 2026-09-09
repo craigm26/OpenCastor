@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import glob
 import importlib
 import os
@@ -1513,6 +1514,176 @@ def _check_drive_mode(
     )
 
 
+# ── "does the configuration persist" — the 2026-09-08 bench trap ────────────
+
+#: PCA9685 registers. MODE1 carries the SLEEP bit; PRESCALE carries the frame
+#: rate. Both are one-byte reads, and reading them is the only way anything in
+#: this stack finds out what the chip actually holds.
+PCA9685_MODE1 = 0x00
+PCA9685_PRESCALE = 0xFE
+PCA9685_MODE1_SLEEP = 0x10
+#: Power-on defaults: MODE1 0x11 (SLEEP + ALLCALL), prescale 30 (~197 Hz).
+PCA9685_POWER_ON_MODE1 = 0x11
+PCA9685_POWER_ON_PRESCALE = 0x1E
+
+
+def pca9685_prescale(frame_hz: int, oscillator_hz: int = 25_000_000) -> int:
+    """The datasheet prescale the driver would write, clamped to the legal 3..255.
+
+    Same arithmetic as `rc_car_actuator.pca9685.PCA9685Drive.prescale`, copied
+    rather than imported so doctor can run on a host where the actuator package
+    is the thing that is missing. 25 MHz / 50 Hz → 121.
+    """
+    if frame_hz <= 0:
+        raise ValueError("frame_hz must be positive")
+    return max(3, min(255, round(oscillator_hz / (4096.0 * frame_hz)) - 1))
+
+
+def _read_pca9685_registers(address: int, bus: int = 1) -> tuple[int, int]:
+    """MODE1 and PRESCALE, read only. Raises on any bus error.
+
+    doctor NEVER writes to this chip. The gateway may own the bus, an ESC may
+    be armed, and a health check that reconfigures a live PWM controller is a
+    health check that can move a car.
+    """
+    from smbus2 import SMBus
+
+    with SMBus(bus) as b:
+        return b.read_byte_data(address, PCA9685_MODE1), b.read_byte_data(
+            address, PCA9685_PRESCALE
+        )
+
+
+def _check_pca9685_persistence(
+    robot: Optional[RobotUnits],
+    policy: dict,
+    addresses: Optional[set] = None,
+    read_registers=None,
+    probe=None,
+) -> CheckResult:
+    """Does the chip still hold what the driver wrote?
+
+    2026-09-08, first real car: a PCA9685 answered `i2cdetect` at 0x40,
+    accepted every write, the driver logged "ESC arming: held neutral",
+    `status.report` said `hardware_reachable: true`, and the rover's smoke
+    suite passed 27/27 — while the chip sat at power-on defaults (MODE1 0x11,
+    SLEEP set, prescale 30) because it reset itself within a second of being
+    configured, later returning `[Errno 121]`. Every layer was truthfully
+    reporting a write into a chip that then forgot, because NOTHING IN THE
+    STACK READS THE CHIP BACK. This does. See docs/hardware/pca9685-bringup.md
+    step 3b.
+    """
+    if robot is None or robot.policy_path is None:
+        return CheckResult("PCA9685 configuration persists", "skip", "no robot home resolved")
+    drive = policy.get("OPENCASTOR_DRIVE", "").strip().lower()
+    if "pca9685" not in drive:
+        return CheckResult(
+            "PCA9685 configuration persists",
+            "skip",
+            f"OPENCASTOR_DRIVE={drive or 'unset'} does not name the PCA9685",
+        )
+    try:
+        address = int(policy.get("OPENCASTOR_DRIVE_I2C_ADDRESS", "0x40"), 0)
+    except ValueError:
+        address = PCA9685_DEFAULT_ADDRESS
+    try:
+        bus = int(policy.get("OPENCASTOR_DRIVE_I2C_BUS", "1"), 0)
+    except ValueError:
+        bus = 1
+    addresses = i2c_addresses(bus=bus) if addresses is None else addresses
+    if address not in addresses:
+        # Drive mode already says this, and says it as a blocking failure.
+        return CheckResult(
+            "PCA9685 configuration persists",
+            "skip",
+            f"nothing answers at 0x{address:02x} — see Drive mode",
+        )
+
+    try:
+        frame_hz = int(policy.get("OPENCASTOR_DRIVE_FRAME_HZ", "50"), 0)
+        oscillator_hz = int(policy.get("OPENCASTOR_DRIVE_OSCILLATOR_HZ", "25000000"), 0)
+        expected = pca9685_prescale(frame_hz, oscillator_hz)
+    except ValueError:
+        frame_hz, oscillator_hz, expected = 50, 25_000_000, 121
+
+    bringup = "see docs/hardware/pca9685-bringup.md step 3b"
+    meter = "the board is resetting; measure VCC and V+ with the ESC arming, " + bringup
+    fix = (
+        f"systemctl --user stop {robot.name}-gateway   # then measure PCA9685 VCC and V+ "
+        f"with a meter while the ESC arms — {bringup}"
+    )
+
+    read_registers = read_registers or _read_pca9685_registers
+    try:
+        mode1, prescale = read_registers(address, bus)
+    except ImportError:
+        return CheckResult(
+            "PCA9685 configuration persists",
+            "skip",
+            "smbus2 not installed — cannot read the chip back",
+            fix="pip install smbus2",
+        )
+    except OSError as exc:
+        # ENOENT/EACCES are the HOST's problem — no bus node, or a user who is
+        # not in the i2c group — and neither says anything about the chip.
+        # Errno 121 (EREMOTEIO) and its neighbours are the chip, and on the
+        # 2026-09-08 bench that was the fault three seconds after bring-up.
+        if exc.errno in (errno.ENOENT, errno.EACCES, errno.EPERM):
+            return CheckResult(
+                "PCA9685 configuration persists",
+                "skip",
+                f"cannot open the I2C bus to read 0x{address:02x} back ({exc})",
+                fix="sudo usermod -aG i2c $USER   # or: sudo raspi-config nonint do_i2c 0",
+            )
+        return CheckResult(
+            "PCA9685 configuration persists",
+            "fail",
+            f"PCA9685 at 0x{address:02x} answers the scan but its registers cannot be "
+            f"read ({exc}): {meter}",
+            fix=fix,
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001 — a bus error IS the symptom
+        return CheckResult(
+            "PCA9685 configuration persists",
+            "fail",
+            f"PCA9685 at 0x{address:02x} answers the scan but its registers cannot be "
+            f"read ({exc}): {meter}",
+            fix=fix,
+            blocking=True,
+        )
+
+    sleeping = bool(mode1 & PCA9685_MODE1_SLEEP)
+    if not sleeping and prescale == expected:
+        return CheckResult(
+            "PCA9685 configuration persists",
+            "ok",
+            f"0x{address:02x} MODE1=0x{mode1:02x} (awake), prescale={prescale} "
+            f"({frame_hz} Hz) — the chip holds what the driver wrote",
+        )
+
+    probe = probe or _probe_port
+    gateway_up = bool(robot.gateway_port is not None and probe(robot.gateway_port))
+    at_power_on = sleeping and prescale == PCA9685_POWER_ON_PRESCALE
+    if at_power_on and not gateway_up:
+        return CheckResult(
+            "PCA9685 configuration persists",
+            "warn",
+            f"0x{address:02x} MODE1=0x{mode1:02x}, prescale={prescale} — unconfigured "
+            "(no driver has written it yet); the gateway is not running",
+            fix=f"systemctl --user start {robot.name}-gateway   # then re-run castor doctor",
+        )
+    return CheckResult(
+        "PCA9685 configuration persists",
+        "fail",
+        f"PCA9685 configuration does not persist (MODE1=0x{mode1:02x}, "
+        f"prescale={prescale}): {meter}"
+        + ("" if sleeping else f" — expected prescale {expected} for {frame_hz} Hz"),
+        fix=fix,
+        blocking=True,
+    )
+
+
 def _browse_mdns(service_type: str = OPENCASTOR_MDNS_TYPE, timeout: float = 2.0) -> list[str]:
     """Names answering on an mDNS service type. Raises ImportError with no zeroconf."""
     from zeroconf import ServiceBrowser, Zeroconf
@@ -1707,6 +1878,7 @@ def run_robot_checks(home=None, unit_dir=None) -> DoctorReport:
     policy = read_env_file(robot.policy_path) if (robot and robot.policy_path) else {}
     add(_check_i2c_bus(policy))
     add(_check_drive_mode(robot, policy))
+    add(_check_pca9685_persistence(robot, policy))
     add(_check_mdns_advertiser())
     add(_check_usb_power_budget())
     for result in _check_gaps(robot):

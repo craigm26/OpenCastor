@@ -178,7 +178,10 @@ the PCA9685 VCC pin and V+ with a meter while the ESC is connected and
 arming, and expect VCC to hold at 3.3 V (or 5 V) through the arming beep. Fix
 the power before going on; no amount of software will drive a chip that
 forgets. `castor doctor` reports this as "PCA9685 configuration does not
-persist" once that check ships.
+persist" — a blocking failure, read from MODE1 and PRESCALE. Doctor only
+READS the chip (the gateway may own the bus), so it can tell "asleep or at the
+wrong frame rate" from "unconfigured, because no driver has written it yet",
+which is only a warning when the gateway is stopped.
 
 ## 4. Measure the oscillator, or accept a creep at rest
 
