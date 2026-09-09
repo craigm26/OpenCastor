@@ -49,7 +49,35 @@ from pathlib import Path
 
 logger = logging.getLogger("castor.up")
 
-ARCHETYPES = ("rc-car", "sim")
+ARCHETYPES = ("rc-car", "sim", "microduck")
+
+#: Which packaged template directory each archetype renders from. `sim` shares
+#: the rc-car home deliberately: it is an rc-car whose wheels are not there yet,
+#: and giving it its own copy would mean two files to keep true.
+TEMPLATE_DIRS = {"rc-car": "rc_car", "sim": "rc_car", "microduck": "microduck"}
+
+#: The Pollen Robotics Microduck. It is the one archetype here that is NOT
+#: detected on a bus, and that is not an implementation detail: a duck has its
+#: own computer, its own 50 Hz loop and its own policies, and it is reached over
+#: the network. `castor up` on a duck is not "make this Pi into a robot", it is
+#: "give this robot a brain, a console, a QR and a relay".
+MICRODUCK = "microduck"
+
+#: robotd's socket, on the duck. Named here as well as in the driver because
+#: this is the file that has to decide whether THIS machine is the duck.
+ROBOTD_SOCKET = "/run/robotd.sock"
+
+#: Where the duck bridge unit reads its settings. Its own file, regenerated
+#: every run like discovery.env, and for the same reason: it holds this
+#: robot's addresses and ports, never a credential. The TOKEN is not in it —
+#: only the path to the token file, which is 0600 and outside the robot home.
+DUCKBRIDGE_ENV = "duckbridge.env"
+
+#: The one token both clients read, at duck-studio's path unchanged. Outside
+#: the robot home deliberately: `bridge/install.sh` wrote it here, the phone's
+#: owner has already typed what is in it, and minting a second token somewhere
+#: tidier would unpair an app that was working. `up` reuses whatever it finds.
+BRIDGE_TOKEN_FILE = "~/.microduck-bridge-token"
 
 #: Port layout relative to --base-port: one robot is three adjacent services.
 GATEWAY_OFF, RUNTIME_OFF, CONSOLE_OFF = 0, 1, 2
@@ -116,6 +144,48 @@ class UpPlan:
     #: False is the default everywhere; only an explicit answer sets it True.
     real_wheels: bool = False
 
+    # -- microduck only ----------------------------------------------------
+    #: The duck's address, as typed. ``None`` means the duck is THIS machine
+    #: (robotd's socket is local), which is the only case where the bridge has
+    #: something to relay without an ssh forward.
+    duck_host: str | None = None
+    #: The login on the duck, for the bridge's ssh forward. ``None`` uses ssh's
+    #: own default, which is whatever the operator's ssh config says.
+    duck_user: str | None = None
+    #: robotd's socket path ON THE DUCK.
+    duck_socket: str = ROBOTD_SOCKET
+    #: Where the token both clients read lives. Outside the robot home on
+    #: purpose: it is duck-studio's path unchanged, so a duck whose owner
+    #: already ran `bridge/install.sh` and typed that token into the phone
+    #: keeps working, and `up` reuses it rather than minting a second one.
+    bridge_token_file: str = ""
+
+    @property
+    def is_duck(self) -> bool:
+        return self.archetype == MICRODUCK
+
+    @property
+    def bridge_port(self) -> int:
+        """7788 — the driver's `local_port` default and StudioKit's
+        `BridgeHandshake.defaultPort`. NOT derived from --base-port: it is a
+        number already written into a shipped app and a shipped driver."""
+        from castor.microduck_bridge import DEFAULT_PORT
+
+        return DEFAULT_PORT
+
+    @property
+    def bridge_deadman_ms(self) -> int:
+        from castor.microduck_bridge import DEFAULT_DEADMAN_MS
+
+        return DEFAULT_DEADMAN_MS
+
+    @property
+    def ssh_dest(self) -> str:
+        """``user@host`` for the bridge's forward, or "" when the duck is here."""
+        if not self.duck_host:
+            return ""
+        return f"{self.duck_user}@{self.duck_host}" if self.duck_user else self.duck_host
+
     @property
     def gateway_port(self) -> int:
         return self.base_port + GATEWAY_OFF
@@ -134,18 +204,83 @@ class UpPlan:
 # ---------------------------------------------------------------------------
 
 
-def pick_archetype(i2c_addresses: set[int]) -> tuple[str, list[str]]:
-    """Choose an archetype from what the bus scan actually found.
+def pick_archetype(
+    i2c_addresses: set[int], duck_evidence: str | None = None
+) -> tuple[str, list[str]]:
+    """Choose an archetype from what the scan actually found.
 
     Detection selects the SHAPE of the robot, never whether it can move: an
     rc-car archetype still starts on simulated wheels. 0x40 is the PCA9685's
     default address — the one every hat and breakout ships at.
+
+    THE DUCK COMES FIRST, and not because it is more important. It is because
+    the two pieces of evidence are not comparable: a PCA9685 at 0x40 is a chip
+    that *might* be wired to a vehicle, while a robotd answering is a whole
+    robot that is already standing there. A Pi with a PWM hat AND a duck on the
+    network is a Pi somebody is pointing at the duck; there is no reading of
+    `castor up --host <duck>` that means "make an rc-car".
     """
     found: list[str] = []
+    if duck_evidence:
+        found.append(duck_evidence)
+        return MICRODUCK, found
     if 0x40 in i2c_addresses:
         found.append("PCA9685 PWM controller at 0x40 (i2c)")
         return "rc-car", found
     return "sim", found
+
+
+def detect_microduck(
+    host: str | None = None,
+    *,
+    probe=None,
+    exists=None,
+    socket_path: str = ROBOTD_SOCKET,
+    hostnames: tuple[str, ...] | None = None,
+) -> str | None:
+    """Is there a duck for this `up` to serve? Evidence, or None.
+
+    A DUCK IS NOT FOUND ON A BUS. Every other archetype in this file is decided
+    by `scan_i2c`, and applying that habit to a Microduck is how you get an
+    archetype that can never be detected: there is nothing of the duck on this
+    machine's I2C, because the duck has its own machine.
+
+    Two pieces of evidence, and only two, because only two are honest:
+
+      * ``robotd``'s socket exists HERE. `castor up` is running on the duck
+        itself. Rare, and the only case where the bridge needs no forward.
+      * A **bridge answers on 7788** at the address given, or at one of the
+        hostnames the driver already knows. A TCP listener on that port is a
+        `microduck-bridge` (or something pretending to be one, which the token
+        will then refuse), and it is the port both the driver and the phone app
+        already default to.
+
+    WHAT IS DELIBERATELY NOT EVIDENCE. An open port 22 is not a duck, it is a
+    computer. mDNS is not consulted at all: the duck publishes none, and
+    Pollen's own scripts say so and route around it. And a duck's stock
+    hostname is `radxa-zero3`, not `duck.local` — which is why an explicit
+    ``--host`` beats the whole ladder and is what the not-found message says.
+
+    ``host`` given always returns evidence: `--host` on `castor up` names a
+    duck and nothing else, so a duck that is merely switched off must still be
+    configurable. The returned line says which of the two it was.
+    """
+    from castor.microduck import CANDIDATE_HOSTNAMES
+    from castor.microduck_bridge import DEFAULT_PORT
+
+    exists = exists or _path_exists
+    probe = probe or _tcp_answers
+
+    if exists(socket_path):
+        return f"robotd socket at {socket_path} — this machine is the duck"
+    if host:
+        if probe(host, DEFAULT_PORT):
+            return f"microduck bridge answering at {host}:{DEFAULT_PORT}"
+        return f"--host {host} (nothing answered on {DEFAULT_PORT} yet)"
+    for candidate in hostnames if hostnames is not None else CANDIDATE_HOSTNAMES:
+        if probe(candidate, DEFAULT_PORT):
+            return f"microduck bridge answering at {candidate}:{DEFAULT_PORT}"
+    return None
 
 
 #: The five variables that switch a generated robot from SimulatedDrive to the
@@ -285,12 +420,28 @@ def derive_identity(name: str) -> tuple[str, str]:
 
 def render(template_name: str, plan: UpPlan, **extra: str) -> str:
     """Fill one packaged template. Placeholders are {name}-style."""
-    text = (resources.files("castor") / "templates" / "rc_car" / template_name).read_text()
+    folder = TEMPLATE_DIRS.get(plan.archetype, "rc_car")
+    text = (resources.files("castor") / "templates" / folder / template_name).read_text()
     mapping = {
         "name": plan.name,
         "rrn": plan.rrn,
         "uuid": plan.robot_uuid,
         "port_runtime": str(plan.runtime_port),
+        # -- microduck. Harmless on the rc-car templates, which name none of
+        # them; kept in one mapping so there is one place to read what a
+        # template may say.
+        #
+        # `bridge_host` is 127.0.0.1 and NOT the duck's address, which looks
+        # wrong the first time and is the whole design: the driver dials the
+        # BRIDGE, and the bridge is on this machine holding one connection to
+        # the duck. Two processes dialling the duck directly is the two-relays
+        # problem this archetype exists to end.
+        "bridge_host": "127.0.0.1",
+        "bridge_port": str(plan.bridge_port),
+        "bridge_token_file": plan.bridge_token_file,
+        "duck_socket": plan.duck_socket,
+        "duck_host": plan.duck_host or "127.0.0.1",
+        "connection_type": "local" if not plan.duck_host else "wifi",
         # The one character that decides whether this robot can move. Empty
         # only when a human answered the real-wheels question; the dataclass
         # default is False, so every other path renders the block commented.
@@ -393,6 +544,46 @@ RestartPreventExitStatus=78
 [Install]
 WantedBy=default.target
 """
+    if plan.is_duck:
+        # THE SIXTH UNIT, and the one that turns a duck from a robot OpenCastor
+        # can describe into a robot OpenCastor can drive.
+        #
+        # Before it there were two relays for one duck: duck-studio's bridge for
+        # the phone, and MicroduckDriver's own `ssh -L 7788:/run/robotd.sock`
+        # for `castor run`. Two relays is two deadmen with different numbers,
+        # two tokens, two things to install, and a duck being driven by two
+        # processes neither of which knows the other exists. This is one of
+        # each, and both clients dial the same port.
+        #
+        # EnvironmentFile with NO leading dash, like every other unit here. A
+        # `-` would make duckbridge.env optional, and a bridge started with no
+        # settings binds 0.0.0.0:7788 pointed at a /run/robotd.sock that is not
+        # there — a service that reports active (running) and relays nothing.
+        # Absent file, failed unit, visible in `systemctl --user status`.
+        #
+        # Restart=always, unlike the gateway's on-failure. The deadman cannot
+        # act if this process dies, and the sentence in the bridge's own header
+        # says so: "it is a floor, not a guarantee ... which is why the systemd
+        # unit restarts it". A bridge that exited cleanly because the duck was
+        # rebooting must come back when the duck does.
+        units[f"{name}-duckbridge.service"] = f"""[Unit]
+Description=robotd relay for {name} — one token, one deadman, the phone and OpenCastor on the same port
+After=network-online.target
+
+[Service]
+EnvironmentFile={home}/{DUCKBRIDGE_ENV}
+ExecStart={python} -m castor.microduck_bridge
+Restart=always
+RestartSec=5
+# 2 is the bridge's own refusal exit: no token file, a token file other users
+# can read, or an ssh forward that will not come up. None of those is fixed by
+# trying again in five seconds, and looping on it buries the one line that says
+# what to do.
+RestartPreventExitStatus=2
+
+[Install]
+WantedBy=default.target
+"""
     units[f"{name}-rrf-stub.service"] = f"""[Unit]
 Description=RRF key resolver stub for {name} (loopback kid lookup)
 
@@ -437,6 +628,77 @@ def discovery_env(plan: UpPlan) -> str:
         "# address changing. Set it only if your stop lives somewhere else.\n"
         "#ROBOT_ESTOP_URL=\n"
     )
+
+
+def duckbridge_env(plan: UpPlan) -> str:
+    """The settings the sixth unit runs on, as an EnvironmentFile.
+
+    A FILE RATHER THAN AN ExecStart LINE, on purpose. The two things an owner
+    most often wants to change on a relay are the deadman and where robotd is,
+    and both are one readable line here. Put on the ExecStart they would be one
+    `systemctl --user edit` away and would be overwritten by the next
+    `castor up`, which regenerates the unit and does not regenerate this.
+
+    NO TOKEN IS IN THIS FILE. Only the path to it. The token lives at 0600
+    outside the robot home, the bridge refuses to start if anybody else can
+    read it, and a robot home somebody tars up for a bug report carries no
+    secret out with it.
+    """
+    ssh = plan.ssh_dest
+    lines = [
+        "# The robotd relay for this duck, written by `castor up` and",
+        "# regenerated on every run. The TOKEN is not here — only the path to",
+        "# it — because this file is safe to read and that file is not.",
+        "#",
+        "# The three deadmen under this robot, so the number below is read with",
+        "# the other two next to it:",
+        "#   1500 ms  the driver's command TTL   (robot.rcan.yaml, command_ttl_s)",
+        f"#   {plan.bridge_deadman_ms: >4} ms  THIS relay, when the client goes quiet",
+        "#    500 ms  robotd's own twist deadman, on the duck, untouchable",
+        f"MICRODUCK_BRIDGE_SOCKET={plan.duck_socket}",
+        f"MICRODUCK_BRIDGE_PORT={plan.bridge_port}",
+        f"MICRODUCK_BRIDGE_DEADMAN_MS={plan.bridge_deadman_ms}",
+        f"MICRODUCK_BRIDGE_TOKEN_FILE={plan.bridge_token_file}",
+        "#",
+        "# The interface to bind. 0.0.0.0 is the robot's own LAN, which is what",
+        "# the phone needs to reach. DO NOT PORT-FORWARD IT: the token keeps a",
+        "# television out of your robot and does not stop anybody who can read",
+        "# the same Wi-Fi.",
+        "MICRODUCK_BRIDGE_HOST=0.0.0.0",
+    ]
+    if ssh:
+        lines += [
+            "#",
+            "# The duck is on the network, so this relay holds ONE `ssh -L` open",
+            "# for its whole life and every client dials the local end of it.",
+            "# That is what makes one relay serve both the phone and `castor",
+            "# run`: unset this only if you move the bridge onto the duck.",
+            "#",
+            "# It needs key auth (BatchMode: a unit has nowhere to type a",
+            "# password) and a login in the duck's `robot` group, or robotd's",
+            "# 0660 socket refuses it. `castor duck` prints both fixes.",
+            f"MICRODUCK_BRIDGE_SSH={ssh}",
+            f"MICRODUCK_BRIDGE_FORWARD_PORT={plan.bridge_port + 1}",
+        ]
+    else:
+        lines += [
+            "#",
+            "# No MICRODUCK_BRIDGE_SSH: robotd's socket is on THIS machine, so",
+            "# there is nothing to forward. Set it to user@duck if you ever move",
+            "# this robot home off the duck.",
+        ]
+    lines += [
+        "#",
+        "# policy.install is OFF unless you say where. Point POLICY_DIR at the",
+        "# directory robotd loads policies from to let the phone put an .onnx",
+        "# on the duck's disk; ROBOTD_TOML lets an install point a [policy] key",
+        "# at the file. The bridge never restarts robotd, so an install takes",
+        "# effect when robotd next starts, and its answer says so.",
+        "#MICRODUCK_BRIDGE_POLICY_DIR=/opt/robot/policies/current",
+        "#MICRODUCK_BRIDGE_ROBOTD_TOML=/etc/robot/robotd.toml",
+        "",
+    ]
+    return "\n".join(lines)
 
 
 def resolve_base_port(requested: int | None, stored: int | None) -> int:
@@ -599,6 +861,8 @@ def run_up(
     start_services: bool = True,
     link: bool = True,
     real_wheels: bool | None = None,
+    host: str | None = None,
+    user: str | None = None,
     ask=None,
 ) -> UpPlan:
     """The whole bring-up. Prints progress; returns the plan for callers/tests.
@@ -616,6 +880,11 @@ def run_up(
     "ask, once, if there is a chip on the bus and a terminal to ask at";
     ``True``/``False`` come from ``--real-wheels``/``--simulated-wheels`` and
     skip the question. ``ask`` overrides ``input`` for tests.
+
+    ``host`` and ``user`` name a Pollen Microduck on the network. ``host``
+    given means the microduck archetype unless an explicit ``archetype`` says
+    otherwise: it is a duck-only flag, and a duck that is merely switched off
+    must still be configurable. Neither is read by any other archetype.
     """
     started = time.monotonic()
     home = home.expanduser().resolve()
@@ -629,10 +898,31 @@ def run_up(
         i2c = {p.i2c_address for p in scan_i2c() if p.i2c_address is not None}
     except Exception:  # noqa: BLE001 - no bus is a valid machine state
         pass
-    picked, detected = pick_archetype(i2c)
+    # A duck is looked for over the NETWORK, and only when there is a reason
+    # to: an explicit --host, an explicit --archetype microduck, or a bus with
+    # no PCA9685 on it. A Pi with a PWM hat is a car and does not spend four
+    # connection attempts proving it is not a duck.
+    duck: str | None = None
+    if host or archetype == MICRODUCK or 0x40 not in i2c:
+        try:
+            duck = detect_microduck(host)
+        except Exception:  # noqa: BLE001 - no network is a valid machine state
+            duck = f"--host {host}" if host else None
+    picked, detected = pick_archetype(i2c, duck_evidence=duck)
     archetype = archetype or picked
     if archetype not in ARCHETYPES:
         raise SystemExit(f"unknown archetype {archetype!r} (know: {ARCHETYPES})")
+    if archetype == MICRODUCK and not duck and not host:
+        # Asked for by hand with nothing found and no address. Honoured — the
+        # duck may be charging — but the one thing that would make it work is
+        # printed rather than discovered later from a mock-mode driver.
+        _say(
+            "warning: --archetype microduck and no duck answered. Give it an "
+            "address: `castor up --archetype microduck --host <ip>`. A stock "
+            "duck's hostname is `radxa-zero3`, it publishes no mDNS, and "
+            "`duckctl ip` over Bluetooth is how Pollen says to find it.",
+            started,
+        )
     for line in detected:
         _say(f"detected: {line}", started)
     _say(f"archetype: {archetype}", started)
@@ -669,9 +959,15 @@ def run_up(
     # Asked BEFORE anything is written, and only when this run would create the
     # policy file: a rerun on a configured robot must not re-litigate a decision
     # its operator already made (and possibly already trimmed for).
-    detected_pwm = any("PCA9685" in line for line in detected)
+    # A duck has no PCA9685 and no question to ask about one. Stated rather
+    # than falling out of the detection: `--real-wheels --archetype microduck`
+    # must not write a PWM block into a policy file for a robot whose motor bus
+    # belongs to another computer entirely.
+    detected_pwm = archetype != MICRODUCK and any("PCA9685" in line for line in detected)
     policy = home / "gateway-policy.env"
-    if real_wheels is None and policy.exists():
+    if archetype == MICRODUCK:
+        wheels, why = False, "a Microduck's servos belong to robotd, not to this host"
+    elif real_wheels is None and policy.exists():
         wheels = policy_names_real_wheels(policy.read_text())
         why = "gateway-policy.env already exists — left untouched"
     else:
@@ -682,7 +978,7 @@ def run_up(
             detected=detected,
             ask=ask,
         )
-    if real_wheels and not detected_pwm:
+    if real_wheels and not detected_pwm and archetype != MICRODUCK:
         # --real-wheels on a bus with nothing on it. Honoured (the chip may be
         # unpowered while the operator wires it), but never silently: the
         # gateway will refuse to start until the board answers.
@@ -697,6 +993,9 @@ def run_up(
         base_port=base_port,
         detected=detected,
         real_wheels=wheels,
+        duck_host=host,
+        duck_user=user,
+        bridge_token_file=str(Path(BRIDGE_TOKEN_FILE).expanduser()),
     )
 
     # -- home dir ------------------------------------------------------------
@@ -734,6 +1033,17 @@ def run_up(
         print("\n  " + WHEELS_OFF_THE_GROUND + "\n")
     (home / "runtime.py").write_text(render("runtime.py.tmpl", plan))
     (home / DISCOVERY_ENV).write_text(discovery_env(plan))
+    if plan.is_duck:
+        from castor.microduck_bridge import mint_token
+
+        (home / DUCKBRIDGE_ENV).write_text(duckbridge_env(plan))
+        bridge_token, token_reused = mint_token(plan.bridge_token_file)
+        _say(
+            ("bridge token: reused " if token_reused else "bridge token: minted at ")
+            + plan.bridge_token_file
+            + (" (the app already has this one)" if token_reused else ""),
+            started,
+        )
 
     # -- bearers + runtime tokens (reused: rotating them un-pairs the phone) --
     bearers = home / "bearers.yaml"
@@ -757,7 +1067,7 @@ def run_up(
     # robot's gateway crash-looped on exactly this. rc-car with an empty
     # config is the SIMULATED-wheels default — real PWM is a deliberate later
     # flip in gateway-policy.env, never a setup default.
-    actuator_name, actuator_note = resolve_actuator()
+    actuator_name, actuator_note = resolve_actuator(archetype)
     bearers.write_text(
         "# robot-md-gateway bearers — generated by `castor up`.\n"
         "bearers:\n"
@@ -812,7 +1122,14 @@ def run_up(
 
     state_file.write_text(
         json.dumps(
-            {"rrn": rrn, "uuid": robot_uuid, "archetype": archetype, "base_port": base_port},
+            {
+                "rrn": rrn,
+                "uuid": robot_uuid,
+                "archetype": archetype,
+                "base_port": base_port,
+                **({"duck_host": host} if host else {}),
+                **({"duck_user": user} if user else {}),
+            },
             indent=2,
         )
     )
@@ -857,6 +1174,15 @@ def run_up(
         f"console {plan.console_port}) — prove it with `castor discovery check`",
         started,
     )
+
+    if plan.is_duck:
+        _say(
+            f"duck relay: 127.0.0.1:{plan.bridge_port} -> "
+            f"{plan.ssh_dest or 'this machine'}{plan.duck_socket}, deadman "
+            f"{plan.bridge_deadman_ms} ms — the SAME port Microduck Studio dials, "
+            "so there is one relay and one token rather than two of each",
+            started,
+        )
 
     if start_services:
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
@@ -928,11 +1254,37 @@ def run_up(
         f"Scan {home / 'pair-qr.png'} {scan_with}, "
         "then follow “Run your first drive”."
     )
+    if plan.is_duck:
+        # THE TOKEN IS PRINTED, and the QR does not carry it. The pairing QR
+        # carries this robot home's credentials; the bridge token is the duck's,
+        # it was typed into a phone by hand once already, and a person who has
+        # to read it off a screen is a person who knows they are holding a
+        # secret. It is also the only way the OpenCastor app and Microduck
+        # Studio end up holding the same one.
+        token = Path(plan.bridge_token_file).read_text().strip()
+        print(
+            "\n  Microduck Studio > Robot > Bridge wants two things:\n"
+            f"    address   this machine, port {plan.bridge_port}\n"
+            f"    token     {token}\n"
+            f"  (from {plan.bridge_token_file}, mode 0600, never rotated by a rerun)\n"
+            "\n  Then, in order:\n"
+            "    castor duck health          did robotd actually answer?\n"
+            f"    systemctl --user status {name}-duckbridge\n"
+            f"    castor run --config {home / 'robot.rcan.yaml'}\n"
+        )
     return plan
 
 
-def resolve_actuator() -> tuple[str, str | None]:
+def resolve_actuator(archetype: str = "rc-car") -> tuple[str, str | None]:
     """Which gateway actuator this host can actually construct.
+
+    THE MICRODUCK ANSWER IS `noop`, AND SAYING SO IS THE POINT. There is no
+    duck actuator for this gateway and inventing an allowlist entry for one
+    would produce the worst failure in the review this archetype came from:
+    a command accepted, signed, receipted, and delivered to nothing. A duck's
+    motion travels the runtime's MicroduckDriver to the relay to robotd, which
+    is a path where a refusal is a refusal, and the gateway's job on this robot
+    is the signed identity, the read tier and the stop.
 
     `rc-car-actuator` is a separate package and — as of this writing — not on
     PyPI, so a fresh `pip install opencastor` does not have it. Writing
@@ -948,6 +1300,13 @@ def resolve_actuator() -> tuple[str, str | None]:
         names = {ep.name for ep in entry_points(group="robot_md_gateway.actuators")}
     except Exception:  # noqa: BLE001
         names = set()
+    if archetype == MICRODUCK:
+        if "microduck" in names:
+            return "microduck", None
+        return "noop", (
+            "no gateway actuator for a duck exists yet, and this one moves nothing "
+            "on purpose — the duck's motion goes runtime -> duckbridge -> robotd"
+        )
     if "rc-car" in names:
         return "rc-car", None
     return "noop", (
@@ -987,3 +1346,24 @@ def _port_answers(port: int) -> bool:
     with socket.socket() as s:
         s.settimeout(0.5)
         return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def _path_exists(path: str) -> bool:
+    return Path(path).exists()
+
+
+def _tcp_answers(host: str, port: int, timeout: float = 0.4) -> bool:
+    """Does anything accept a connection at host:port?
+
+    Short and forgiving on purpose. This runs up to four times on a bare host
+    with no duck anywhere near it, at the very start of a command whose whole
+    promise is ten minutes, so a name that does not resolve must cost a DNS
+    failure and not a timeout. `create_connection` gives us both: resolution
+    errors raise immediately, and the timeout only applies to a host that
+    answered ARP and then went quiet.
+    """
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
