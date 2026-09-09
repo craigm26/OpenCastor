@@ -22,9 +22,13 @@ from castor.microduck_choreography import (
 class FakeDuck:
     """Records what the choreographer asked the driver to do."""
 
-    def __init__(self, state: dict | None = None):
+    def __init__(self, state: dict | None = None, battery: dict | None = None):
         self.calls: list[tuple] = []
         self._state = state or {}
+        # The battery is a robot.health reading, not a state-stream field: RobotState
+        # carries no battery at all (duck-ipc-proto/src/lib.rs:3317-3365). The fake
+        # keeps them apart so a test cannot pass by putting one where the other goes.
+        self._battery = battery or {}
         self.fail_on: str | None = None
 
     def _record(self, name, *args, **kwargs):
@@ -44,6 +48,7 @@ class FakeDuck:
     def sit_toggle(self): self._record("sit_toggle")
     def roulade(self): self._record("roulade")
     def get_state(self): return self._state
+    def get_battery(self, max_age_s=2.0): return dict(self._battery)
 
     def names(self) -> list[str]:
         return [c[0] for c in self.calls]
@@ -211,21 +216,55 @@ def test_a_limp_duck_ends_the_performance(duck):
 
 
 def test_a_flat_battery_ends_the_performance(duck):
-    duck._state = {"battery": {"percent": 4}}
+    duck._battery = {"volts": 6.9, "percent": 4}
     c = DuckChoreographer(duck, sleep=lambda s: None, clock=lambda: 0.0)
     result = c.perform([{"move": "dance"}])
     assert not result.completed
     assert "battery down to 4%" in result.aborted_because
 
 
+def test_a_flat_battery_stops_a_duck_with_an_empty_state_stream(duck):
+    """The guard must not need the state stream to fire.
+
+    It used to: ``_abort_reason`` returned early on an empty state, and the battery
+    was read from that same empty dict. On a real duck the state stream never has a
+    battery, so the documented 12% abort had never once fired.
+    """
+    duck._state = {}
+    duck._battery = {"percent": 7}
+    c = DuckChoreographer(duck, sleep=lambda s: None, clock=lambda: 0.0)
+    result = c.perform([{"move": "dance"}])
+    assert not result.completed
+    assert "battery down to 7%" in result.aborted_because
+
+
 def test_a_healthy_duck_is_not_aborted(duck):
-    duck._state = {"safety": {"fallen": False}, "battery": {"percent": 80}}
+    duck._state = {"safety": {"fallen": False}}
+    duck._battery = {"percent": 80}
     c = DuckChoreographer(duck, sleep=lambda s: None, clock=lambda: 0.0)
     assert c.perform([{"move": "greet"}]).completed
 
 
 def test_no_state_at_all_is_not_a_reason_to_stop(duck):
     duck._state = {}
+    c = DuckChoreographer(duck, sleep=lambda s: None, clock=lambda: 0.0)
+    assert c.perform([{"move": "nod"}]).completed
+
+
+def test_an_unknown_battery_is_not_a_reason_to_stop(duck):
+    """``None`` is not zero. A driver that cannot answer has an unknown pack."""
+    duck._battery = {}
+    c = DuckChoreographer(duck, sleep=lambda s: None, clock=lambda: 0.0)
+    assert c.perform([{"move": "nod"}]).completed
+
+
+def test_a_driver_with_no_get_battery_still_performs():
+    """Older/foreign drivers without the method must not break a performance."""
+
+    class Minimal(FakeDuck):
+        get_battery = None
+
+    duck = Minimal()
     c = DuckChoreographer(duck, sleep=lambda s: None, clock=lambda: 0.0)
     assert c.perform([{"move": "nod"}]).completed
 
