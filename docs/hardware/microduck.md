@@ -3,29 +3,83 @@
 The easiest setup in OpenCastor. One command:
 
 ```bash
-pip install opencastor
+pip install "opencastor>=3.1"
 castor duck
 ```
 
+The `>=3.1` is load-bearing: a bare `pip install opencastor` resolves the old
+CalVer wheel. See [README.md](../../README.md#quick-start).
+
 That's the whole thing. `castor duck` finds the duck, checks it can reach it, asks
-robotd how it's feeling, and writes a working RCAN config.
+robotd how it's feeling, and writes a **ROBOT.md** — the manifest `castor run`
+accepts.
+
+Captured from a real run against a robotd whose replies are transcribed from
+Pollen's own `duck-ipc-proto` (`tests/microduck_wire_fixtures.py`), which is what
+made the numbers below reproducible rather than illustrative:
 
 ```
   🦆 OpenCastor · Microduck
 
   1/4  Finding your duck
-        found radxa@duck-01.local (via hostname)
+        looking…
+        found localhost (via local)
   2/4  Checking access
-        ssh ok as radxa · robot group ok
+        running on the duck itself — no SSH needed
   3/4  Talking to robotd
-        healthy · loop 49.8 Hz · battery 64% · walk.onnx, sit.onnx
+        healthy · loop 49.8 Hz (0 missed) · battery 64% (7.9 V)
+        policies walk, stand, sitstand, ground_pick · 5 skills
   4/4  Writing config
-        ~/.config/opencastor/duck-01.rcan.yaml
+        ~/.config/opencastor/duck.ROBOT.md
 
-  Ready.
-    castor run --config ~/.config/opencastor/duck-01.rcan.yaml
-    castor duck test     make it walk
+  Duck ready. One thing left — the brain:
+    castor login                 sign in to anthropic
+    or: castor duck --brain ollama   run a local model instead
+    then: castor run --config ~/.config/opencastor/duck.ROBOT.md
+    castor duck test     make it walk (no brain needed)
     castor duck health   check on it
+```
+
+If `robot.health` does **not** answer, the last block never says "ready". The
+manifest is still written, marked unverified in its own body, and the command
+tells you so:
+
+```
+  Manifest written — the duck did not answer.
+    could not reach robotd
+    Nothing here is proven yet. Check it before you trust it:
+    castor duck health   ask robotd again
+    On the duck: sudo systemctl status robotd
+```
+
+`castor duck health` shows the same reply in full, including which network is in
+which slot:
+
+```
+  healthy — localhost (via local)
+    loop     49.8 Hz (0 missed)
+    battery  64% (7.9 V)
+    sensors  imu ready    bus ok
+    walk         alpha_walking.onnx
+    stand        alpha_stand.onnx
+    sitstand     alpha_sitstand.onnx
+    ground_pick  alpha_ground_pick.onnx
+    skills       ground_pick, kick_left, kick_right, sit_toggle, roulade
+    envelope 0.2 m/s forward · 1.0 rad/s yaw (pad: 0.3 m/s)
+```
+
+And `castor duck test` says what speed it is asking for, and what that is a
+fraction of:
+
+```
+  This will make the duck stand up and walk forward briefly.
+  Put it on the floor with clear space around it.
+
+  walking at 0.06 m/s of a 0.2 m/s envelope; the gamepad's own limit is 0.3.
+  Faster, up to the envelope: castor duck test --speed 0.2
+  standing up…
+  walking…
+  ✓ it walks — 1.5 s at 0.06 m/s.
 ```
 
 If the brain has no credentials yet, the last step says so and points at
@@ -81,17 +135,38 @@ drivers:
 
 ## Discovery
 
-`castor duck` tries these in order, because no single one is reliable:
+**Know the address? Type it — that is the reliable path, not a fallback:**
+
+```bash
+castor duck --host 192.168.1.42
+```
+
+A stock duck is genuinely hard to find, and it is worth being clear about why
+rather than offering methods that cannot work:
+
+- **It publishes no mDNS.** There is no Avahi service file and no zeroconf
+  registration anywhere in Pollen's repository, and their own scripts route
+  around name resolution instead of relying on it (`scripts/dev-push.sh`,
+  `scripts/provision-board.sh`). OpenCastor no longer lists mDNS as a way to
+  find a stock duck; it only browses under `--deep`, where it can still find a
+  duck running duck-studio's bridge (which does register `_robotd._tcp`).
+- **Its hostname is either generic or unguessable.** Every board flashed from
+  one image is `radxa-zero3` (`docs/design/webrtc-console.md`), and `configd`'s
+  own default robot name is `duck-<4 hex>` derived from the SoC serial
+  (`configd/src/identity.rs`) — 65536 possibilities, so it is *recognised* when
+  met, never probed for.
 
 | Method | Notes |
 |---|---|
+| `--host` | The address you already know. First, and fastest |
 | Local socket | `/run/robotd.sock` exists → OpenCastor is already on the duck |
-| Hostnames | `duck.local`, `duck-01.local`, `microduck.local`, `duckling.local` |
-| `duckctl ip` | Over Bluetooth — the most reliable path on the stock image |
-| mDNS | Needs `zeroconf`; Pollen's docs warn it "resolves when it feels like it" |
-| ARP table | `castor duck --deep` — finds ducks with unknown hostnames |
+| Hostnames | `radxa-zero3.local` (stock), then `duck.local`, `duck-01.local`, `microduck.local`, `duckling.local` |
+| `duckctl ip` | Over Bluetooth. `duckctl` is not a download: `cargo install --path duckctl` from a clone of `pollen-robotics/microduck` |
+| ARP table | `castor duck --deep` — plus an mDNS browse, for a duck someone has added a record to |
 
-Know the address already? Skip all of it: `castor duck --host 192.168.1.42`.
+Names shaped like `duck-*`, `microduck*`, `duckling*` or `radxa-zero3*` are
+treated as duck-shaped wherever one turns up. Recognition is only a hint —
+a candidate is proven a duck by finding robotd's socket, never by its name.
 
 ## The two things that can block you
 
@@ -119,9 +194,20 @@ gamepad daemon and the phone app use, so OpenCastor is a first-class client.
 | `driver.head(...)` / `look_at(x,y,z)` | `robot.head` notification (radians) |
 | `driver.stop()` | `robot.stop` request — stands still, **not** limp |
 | `driver.init()` / `relax()` / `enable()` | `robot.init` / `robot.relax` / `robot.enable` |
-| `driver.health_check()` | `robot.health` — loop Hz, battery, IMU, bus |
-| `driver.get_state()` / `get_battery()` / `get_odometry()` | cached `robot.state` stream |
-| `driver.get_policies()` | ONNX policies reported at `robot.subscribe` |
+| `driver.health_check()` | `robot.health` — `healthy`, `control_loop.{target_hz, achieved_hz, missed}`, `battery.{volts, percent}`, `imu`, `bus` |
+| `driver.get_state()` / `get_odometry()` | cached `robot.state` stream |
+| `driver.get_battery()` | `robot.health` — **not** the state stream, which carries no battery at all |
+| `driver.get_policies()` / `get_policy_slots()` | `robot.subscribe`'s named slots: `walk`, `stand`, `sitstand`, `ground_pick`, `skills`, `unavailable` |
+| `driver.envelope` | this driver's `max_vx/vy/vyaw`, beside `padd`'s own 0.3 m/s and 1.5 rad/s |
+
+Three of those rows are recent corrections. `robot.health` answers with
+`control_loop`, not `loop`, and its rate field is `achieved_hz` (with `target_hz`
+beside it), not `hz` — `hz` belongs to a *different* struct on the state stream.
+`robot.subscribe` answers with named slots, not a `networks` list. And the battery
+is on `robot.health` only: `RobotState` has no battery field, which Pollen's own
+cheatsheet says outright. Reading any of them from the wrong place fails silently,
+which is why `tests/microduck_wire_fixtures.py` transcribes the structs with their
+source lines and every test replies from that file.
 
 ### Skills, voice and the beak
 
@@ -288,4 +374,6 @@ canonical bytes, a hash-chain fold, and a match record nobody can quietly edit.
 - Preset: `config/presets/pollen_microduck.rcan.yaml`
 - Driver: `castor/drivers/microduck_driver.py`
 - Setup: `castor/microduck.py`
+- Wire fixtures (transcribed from `duck-ipc-proto`, and runnable):
+  `tests/microduck_wire_fixtures.py`
 - Upstream: [pollen-robotics/microduck](https://github.com/pollen-robotics/microduck)
