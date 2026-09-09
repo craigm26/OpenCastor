@@ -4323,6 +4323,17 @@ def _duck_plan_from_request(duck, request: str, say) -> "list | None":
         return None
 
 
+def _exit_nonzero(code: int) -> int:
+    """Turn a command's non-zero return into a process exit code.
+
+    ``main()`` calls its handlers as ``handler(args)`` and discards what they
+    return, so a command whose result is a verdict has to raise.
+    """
+    if code:
+        raise SystemExit(code)
+    return 0
+
+
 def cmd_pair(args) -> int:
     """castor pair — print the iOS app's pairing QR + wire gateway attestation.
 
@@ -8210,6 +8221,11 @@ def main() -> None:
         "--list", action="store_true", help="List recent episodes from the gateway"
     )
 
+    # castor bench — named benchmarks that emit a JSON record (castor/bench/)
+    from castor.bench.command import add_parser as _add_bench_parser
+
+    _add_bench_parser(sub)
+
     # castor benchmark
     p_bench = sub.add_parser(
         "benchmark",
@@ -10403,6 +10419,12 @@ def main() -> None:
         "flash": cmd_flash,
         "hub": cmd_hub,
         "duck": cmd_duck,
+        # castor bench ten-minutes — castor/bench/command.py owns the body.
+        # main() discards a handler's return value, and a benchmark that failed
+        # must not exit 0, so a non-zero code is raised rather than returned.
+        "bench": lambda _a: _exit_nonzero(
+            __import__("castor.bench.command", fromlist=["cmd_bench"]).cmd_bench(_a)
+        ),
         "scan": cmd_scan,
         "stop": cmd_stop,
         "daemon": cmd_daemon,
