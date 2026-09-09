@@ -19,17 +19,46 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     <div class="container">
       <div class="changelog-timeline">
 
-        <!-- Unreleased -->
-        <div class="changelog-release current reveal" id="unreleased">
+        <!-- 3.2.0 -->
+        <div class="changelog-release current reveal" id="v3.2.0">
           <div class="release-header">
-            <span class="release-version">Unreleased</span>
+            <span class="release-version">3.2.0</span>
             <span class="release-badge badge-new">Latest</span>
             <span class="release-badge badge-feature">Microduck</span>
-            <span class="release-badge badge-feature">castor up</span>
-            <span class="release-date">On main</span>
+            <span class="release-badge badge-feature">castor bench</span>
+            <span class="release-date">September 8, 2026</span>
           </div>
           <div class="release-body">
-            <h3>The Microduck, and one command from bare host to paired robot</h3>
+            <h3>The Microduck is the reference robot, and the ten-minute goal is a command</h3>
+            <ul>
+              <li><strong><code>castor bench ten-minutes --robot microduck</code></strong> &mdash; seven timestamped checkpoints from &ldquo;package installed&rdquo; to &ldquo;robot.stop observed after silence, naming which deadman fired&rdquo;, a JSON record with versions, shas, duck identity and every wire line, an EvalLog export that <code>inspect-robots</code> reads back byte for byte, and three targets: a mock robotd, Pollen&rsquo;s own simulator running the <em>real</em> <code>robotd</code>, and a real duck. Today the sim passes C1 to C6 in 3.5 seconds; nothing has touched a physical duck yet, and the record says so.</li>
+              <li><strong>Five wire faults fixed</strong> &mdash; <code>castor duck</code> had never been run against a real robotd. Four keys read from the wrong struct, and <code>robot.subscribe</code> had never once succeeded. Two independent runs against the live daemon found the same fifth fault.</li>
+              <li><strong><code>castor up --archetype microduck</code></strong> &mdash; six units including the bridge as <code>duckbridge.service</code>, one token the phone and OpenCastor share, port 7788 agreed in four places.</li>
+              <li><strong><code>transport: webrtc</code></strong> &mdash; drive a duck over <code>mediad</code>&rsquo;s own network transport with no SSH key, no <code>robot</code> group and no reboot (<code>pip install "opencastor[microduck-webrtc]"</code>). The guide now states plainly that <code>mediad</code> is unauthenticated on <code>0.0.0.0</code>.</li>
+              <li><strong><code>castor doctor</code> knows ducks</strong> and calls a mock driver a failure; the duck&rsquo;s LLM tools finally register; <code>castor duck</code> writes a manifest <code>castor run</code> accepts, never prints &ldquo;Duck ready.&rdquo; for a duck that did not answer, and says its speed envelope out loud.</li>
+              <li><strong>RC car</strong> &mdash; <code>castor doctor</code> reads the PCA9685 back and reports a chip that forgets its configuration, found on the first hardware contact; the bring-up checklist gained that step.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- 3.1.0 -->
+        <div class="changelog-release reveal" id="v3.1.0">
+          <div class="release-header">
+            <span class="release-version">3.1.0</span>
+            <span class="release-badge badge-feature">Microduck</span>
+            <span class="release-badge badge-feature">castor up</span>
+            <span class="release-date">September 8, 2026</span>
+          </div>
+          <div class="release-body">
+            <h3>Box to driving in under ten minutes, and the Microduck</h3>
+            <p style="margin-bottom:12px">Published on PyPI as <code>1!3.1.0</code>: install with <code>pip install "opencastor&gt;=3.1"</code>. The epoch is what makes pip prefer this line over ninety-seven older date-versioned releases that had no <code>castor up</code> in them.</p>
+            <ul>
+              <li><strong>Real wheels are one question away</strong> &mdash; <code>castor up</code> asks, with the wheels-off-the-ground warning, when it detects a PCA9685; <code>rc-car-actuator</code> is a core dependency; the template&rsquo;s channels match every reference vehicle; the manifest can no longer draft a stop (<code>duration_s</code> has no default).</li>
+              <li><strong>Discovery ships</strong> &mdash; a fifth unit advertises <code>_opencastor._tcp</code> with rrn, ports, name and manifest path; <code>castor discovery check</code> proves it from the wire.</li>
+              <li><strong><code>castor doctor</code> reads the robot it provisioned</strong> &mdash; real ports, <code>/dev/i2c-1</code>, simulated wheels, mDNS, USB current versus a streaming camera, every capability gap, each with a pasteable fix and a non-zero exit when the car cannot move.</li>
+              <li><strong>The Pi image enables I2C at first boot</strong> and ships as one file; the install and port docs agree with the code; <code>castor init</code> asks the robot&rsquo;s shape first.</li>
+            </ul>
+            <h3 style="margin-top:20px">The Microduck, and one command from bare host to paired robot</h3>
             <ul>
               <li><strong>Pollen Microduck support</strong> &mdash; a 25 cm walking biped whose motion comes from RL policies executed by its own <code>robotd</code> daemon at 50 Hz. OpenCastor is an intent client over robotd's JSON-RPC 2.0 NDJSON socket; robotd keeps exclusive ownership of the motor bus. <a href="/docs/hardware/microduck">Hardware guide &rarr;</a></li>
               <li><strong><code>castor duck</code></strong> &mdash; one command from a duck on the desk to a duck under an LLM: find it, prove we can reach it, ask robotd how it feels, write the config. Discovery tries five things (local socket, hostnames, <code>duckctl ip</code> over Bluetooth, mDNS, ARP with <code>--deep</code>) because Pollen's own docs admit mDNS &ldquo;resolves when it feels like it&rdquo;. The two things that can block you &mdash; SSH access and <code>robot</code> group membership &mdash; each get their exact fix printed.</li>
