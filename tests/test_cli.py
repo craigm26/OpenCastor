@@ -1479,7 +1479,7 @@ class TestCmdRestore:
 class TestCmdMigrate:
     def test_calls_migrate_to_robot_md_positional(self):
         args = _make_args(src="old.rcan.yaml", out="ROBOT.md", config=None)
-        mock_migrate = MagicMock()
+        mock_migrate = MagicMock(return_value=0)
         with patch.dict(
             "sys.modules",
             {"castor.migrate": MagicMock(migrate_to_robot_md=mock_migrate)},
@@ -1489,7 +1489,7 @@ class TestCmdMigrate:
 
     def test_calls_migrate_to_robot_md_config_alias(self):
         args = _make_args(src=None, out="ROBOT.md", config="legacy.rcan.yaml")
-        mock_migrate = MagicMock()
+        mock_migrate = MagicMock(return_value=0)
         with patch.dict(
             "sys.modules",
             {"castor.migrate": MagicMock(migrate_to_robot_md=mock_migrate)},
@@ -1497,9 +1497,27 @@ class TestCmdMigrate:
             cmd_migrate(args)
         mock_migrate.assert_called_once_with("legacy.rcan.yaml", "ROBOT.md")
 
+    def test_propagates_a_failed_migration(self):
+        """A migration that would drop a block must not exit 0.
+
+        It used to: cmd_migrate ignored the return value, so a manifest with no
+        `drivers` key looked like a success (castor/registry.py:201-202 then reads
+        that as "no robot", with no error printed anywhere).
+        """
+        args = _make_args(src="old.rcan.yaml", out="ROBOT.md", config=None)
+        with patch.dict(
+            "sys.modules",
+            {"castor.migrate": MagicMock(migrate_to_robot_md=MagicMock(return_value=1))},
+        ):
+            with pytest.raises(SystemExit) as exc:
+                cmd_migrate(args)
+        assert exc.value.code == 1
+
     def test_errors_without_src(self, capsys):
         args = _make_args(src=None, out="ROBOT.md", config=None)
-        cmd_migrate(args)
+        with pytest.raises(SystemExit) as exc:
+            cmd_migrate(args)
+        assert exc.value.code == 2
         out = capsys.readouterr().out
         assert "error" in out.lower() and "src" in out.lower()
 
