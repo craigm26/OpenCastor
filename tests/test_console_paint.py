@@ -70,7 +70,10 @@ def fake_runner(monkeypatch: pytest.MonkeyPatch):
     """Stand in for subprocess.Popen: record the argv, hand back a process the test finishes."""
     launched: list[dict] = []
 
-    def popen(cmd, env=None, stdout=None, stderr=None, cwd=None):
+    def popen(cmd, env=None, stdout=None, stderr=None, cwd=None, **kwargs):
+        assert (
+            kwargs.get("start_new_session") is True
+        )  # a stop must reach the shim and the runner's child
         proc = _FakeProcess()
         launched.append({"cmd": cmd, "env": env, "cwd": cwd, "proc": proc})
         return proc

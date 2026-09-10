@@ -32,6 +32,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -168,8 +169,11 @@ def _task_for_picture(picture: str) -> str:
 def _launch(job: _Job, cmd: list[str], env: dict[str, str]) -> None:
     job.dir.mkdir(parents=True, exist_ok=True)
     log = open(job.dir / "run.log", "ab")  # noqa: SIM115 - the process owns it now
+    # Its own session, so a stop reaches the whole tree: the runner, the
+    # inspect-robots process it execs, and the subscription shim it spawns.
     job.process = subprocess.Popen(
-        cmd, env=env, stdout=log, stderr=subprocess.STDOUT, cwd=str(job.dir)
+        cmd, env=env, stdout=log, stderr=subprocess.STDOUT, cwd=str(job.dir), start_new_session=True
+    )
     )
 
     def reap() -> None:
@@ -371,11 +375,11 @@ def paint_stop() -> dict[str, Any]:
     if job is None or job.process is None:
         return {"ok": True, "stopped": False, "state": "idle"}
     job.stopped = True
-    job.process.terminate()
+    _signal_tree(job.process, signal.SIGTERM)
     try:
         job.process.wait(timeout=15)
     except subprocess.TimeoutExpired:
-        job.process.kill()
+        _signal_tree(job.process, signal.SIGKILL)
     return {"ok": True, "stopped": True, "job": job.id}
 
 
@@ -457,6 +461,17 @@ def paint_canvas():  # noqa: ANN201 - FastAPI Response
     return Response(
         content=path.read_bytes(), media_type="image/png", headers={"Cache-Control": "no-store"}
     )
+
+
+def _signal_tree(process: Any, sig: int) -> None:
+    """Signal the job's whole process group (it was started in its own session), else just it."""
+    try:
+        os.killpg(os.getpgid(process.pid), sig)
+    except (ProcessLookupError, PermissionError, OSError, AttributeError, TypeError):
+        if sig == signal.SIGKILL:
+            process.kill()
+        else:
+            process.terminate()
 
 
 def _reset_for_tests() -> None:
