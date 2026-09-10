@@ -1,0 +1,99 @@
+{
+  "error": null,
+  "eval": {
+    "created": "2026-09-09T18:28:05.349672+00:00",
+    "embodiment": "opencastor-virtual",
+    "embodiment_info": {
+      "capabilities": [
+        "self_paced"
+      ],
+      "control_hz": null,
+      "is_simulated": false
+    },
+    "git_commit": "69a287a609690b0d1b46de2eb954343cf1c27b53",
+    "inspect_robots_version": "0.58.0",
+    "max_seconds": null,
+    "max_steps": 3000,
+    "policy": "sacpaint_trace",
+    "policy_config": {
+      "action_horizon": 8,
+      "replan_interval": null,
+      "temperature": null
+    },
+    "seed": 0,
+    "task": "sacpaint/photo-v1"
+  },
+  "results": {
+    "errored_trials": 0,
+    "metrics": {
+      "composite": 0.8195282366666666,
+      "discipline": 0.8665999904748297,
+      "efficiency": 0.7836666666666667,
+      "landmark_geometry": 0.7654,
+      "structure": 0.9121060851603672
+    },
+    "total_scenes": 1,
+    "total_trials": 1
+  },
+  "samples": [
+    {
+      "epochs": [
+        {
+          "composite": 0.8195282366666666,
+          "discipline": 0.8665999904748297,
+          "efficiency": 0.7836666666666667,
+          "landmark_geometry": 0.7654,
+          "structure": 0.9121060851603672
+        }
+      ],
+      "error": null,
+      "instruction": "Draw the reference image on the canvas with the pen. You may look at the overhead camera to inspect your work and make corrections. Stop when you believe the drawing is complete.",
+      "judgement_sources": [
+        null
+      ],
+      "operator_judgements": [
+        null
+      ],
+      "operator_messages": [
+        []
+      ],
+      "operator_notes": [
+        null
+      ],
+      "policy_transcripts": [
+        null
+      ],
+      "reduced": {
+        "composite": 0.8195282366666666,
+        "discipline": 0.8665999904748297,
+        "efficiency": 0.7836666666666667,
+        "landmark_geometry": 0.7654,
+        "structure": 0.9121060851603672
+      },
+      "scene_id": "sacramento-photo-v1",
+      "scene_metadata": {
+        "description": "Sacramento, photographed from above the Capitol: the Tower Bridge at the end of the Capitol Mall, the Capitol cupola and dome in the foreground, office towers either side, the valley and mountains on the horizon.",
+        "photo_credit": ""
+      },
+      "status": "success",
+      "termination_reasons": [
+        "done"
+      ],
+      "trial_metadata": [
+        {
+          "actions": "actions/20260909_182805_e17616b6/sacramento-photo-v1-e0.jsonl"
+        }
+      ]
+    }
+  ],
+  "stats": {
+    "completed_at": "2026-09-09T19:29:43.278263+00:00",
+    "duration_s": 3697.916656346002,
+    "frames_dir": "/home/craigm26/sacpaint-runs/bob-virtual-2026-09-09/logs/frames/20260909_182805_e17616b6",
+    "mean_inference_latency_s": null,
+    "started_at": "2026-09-09T18:28:05.361623+00:00",
+    "total_steps": 649
+  },
+  "status": "success",
+  "version": 1
+}
