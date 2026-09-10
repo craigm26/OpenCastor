@@ -20,10 +20,30 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       <div class="changelog-timeline">
 
         <!-- 3.2.0 -->
-        <div class="changelog-release current reveal" id="v3.2.0">
+        <div class="changelog-release current reveal" id="v3.3.0">
+          <div class="release-header">
+            <span class="release-version">3.3.0</span>
+            <span class="release-badge badge-new">Latest</span>
+            <span class="release-badge badge-feature">castor bench</span>
+            <span class="release-badge badge-feature">PaintBench</span>
+            <span class="release-date">September 10, 2026</span>
+          </div>
+          <div class="release-body">
+            <h3>Sacramento PaintBench is a castor bench benchmark</h3>
+            <ul>
+              <li><strong><code>castor bench sacpaint</code></strong> &mdash; the standalone <code>sacpaint</code> package moves into the runtime as <code>castor.bench.sacpaint</code>. A robot with a pen must reproduce a photograph of Sacramento from camera feedback; any photo of the finished sheet scores offline with <code>castor bench sacpaint score PHOTO</code>. Install the eval stack with <code>pip install "opencastor[paintbench]"</code>; a plain install pulls no eval framework.</li>
+              <li><strong>The reference is the photograph</strong> &mdash; the model sees the original picture; the scorers read a stroke skeleton traced over its landmarks, and every EvalLog carries both hashes.</li>
+              <li><strong>Media as categories</strong> &mdash; every score carries <code>medium</code> (<code>pen</code>, <code>virtual</code>, <code>sim</code>), each ranked on its own. <code>-E medium=virtual -E calibration=easel</code> runs an arm with no paper and no pen: the canvas is inked from where the arm measured its tip. First real-arm run, an SO-ARM101 on 2026-09-09: 649 moves, 62 minutes, composite 0.82.</li>
+              <li><strong>The runtime&rsquo;s first Python gateway client</strong> &mdash; RCAN envelopes to <code>/v1/invoke</code> with signed receipts kept as JSONL, a deny raised as a safety abort with the driver&rsquo;s sub-code, a reach that ran but missed told apart from a fault.</li>
+              <li><strong>Console</strong> &mdash; <code>/eval/reference.png</code> serves the packaged photograph; the 3.2.0 <code>/eval/*</code> routes for the phone&rsquo;s frames and corners are now in the changelog too.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- 3.2.0 -->
+        <div class="changelog-release reveal" id="v3.2.0">
           <div class="release-header">
             <span class="release-version">3.2.0</span>
-            <span class="release-badge badge-new">Latest</span>
             <span class="release-badge badge-feature">Microduck</span>
             <span class="release-badge badge-feature">castor bench</span>
             <span class="release-date">September 8, 2026</span>

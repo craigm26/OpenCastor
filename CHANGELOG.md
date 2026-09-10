@@ -9,6 +9,10 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-09-10
+
+Published on PyPI as `1!3.3.0` (the epoch is required; see `docs/pypi-versioning.md`).
+
 **Sacramento PaintBench is a `castor bench` benchmark now.** `castor bench sacpaint`
 brings the standalone `sacpaint` package (PyPI 0.3.1) into the runtime as
 `castor.bench.sacpaint`: a robot with a pen must reproduce a photograph of
