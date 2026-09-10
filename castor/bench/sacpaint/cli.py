@@ -543,8 +543,8 @@ def cmd_worldevals_entry(args: argparse.Namespace) -> int:
         "Every score carries a medium (pen on paper, or virtual: a real arm inking from its own telemetry); "
         "each medium is ranked as its own category."
     ),
-    repo="https://github.com/craigm26/sacpaint",
-    install="pip install sacpaint",
+    repo="https://github.com/craigm26/OpenCastor",
+    install="pip install \"opencastor[paintbench]\"",
     task_keys=({names},),
     tags=("drawing", "single-arm", "visual-feedback", "manipulation", "media-categories"),
     bimanual=False,
