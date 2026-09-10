@@ -7,7 +7,7 @@ name = "opencastor"
 # Epoch 1: ninety-seven CalVer releases (2026.x) sit above any 3.x under PEP 440,
 # so a bare `pip install opencastor` picked an April wheel with no `castor up`.
 # The epoch makes every 1!3.x release sort above them. Keep it.
-version = "1!3.3.0"
+version = "1!3.4.0"
 description = "The Universal Runtime for Embodied AI"
 readme = "README.md"
 license = "Apache-2.0"

@@ -20,10 +20,30 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       <div class="changelog-timeline">
 
         <!-- 3.2.0 -->
-        <div class="changelog-release current reveal" id="v3.3.0">
+        <div class="changelog-release current reveal" id="v3.4.0">
+          <div class="release-header">
+            <span class="release-version">3.4.0</span>
+            <span class="release-badge badge-new">Latest</span>
+            <span class="release-badge badge-feature">Paint a picture</span>
+            <span class="release-badge badge-feature">iOS 1.3</span>
+            <span class="release-date">September 10, 2026</span>
+          </div>
+          <div class="release-body">
+            <h3>Ask the robot to paint a picture, from the phone</h3>
+            <ul>
+              <li><strong>A paint job on the console</strong> &mdash; <code>POST /eval/paint</code> starts one <code>castor bench sacpaint run</code> on the robot from the operator&rsquo;s <code>paint.json</code> profile; <code>GET /eval/paint</code> reports strokes, misses, model calls and finally the score; <code>POST /eval/paint/stop</code> ends it. One job at a time: the arm is one arm, and every stroke still goes through the gateway with a signed receipt.</li>
+              <li><strong>A picture of your own</strong> &mdash; <code>POST /eval/picture</code> takes a JPEG and traces its edges into a scoring skeleton (<code>castor bench sacpaint new --auto-trace</code>), so the paint is still scored.</li>
+              <li><strong>Watch it grow</strong> &mdash; the OpenCastor body posts its canvas to the console after every move (<code>-E canvas_post_url</code>) and writes a small progress file (<code>-E progress_path</code>).</li>
+              <li><strong>iOS 1.3 (build 78, TestFlight)</strong> &mdash; a Paint a picture card on every paired robot&rsquo;s page: the photograph of Sacramento by default, a photo picker, one button, the live canvas, and a plain-language reading of the score.</li>
+              <li><strong>Measured</strong> &mdash; Opus through the owner&rsquo;s subscription painted Sacramento on an SO-ARM101&rsquo;s virtual easel in 31 minutes, 52 looks, 147 moves, composite 0.35; the oracle trace scores 0.82 on the same rig.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- 3.3.0 -->
+        <div class="changelog-release reveal" id="v3.3.0">
           <div class="release-header">
             <span class="release-version">3.3.0</span>
-            <span class="release-badge badge-new">Latest</span>
             <span class="release-badge badge-feature">castor bench</span>
             <span class="release-badge badge-feature">PaintBench</span>
             <span class="release-date">September 10, 2026</span>

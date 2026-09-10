@@ -9,6 +9,10 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-09-10
+
+Published on PyPI as `1!3.4.0`.
+
 **Ask the robot to paint a picture, from the phone.** The console gains a paint
 job (`castor/console/paint.py`): `POST /eval/paint` starts one
 `castor bench sacpaint run` on the robot with the operator's `paint.json`
@@ -17,8 +21,10 @@ score, `POST /eval/paint/stop` ends it, and `POST /eval/picture` takes a photo o
 the person's own, traced into a scoring skeleton on receipt
 (`castor bench sacpaint new --auto-trace`). The benchmark's OpenCastor body
 learned to report as it goes (`-E progress_path`, `-E canvas_post_url`), so the
-phone watches the canvas grow. The iOS app (build 78) shows a Paint a picture
-card on every paired robot's page, Sacramento by default. Docs in
+phone watches the canvas grow. The iOS app (1.3, build 78, on TestFlight) shows a Paint a picture
+card on every paired robot's page, Sacramento by default. Also: `castor bench
+sacpaint worldevals-entry` prints the catalogue form WorldEvals accepts; a stop
+from the phone signals the job's whole process tree. Docs in
 `docs/benchmarks/sacpaint.md`; `docs/eval-eyes.md` lists the new routes.
 
 ## [3.3.0] - 2026-09-10
