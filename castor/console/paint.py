@@ -174,7 +174,6 @@ def _launch(job: _Job, cmd: list[str], env: dict[str, str]) -> None:
     job.process = subprocess.Popen(
         cmd, env=env, stdout=log, stderr=subprocess.STDOUT, cwd=str(job.dir), start_new_session=True
     )
-    )
 
     def reap() -> None:
         assert job.process is not None
