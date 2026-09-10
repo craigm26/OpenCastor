@@ -1,0 +1,98 @@
+{
+  "canvas_mm": [
+    150.0,
+    200.0
+  ],
+  "discipline_band_frac": 0.025,
+  "ink_threshold": 128,
+  "kind": "line",
+  "landmark_tolerance_frac": 0.01,
+  "landmarks": {
+    "buildings": {
+      "bbox": [
+        0.0133,
+        0.335,
+        0.9867,
+        0.765
+      ],
+      "weight": 1
+    },
+    "capitol_dome": {
+      "bbox": [
+        0.2467,
+        0.66,
+        0.7533,
+        0.865
+      ],
+      "weight": 3
+    },
+    "cupola": {
+      "bbox": [
+        0.43,
+        0.52,
+        0.57,
+        0.69
+      ],
+      "weight": 1
+    },
+    "horizon": {
+      "bbox": [
+        0.0,
+        0.235,
+        1.0,
+        0.265
+      ],
+      "weight": 1
+    },
+    "road": {
+      "bbox": [
+        0.3533,
+        0.4725,
+        0.6467,
+        0.665
+      ],
+      "weight": 2
+    },
+    "tower_bridge": {
+      "bbox": [
+        0.38,
+        0.24,
+        0.62,
+        0.5025
+      ],
+      "weight": 3
+    }
+  },
+  "px_per_mm": 4.0,
+  "relations": [
+    {
+      "a": "tower_bridge",
+      "b": "capitol_dome",
+      "kind": "same_x",
+      "tolerance": 0.05
+    },
+    {
+      "a": "tower_bridge",
+      "b": "capitol_dome",
+      "kind": "above"
+    },
+    {
+      "a": "cupola",
+      "b": "capitol_dome",
+      "kind": "above"
+    },
+    {
+      "a": "horizon",
+      "b": "tower_bridge",
+      "kind": "above"
+    }
+  ],
+  "structure_tolerance_frac": 0.02,
+  "version": "sacramento-line-v0",
+  "weights": {
+    "discipline": 0.15,
+    "efficiency": 0.1,
+    "landmark_geometry": 0.45,
+    "structure": 0.3
+  }
+}

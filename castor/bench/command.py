@@ -7,7 +7,6 @@ tested and changed without touching a ten-thousand-line file.
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -51,6 +50,8 @@ def add_parser(sub: Any) -> Any:
             "  castor bench ten-minutes --robot microduck --sim --floor\n"
             "  castor bench ten-minutes --robot rc-car        # prints the checkpoints it "
             "would use\n"
+            "  castor bench sacpaint score photo-of-my-drawing.jpg   # Sacramento PaintBench\n"
+            "  castor bench sacpaint run --policy sacpaint_trace --embodiment sacpaint_plotter\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -83,9 +84,7 @@ def add_parser(sub: Any) -> Any:
     p10.add_argument("--host", default=None, help="Skip discovery; the duck's address")
     p10.add_argument("--user", default=None, help="SSH login, for --transport ssh")
     p10.add_argument("--port", type=int, default=None, help="TCP port, for --transport tcp")
-    p10.add_argument(
-        "--socket", default="/run/robotd.sock", help="robotd socket path on the robot"
-    )
+    p10.add_argument("--socket", default="/run/robotd.sock", help="robotd socket path on the robot")
     p10.add_argument(
         "--brain",
         default=None,
@@ -140,9 +139,7 @@ def add_parser(sub: Any) -> Any:
     p10.add_argument(
         "--exclude-wifi-reason", default=None, help="One line saying why that number is what it is"
     )
-    p10.add_argument(
-        "--request", default=DEFAULT_REQUEST, help="What the brain is asked for at C4"
-    )
+    p10.add_argument("--request", default=DEFAULT_REQUEST, help="What the brain is asked for at C4")
     p10.add_argument(
         "--fresh-venv",
         default=None,
@@ -158,14 +155,37 @@ def add_parser(sub: Any) -> Any:
         choices=("A", "B", "C"),
         help="Which route the run took, for the EvalLog scene_id",
     )
+    psp = bench_sub.add_parser(
+        "sacpaint",
+        help="Sacramento PaintBench: a robot with a pen reproduces a photograph, scored from any photo",
+        description=(
+            "An Inspect Robots benchmark (pip install 'opencastor[paintbench]'). The model sees a "
+            "photograph of Sacramento on the reference camera and must draw it; five geometric "
+            "scorers read the final canvas. Subcommands: score, new, preview, list, run, export, "
+            "worldevals-entry, calibrate, shim. `castor bench sacpaint <subcommand> --help` for each."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
+    )
+    psp.add_argument(
+        "sacpaint_args", nargs=argparse.REMAINDER, help="sacpaint subcommand and its flags"
+    )
     return parser
 
 
 def cmd_bench(args: Any) -> int:
     """Dispatch ``castor bench``. Returns the process exit code."""
-    if getattr(args, "bench_cmd", None) != "ten-minutes":
-        _say("castor bench: name a benchmark. The one that exists is `ten-minutes`.")
+    name = getattr(args, "bench_cmd", None)
+    if name == "sacpaint":
+        from castor.bench.sacpaint.cli import main as sacpaint_main
+
+        return int(sacpaint_main(list(getattr(args, "sacpaint_args", []) or [])))
+    if name != "ten-minutes":
+        _say(
+            "castor bench: name a benchmark. The ones that exist are `ten-minutes` and `sacpaint`."
+        )
         _say("  castor bench ten-minutes --robot microduck --ci")
+        _say("  castor bench sacpaint score photo-of-my-drawing.jpg")
         return 2
     return cmd_ten_minutes(args)
 
