@@ -544,7 +544,7 @@ def cmd_worldevals_entry(args: argparse.Namespace) -> int:
         "each medium is ranked as its own category."
     ),
     repo="https://github.com/craigm26/OpenCastor",
-    install='pip install "opencastor[paintbench]"',
+    install="pip install sacpaint",  # a pointer package that depends on opencastor[paintbench]
     task_keys=({names},),
     tags=("drawing", "single-arm", "visual-feedback", "manipulation", "media-categories"),
     bimanual=False,
