@@ -279,3 +279,12 @@ whose pairing carries a console.
 every refusal, and the feedback cursor. `CastorKit/Tests/CastorKitTests/EvalEyesTests.swift`
 (17, in opencastor-ios) pins the corner ordering against sacpaint's rule, the
 degeneracy floor, the frame-fitting arithmetic and the cadence.
+
+## Paint a picture (added 3.4.0)
+
+`castor/console/paint.py` mounts next to these routes: `GET /eval/paint/config`,
+`POST /eval/paint`, `GET /eval/paint`, `POST /eval/paint/stop`,
+`POST /eval/picture?name=…`, `GET /eval/picture/{name}.jpg`,
+`GET /eval/paint/canvas.png`. The paint job's live canvas arrives on the
+`canvas` stream of `POST /eval/frame`, so `GET /eval/frame/latest?stream=canvas`
+shows the drawing as it grows. Details in `docs/benchmarks/sacpaint.md`.

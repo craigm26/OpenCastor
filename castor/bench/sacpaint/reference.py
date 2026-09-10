@@ -528,6 +528,48 @@ def sacramento_photo_spec() -> ReferenceSpec:
     )
 
 
+# --- tracing a photograph into a skeleton -------------------------------------------
+
+
+def auto_trace_strokes(
+    photo_rgb: np.ndarray,
+    canvas_mm: tuple[float, float],
+    *,
+    max_strokes: int = 60,
+    min_length_mm: float = 8.0,
+    simplify_mm: float = 1.0,
+) -> dict[str, list[Stroke]]:
+    """Trace a photograph's salient edges into polylines, canvas mm, for an unscripted reference.
+
+    Canny edges on a blurred, canvas-sized copy, contours longest first,
+    simplified to ``simplify_mm``. One landmark, ``edges``, so a drawing of an
+    uploaded picture is scored on how much of its edge map it reproduces
+    (structure and discipline) rather than on named parts nobody has named.
+    """
+    w_mm, h_mm = canvas_mm
+    scale = 2.0  # px per mm for the trace: enough to place a line, cheap to run
+    w_px, h_px = round(w_mm * scale), round(h_mm * scale)
+    small = cv2.resize(photo_rgb, (w_px, h_px), interpolation=cv2.INTER_AREA)
+    gray = cv2.GaussianBlur(cv2.cvtColor(small, cv2.COLOR_RGB2GRAY), (5, 5), 0)
+    median = float(np.median(gray))
+    edges = cv2.Canny(gray, max(0, int(0.66 * median)), min(255, int(1.33 * median)))
+    contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    contours = sorted(contours, key=lambda c: cv2.arcLength(c, False), reverse=True)
+    strokes: list[Stroke] = []
+    for contour in contours:
+        if cv2.arcLength(contour, False) / scale < min_length_mm:
+            break
+        approx = cv2.approxPolyDP(contour, simplify_mm * scale, False).reshape(-1, 2)
+        if len(approx) < 2:
+            continue
+        strokes.append([(float(x) / scale, (h_px - float(y)) / scale) for x, y in approx])
+        if len(strokes) >= max_strokes:
+            break
+    if not strokes:
+        raise ValueError("no edges long enough to trace; try a picture with clearer outlines")
+    return {"edges": strokes}
+
+
 # --- discovery -------------------------------------------------------------------
 
 

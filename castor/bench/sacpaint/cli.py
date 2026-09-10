@@ -126,6 +126,15 @@ def cmd_new(args: argparse.Namespace) -> int:
         photo_dest = dest.parent / f"{name}{src.suffix.lower()}"
         shutil.copyfile(src, photo_dest)
         spec.photo, spec.photo_credit = photo_dest.name, args.photo_credit
+        if getattr(args, "auto_trace", False):
+            from castor.bench.sacpaint.reference import auto_trace_strokes
+
+            spec.strokes = auto_trace_strokes(_load_rgb(str(photo_dest)), (w, h))
+            spec.landmarks = {"edges": {"weight": 1}}
+            spec.relations = []
+            spec.description = (
+                args.description or f"{name}: an uploaded photograph, scored on its traced edges."
+            )
     if (w, h) != tuple(base.canvas_mm):
         # Scale the copied drawing onto the new sheet so it stays a valid starting point.
         sx, sy = w / base.canvas_mm[0], h / base.canvas_mm[1]
@@ -597,6 +606,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     n.add_argument(
         "--photo-credit", default="", help="attribution recorded in the spec and every EvalLog"
+    )
+    n.add_argument(
+        "--auto-trace",
+        action="store_true",
+        help="with --photo: trace the photo's edges into the scoring skeleton instead of copying the base's strokes",
     )
     n.add_argument("--force", action="store_true")
     n.set_defaults(fn=cmd_new)

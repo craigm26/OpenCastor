@@ -51,6 +51,7 @@ from .eval_eyes import router as eval_router
 from .memory import router as memory_router
 from .models import read_active
 from .models import router as models_router
+from .paint import router as paint_router
 
 
 def _matches(supplied: str | None, expected: str) -> bool:
@@ -121,6 +122,10 @@ def build_app() -> FastAPI:
     # embodiment on this host PULLS it. Behind the same read-only bearer as the
     # rest — it moves pictures and sentences, never a joint.
     app.include_router(eval_router, dependencies=[Depends(require_console_auth)])
+    # "Paint a picture": the phone starts a castor bench sacpaint run on this
+    # host and watches it. A job, not a request; every stroke still goes
+    # through the gateway.
+    app.include_router(paint_router, dependencies=[Depends(require_console_auth)])
     return app
 
 

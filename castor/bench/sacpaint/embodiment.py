@@ -37,10 +37,12 @@ canonical canvas (nothing to rectify), and every score it produces is labelled
 from __future__ import annotations
 
 import inspect
+import json
 import logging
 import os
 import sys
 import time
+import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -316,6 +318,10 @@ class OpenCastorEmbodiment:
         # operator + logs
         no_prompt: bool = False,
         receipts_dir: str | None = None,
+        # a console that started this run reads these (castor/console/paint.py)
+        progress_path: str | None = None,
+        canvas_post_url: str | None = None,
+        canvas_post_token_env: str = "CONSOLE_TOKEN",
         # seams (tests inject these; the CLI never does)
         client: GatewayClient | None = None,
         overhead_source: FrameSource | None = None,
@@ -410,6 +416,10 @@ class OpenCastorEmbodiment:
         self._envelope: Any = None
 
         self.receipts_dir = receipts_dir
+        self._progress_path = Path(progress_path).expanduser() if progress_path else None
+        self._canvas_post_url = canvas_post_url or None
+        self._canvas_post_token = os.environ.get(canvas_post_token_env) or cam_token
+        self._started_at = time.time()
         self._receipts_written = False
         self._trial: tuple[str, int] | None = None
 
@@ -671,11 +681,46 @@ class OpenCastorEmbodiment:
 
     # -- observation -------------------------------------------------------
 
+    def _report(self, canvas: np.ndarray | None) -> None:
+        """Tell a watching console how far along the run is. Never raises: reporting is not the run."""
+        if self._progress_path is not None:
+            try:
+                payload = {
+                    "steps": self.num_steps,
+                    "misses": self.misses,
+                    "medium": self.medium,
+                    "elapsed_s": round(time.time() - self._started_at, 1),
+                    "updated_at": time.time(),
+                }
+                tmp = self._progress_path.with_suffix(".tmp")
+                tmp.write_text(json.dumps(payload))
+                tmp.replace(self._progress_path)
+            except OSError as exc:  # pragma: no cover - disk trouble must not stop the arm
+                logger.warning("opencastor: progress not written: %s", exc)
+        if self._canvas_post_url and canvas is not None:
+            try:
+                ok, buf = cv2.imencode(
+                    ".jpg", cv2.cvtColor(canvas, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 85]
+                )
+                if ok:
+                    req = urllib.request.Request(
+                        self._canvas_post_url,
+                        data=buf.tobytes(),
+                        method="POST",
+                        headers={"Content-Type": "image/jpeg"},
+                    )
+                    if self._canvas_post_token:
+                        req.add_header("Authorization", f"Bearer {self._canvas_post_token}")
+                    urllib.request.urlopen(req, timeout=5).read()
+            except Exception as exc:  # noqa: BLE001 - the console is an audience, not a dependency
+                logger.warning("opencastor: canvas not posted: %s", exc)
+
     def _observe(self) -> Observation:
         """One fresh overhead photograph (or the virtual ink), the reference, the pen position, the corners."""
         extra: dict[str, Any] = {MEDIUM_KEY: self.medium, "misses": self.misses}
         if self._ink is not None:
             images = {OVERHEAD: self._ink.image(), REFERENCE_CAM: self.reference_camera.fetch()}
+            self._report(images[OVERHEAD])
             extra[CANONICAL_FLAG] = True  # telemetry ink is already the canonical canvas
             if self.overhead is not None:
                 images["scene"] = (
@@ -689,6 +734,9 @@ class OpenCastorEmbodiment:
             )
         assert self.overhead is not None
         images = {OVERHEAD: self.overhead.fetch(), REFERENCE_CAM: self.reference_camera.fetch()}
+        self._report(
+            None
+        )  # a real camera's frames are already on the console; only the count is new
         corners = self._canvas_corners()
         if corners is not None:
             extra[CORNERS_KEY] = [[float(x), float(y)] for x, y in corners]

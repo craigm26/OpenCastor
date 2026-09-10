@@ -396,3 +396,32 @@ def test_run_command_builder_for_api_and_subscription(tmp_path: Path) -> None:
     cmd, env = cli.build_run_command(args, 8931)
     assert "base_url=http://127.0.0.1:8931/v1" in cmd and "api_key_env=SACPAINT_SHIM_KEY" in cmd
     assert env["SACPAINT_WIRE_LABEL"] == "claude-code-cli" and "max_llm_calls=12" in cmd
+
+
+def test_auto_trace_makes_a_scoreable_skeleton_from_the_photo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from castor.bench.sacpaint.reference import auto_trace_strokes
+
+    monkeypatch.setenv("SACPAINT_REFERENCES", str(tmp_path))
+    reference.refresh()
+
+    strokes = auto_trace_strokes(reference.reference_image(), (150.0, 200.0))
+    edges = strokes["edges"]
+    assert 5 <= len(edges) <= 60
+    for stroke in edges:
+        assert len(stroke) >= 2
+        for x, y in stroke:
+            assert 0.0 <= x <= 150.0 and 0.0 <= y <= 200.0
+    spec = reference.ReferenceSpec(
+        name="traced", strokes=strokes, landmarks={"edges": {"weight": 1}}
+    )
+    spec.save(tmp_path / "traced.spec.json")
+    reference.refresh()
+    spec = reference.get_spec("traced")
+    ink = spec.render()
+    assert (ink[:, :, 0] < 128).sum() > 2000  # enough ink to score against
+    from castor.bench.sacpaint.scorers import score_canvas
+
+    perfect = score_canvas(ink, spec)
+    assert perfect["parts"]["structure"] > 0.99 and perfect["parts"]["landmark_geometry"] > 0.99

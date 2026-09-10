@@ -9,6 +9,18 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+**Ask the robot to paint a picture, from the phone.** The console gains a paint
+job (`castor/console/paint.py`): `POST /eval/paint` starts one
+`castor bench sacpaint run` on the robot with the operator's `paint.json`
+profile, `GET /eval/paint` reports strokes, misses, model calls and finally the
+score, `POST /eval/paint/stop` ends it, and `POST /eval/picture` takes a photo of
+the person's own, traced into a scoring skeleton on receipt
+(`castor bench sacpaint new --auto-trace`). The benchmark's OpenCastor body
+learned to report as it goes (`-E progress_path`, `-E canvas_post_url`), so the
+phone watches the canvas grow. The iOS app (build 78) shows a Paint a picture
+card on every paired robot's page, Sacramento by default. Docs in
+`docs/benchmarks/sacpaint.md`; `docs/eval-eyes.md` lists the new routes.
+
 ## [3.3.0] - 2026-09-10
 
 Published on PyPI as `1!3.3.0` (the epoch is required; see `docs/pypi-versioning.md`).

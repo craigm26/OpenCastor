@@ -184,6 +184,46 @@ the task `sacpaint/<name>` the moment the package is imported. The built-in
 spec is at `castor/bench/sacpaint/assets/sacramento-photo-v1.spec.json`; copy it, edit
 it, done.
 
+## Paint a picture from the phone
+
+The OpenCastor iOS app has a **Paint a picture** screen on every paired robot's
+page: the photograph of Sacramento, one button, and a live view of the canvas
+while the arm paints. It talks to the robot's console, which runs the benchmark
+on the robot's behalf:
+
+| Route | What |
+|---|---|
+| `GET /eval/paint/config` | the media this robot can paint in, the default picture, whether a brain is configured (no secrets) |
+| `POST /eval/paint` `{"picture": "sacramento", "medium": "virtual"}` | start one `castor bench sacpaint run` as a background job; 409 while one runs, 503 without a profile, 422 for a medium the rig lacks |
+| `GET /eval/paint` | `idle`, or `running` with `steps`, `misses`, `llm_calls`, `elapsed_s`, or `done`/`stopped`/`error` with the `score` |
+| `POST /eval/paint/stop` | end the job; the arm finishes the move it is on |
+| `POST /eval/picture?name=mine` (raw JPEG) | a picture of your own; the robot traces its edges into a scoring skeleton (`castor bench sacpaint new --photo … --auto-trace`) and it becomes task `sacpaint/mine` |
+| `GET /eval/frame/latest?stream=canvas` | the live canvas: the embodiment posts it after every move (`-E canvas_post_url`) |
+| `GET /eval/paint/canvas.png` | the finished canvas as the scorer read it |
+
+The robot decides how it paints. The operator writes `<ROBOT_HOME>/paint.json`
+once (Bob's is at `/home/craigm26/bob/paint.json`):
+
+```json
+{
+  "embodiment": "opencastor",
+  "flags": {"pair_payload": "/home/craigm26/bob/pair-payload.json",
+            "calibration": "easel", "move_tool": "arm.reach_point", "move_args": "reach_point",
+            "tolerance_mm": "5", "strict_reach": "false", "timeout_s": "120"},
+  "brain": {"subscription": "opus", "claude_bin": "/home/craigm26/.local/bin/claude"},
+  "max_llm_calls": 60,
+  "media": ["virtual"]
+}
+```
+
+`media` lists what the rig can do today; with `"pen"` in it the console points
+the run at the phone's frames and tapped corners (Eval mode) automatically.
+`brain` is either `{"subscription": "<claude alias>"}` (the shim; scores carry
+`wire=claude-code-cli`) or `{"model": "anthropic/…"}` with a key in the
+console's environment. Two embodiment flags exist for this: `-E progress_path=`
+(a small JSON the console reads for `steps`/`misses`) and `-E canvas_post_url=`
+(the virtual canvas, posted as JPEG with the console token).
+
 ## Real robots
 
 Any embodiment that exposes this contract runs the benchmark unchanged:
