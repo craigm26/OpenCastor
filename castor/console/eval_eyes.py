@@ -71,7 +71,7 @@ MAX_FEEDBACK_CHARS = 2000
 MAX_FEEDBACK_LINES = 500
 
 #: Where the reference image comes from when the operator has not said.
-#: sacpaint ships it; a host without sacpaint installed sets this instead.
+#: The runtime ships it (castor.bench.sacpaint); an operator with another target sets this instead.
 REFERENCE_ENV = "EVAL_REFERENCE_PATH"
 
 
@@ -132,7 +132,7 @@ def _corner_list(payload: Any) -> list[list[float]]:
 
     TWO SHAPES IN, ONE SHAPE OUT. The phone posts a named object because a human
     reading the request has to be able to tell which corner is which; the scorer
-    wants the flat list `sacpaint.rectify.rectify(corners=...)` takes. Accepting
+    wants the flat list `castor.bench.sacpaint.rectify.rectify(corners=...)` takes. Accepting
     both here is what stops either end from carrying a translation of the other's
     idea of the order — which is exactly where a mirrored canvas comes from.
 
@@ -212,17 +212,19 @@ def _reference_path() -> Path | None:
     """The reference image file, or None if this host has not got one.
 
     The env var wins so an operator can point a rig at any target without
-    installing a benchmark; sacpaint's packaged asset is the fallback so the
-    common case needs no configuration at all.
+    installing a benchmark; the packaged photograph (castor.bench.sacpaint)
+    is the fallback so the common case needs no configuration at all.
     """
     override = os.environ.get(REFERENCE_ENV, "").strip()
     if override:
         path = Path(override).expanduser()
         return path if path.is_file() else None
-    try:  # pragma: no cover - depends on whether sacpaint is installed here
+    try:  # pragma: no cover - ships with the runtime; None only on a broken install
         from importlib.resources import files
 
-        candidate = Path(str(files("sacpaint") / "assets" / "sacramento-line-v0.png"))
+        candidate = Path(
+            str(files("castor.bench.sacpaint") / "assets" / "sacramento-photo-v1.webp")
+        )
         return candidate if candidate.is_file() else None
     except Exception:
         return None
@@ -334,7 +336,7 @@ def _stream_info(name: str, target: _Stream | None) -> dict:
 async def set_corners(request: Request) -> dict:
     """Where the canvas is in the frame, as the operator taps it.
 
-    THIS IS THE PRINTED FIXTURE, REPLACED BY A PERSON. sacpaint rectifies through
+    THIS IS THE PRINTED FIXTURE, REPLACED BY A PERSON. The benchmark rectifies through
     four ArUco markers when somebody printed them; four taps on the phone are the
     same four points from the same photograph, obtained without a printer. They
     are stored per stream, they survive every subsequent frame, and they are only
@@ -344,7 +346,7 @@ async def set_corners(request: Request) -> dict:
     try:
         payload = await request.json()
     except Exception:
-        raise HTTPException(status_code=422, detail="body must be JSON")
+        raise HTTPException(status_code=422, detail="body must be JSON") from None
     if not isinstance(payload, dict):
         raise HTTPException(status_code=422, detail="body must be a JSON object")
     name = _check_stream(str(payload.get("stream", DEFAULT_STREAM)))
@@ -364,7 +366,7 @@ async def set_corners(request: Request) -> dict:
 def get_corners(stream: str = DEFAULT_STREAM) -> dict:
     """The canvas corners for a stream, or `marked: false`.
 
-    `corners` is the flat TL,TR,BR,BL list `sacpaint.rectify.rectify(image,
+    `corners` is the flat TL,TR,BR,BL list `castor.bench.sacpaint.rectify.rectify(image,
     corners=...)` accepts as-is; `named` is the same four points for a human.
     """
     name = _check_stream(stream)
@@ -381,7 +383,7 @@ def _corner_record(name: str, target: _Stream) -> dict:
         "stream": name,
         "marked": True,
         "corners": corners,
-        "named": dict(zip(("tl", "tr", "br", "bl"), corners)),
+        "named": dict(zip(("tl", "tr", "br", "bl"), corners, strict=False)),
         "order": ["tl", "tr", "br", "bl"],
         "space": "normalized 0..1 of the posted JPEG, origin top-left, y down",
         "marked_at": target.corners_at,
@@ -407,7 +409,7 @@ async def add_feedback(request: Request) -> dict:
     try:
         payload = await request.json()
     except Exception:
-        raise HTTPException(status_code=422, detail="body must be JSON")
+        raise HTTPException(status_code=422, detail="body must be JSON") from None
     if not isinstance(payload, dict):
         raise HTTPException(status_code=422, detail="body must be a JSON object")
 
@@ -481,9 +483,34 @@ def reference_png() -> Response:
     try:
         data = path.read_bytes()
     except OSError as exc:
-        raise HTTPException(status_code=404, detail=f"reference unreadable: {exc}")
-    return Response(content=data, media_type="image/png",
-                    headers={"Cache-Control": "no-store"})
+        raise HTTPException(status_code=404, detail=f"reference unreadable: {exc}") from exc
+    if path.suffix.lower() != ".png":
+        # The route promises a PNG (the phone decodes exactly that); the packaged
+        # reference is the original photograph as supplied, so transcode on the way out.
+        data = _as_png(data)
+    return Response(content=data, media_type="image/png", headers={"Cache-Control": "no-store"})
+
+
+_PNG_CACHE: dict = {}
+
+
+def _as_png(data: bytes) -> bytes:
+    key = hash(data)
+    if key not in _PNG_CACHE:
+        import cv2
+        import numpy as np
+
+        image = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if image is None:
+            raise HTTPException(status_code=500, detail="reference image could not be decoded")
+        ok, buf = cv2.imencode(".png", image)
+        if not ok:
+            raise HTTPException(
+                status_code=500, detail="reference image could not be encoded as PNG"
+            )
+        _PNG_CACHE.clear()
+        _PNG_CACHE[key] = buf.tobytes()
+    return _PNG_CACHE[key]
 
 
 @router.get("/eval/status")

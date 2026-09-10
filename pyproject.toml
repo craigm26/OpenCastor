@@ -158,6 +158,10 @@ apple = [
     # Apple SDK install is handled by setup flow/installer with explicit consent.
 ]
 simulation = []  # Gazebo uses ROS2/rclpy; Webots via REST — no extra pip deps
+# Sacramento PaintBench (castor bench sacpaint): the Inspect Robots eval stack. Kept out of core so
+# `pip install opencastor` and the ten-minute path never pull an eval framework.
+paintbench = ["inspect-robots>=0.58.0"]
+paintbench-agent = ["inspect-robots>=0.58.0", "inspect-robots-agent>=0.26.0"]
 all = [
     # Keep this installable across supported Python versions.
     # Neonize-based extras (rpi/whatsapp/channels) are intentionally excluded because
@@ -181,6 +185,7 @@ all = [
     "qrcode>=7.4.0",
 ]
 dev = [
+    "inspect-robots>=0.58.0",  # castor bench sacpaint tests
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
@@ -189,6 +194,23 @@ dev = [
     "cyclonedx-bom>=4.0",
     "respx>=0.21",
 ]
+
+[project.entry-points."inspect_robots.tasks"]
+"sacpaint/photo-v1" = "castor.bench.sacpaint.tasks:photo_v1"
+"sacpaint/line-v0" = "castor.bench.sacpaint.tasks:line_v0"
+
+[project.entry-points."inspect_robots.embodiments"]
+sacpaint_plotter = "castor.bench.sacpaint.mock:plotter_embodiment"
+opencastor = "castor.bench.sacpaint.embodiment:opencastor_embodiment"
+
+[project.entry-points."inspect_robots.policies"]
+sacpaint_trace = "castor.bench.sacpaint.mock:trace_policy"
+sacpaint_idle = "castor.bench.sacpaint.mock:idle_policy"
+
+[project.entry-points."inspect_robots.scorers"]
+sacpaint_landmarks = "castor.bench.sacpaint.scorers:landmark_geometry"
+sacpaint_structure = "castor.bench.sacpaint.scorers:structure"
+sacpaint_discipline = "castor.bench.sacpaint.scorers:discipline"
 
 [project.scripts]
 castor = "castor.cli:_friendly_error_handler"
@@ -216,6 +238,7 @@ castor = ["py.typed"]
 "castor.profiles.odrive" = ["*.yaml"]
 "castor.profiles.coral" = ["*.yaml"]
 "castor.templates" = ["**/*"]
+"castor.bench.sacpaint" = ["assets/*.png", "assets/*.json", "assets/*.webp"]
 
 [tool.ruff]
 line-length = 100

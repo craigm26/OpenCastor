@@ -38,3 +38,4 @@ config/swarm.yaml
 
 # wrangler pages cache (local deploy state, never source)
 .wrangler/
+.pytest-tmp/

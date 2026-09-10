@@ -9,6 +9,47 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+**Sacramento PaintBench is a `castor bench` benchmark now.** `castor bench sacpaint`
+brings the standalone `sacpaint` package (PyPI 0.3.1) into the runtime as
+`castor.bench.sacpaint`: a robot with a pen must reproduce a photograph of
+Sacramento from camera feedback, and any photo of the finished sheet scores
+offline. Install the eval stack with `pip install "opencastor[paintbench]"`
+(`paintbench-agent` adds the frontier-model policy); `pip install opencastor`
+alone still pulls no eval framework.
+
+### Added — castor bench sacpaint
+
+- `castor bench sacpaint score PHOTO` rectifies a photo of the sheet (tapped
+  corners, ArUco, or the sheet itself) and prints the five-scorer breakdown.
+- Tasks `sacpaint/photo-v1` (the reference is the original photograph; the
+  scorers read a stroke skeleton traced over its landmarks, both hashes in every
+  EvalLog) and `sacpaint/line-v0`, embodiments `sacpaint_plotter` (mock) and
+  `opencastor` (an SO-ARM101 behind robot-md-gateway, signed receipts, the
+  iPhone or the console as eyes), policies `sacpaint_trace` / `sacpaint_idle`,
+  and the scorers, all registered as `inspect_robots.*` entry points.
+- Media: every score carries `medium` (`pen`, `virtual`, `sim`), each its own
+  leaderboard category. `-E medium=virtual -E calibration=easel` runs a rig
+  with no paper and no pen: the arm moves for real and the canvas is inked
+  from its measured tip. Measured on Bob 2026-09-09: 649 moves, 62 min,
+  composite 0.82.
+- `castor bench sacpaint calibrate` teaches the canvas-to-arm transform;
+  `castor bench sacpaint shim` runs the Claude-subscription shim;
+  `castor bench sacpaint export` writes the robocurve run-dataset layout;
+  `castor bench sacpaint worldevals-entry` prints the catalogue block.
+- The runtime's first Python gateway client (`castor.bench.sacpaint.gateway`):
+  RCAN envelopes to `/v1/invoke`, receipts kept and written as JSONL, denies
+  raised as `SafetyAbort` with the driver's sub-code, a reach that ran but
+  missed raised as `GatewayMiss` so the virtual medium can carry on.
+- Docs: `docs/benchmarks/sacpaint.md`.
+
+### Changed
+
+- `GET /eval/reference.png` on the console now serves the benchmark's own
+  photograph (transcoded to PNG) instead of looking for a separately installed
+  `sacpaint`; `EVAL_REFERENCE_PATH` still overrides it. The `/eval/*` routes
+  themselves (frames, corners, feedback, status; `docs/eval-eyes.md`) landed in
+  3.2.0 without a changelog line; this is it.
+
 ## [3.2.0] - 2026-09-08
 
 Published on PyPI as `1!3.2.0`. **The Microduck becomes the reference robot for

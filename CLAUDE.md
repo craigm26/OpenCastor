@@ -49,6 +49,8 @@ OpenCastor/
 │   │   ├── task_router.py  # TaskRouter — routes tasks by category to providers
 │   │   └── base.py         # BaseProvider ABC + Thought dataclass
 │   ├── drivers/            # Hardware drivers (see full list below)
+│   ├── bench/              # castor bench: ten-minutes (record + EvalLog), sacpaint/ (Sacramento PaintBench,
+│   │                       #   an Inspect Robots benchmark; docs/benchmarks/sacpaint.md)
 │   ├── channels/           # Messaging channels (WhatsApp, Telegram, Discord, ...)
 │   │   └── rcan_mqtt_transport.py  # RCAN-over-MQTT carrier (compact/minimal encoding)
 │   ├── console/            # Robot console — `python -m castor.console` (a `castor up` unit)
