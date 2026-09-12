@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import secrets
 import shutil
 import subprocess
 import sys
@@ -22,6 +23,7 @@ import cv2
 import numpy as np
 
 from castor.bench.sacpaint import reference as refmod
+from castor.bench.sacpaint.claude_shim.server import DEFAULT_MAX_CONCURRENT_CHILDREN
 from castor.bench.sacpaint.reference import (
     DEFAULT_REFERENCE,
     SPEC_SUFFIX,
@@ -205,9 +207,17 @@ def _inspect_robots_bin() -> list[str]:
 
 
 def build_run_command(
-    args: argparse.Namespace, shim_port: int | None = None
+    args: argparse.Namespace,
+    shim_port: int | None = None,
+    shim_token: str | None = None,
 ) -> tuple[list[str], dict[str, str]]:
-    """The inspect-robots command line and environment for ``sacpaint run`` (pure, for tests)."""
+    """The inspect-robots command line and environment for ``sacpaint run`` (pure, for tests).
+
+    ``shim_token`` is the per-run bearer the shim will demand. It is a real
+    secret, not a placeholder: the shim binds loopback, but every process on
+    this robot runs as the same uid, so loopback alone does not keep a
+    co-resident caller off the owner's subscription.
+    """
     log_dir = Path(args.log_dir)
     env = dict(os.environ, SACPAINT_ARTIFACTS=str(log_dir / "sacpaint-artifacts"))
     cmd = _inspect_robots_bin() + [
@@ -223,7 +233,7 @@ def build_run_command(
         "--store-frames",
     ]
     if shim_port is not None:
-        env["SACPAINT_SHIM_KEY"] = "unused"
+        env["SACPAINT_SHIM_KEY"] = shim_token or secrets.token_urlsafe(32)
         env["SACPAINT_WIRE_LABEL"] = "claude-code-cli"
         cmd += [
             "-P",
@@ -270,8 +280,13 @@ def _wait_healthy(port: int, seconds: float = 15.0) -> bool:
 def cmd_run(args: argparse.Namespace) -> int:
     shim = None
     port = None
+    token = None
     if args.subscription:
         port = _free_port()
+        # One token per run, generated here and given to both sides. It travels
+        # in the shim's environment rather than its argv so it never shows up
+        # in another user's `ps`.
+        token = secrets.token_urlsafe(32)
         shim_cmd = [
             sys.executable,
             "-m",
@@ -280,10 +295,12 @@ def cmd_run(args: argparse.Namespace) -> int:
             str(port),
             "--model",
             args.model or "haiku",
+            "--max-concurrent-children",
+            str(getattr(args, "max_concurrent_children", DEFAULT_MAX_CONCURRENT_CHILDREN)),
         ]
         if args.claude_bin:
             shim_cmd += ["--claude-bin", args.claude_bin]
-        shim = subprocess.Popen(shim_cmd)
+        shim = subprocess.Popen(shim_cmd, env=dict(os.environ, SACPAINT_SHIM_TOKEN=token))
         if not _wait_healthy(port):
             shim.terminate()
             raise SystemExit(
@@ -293,7 +310,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             f"subscription shim up on 127.0.0.1:{port}; scores will be labelled wire=claude-code-cli",
             flush=True,
         )
-    cmd, env = build_run_command(args, port)
+    cmd, env = build_run_command(args, port, token)
     print("$ " + " ".join(cmd), flush=True)
     try:
         code = subprocess.call(cmd, env=env)
@@ -641,6 +658,15 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument(
         "--claude-bin",
         help="path to the claude CLI for --subscription (default: whatever is on PATH)",
+    )
+    r.add_argument(
+        "--max-concurrent-children",
+        type=int,
+        default=DEFAULT_MAX_CONCURRENT_CHILDREN,
+        help=(
+            "with --subscription: hard ceiling on `claude -p` children the shim will run "
+            f"at once (default: {DEFAULT_MAX_CONCURRENT_CHILDREN})"
+        ),
     )
     r.add_argument(
         "--max-llm-calls",

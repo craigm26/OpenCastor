@@ -6,7 +6,7 @@ import argparse
 import logging
 import sys
 
-from castor.bench.sacpaint.claude_shim.server import serve
+from castor.bench.sacpaint.claude_shim.server import DEFAULT_MAX_CONCURRENT_CHILDREN, serve
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -16,7 +16,9 @@ def build_parser() -> argparse.ArgumentParser:
             "Serve an OpenAI Chat Completions (and Anthropic Messages) endpoint on "
             "localhost that answers each request with one `claude -p` call, so a "
             "Claude subscription stands in for a metered API key. Results carry the "
-            "claude-code-cli wire label and are not comparable to raw-API runs."
+            "claude-code-cli wire label and are not comparable to raw-API runs. "
+            "Every POST must carry the run's bearer token: set SACPAINT_SHIM_TOKEN "
+            "before starting, or use the token this prints on startup."
         ),
     )
     parser.add_argument("--host", default="127.0.0.1", help="bind address (default: 127.0.0.1)")
@@ -42,6 +44,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=300.0,
         help="seconds to wait for one CLI call (default: 300)",
+    )
+    parser.add_argument(
+        "--max-concurrent-children",
+        type=int,
+        default=DEFAULT_MAX_CONCURRENT_CHILDREN,
+        help=(
+            "hard ceiling on `claude -p` children in flight; requests over it get a 429 "
+            f"rather than queueing (default: {DEFAULT_MAX_CONCURRENT_CHILDREN})"
+        ),
     )
     parser.add_argument(
         "--keep-frames",
@@ -72,6 +83,7 @@ def main(argv: list[str] | None = None) -> int:
         max_turns=args.max_turns,
         timeout_s=args.timeout,
         keep_frames=args.keep_frames,
+        max_concurrent_children=args.max_concurrent_children,
     )
     return 0
 

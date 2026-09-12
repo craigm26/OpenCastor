@@ -680,10 +680,17 @@ OpenAI Chat Completions endpoint on localhost and answers each request with one
 castor bench sacpaint run --subscription --model haiku --policy agent --embodiment sacpaint_plotter --max-llm-calls 40
 ```
 
-`castor bench sacpaint run --subscription` starts the shim on a free port, waits for its
+`castor bench sacpaint run --subscription` starts the shim on a free port, mints
+a fresh bearer token for that run and hands it to both sides, waits for its
 health check, points the agent policy at it, labels every score artifact with
 `wire: claude-code-cli`, and stops the shim when the run ends. Everything below
 is what that flag does by hand.
+
+The shim binds `127.0.0.1`, but loopback is not a boundary between processes
+that share a uid, which is the shape on a robot Pi. So every POST must carry
+the run's token, and `--max-concurrent-children` (default 2) caps how many
+`claude -p` children can be in flight at once; a request over the ceiling gets
+a `429` rather than being queued.
 
 ### Install
 
@@ -693,21 +700,27 @@ is what that flag does by hand.
 ### Start it
 
 ```bash
+export SACPAINT_SHIM_TOKEN=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')
+
 castor bench sacpaint shim --port 8931 --model haiku \
-    --claude-bin ~/.local/bin/claude --max-turns 6
+    --claude-bin ~/.local/bin/claude --max-turns 6 --max-concurrent-children 2
 ```
 
-`--claude-bin` matters when `PATH` is odd; pass the full path. Check it is up:
+`--claude-bin` matters when `PATH` is odd; pass the full path. The shim reads
+`SACPAINT_SHIM_TOKEN` once at startup and pops it, so no `claude -p` child
+inherits it; start it without one and it invents a token and prints it to
+stderr rather than running open. Check it is up (`GET` needs no token):
 
 ```bash
 curl -s http://127.0.0.1:8931/healthz
-# {"status": "ok", "model": "haiku", "calls": 0, "wire": "claude-code-cli"}
+# {"status": "ok", "model": "haiku", "calls": 0, "children": 0,
+#  "max_concurrent_children": 2, "wire": "claude-code-cli"}
 ```
 
 ### Point the policy at it
 
 ```bash
-export SACPAINT_SHIM_KEY=unused   # the shim ignores it; the flag needs a name
+export SACPAINT_SHIM_KEY="$SACPAINT_SHIM_TOKEN"   # the shim checks this one
 
 inspect-robots run --task sacpaint/photo-v1 --policy agent \
     -P base_url=http://127.0.0.1:8931/v1 \
@@ -720,8 +733,9 @@ inspect-robots run --task sacpaint/photo-v1 --policy agent \
 ```
 
 `-P base_url=` is the first rung of the plugin's provider ladder, so no
-provider key is consulted at all. `-P api_key_env=` names a variable the shim
-does not check; point it at anything.
+provider key is consulted at all. `-P api_key_env=` names the variable holding
+the shim's bearer token: it must be the same value the shim started with, or
+every call comes back `401`.
 
 **Always set `-P max_llm_calls=`.** Each call spends subscription usage, and
 the plugin's default is 100. A handful is enough to prove a rig.

@@ -10,9 +10,13 @@ comparable to raw-API runs. See ``docs/subscription.md``.
 """
 
 from castor.bench.sacpaint.claude_shim.server import (
+    DEFAULT_MAX_CONCURRENT_CHILDREN,
+    TOKEN_ENV,
     ClaudeCLIError,
     ClaudeRunner,
+    ShimBusy,
     make_server,
+    resolve_auth_token,
     serve,
 )
 from castor.bench.sacpaint.claude_shim.translate import (
@@ -31,9 +35,12 @@ from castor.bench.sacpaint.claude_shim.translate import (
 )
 
 __all__ = [
+    "DEFAULT_MAX_CONCURRENT_CHILDREN",
+    "TOKEN_ENV",
     "WIRE_LABEL",
     "ClaudeCLIError",
     "ClaudeRunner",
+    "ShimBusy",
     "Prepared",
     "TranslationError",
     "anthropic_response",
@@ -43,6 +50,7 @@ __all__ = [
     "make_server",
     "prepare",
     "render_conversation",
+    "resolve_auth_token",
     "serve",
     "tool_instruction",
     "tool_schema",

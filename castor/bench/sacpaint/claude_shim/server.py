@@ -21,9 +21,12 @@ Then point a client at ``http://127.0.0.1:8931/v1``.
 
 from __future__ import annotations
 
+import contextlib
+import hmac
 import json
 import logging
 import os
+import secrets
 import shutil
 import subprocess
 import sys
@@ -48,9 +51,23 @@ log = logging.getLogger("sacpaint.claude_shim")
 #: Body bigger than this is refused outright rather than read into memory.
 MAX_BODY_BYTES = 64 * 1024 * 1024
 
+#: Environment variable the per-run token arrives in when `sacpaint run
+#: --subscription` starts the shim. Read once at startup and popped, so it is
+#: never inherited by the `claude -p` children.
+TOKEN_ENV = "SACPAINT_SHIM_TOKEN"
+
+#: How many `claude -p` children may be in flight at once by default. The bench
+#: drives one call at a time, so two leaves headroom without letting a
+#: co-resident caller fork the machine flat.
+DEFAULT_MAX_CONCURRENT_CHILDREN = 2
+
 
 class ClaudeCLIError(RuntimeError):
     """The CLI could not be run, or returned something unusable."""
+
+
+class ShimBusy(RuntimeError):
+    """Every child slot is taken; the caller should retry rather than queue."""
 
 
 class ClaudeRunner:
@@ -65,6 +82,7 @@ class ClaudeRunner:
         timeout_s: float = 300.0,
         workdir: Path | None = None,
         keep_frames: bool = False,
+        max_concurrent_children: int = DEFAULT_MAX_CONCURRENT_CHILDREN,
     ):
         self.claude_bin = claude_bin
         self.model = model
@@ -75,6 +93,30 @@ class ClaudeRunner:
         self.workdir.mkdir(parents=True, exist_ok=True)
         self.calls = 0
         self._lock = threading.Lock()
+        if max_concurrent_children < 1:
+            raise ValueError("max_concurrent_children must be at least 1")
+        self.max_concurrent_children = max_concurrent_children
+        # A hard ceiling, not a queue: ThreadingHTTPServer will happily start a
+        # thread per connection, and each thread wants its own `claude -p`.
+        # Without this a burst of requests forks the robot's Pi flat.
+        self._slots = threading.BoundedSemaphore(max_concurrent_children)
+        self.children = 0
+
+    @contextlib.contextmanager
+    def child_slot(self):
+        """Hold one of the ``max_concurrent_children`` slots, or raise ShimBusy."""
+        if not self._slots.acquire(blocking=False):
+            raise ShimBusy(
+                f"all {self.max_concurrent_children} claude child slots are busy; retry shortly"
+            )
+        with self._lock:
+            self.children += 1
+        try:
+            yield
+        finally:
+            with self._lock:
+                self.children -= 1
+            self._slots.release()
 
     # -- command construction -------------------------------------------------
 
@@ -132,23 +174,24 @@ class ClaudeRunner:
             plan.model or self.model,
             len(plan.image_paths),
         )
-        try:
-            completed = subprocess.run(
-                argv,
-                input=plan.prompt,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=self.timeout_s,
-                cwd=str(image_dir),
-                env=env,
-            )
-        except FileNotFoundError as exc:
-            raise ClaudeCLIError(
-                f"claude CLI not found at {self.claude_bin!r}; pass --claude-bin with the full path (often ~/.local/bin/claude)"
-            ) from exc
-        except subprocess.TimeoutExpired as exc:
-            raise ClaudeCLIError(f"claude CLI timed out after {self.timeout_s}s") from exc
+        with self.child_slot():
+            try:
+                completed = subprocess.run(
+                    argv,
+                    input=plan.prompt,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=self.timeout_s,
+                    cwd=str(image_dir),
+                    env=env,
+                )
+            except FileNotFoundError as exc:
+                raise ClaudeCLIError(
+                    f"claude CLI not found at {self.claude_bin!r}; pass --claude-bin with the full path (often ~/.local/bin/claude)"
+                ) from exc
+            except subprocess.TimeoutExpired as exc:
+                raise ClaudeCLIError(f"claude CLI timed out after {self.timeout_s}s") from exc
 
         stdout = (completed.stdout or "").strip()
         # Parse before judging the exit code. The CLI routinely exits non-zero
@@ -206,6 +249,7 @@ class ShimHandler(BaseHTTPRequestHandler):
 
     server_version = "sacpaint-claude-shim/1.0"
     runner: ClaudeRunner  # injected by make_server
+    auth_token: str  # injected by make_server; every POST must present it
 
     # -- plumbing -------------------------------------------------------------
 
@@ -220,9 +264,43 @@ class ShimHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
-    def _error(self, status: int, message: str) -> None:
+    def _error(self, status: int, message: str, *, error_type: str = "shim_error") -> None:
         log.error("HTTP %d: %s", status, message)
-        self._send(status, {"error": {"message": message, "type": "shim_error"}})
+        self._send(status, {"error": {"message": message, "type": error_type}})
+
+    def _presented_token(self) -> str | None:
+        """The bearer token on this request, from either wire's usual header."""
+        header = self.headers.get("Authorization")
+        if header:
+            scheme, _, value = header.partition(" ")
+            if scheme.lower() == "bearer" and value.strip():
+                return value.strip()
+            return header.strip() or None
+        # The Anthropic Messages wire sends the key as x-api-key instead.
+        key = self.headers.get("x-api-key")
+        return key.strip() if key and key.strip() else None
+
+    def _authorized(self) -> bool:
+        """Constant-time check of the per-run token.
+
+        The shim binds loopback, but every agent session on this robot runs as
+        the same uid, so loopback is not a boundary: without this check any
+        co-resident process can spend the owner's subscription.
+        """
+        presented = self._presented_token()
+        if presented is None:
+            return False
+        return hmac.compare_digest(presented, self.auth_token)
+
+    def _reject_unauthorized(self) -> None:
+        # Drain nothing and keep no connection: an unauthenticated caller gets
+        # one answer and the socket back.
+        self.close_connection = True
+        self._error(
+            401,
+            "this shim needs the run's bearer token (Authorization: Bearer ...)",
+            error_type="authentication_error",
+        )
 
     def _read_body(self) -> dict[str, Any] | None:
         try:
@@ -253,6 +331,8 @@ class ShimHandler(BaseHTTPRequestHandler):
                     "status": "ok",
                     "model": self.runner.model,
                     "calls": self.runner.calls,
+                    "children": self.runner.children,
+                    "max_concurrent_children": self.runner.max_concurrent_children,
                     "wire": "claude-code-cli",
                 },
             )
@@ -271,6 +351,9 @@ class ShimHandler(BaseHTTPRequestHandler):
             self._error(404, f"no route for GET {self.path}")
 
     def do_POST(self) -> None:
+        if not self._authorized():
+            self._reject_unauthorized()
+            return
         path = self.path.split("?", 1)[0].rstrip("/")
         if path.endswith("/chat/completions"):
             self._complete(anthropic=False)
@@ -299,6 +382,11 @@ class ShimHandler(BaseHTTPRequestHandler):
                 return
             try:
                 envelope = self.runner.run(plan, scratch)
+            except ShimBusy as exc:
+                # 429, not a queue: the caller decides whether to wait. Holding
+                # the connection open would let a burst pile up unbounded.
+                self._error(429, str(exc), error_type="rate_limit_error")
+                return
             except ClaudeCLIError as exc:
                 # 502: the upstream (the CLI) failed, not the caller's request.
                 # The agent policy retries 5xx, which is the behaviour we want
@@ -313,11 +401,39 @@ class ShimHandler(BaseHTTPRequestHandler):
 
 
 def make_server(
-    runner: ClaudeRunner, host: str = "127.0.0.1", port: int = 8931
+    runner: ClaudeRunner,
+    host: str = "127.0.0.1",
+    port: int = 8931,
+    *,
+    auth_token: str,
 ) -> ThreadingHTTPServer:
-    """Build (but do not start) the HTTP server bound to ``host:port``."""
-    handler = type("BoundShimHandler", (ShimHandler,), {"runner": runner})
+    """Build (but do not start) the HTTP server bound to ``host:port``.
+
+    ``auth_token`` is required on purpose: there is no such thing as an
+    unauthenticated shim, because loopback is not a boundary between processes
+    that share a uid.
+    """
+    if not auth_token:
+        raise ValueError("the shim needs a non-empty auth_token")
+    handler = type(
+        "BoundShimHandler", (ShimHandler,), {"runner": runner, "auth_token": auth_token}
+    )
     return ThreadingHTTPServer((host, port), handler)
+
+
+def resolve_auth_token(explicit: str | None = None) -> tuple[str, bool]:
+    """The token for this shim, and whether it had to be invented.
+
+    Order: the argument, then ``SACPAINT_SHIM_TOKEN`` (popped from the
+    environment so no child inherits it), then a fresh one.
+    """
+    if explicit:
+        os.environ.pop(TOKEN_ENV, None)
+        return explicit, False
+    from_env = os.environ.pop(TOKEN_ENV, "").strip()
+    if from_env:
+        return from_env, False
+    return secrets.token_urlsafe(32), True
 
 
 def serve(
@@ -329,6 +445,8 @@ def serve(
     max_turns: int = 6,
     timeout_s: float = 300.0,
     keep_frames: bool = False,
+    auth_token: str | None = None,
+    max_concurrent_children: int = DEFAULT_MAX_CONCURRENT_CHILDREN,
 ) -> None:
     """Run the shim until interrupted."""
     runner = ClaudeRunner(
@@ -337,8 +455,10 @@ def serve(
         max_turns=max_turns,
         timeout_s=timeout_s,
         keep_frames=keep_frames,
+        max_concurrent_children=max_concurrent_children,
     )
-    httpd = make_server(runner, host, port)
+    token, invented = resolve_auth_token(auth_token)
+    httpd = make_server(runner, host, port, auth_token=token)
     log.info(
         "sacpaint-claude-shim on http://%s:%d/v1 (model=%s, claude=%s, frames in %s)",
         host,
@@ -348,10 +468,19 @@ def serve(
         runner.workdir,
     )
     print(
-        f"sacpaint-claude-shim listening on http://{host}:{port}/v1 (model={model}, wire=claude-code-cli)",
+        f"sacpaint-claude-shim listening on http://{host}:{port}/v1 (model={model}, "
+        f"wire=claude-code-cli, max_concurrent_children={max_concurrent_children})",
         file=sys.stderr,
         flush=True,
     )
+    if invented:
+        # Hand-started shim: nobody passed a token, so print the one it made.
+        # `sacpaint run --subscription` passes its own and never lands here.
+        print(
+            f"bearer token for this shim (send it as Authorization: Bearer ...): {token}",
+            file=sys.stderr,
+            flush=True,
+        )
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

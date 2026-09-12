@@ -114,6 +114,8 @@ GIVE_UP_TOOL = {
     },
 }
 ALL_TOOLS = [MOVE_TOOL, DONE_TOOL, GIVE_UP_TOOL, TAKE_PIC_TOOL]
+#: The shim demands a bearer token on every POST; see tests/test_sacpaint_shim_auth.py.
+SHIM_TOKEN = "shim-token-for-tests"
 ALL_NAMES = ("move_to", "done", "give_up", "take_pic")
 
 
@@ -773,7 +775,7 @@ def test_an_empty_error_envelope_is_fatal(fake_claude: Path, tmp_path: Path) -> 
 @pytest.fixture
 def shim_url(fake_claude: Path, tmp_path: Path):
     runner = ClaudeRunner(claude_bin=str(fake_claude), workdir=tmp_path / "work")
-    httpd = make_server(runner, "127.0.0.1", 0)
+    httpd = make_server(runner, "127.0.0.1", 0, auth_token=SHIM_TOKEN)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     try:
@@ -790,7 +792,7 @@ def _post(url: str, body: dict) -> tuple[int, dict]:
         data=json.dumps(body).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
-            "Authorization": "Bearer whatever",
+            "Authorization": f"Bearer {SHIM_TOKEN}",
         },
     )
     try:
