@@ -1857,6 +1857,13 @@ def _champion_forbidden_key(config: dict, _prefix: str = "") -> Optional[str]:
     `cost_gate_usd` and `max_iterations` pass. A substring test would refuse
     `mapping` for containing `pin`, which is the trap this project has hit
     before with an unanchored grep.
+
+    EVERY key in the document is screened, which means walking lists as well as
+    nested dicts: a champion value is written into `agent.harness` verbatim, so
+    ``{"drift_detection": [{"p66_consent_threshold": 0.99}]}`` puts a fenced key
+    on this robot's disk just as surely as a nested dict does, and a fence that
+    only walked dicts would have let it through while the docstring claimed
+    otherwise.
     """
     from castor.optimizer import _FORBIDDEN_KEYS
 
@@ -1869,10 +1876,21 @@ def _champion_forbidden_key(config: dict, _prefix: str = "") -> Optional[str]:
             return path
         if any(part in _FORBIDDEN_KEYS for part in _re.split(r"[_\-.]+", name) if part):
             return path
-        if isinstance(value, dict):
-            nested = _champion_forbidden_key(value, _prefix=f"{path}.")
-            if nested is not None:
-                return nested
+        nested = _champion_forbidden_nested(value, f"{path}.")
+        if nested is not None:
+            return nested
+    return None
+
+
+def _champion_forbidden_nested(value, prefix: str) -> Optional[str]:
+    """Screen a champion VALUE: a dict directly, a list item by item."""
+    if isinstance(value, dict):
+        return _champion_forbidden_key(value, _prefix=prefix)
+    if isinstance(value, (list, tuple)):
+        for i, item in enumerate(value):
+            found = _champion_forbidden_nested(item, f"{prefix[:-1]}[{i}].")
+            if found is not None:
+                return found
     return None
 
 

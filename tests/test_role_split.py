@@ -413,6 +413,21 @@ def test_forbidden_key_matching_is_anchored_not_substring():
     assert _champion_forbidden_key({"agent": {"auth": {}}}) == "agent.auth"
 
 
+def test_forbidden_key_screening_walks_lists_not_only_dicts():
+    """A champion value is written verbatim, so a list hides a key just as well.
+
+    The fence claims EVERY key in the document; a list item is a key's home too.
+    """
+    from castor.api import _champion_forbidden_key
+
+    assert (
+        _champion_forbidden_key({"drift_detection": [{"p66_consent_threshold": 0.99}]})
+        == "drift_detection[0].p66_consent_threshold"
+    )
+    assert _champion_forbidden_key({"drift_detection": [{"max_iterations": 3}]}) is None
+    assert _champion_forbidden_key({"a": [[{"api_key": "x"}]]}) == "a[0][0].api_key"
+
+
 # ---------------------------------------------------------------------------
 # 5. The admin bearer is minted by `castor up` and its secret is not on disk
 # ---------------------------------------------------------------------------

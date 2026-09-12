@@ -17,7 +17,8 @@ own `OPENCASTOR_API_TOKEN` when the caller supplied no peer token, and
 `GET /api/fleet/{ruri}/status` attached that token unconditionally. That token
 mapped to role `admin` on this robot (it maps to `operator` as of the role split
 below), and the destination address came from an unauthenticated mDNS answer, so
-the relay could hand admin here to whoever answered a discovery query. Both endpoints now require a caller-supplied peer
+the relay could hand admin here to whoever answered a discovery query. Both
+endpoints now require a caller-supplied peer
 credential (`token` in the command body, `?peer_token=` or the `X-Peer-Token`
 header for status) and refuse with 401 `no_peer_credential` before any HTTP
 client is constructed. This robot's own token is never attached to an outbound

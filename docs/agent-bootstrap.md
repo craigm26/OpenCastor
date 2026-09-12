@@ -48,9 +48,21 @@ Expected output pattern:
 
 ## 5) Issue Command
 
+`POST /api/command` needs the `operator` role, so it needs a credential. A robot
+brought up with `castor up` already has one in `$ROBOT_HOME/tokens.env`; a bare
+`castor run` has none, and a runtime with no credential configured refuses every
+route above `viewer` with `401 no_auth_configured` (`/health` and `/api/status`
+still answer). Export one before this step:
+
+```bash
+export OPENCASTOR_API_TOKEN=$(grep OPENCASTOR_API_TOKEN "$ROBOT_HOME/tokens.env" | cut -d= -f2)
+# or, for a hand-run simulate session, set any value before starting the runtime
+```
+
 ```bash
 curl -fsS -X POST http://127.0.0.1:8000/api/command \
   -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $OPENCASTOR_API_TOKEN" \
   -d '{"instruction":"move forward slowly for 1 second"}'
 ```
 
