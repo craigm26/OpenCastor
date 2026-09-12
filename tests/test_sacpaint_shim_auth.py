@@ -194,6 +194,28 @@ def test_an_unauthenticated_post_to_an_unknown_route_is_still_401(shim: str) -> 
     assert status == 401
 
 
+def test_a_non_ascii_token_is_answered_401_not_a_traceback(shim: str, tmp_path: Path) -> None:
+    """Headers arrive latin-1 decoded, so a caller can put a non-ASCII byte in
+    Authorization. ``hmac.compare_digest`` on str raises TypeError for those,
+    which would kill the handler thread and return no reply at all."""
+    import http.client
+
+    host, _, port = shim.removeprefix("http://").partition(":")
+    conn = http.client.HTTPConnection(host, int(port), timeout=30)
+    conn.request(
+        "POST",
+        "/v1/chat/completions",
+        body=json.dumps(BODY).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Authorization": "Bearer ÿþ"},
+    )
+    response = conn.getresponse()
+    body = json.loads(response.read())
+    conn.close()
+    assert response.status == 401
+    assert body["error"]["type"] == "authentication_error"
+    assert not (tmp_path / "bin" / "started").exists()
+
+
 def test_make_server_refuses_to_run_without_a_token(tmp_path: Path) -> None:
     runner = ClaudeRunner(claude_bin=str(_write_fake_claude(tmp_path)))
     with pytest.raises(ValueError, match="auth_token"):
@@ -251,6 +273,66 @@ def test_concurrency_ceiling_returns_429_above_limit(tmp_path: Path) -> None:
     assert peak_processes >= 1, "the fake CLI never ran; the test proved nothing"
     assert peak_processes <= 1, f"saw {peak_processes} live claude processes with a ceiling of 1"
     assert _live_children(tmp_path) == 0
+
+
+def test_a_refused_request_does_not_count_as_a_subscription_call(tmp_path: Path) -> None:
+    """`calls` is the usage figure /healthz reports; a 429 spent nothing."""
+    runner = ClaudeRunner(
+        claude_bin=str(_write_fake_claude(tmp_path)),
+        workdir=tmp_path / "work",
+        max_concurrent_children=1,
+    )
+    httpd, thread, url = _serve(runner)
+    try:
+        status, _ = _post(
+            f"{url}/v1/chat/completions", BODY, {"Authorization": f"Bearer {RUN_TOKEN}"}
+        )
+        assert status == 200
+        assert runner.calls == 1
+        # Hold the only slot, then knock: the request is refused before it counts.
+        with runner.child_slot():
+            refused, _ = _post(
+                f"{url}/v1/chat/completions", BODY, {"Authorization": f"Bearer {RUN_TOKEN}"}
+            )
+        assert refused == 429
+        assert runner.calls == 1
+        # And an unauthenticated caller never touches the counter either.
+        assert _post(f"{url}/v1/chat/completions", BODY, {})[0] == 401
+        assert runner.calls == 1
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+
+def test_the_shim_token_is_not_handed_to_the_cli_child(tmp_path: Path) -> None:
+    """The front-door secret stays in the shim; `claude -p` never sees it."""
+    runner = ClaudeRunner(claude_bin=str(_write_fake_claude(tmp_path)), workdir=tmp_path / "work")
+    seen: dict[str, dict[str, str]] = {}
+
+    def fake_run(argv, **kwargs):
+        seen["env"] = kwargs["env"]
+        raise FileNotFoundError("stop here; the env is what we came for")
+
+    import subprocess as _subprocess
+
+    original = _subprocess.run
+    _subprocess.run = fake_run
+    os.environ[TOKEN_ENV] = "front-door-secret"
+    try:
+        httpd, thread, url = _serve(runner)
+        try:
+            _post(f"{url}/v1/chat/completions", BODY, {"Authorization": f"Bearer {RUN_TOKEN}"})
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+            thread.join(timeout=5)
+    finally:
+        _subprocess.run = original
+        os.environ.pop(TOKEN_ENV, None)
+
+    assert TOKEN_ENV not in seen["env"]
+    assert "front-door-secret" not in seen["env"].values()
 
 
 def test_the_ceiling_lets_sequential_calls_through(shim: str) -> None:

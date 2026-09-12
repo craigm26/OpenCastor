@@ -163,18 +163,22 @@ class ClaudeRunner:
         # The whole point is the subscription: never let a stray key meter this.
         env.pop("ANTHROPIC_API_KEY", None)
         env.pop("ANTHROPIC_AUTH_TOKEN", None)
+        # The shim's own front-door token is not the child's business either.
+        env.pop(TOKEN_ENV, None)
 
-        with self._lock:
-            self.calls += 1
-            call_index = self.calls
-
-        log.info(
-            "call %d -> %s (%d images)",
-            call_index,
-            plan.model or self.model,
-            len(plan.image_paths),
-        )
+        # Take a slot before counting: `calls` is the subscription usage figure
+        # /healthz reports, so a request refused with 429 must not inflate it.
         with self.child_slot():
+            with self._lock:
+                self.calls += 1
+                call_index = self.calls
+
+            log.info(
+                "call %d -> %s (%d images)",
+                call_index,
+                plan.model or self.model,
+                len(plan.image_paths),
+            )
             try:
                 completed = subprocess.run(
                     argv,
@@ -290,7 +294,14 @@ class ShimHandler(BaseHTTPRequestHandler):
         presented = self._presented_token()
         if presented is None:
             return False
-        return hmac.compare_digest(presented, self.auth_token)
+        # Compare bytes, not str. Headers arrive latin-1 decoded, so a caller
+        # can put a non-ASCII byte in Authorization, and compare_digest on str
+        # raises TypeError for those - which would take the handler thread down
+        # with a traceback and no reply instead of answering 401.
+        return hmac.compare_digest(
+            presented.encode("utf-8", "surrogateescape"),
+            self.auth_token.encode("utf-8", "surrogateescape"),
+        )
 
     def _reject_unauthorized(self) -> None:
         # Drain nothing and keep no connection: an unauthenticated caller gets
