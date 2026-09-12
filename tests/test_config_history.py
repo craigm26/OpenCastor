@@ -138,17 +138,24 @@ def test_singleton():
 
 
 @pytest.fixture()
-def api_client():
+def api_client(monkeypatch):
     import castor.config_history as m
 
     m._history = None
 
     from fastapi.testclient import TestClient
 
+    import castor.api as api_mod
     from castor.api import app, state
 
+    # An unconfigured runtime now refuses every route above `viewer` with 401
+    # `no_auth_configured`, so this client carries the admin bearer.
+    monkeypatch.setattr(api_mod, "API_TOKEN", None)
+    monkeypatch.setattr(api_mod, "ADMIN_TOKEN", "test-admin-bearer")
+    monkeypatch.setattr(api_mod, "ADMIN_TOKEN_SHA256", None)
+    monkeypatch.delenv("ROBOT_HOME", raising=False)
     state.config = _SAMPLE_CONFIG_A.copy()
-    return TestClient(app)
+    return TestClient(app, headers={"Authorization": "Bearer test-admin-bearer"})
 
 
 def test_api_config_history_empty(api_client):

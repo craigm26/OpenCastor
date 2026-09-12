@@ -121,6 +121,12 @@ def _make_client_and_reset(monkeypatch):
     api_mod.state.thought_history = collections.deque(maxlen=50)
     api_mod.state.hitl_gate_manager = None
     api_mod.API_TOKEN = None
+    # /api/hitl/authorize is gated at `admin`, and an unconfigured runtime now
+    # refuses every route above `viewer` with 401 `no_auth_configured` — the
+    # hole that let the agent's own bearer resolve the gate it was stopped by.
+    monkeypatch.setattr(api_mod, "ADMIN_TOKEN", "test-admin-bearer")
+    monkeypatch.setattr(api_mod, "ADMIN_TOKEN_SHA256", None)
+    monkeypatch.delenv("ROBOT_HOME", raising=False)
 
     from starlette.testclient import TestClient
 
@@ -136,7 +142,11 @@ def _make_client_and_reset(monkeypatch):
         yield
 
     app.router.lifespan_context = _noop_lifespan
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(
+        app,
+        raise_server_exceptions=False,
+        headers={"Authorization": "Bearer test-admin-bearer"},
+    )
 
 
 def _wire_consent_gate(timeout_ms: int = 30000):

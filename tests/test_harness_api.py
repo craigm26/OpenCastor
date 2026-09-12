@@ -68,12 +68,23 @@ _MINIMAL_CONFIG = {
 # ---------------------------------------------------------------------------
 
 
+#: These tests exercise /api/harness, which is gated at `admin`. A runtime with
+#: NO credential configured refuses every route above `viewer` with 401
+#: `no_auth_configured` (castor/api.py), so the client has to carry the admin
+#: bearer — it used to reach these endpoints by virtue of the runtime being
+#: unconfigured, which is the hole OC-02 closed.
+_TEST_ADMIN_TOKEN = "test-admin-bearer"
+_ADMIN_HEADERS = {"Authorization": f"Bearer {_TEST_ADMIN_TOKEN}"}
+
+
 @pytest.fixture(autouse=True)
 def _reset_state(monkeypatch):
     """Reset AppState and auth env vars before every test."""
     monkeypatch.delenv("OPENCASTOR_API_TOKEN", raising=False)
     monkeypatch.delenv("OPENCASTOR_JWT_SECRET", raising=False)
     monkeypatch.delenv("OPENCASTOR_CONFIG", raising=False)
+    monkeypatch.delenv("OPENCASTOR_ADMIN_TOKEN_SHA256", raising=False)
+    monkeypatch.delenv("ROBOT_HOME", raising=False)
 
     import castor.api as api_mod
 
@@ -85,10 +96,14 @@ def _reset_state(monkeypatch):
     api_mod.state.boot_time = time.time()
     api_mod.state.fs = None
     api_mod.API_TOKEN = None
+    api_mod.ADMIN_TOKEN = _TEST_ADMIN_TOKEN
+    api_mod.ADMIN_TOKEN_SHA256 = None
     api_mod._command_history.clear()
     api_mod._webhook_history.clear()
 
     yield
+
+    api_mod.ADMIN_TOKEN = None
 
 
 @pytest.fixture()
@@ -112,7 +127,7 @@ def client():
     app.router.lifespan_context = _noop_lifespan
 
     try:
-        with TestClient(app, raise_server_exceptions=False) as c:
+        with TestClient(app, raise_server_exceptions=False, headers=_ADMIN_HEADERS) as c:
             yield c
     finally:
         app.router.on_startup[:] = original_startup

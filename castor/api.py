@@ -243,15 +243,93 @@ state = AppState()
 # ---------------------------------------------------------------------------
 # Auth dependency
 # ---------------------------------------------------------------------------
+#: The RUNTIME bearer. This is the credential the agent, the phone app and the
+#: robot's own services carry all day, and `castor up` writes it into
+#: tokens.env under the runtime uid — so anything running as the runtime user,
+#: the AI agent included, can read it. It therefore maps to `operator`, never
+#: `admin`: it may drive the robot, and it may not authorize the human gate
+#: that was put in front of driving.
 API_TOKEN = os.getenv("OPENCASTOR_API_TOKEN")
+
+#: The ADMIN bearer — the human's. `castor up` prints it once and never writes
+#: the secret itself to disk; only its SHA-256 digest is stored (see
+#: :data:`ADMIN_TOKEN_SHA256` and ``castor/up.py``), so reading every file the
+#: runtime user owns does not yield a credential that can be presented.
+#: Set the plaintext in the environment only for a hand-run or test robot.
+ADMIN_TOKEN = os.getenv("OPENCASTOR_ADMIN_TOKEN")
+
+#: SHA-256 hex digest of the admin bearer, when the secret itself is not in the
+#: environment. Read from ``OPENCASTOR_ADMIN_TOKEN_SHA256`` or, failing that,
+#: from ``$ROBOT_HOME/admin-token.sha256`` (0600), which is what `castor up`
+#: writes. A digest is not a bearer: it cannot be replayed against this API.
+ADMIN_TOKEN_SHA256 = os.getenv("OPENCASTOR_ADMIN_TOKEN_SHA256")
+
+
+def _admin_digest() -> str:
+    """The expected SHA-256 of the admin bearer, or "" when none is configured.
+
+    Resolution order: the module global (env var, or a test's monkeypatch), then
+    ``$ROBOT_HOME/admin-token.sha256``. The file is read on every call rather
+    than cached at import because `castor up` mints a fresh admin token on each
+    run and the runtime unit is restarted by the same script.
+    """
+    if ADMIN_TOKEN_SHA256:
+        return ADMIN_TOKEN_SHA256.strip()
+    if ADMIN_TOKEN:
+        return hashlib.sha256(ADMIN_TOKEN.encode("utf-8")).hexdigest()
+    robot_home = os.getenv("ROBOT_HOME")
+    if not robot_home:
+        return ""
+    try:
+        return (Path(robot_home) / "admin-token.sha256").read_text().strip()
+    except OSError:
+        return ""
+
+
+def _is_admin_bearer(raw_token: str) -> bool:
+    """Constant-time check of *raw_token* against the configured admin digest."""
+    if not raw_token:
+        return False
+    expected = _admin_digest()
+    if not expected:
+        return False
+    presented = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    return hmac.compare_digest(presented, expected)
+
+
+#: What an RCAN principal's role claim means in this API's three-tier scheme.
+#: An absent claim decodes to GUEST in :mod:`castor.rcan.jwt_auth`, so an RCAN
+#: JWT with no role lands on `viewer` — read-only — instead of the `admin` every
+#: decodable RCAN JWT used to receive.
+_RCAN_ROLE_TO_API_ROLE = {
+    "CREATOR": "admin",
+    "OWNER": "admin",
+    "LEASEE": "operator",
+    "USER": "operator",
+    "GUEST": "viewer",
+}
 
 
 def _check_min_role(request: Request, min_role: str) -> None:
-    """Raise HTTP 403 if the authenticated user has insufficient role level.
+    """Raise if the authenticated caller has insufficient role level.
 
-    Works with both multi-user JWT tokens (jwt_role on request.state) and the
-    static bearer token path (treated as admin-level).  Skips the check when
-    no auth is configured (open access mode).
+    Three outcomes:
+
+    * 401 ``no_auth_configured`` — this runtime has no credential configured at
+      all, and the route asks for more than `viewer`. THIS IS THE BRANCH SHARED
+      BY ``/api/system/reboot``, ``/api/system/shutdown``, ``/api/system/upgrade``
+      and ``/api/harness/apply-champion``: before this existed, an unconfigured
+      runtime served every one of them to anyone who could reach the port,
+      because :func:`verify_token` fell off the end of its layer 4 without
+      raising and this function returned early on a role of ``None``.
+    * 403 — authenticated, but the role is below *min_role*.
+    * return — allowed.
+
+    The refusal lives here and not at the end of :func:`verify_token` because
+    only the route knows what it costs: an auth dependency would have to carry a
+    hardcoded path list, and a hardcoded path list goes stale the first time
+    somebody adds another privileged endpoint. Read-only routes (``/health``,
+    ``/api/status``, anything gated at `viewer`) keep working unconfigured.
 
     Args:
         request:  The incoming FastAPI request.
@@ -259,28 +337,52 @@ def _check_min_role(request: Request, min_role: str) -> None:
     """
     from castor.auth_jwt import ROLES
 
-    role = getattr(request.state, "jwt_role", None)
-    if role is None:
-        # Static token path sets jwt_role in verify_token;
-        # if still None, this is open access — allow.
+    role = getattr(request.state, "jwt_role", None) or "viewer"
+    min_level = ROLES.get(min_role, 0)
+
+    if not getattr(request.state, "auth_configured", True):
+        if min_level > ROLES["viewer"]:
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "deny": "no_auth_configured",
+                    "hint": (
+                        "This runtime has no OPENCASTOR_USERS, JWT secret or bearer "
+                        "configured, so it cannot tell who is asking. Run `castor up`."
+                    ),
+                },
+            )
         return
 
     level = ROLES.get(role, 0)
-    min_level = ROLES.get(min_role, 0)
     if level < min_level:
         raise HTTPException(
             status_code=403,
-            detail=f"Insufficient role: '{role}' requires at least '{min_role}'",
+            detail={
+                "deny": "insufficient_role",
+                "role": role,
+                "requires": min_role,
+            },
         )
 
 
 async def verify_token(request: Request):
-    """Multi-layer auth: JWT first, then bearer token, then anonymous/GUEST.
+    """Multi-layer auth: JWT first, then the two bearers, then anonymous.
 
     Layer 1: Multi-user JWT (castor.auth_jwt) — checked when OPENCASTOR_USERS is set.
     Layer 2: RCAN JWT (castor.rcan.jwt_auth) — checked when OPENCASTOR_JWT_SECRET is set.
-    Layer 3: Static bearer token (OPENCASTOR_API_TOKEN) — backwards-compatible.
-    Layer 4: Open access when no auth is configured.
+             The API role comes from the token's own role claim; an absent claim
+             is GUEST, which is `viewer`.
+    Layer 3a: Static ADMIN bearer (OPENCASTOR_ADMIN_TOKEN) — role `admin`.
+    Layer 3b: Static RUNTIME bearer (OPENCASTOR_API_TOKEN) — role `operator`.
+    Layer 4: Nothing configured. The request is marked anonymous AND
+             ``auth_configured = False``, which makes :func:`_check_min_role`
+             refuse 401 on every route above `viewer`.
+
+    The split in layer 3 is the point of this dependency. The runtime bearer is
+    readable by anything running as the runtime user — the AI agent included —
+    so a single bearer that carried `admin` made the HiTL gate at
+    ``POST /api/hitl/authorize`` self-approvable by the very agent it gates.
 
     Also accepts the token via ``?token=`` query parameter for streaming
     clients (browsers, VLC) that cannot set Authorization headers.
@@ -309,6 +411,7 @@ async def verify_token(request: Request):
                 request.state.jwt_username = payload.get("sub", "unknown")
                 request.state.jwt_role = role
                 request.state.auth_type = "jwt"
+                request.state.auth_configured = True
                 return
         except Exception:
             pass  # Not a multi-user JWT; fall through
@@ -320,24 +423,48 @@ async def verify_token(request: Request):
 
             mgr = RCANTokenManager(issuer=state.ruri or "")
             principal = mgr.verify(raw_token)
+            # The role comes from the TOKEN, not from the fact that it decoded.
+            # `RCANTokenManager.verify` defaults an absent claim to GUEST, which
+            # maps to `viewer`: a signed token that never claimed a role does not
+            # get one. (This line used to read `= "admin"`.)
+            rcan_role = getattr(getattr(principal, "role", None), "name", "") or "GUEST"
             request.state.principal = principal
             request.state.jwt_username = getattr(principal, "name", "unknown")
-            request.state.jwt_role = "admin"
+            request.state.jwt_role = _RCAN_ROLE_TO_API_ROLE.get(rcan_role, "viewer")
             request.state.auth_type = "jwt"
+            request.state.auth_configured = True
             return
         except Exception:
             pass  # Fall through to static token check
 
-    # --- Layer 3: Static API token (constant-time compare to prevent timing attacks) ---
+    # --- Layer 3a: Static ADMIN bearer (the human's; role `admin`) ---
+    if _is_admin_bearer(raw_token):
+        request.state.jwt_username = "admin"
+        request.state.jwt_role = "admin"
+        request.state.auth_type = "static_admin"
+        request.state.auth_configured = True
+        return
+
+    # --- Layer 3b: Static RUNTIME bearer (constant-time compare) ---
     if API_TOKEN:
         if not hmac.compare_digest(auth.encode(), f"Bearer {API_TOKEN}".encode()):
             raise HTTPException(status_code=401, detail="Invalid or missing API token")
         request.state.jwt_username = "api"
-        request.state.jwt_role = "admin"
+        # `operator`, not `admin`. See the API_TOKEN docstring above.
+        request.state.jwt_role = "operator"
         request.state.auth_type = "static"
+        request.state.auth_configured = True
         return
 
-    # --- Layer 4: No auth configured -- open access ---
+    # --- Layer 4: Nothing configured ---
+    # An admin digest with no runtime bearer still counts as configured: a wrong
+    # token must not fall through to anonymous.
+    request.state.jwt_username = "anonymous"
+    request.state.jwt_role = "viewer"
+    request.state.auth_type = "none"
+    request.state.auth_configured = bool(_admin_digest())
+    if request.state.auth_configured and raw_token:
+        raise HTTPException(status_code=401, detail="Invalid or missing API token")
 
 
 # ---------------------------------------------------------------------------
@@ -537,9 +664,12 @@ async def auth_me(request: Request):
             "auth_type": "jwt",
         }
 
-    # Static bearer token (backwards-compat)
+    # Static bearer token (backwards-compat). `operator`, matching the role
+    # verify_token actually assigns it — this branch is unreachable now that
+    # every layer sets jwt_username, but a stale "admin" here would be the next
+    # person's evidence that the bearer still carries admin. It does not.
     if API_TOKEN and request.headers.get("Authorization") == f"Bearer {API_TOKEN}":
-        return {"username": "api", "role": "admin", "auth_type": "static"}
+        return {"username": "api", "role": "operator", "auth_type": "static"}
 
     return {"username": "anonymous", "role": "viewer", "auth_type": "none"}
 
@@ -854,11 +984,26 @@ async def emergency_stop():
 
 
 @app.post("/api/estop/clear", dependencies=[Depends(verify_token)])
-async def clear_estop():
-    """Clear emergency stop (requires API token)."""
+async def clear_estop(request: Request):
+    """Clear emergency stop. Requires admin role.
+
+    Setting a stop is anybody's right (``POST /api/stop`` stays open to every
+    authenticated caller); CLEARING one is the human's. The runtime bearer the
+    agent carries reaches `operator`, so an agent cannot resume the motion a
+    person halted — the same rule that keeps it off ``/api/hitl/authorize``.
+    """
+    _check_min_role(request, "admin")
+    actor = getattr(request.state, "jwt_username", "unknown")
     if state.fs:
+        # `principal="api"` names the CastorFS capability holder, which is a
+        # different namespace from the API identity (castor/fs/safety.py reads
+        # it against Cap.SAFETY_OVERRIDE). The API identity goes in the record.
         if state.fs.clear_estop(principal="api"):
-            return {"status": "cleared"}
+            try:
+                get_audit().log("estop_cleared", source="api", actor=actor)
+            except Exception as exc:
+                logger.debug("E-stop clear audit write failed: %s", exc)
+            return {"status": "cleared", "cleared_by": actor}
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     return {"status": "no_fs"}
 
@@ -1698,6 +1843,73 @@ async def research_contributors():
     }
 
 
+def _champion_forbidden_key(config: dict, _prefix: str = "") -> Optional[str]:
+    """The first key in *config* the fence refuses, or None.
+
+    The fence is ``castor.optimizer._FORBIDDEN_KEYS`` — the set this repo
+    already ships to stop its own local optimizer touching safety, auth and
+    hardware. A champion document arrives from further away than the optimizer
+    does, so it gets the same fence and no second policy to keep in sync.
+
+    Matching is ANCHORED, never a bare substring: a key is refused when the
+    whole key is in the set, or when one of its ``_ - .``-separated components
+    is. `p66_consent_threshold` is refused on its `p66` component;
+    `cost_gate_usd` and `max_iterations` pass. A substring test would refuse
+    `mapping` for containing `pin`, which is the trap this project has hit
+    before with an unanchored grep.
+    """
+    from castor.optimizer import _FORBIDDEN_KEYS
+
+    if not isinstance(config, dict):
+        return None
+    for key, value in config.items():
+        name = str(key).lower()
+        path = f"{_prefix}{key}"
+        if name in _FORBIDDEN_KEYS:
+            return path
+        if any(part in _FORBIDDEN_KEYS for part in _re.split(r"[_\-.]+", name) if part):
+            return path
+        if isinstance(value, dict):
+            nested = _champion_forbidden_key(value, _prefix=f"{path}.")
+            if nested is not None:
+                return nested
+    return None
+
+
+def _audit_champion_apply(
+    *,
+    outcome: str,
+    reason: str,
+    actor: str,
+    source: str,
+    candidate_id: str,
+    score: float,
+    applied_keys: dict,
+    forbidden_key: Optional[str] = None,
+) -> None:
+    """One audit line per champion-apply attempt, allowed or refused.
+
+    ``source`` names where the document came from (a Firestore doc path or the
+    ops-checkout file), ``actor`` is the authenticated principal, and
+    ``applied_keys`` is the before/after diff. `castor doctor` reads these back.
+    """
+    try:
+        get_audit().log(
+            "champion_apply",
+            source="api",
+            outcome=outcome,
+            reason=reason,
+            actor=actor,
+            champion_source=source,
+            candidate_id=candidate_id,
+            score=score,
+            applied_keys=applied_keys,
+            **({"forbidden_key": forbidden_key} if forbidden_key else {}),
+        )
+    except Exception as exc:  # an audit failure must not change the decision
+        logger.debug("Champion apply audit write failed: %s", exc)
+
+
 @app.post("/api/harness/apply-champion", dependencies=[Depends(verify_token)])
 async def apply_champion_harness(request: Request):
     """POST /api/harness/apply-champion — Apply the current research champion config.
@@ -1712,12 +1924,16 @@ async def apply_champion_harness(request: Request):
       {} — apply champion to this robot only
       {"dry_run": true} — preview what would change without applying
 
-    Requires: operator role minimum.
+    Requires: admin role. A champion document is a REMOTE document — a Firestore
+    field or a file in an ops checkout — and applying one rewrites this robot's
+    own robot.rcan.yaml. That is an owner's act, not the runtime bearer's.
+
     Response:
       {"applied": true, "candidate_id": str, "score": float, "config": {...}}
       {"applied": false, "reason": "no_pending_champion"}
+      400 {"deny": "forbidden_key", ...} — the document named a fenced key
     """
-    _check_min_role(request, "operator")
+    _check_min_role(request, "admin")
 
     try:
         body = await request.json()
@@ -1754,6 +1970,7 @@ async def apply_champion_harness(request: Request):
                         "candidate_id": pending.pop("_candidate_id", "unknown"),
                         "score": pending.pop("_score", 0.0),
                         "config": {k: v for k, v in pending.items() if not k.startswith("_")},
+                        "source": f"firestore:robots/{rrn}#harness_pending",
                     }
                     pending.pop("_pending_since", None)
         except Exception as exc:
@@ -1768,6 +1985,8 @@ async def apply_champion_harness(request: Request):
                     "candidate_id": raw.get("candidate_id", raw.get("id", "unknown")),
                     "score": raw.get("score", 0.0),
                     "config": raw["config"],
+                    "source": f"file:{champion_path}"
+                    + (f"@{raw['commit']}" if raw.get("commit") else ""),
                 }
         except Exception as exc:
             logger.warning("champion.yaml read failed: %s", exc)
@@ -1778,6 +1997,39 @@ async def apply_champion_harness(request: Request):
     config = champion_data["config"]
     candidate_id = champion_data["candidate_id"]
     score = champion_data["score"]
+    source = champion_data.get("source", "unknown")
+    actor = getattr(request.state, "jwt_username", "unknown")
+
+    # ── Fence: a remote document may not name a fenced key, at all ───────────
+    # The old code merged whatever it liked out of TUNABLE_KEYS and silently
+    # dropped the rest, which made a poisoned document indistinguishable from a
+    # clean one in the response AND in the log. Now one fenced key rejects the
+    # WHOLE document and nothing is written. The fence is
+    # `castor.optimizer._FORBIDDEN_KEYS` — the set this repo already ships for
+    # the local optimizer — so there is one policy here, not two.
+    offending = _champion_forbidden_key(config)
+    if offending is not None:
+        _audit_champion_apply(
+            outcome="refused",
+            reason="forbidden_key",
+            actor=actor,
+            source=source,
+            candidate_id=candidate_id,
+            score=score,
+            applied_keys={},
+            forbidden_key=offending,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "deny": "forbidden_key",
+                "key": offending,
+                "hint": (
+                    "A champion document may not name a safety, auth or hardware key. "
+                    "The whole document was rejected; nothing was written."
+                ),
+            },
+        )
 
     if dry_run:
         return {
@@ -1790,11 +2042,15 @@ async def apply_champion_harness(request: Request):
         }
 
     # ── Apply: merge tunables into live config via same path as POST /api/harness ──
+    # `p66_consent_threshold` is NOT here and must never come back: it is the
+    # number that decides when the runtime stops to ask a human, and a remote
+    # document that can raise it can switch the asking off. The fence above
+    # rejects it outright (its `p66` component is in _FORBIDDEN_KEYS) — this set
+    # is the second line, not the first. `cost_gate_usd` stays tunable.
     TUNABLE_KEYS = {
         "max_iterations",
         "thinking_budget",
         "context_budget",
-        "p66_consent_threshold",
         "retry_on_error",
         "drift_detection",
         "cost_gate_usd",
@@ -1811,8 +2067,10 @@ async def apply_champion_harness(request: Request):
     harness = agent.setdefault("harness", {})
 
     applied_keys: dict = {}
+    key_diff: dict = {}
     for key, value in config.items():
         if key in TUNABLE_KEYS:
+            key_diff[key] = {"from": harness.get(key), "to": value}
             harness[key] = value
             applied_keys[key] = value
 
@@ -1826,13 +2084,34 @@ async def apply_champion_harness(request: Request):
             yaml.dump(new_config, f, default_flow_style=False)
         state.config = new_config
         logger.info(
-            "Applied champion harness '%s' (score=%.4f): %s",
+            "Applied champion harness '%s' (score=%.4f) from %s for %s: %s",
             candidate_id,
             score,
+            source,
+            actor,
             applied_keys,
         )
     except Exception as exc:
+        _audit_champion_apply(
+            outcome="failed",
+            reason=f"write_failed: {exc}",
+            actor=actor,
+            source=source,
+            candidate_id=candidate_id,
+            score=score,
+            applied_keys=key_diff,
+        )
         return {"applied": False, "reason": f"write_failed: {exc}"}
+
+    _audit_champion_apply(
+        outcome="applied",
+        reason="ok",
+        actor=actor,
+        source=source,
+        candidate_id=candidate_id,
+        score=score,
+        applied_keys=key_diff,
+    )
 
     # Clear pending flag from Firestore
     if rrn:
@@ -1863,11 +2142,14 @@ async def set_auto_apply_champion(request: Request):
 
     Body: {"enabled": true|false}
     When enabled=true, future champion promotions will be applied immediately to this robot.
-    When enabled=false (default), champion configs are stored as pending for manual review.
+    When enabled=false (the default, and the default an absent body decodes to),
+    champion configs are stored as pending for manual review.
 
-    Requires: operator role.
+    Requires: admin role. This toggle is the one that removes the human from the
+    loop entirely — it makes a remote document rewrite robot.rcan.yaml with
+    nobody watching — so it takes the same credential as applying one by hand.
     """
-    _check_min_role(request, "operator")
+    _check_min_role(request, "admin")
     try:
         body = await request.json()
     except Exception:
@@ -1894,7 +2176,21 @@ async def set_auto_apply_champion(request: Request):
                 "contribute.auto_apply_champion": enabled,
             }
         )
-        logger.info("Set auto_apply_champion=%s for robot %s", enabled, rrn)
+        logger.info(
+            "Set auto_apply_champion=%s for robot %s (by %s)",
+            enabled,
+            rrn,
+            getattr(request.state, "jwt_username", "unknown"),
+        )
+        _audit_champion_apply(
+            outcome="auto_apply_toggled",
+            reason=f"enabled={enabled}",
+            actor=getattr(request.state, "jwt_username", "unknown"),
+            source=f"firestore:robots/{rrn}#contribute.auto_apply_champion",
+            candidate_id="",
+            score=0.0,
+            applied_keys={"auto_apply_champion": {"to": enabled}},
+        )
         return {"auto_apply_champion": enabled, "rrn": rrn}
     except Exception as exc:
         return {"error": str(exc)}
@@ -6682,9 +6978,9 @@ async def fleet_command(ruri: str, body: _FleetCommandRequest, request: Request)
 
     The caller supplies the PEER's credential in ``token``. This robot's own
     ``OPENCASTOR_API_TOKEN`` is never attached to an outbound relay: that token
-    maps to role ``admin`` here (see :func:`verify_token`), and the destination
-    address comes from an unauthenticated mDNS answer, so lending it would hand
-    admin on this robot to whoever answered the discovery query.
+    drives this robot (role ``operator`` since the OC-02 role split; it was
+    ``admin``), and the destination address comes from an unauthenticated mDNS
+    answer, so lending it would hand the robot to whoever answered the query.
     """
     import httpx
 
@@ -7076,7 +7372,7 @@ input[type=range]{{width:110px;accent-color:#58a6ff;}}
 
   document.getElementById("estop-btn").addEventListener("click", () => {{
     stopMove();
-    api("/api/stop").then(() => fb("E-STOP active — use /api/estop/clear to resume", "#da3633"));
+    api("/api/stop").then(() => fb("E-STOP active — clearing it needs the owner token", "#da3633"));
   }});
 
   let gpIdx = null, gpRaf = null, prev = {{}}, lastT = 0, lastMoving = false;
@@ -7122,7 +7418,10 @@ input[type=range]{{width:110px;accent-color:#58a6ff;}}
       fb("E-STOP (gamepad Start)", "#da3633");
     }}
     if (justPressed(gp,8))
-      api("/api/estop/clear").then(() => fb("Stop cleared (gamepad Sel)", "#3fb950"));
+      api("/api/estop/clear").then(r => fb(
+        r && r.ok ? "Stop cleared (gamepad Sel)"
+                  : "Clearing a stop needs the owner token `castor up` printed",
+        r && r.ok ? "#3fb950" : "#da3633"));
   }}
 
   window.addEventListener("gamepadconnected", e => {{
@@ -9230,9 +9529,14 @@ class HiTLAuthorizeRequest(BaseModel):
 async def hitl_authorize(body: HiTLAuthorizeRequest, request: Request):
     """Approve or deny a pending HiTL gate authorization request.
 
-    Requires ``admin`` role (OWNER+).
+    Requires ``admin`` role (OWNER+), which since the role split means the
+    ADMIN bearer or an admin/OWNER JWT — not the runtime bearer the agent
+    carries. This is the endpoint the whole split exists for: while the static
+    bearer mapped to `admin`, the agent whose action was paused here held a
+    credential that could resolve the pause.
     """
     _check_min_role(request, "admin")
+    actor = getattr(request.state, "jwt_username", "unknown")
 
     if body.decision not in ("approve", "deny"):
         raise HTTPException(
@@ -9249,8 +9553,23 @@ async def hitl_authorize(body: HiTLAuthorizeRequest, request: Request):
             status_code=404,
             detail=f"No pending HiTL request with id '{body.pending_id}'",
         )
+    try:
+        get_audit().log(
+            "hitl_authorize",
+            source="api",
+            actor=actor,
+            pending_id=body.pending_id,
+            decision=body.decision,
+        )
+    except Exception as exc:  # an audit failure must not change the decision
+        logger.debug("HiTL authorize audit write failed: %s", exc)
     return JSONResponse(
-        content={"ok": True, "pending_id": body.pending_id, "decision": body.decision}
+        content={
+            "ok": True,
+            "pending_id": body.pending_id,
+            "decision": body.decision,
+            "authorized_by": actor,
+        }
     )
 
 

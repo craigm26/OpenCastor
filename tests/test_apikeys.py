@@ -145,9 +145,16 @@ def api_client(tmp_path, monkeypatch):
 
     from fastapi.testclient import TestClient
 
+    import castor.api as api_mod
     from castor.api import app
 
-    return TestClient(app)
+    # An unconfigured runtime now refuses every route above `viewer` with 401
+    # `no_auth_configured`, so this client carries the admin bearer.
+    monkeypatch.setattr(api_mod, "API_TOKEN", None)
+    monkeypatch.setattr(api_mod, "ADMIN_TOKEN", "test-admin-bearer")
+    monkeypatch.setattr(api_mod, "ADMIN_TOKEN_SHA256", None)
+    monkeypatch.delenv("ROBOT_HOME", raising=False)
+    return TestClient(app, headers={"Authorization": "Bearer test-admin-bearer"})
 
 
 def test_api_keys_generate(api_client):

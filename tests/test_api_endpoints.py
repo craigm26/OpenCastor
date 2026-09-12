@@ -21,6 +21,13 @@ from castor.providers.base import Thought
 # ---------------------------------------------------------------------------
 _SENTINEL = object()
 
+#: The admin bearer the `client` fixture presents by default (see _reset_state).
+_TEST_ADMIN_TOKEN = "test-admin-bearer"
+_ADMIN_HEADERS = {"Authorization": f"Bearer {_TEST_ADMIN_TOKEN}"}
+#: Overrides the fixture's default bearer with a present-but-empty header, so a
+#: test that is ABOUT the missing-credential path still sends no credential.
+_NO_CREDENTIAL = {"Authorization": ""}
+
 
 def _make_mock_brain(raw_text="moving forward", action=_SENTINEL):
     """Create a mock brain whose think() returns a predictable Thought.
@@ -77,10 +84,12 @@ def _reset_state_and_env(monkeypatch):
     We import `state` and `app` fresh and patch the module-level API_TOKEN
     so each test starts with a clean slate.
     """
-    # Remove auth-related env vars so tests start in open-access mode
+    # Remove auth-related env vars so tests start from a known state
     monkeypatch.delenv("OPENCASTOR_API_TOKEN", raising=False)
     monkeypatch.delenv("OPENCASTOR_JWT_SECRET", raising=False)
     monkeypatch.delenv("OPENCASTOR_CONFIG", raising=False)
+    monkeypatch.delenv("OPENCASTOR_ADMIN_TOKEN_SHA256", raising=False)
+    monkeypatch.delenv("ROBOT_HOME", raising=False)
 
     import castor.api as api_mod
 
@@ -102,14 +111,23 @@ def _reset_state_and_env(monkeypatch):
     api_mod.state.learner = None
     api_mod.state.mission_runner = None
 
-    # Reset the module-level API_TOKEN
+    # Reset the module-level API_TOKEN, and configure the admin bearer the
+    # `client` fixture presents by default. A runtime with NO credential at all
+    # now refuses every route above `viewer` with 401 `no_auth_configured`
+    # (castor/api.py) instead of serving it, so a test that wants to reach a
+    # gated endpoint has to carry a credential. Tests that are ABOUT auth
+    # override the header themselves.
     api_mod.API_TOKEN = None
+    api_mod.ADMIN_TOKEN = _TEST_ADMIN_TOKEN
+    api_mod.ADMIN_TOKEN_SHA256 = None
 
     # Clear rate-limiter history so tests don't trip each other's per-IP limits
     api_mod._command_history.clear()
     api_mod._webhook_history.clear()
 
     yield
+
+    api_mod.ADMIN_TOKEN = None
 
 
 @pytest.fixture()
@@ -143,7 +161,7 @@ def client():
     app.router.lifespan_context = _noop_lifespan
 
     try:
-        with TestClient(app, raise_server_exceptions=False) as c:
+        with TestClient(app, raise_server_exceptions=False, headers=_ADMIN_HEADERS) as c:
             yield c
     finally:
         # Restore original handlers
@@ -194,7 +212,8 @@ class TestHealthEndpoint:
     def test_health_detail_requires_auth(self, client, api_mod):
         """/api/health/detail must require a valid token."""
         api_mod.API_TOKEN = "secret-token-123"
-        resp = client.get("/api/health/detail")
+        api_mod.ADMIN_TOKEN = None
+        resp = client.get("/api/health/detail", headers=_NO_CREDENTIAL)
         assert resp.status_code == 401
 
     def test_health_detail_returns_full_info(self, client, api_mod):
@@ -212,14 +231,22 @@ class TestHealthEndpoint:
 # Auth enforcement
 # =====================================================================
 class TestAuthEnforcement:
-    def test_open_access_when_no_token_configured(self, client):
-        """When API_TOKEN is None, protected endpoints are accessible."""
-        resp = client.get("/api/status")
+    def test_open_access_when_no_token_configured(self, client, api_mod):
+        """With nothing configured, READ-ONLY routes still answer.
+
+        The refusal an unconfigured runtime now issues is scoped to routes above
+        `viewer`, so a half-set-up robot stays diagnosable from the phone. This
+        asserts the scope, with no credential of any kind in play.
+        """
+        api_mod.API_TOKEN = None
+        api_mod.ADMIN_TOKEN = None
+        resp = client.get("/api/status", headers=_NO_CREDENTIAL)
         assert resp.status_code == 200
 
     def test_401_when_token_required_but_missing(self, client, api_mod):
         api_mod.API_TOKEN = "secret"
-        resp = client.get("/api/status")
+        api_mod.ADMIN_TOKEN = None
+        resp = client.get("/api/status", headers=_NO_CREDENTIAL)
         assert resp.status_code == 401
 
     def test_401_when_token_wrong(self, client, api_mod):
@@ -249,6 +276,7 @@ class TestAuthEnforcement:
     def test_multiple_protected_endpoints_require_auth(self, client, api_mod):
         """All protected endpoints should return 401 when token is set."""
         api_mod.API_TOKEN = "secret"
+        api_mod.ADMIN_TOKEN = None
         protected = [
             ("GET", "/api/status"),
             ("POST", "/api/command"),
@@ -275,9 +303,9 @@ class TestAuthEnforcement:
         ]
         for method, path in protected:
             if method == "GET":
-                resp = client.get(path)
+                resp = client.get(path, headers=_NO_CREDENTIAL)
             else:
-                resp = client.post(path, json={})
+                resp = client.post(path, json={}, headers=_NO_CREDENTIAL)
             assert resp.status_code == 401, (
                 f"{method} {path} returned {resp.status_code}, expected 401"
             )

@@ -15,9 +15,9 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 over mDNS.** `POST /api/fleet/{ruri}/command` used to fall back to this robot's
 own `OPENCASTOR_API_TOKEN` when the caller supplied no peer token, and
 `GET /api/fleet/{ruri}/status` attached that token unconditionally. That token
-maps to role `admin` on this robot, and the destination address came from an
-unauthenticated mDNS answer, so the relay could hand admin here to whoever
-answered a discovery query. Both endpoints now require a caller-supplied peer
+mapped to role `admin` on this robot (it maps to `operator` as of the role split
+below), and the destination address came from an unauthenticated mDNS answer, so
+the relay could hand admin here to whoever answered a discovery query. Both endpoints now require a caller-supplied peer
 credential (`token` in the command body, `?peer_token=` or the `X-Peer-Token`
 header for status) and refuse with 401 `no_peer_credential` before any HTTP
 client is constructed. This robot's own token is never attached to an outbound
@@ -38,6 +38,59 @@ robot with no `fleet.peers` key believe in two of the author's own hosts.
 
 Callers that relied on the implicit token now get a 401 and must pass the peer's
 own credential.
+
+**The runtime's static bearer no longer carries the admin role.**
+`OPENCASTOR_API_TOKEN` is the credential the agent, the app and the robot's own
+services carry, and `castor up` writes it into `tokens.env` under the runtime
+uid — so anything running as the robot can read it. It used to map to
+`jwt_role = "admin"`, which meant the one production human-in-the-loop gate,
+`POST /api/hitl/authorize`, accepted the credential held by the very agent it
+gates. It now maps to `operator`. A second credential, the owner's, carries
+`admin`: `castor up` mints it fresh on every run, prints it once beside the
+pairing QR, and stores only its SHA-256 in `$ROBOT_HOME/admin-token.sha256`
+(0600) — never in `tokens.env`, because a token in `tokens.env` is a token the
+agent holds. Reading the digest does not let you present it. Lost the token?
+Re-run `castor up`.
+
+A decodable RCAN JWT no longer implies `admin` either: the API role comes from
+the token's own role claim (CREATOR/OWNER → `admin`, LEASEE/USER → `operator`,
+GUEST → `viewer`), and an absent claim decodes to GUEST, which is `viewer`.
+
+**An unconfigured runtime refuses privileged routes instead of serving them.**
+`verify_token`'s layer 4 was a comment followed by the end of the function: with
+`OPENCASTOR_USERS`, the JWT secret and `OPENCASTOR_API_TOKEN` all unset it
+returned having set no role, and `_check_min_role` returned early on a role of
+`None`. `/api/system/reboot`, `/api/system/shutdown`, `/api/system/upgrade` and
+`/api/harness/apply-champion` were open to anyone who could reach the port. Such
+a runtime now refuses every route above `viewer` with 401 `no_auth_configured`;
+`/health` and `/api/status` keep answering so a half-set-up robot can still be
+diagnosed.
+
+**A remote champion document can no longer move the number that decides when
+the robot asks a human.** `POST /api/harness/apply-champion` merged keys from a
+Firestore field or an ops-checkout file against a `TUNABLE_KEYS` set that
+included `p66_consent_threshold`, recorded no actor, and silently dropped
+everything else. `p66_consent_threshold` is out of `TUNABLE_KEYS`, every key in
+the document is now screened against `castor/optimizer.py`'s shipped
+`_FORBIDDEN_KEYS` (anchored on whole keys and `_ - .`-separated components, not
+substrings), and one fenced key rejects the WHOLE document with 400
+`forbidden_key` — nothing is written. `cost_gate_usd` stays tunable. The
+endpoint and `POST /api/harness/auto-apply` both moved from `operator` to
+`admin`, and every attempt writes a `champion_apply` audit line carrying the
+champion source, the before/after key diff and the authenticated actor.
+`castor doctor` prints the last one with its actor.
+
+**Roles that changed.** `POST /api/estop/clear` gained an `admin` gate (setting
+a stop stays open to any authenticated caller; clearing one the human set does
+not), and records who cleared it. `POST /api/hitl/authorize` records who
+authorized. `ApprovalGate.approve()/deny()` take a `principal` and write it to
+the entry and the audit log.
+
+Callers holding only the runtime bearer now get 403 `insufficient_role` on
+`/api/hitl/authorize`, `/api/estop/clear`, `/api/system/*`, `/api/keys/*`,
+`/auth/rotate-key`, `/api/config/reload`, `/api/config/rollback`,
+`/api/harness*` and the other routes already gated at `admin`. Use the owner
+token `castor up` printed.
 
 ## [3.4.0] - 2026-09-10
 

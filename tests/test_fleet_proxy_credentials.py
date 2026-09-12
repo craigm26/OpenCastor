@@ -3,8 +3,9 @@
 ``/api/fleet/{ruri}/command`` and ``/api/fleet/{ruri}/status`` relay to an
 address that came from an mDNS answer, and an mDNS answer is unauthenticated:
 anything on the LAN can claim any RURI. This robot's ``OPENCASTOR_API_TOKEN``
-maps to role ``admin`` in :func:`castor.api.verify_token`, so attaching it to
-such a relay hands admin on THIS robot to whoever answered the query.
+drives this robot (role ``operator`` in :func:`castor.api.verify_token` since
+the role split; it was ``admin``), so attaching it to such a relay hands THIS
+robot to whoever answered the query.
 
 Two properties are pinned here:
 

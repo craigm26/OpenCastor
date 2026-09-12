@@ -296,11 +296,32 @@ def require_role(min_role: str):
                 except Exception:
                     pass  # Fall through to static token check
 
-            # --- Fall back to static API token (admin-level) ---
+            # --- Static ADMIN bearer (the human's) ---
+            from castor.api import _is_admin_bearer
+
+            if _is_admin_bearer(raw_token):
+                if ROLES.get("admin", 0) < ROLES.get(min_role, 0):
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"Insufficient role: 'admin' (requires '{min_role}')",
+                    )
+                request.state.jwt_username = "admin"
+                request.state.jwt_role = "admin"
+                request.state.auth_type = "static_admin"
+                return
+
+            # --- Fall back to the static RUNTIME bearer (operator-level) ---
+            # Was admin-level. The runtime bearer is readable by anything running
+            # as the runtime user, the AI agent included; see castor/api.py.
             static_token = os.getenv("OPENCASTOR_API_TOKEN")
             if static_token and raw_token == static_token:
+                if ROLES.get("operator", 0) < ROLES.get(min_role, 0):
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"Insufficient role: 'operator' (requires '{min_role}')",
+                    )
                 request.state.jwt_username = "api"
-                request.state.jwt_role = "admin"
+                request.state.jwt_role = "operator"
                 request.state.auth_type = "static"
                 return
 

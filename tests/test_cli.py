@@ -2012,7 +2012,10 @@ class TestCmdApprovals:
             },
         ):
             cmd_approvals(args)
-        mock_gate.approve.assert_called_once_with(1)
+        # approve() now records WHO approved (castor/approvals.py).
+        mock_gate.approve.assert_called_once()
+        assert mock_gate.approve.call_args.args == (1,)
+        assert mock_gate.approve.call_args.kwargs["principal"].startswith("cli:")
         out = capsys.readouterr().out
         assert "Approved" in out
 
@@ -2049,7 +2052,9 @@ class TestCmdApprovals:
             },
         ):
             cmd_approvals(args)
-        mock_gate.deny.assert_called_once_with(2)
+        mock_gate.deny.assert_called_once()
+        assert mock_gate.deny.call_args.args == (2,)
+        assert mock_gate.deny.call_args.kwargs["principal"].startswith("cli:")
 
     def test_deny_not_found(self, capsys):
         """--deny with unknown ID should print not found."""

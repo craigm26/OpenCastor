@@ -104,29 +104,57 @@ class ApprovalGate:
         with self._lock:
             return [e for e in self._queue if e["status"] == "pending"]
 
-    def approve(self, approval_id: int) -> dict:
-        """Approve a pending action and return it for execution."""
+    def approve(self, approval_id: int, principal: str = "unknown") -> dict:
+        """Approve a pending action and return it for execution.
+
+        *principal* names WHO approved. A gate whose record does not say that
+        answers the wrong question: "was this approved" is easy and useless
+        next to "who approved it", and a queue that only ever showed
+        ``status: approved`` could not distinguish the owner from the agent
+        that raised the action in the first place. It is recorded on the entry
+        (``approved_by``) and in the audit log.
+        """
         with self._lock:
             for entry in self._queue:
                 if entry["id"] == approval_id and entry["status"] == "pending":
                     entry["status"] = "approved"
+                    entry["approved_by"] = principal
                     entry["resolved_at"] = datetime.now().isoformat()
                     self._save()
-                    logger.info(f"Approval {approval_id} approved")
+                    logger.info("Approval %s approved by %s", approval_id, principal)
+                    self._audit(approval_id, "approved", principal)
                     return entry["action"]
             return None
 
-    def deny(self, approval_id: int) -> bool:
-        """Deny a pending action."""
+    def deny(self, approval_id: int, principal: str = "unknown") -> bool:
+        """Deny a pending action. *principal* names who denied it."""
         with self._lock:
             for entry in self._queue:
                 if entry["id"] == approval_id and entry["status"] == "pending":
                     entry["status"] = "denied"
+                    entry["denied_by"] = principal
                     entry["resolved_at"] = datetime.now().isoformat()
                     self._save()
-                    logger.info(f"Approval {approval_id} denied")
+                    logger.info("Approval %s denied by %s", approval_id, principal)
+                    self._audit(approval_id, "denied", principal)
                     return True
             return False
+
+    @staticmethod
+    def _audit(approval_id: int, decision: str, principal: str) -> None:
+        """Record the decision and its principal. Never changes the outcome."""
+        try:
+            from castor.audit import get_audit
+
+            get_audit().log(
+                "approval",
+                source="approvals",
+                id=approval_id,
+                decision=decision,
+                principal=principal,
+            )
+        except Exception as exc:
+            logger.debug(f"Approval audit write failed: {exc}")
 
     def clear(self):
         """Clear all resolved approvals (keep pending ones)."""

@@ -62,6 +62,9 @@ _CONFIG_NO_SKILLS = {
 # Fixtures
 # ---------------------------------------------------------------------------
 
+#: The admin bearer the `client` fixture presents by default.
+_TEST_ADMIN_TOKEN = "test-admin-bearer"
+
 
 @pytest.fixture(autouse=True)
 def _reset_state(monkeypatch):
@@ -79,10 +82,17 @@ def _reset_state(monkeypatch):
     api_mod.state.boot_time = time.time()
     api_mod.state.fs = None
     api_mod.API_TOKEN = None
+    # POST /api/harness is gated at `admin`; an unconfigured runtime refuses
+    # every route above `viewer` with 401 `no_auth_configured`.
+    api_mod.ADMIN_TOKEN = _TEST_ADMIN_TOKEN
+    api_mod.ADMIN_TOKEN_SHA256 = None
+    monkeypatch.delenv("ROBOT_HOME", raising=False)
     api_mod._command_history.clear()
     api_mod._webhook_history.clear()
 
     yield
+
+    api_mod.ADMIN_TOKEN = None
 
 
 @pytest.fixture()
@@ -106,7 +116,11 @@ def client():
     app.router.lifespan_context = _noop_lifespan
 
     try:
-        with TestClient(app, raise_server_exceptions=False) as c:
+        with TestClient(
+            app,
+            raise_server_exceptions=False,
+            headers={"Authorization": f"Bearer {_TEST_ADMIN_TOKEN}"},
+        ) as c:
             yield c
     finally:
         app.router.on_startup[:] = original_startup

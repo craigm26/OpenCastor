@@ -1856,6 +1856,55 @@ def _check_gaps(robot: Optional[RobotUnits], collect=None) -> list[CheckResult]:
     return out
 
 
+def _check_last_champion_apply(audit=None) -> CheckResult:
+    """The last remote champion config applied to this robot, and BY WHOM.
+
+    A champion document arrives from Firestore or an ops checkout and rewrites
+    robot.rcan.yaml. Until this check existed, the only trace was a log line
+    that named neither the source nor the principal, so "which config is this
+    robot running, and who put it there" had no answer on the robot itself.
+
+    Never blocking: a robot that has never applied one is the normal case, and
+    a refused document is an `ok` outcome, not a broken robot. It is a WARN when
+    the last attempt was refused, because a refusal is somebody trying.
+    """
+    if audit is None:
+        try:
+            from castor.audit import get_audit
+
+            audit = get_audit()
+        except Exception as exc:  # noqa: BLE001
+            return CheckResult("Last champion apply", "skip", f"audit unavailable: {exc}")
+    try:
+        entries = audit.read(event="champion_apply", limit=200)
+    except Exception as exc:  # noqa: BLE001
+        return CheckResult("Last champion apply", "skip", f"audit read failed: {exc}")
+    if not entries:
+        return CheckResult(
+            "Last champion apply",
+            "ok",
+            "never — this robot runs the config `castor up` generated",
+        )
+    last = entries[-1]
+    outcome = last.get("outcome", "unknown")
+    detail = (
+        f"{last.get('ts', '?')[:19]} {outcome} "
+        f"candidate={last.get('candidate_id') or '-'} "
+        f"by={last.get('actor', 'unknown')} "
+        f"from={last.get('champion_source', 'unknown')}"
+    )
+    keys = last.get("applied_keys") or {}
+    if keys:
+        detail += " keys=" + ",".join(sorted(str(k) for k in keys))
+    if last.get("forbidden_key"):
+        detail += f" forbidden_key={last['forbidden_key']}"
+    return CheckResult(
+        "Last champion apply",
+        "warn" if outcome in ("refused", "failed") else "ok",
+        detail,
+    )
+
+
 def run_robot_checks(home=None, unit_dir=None) -> DoctorReport:
     """The whole robot section, in the order an owner debugs in.
 
@@ -1882,6 +1931,7 @@ def run_robot_checks(home=None, unit_dir=None) -> DoctorReport:
     add(_check_pca9685_persistence(robot, policy))
     add(_check_mdns_advertiser())
     add(_check_usb_power_budget())
+    add(_check_last_champion_apply())
     for result in _check_gaps(robot):
         add(result)
 

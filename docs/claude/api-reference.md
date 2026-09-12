@@ -6,13 +6,28 @@ Complete reference for all endpoints in `castor/api.py`.
 
 Auth layers checked in order:
 1. **Multi-user JWT** — `JWT_SECRET` + `OPENCASTOR_USERS` env var (`castor/auth_jwt.py`)
-2. **RCAN JWT** — `OPENCASTOR_JWT_SECRET`
-3. **Static bearer** — `OPENCASTOR_API_TOKEN`
-4. **Open** — no auth required
+2. **RCAN JWT** — `OPENCASTOR_JWT_SECRET`. The API role comes from the token's own
+   role claim: CREATOR/OWNER → `admin`, LEASEE/USER → `operator`, GUEST → `viewer`.
+   An absent claim decodes to GUEST, so it is `viewer`.
+3a. **Static ADMIN bearer** — `OPENCASTOR_ADMIN_TOKEN`, or the SHA-256 in
+   `$ROBOT_HOME/admin-token.sha256` that `castor up` writes. Role `admin`.
+3b. **Static RUNTIME bearer** — `OPENCASTOR_API_TOKEN`. Role `operator`.
+4. **Nothing configured** — anonymous `viewer`. Every route above `viewer`
+   refuses with 401 `no_auth_configured`; `/health` and `/api/status` still answer.
 
 Roles: `admin(3) > operator(2) > viewer(1)`
 - Viewers get 403 on `POST /api/command`
 - Operators get 403 on `POST /api/config/reload`
+
+**Two bearers, on purpose.** `OPENCASTOR_API_TOKEN` lives in `tokens.env` under
+the runtime uid, so anything running as the robot — the AI agent included — can
+read it; it drives (`operator`) and cannot authorize the human gates in front of
+driving. The admin bearer is printed once by `castor up` and only its digest is
+stored, so reading every file the robot owns does not yield a credential that
+can be presented. Routes gated at `admin` include `POST /api/hitl/authorize`,
+`POST /api/estop/clear`, `/api/system/{reboot,shutdown,upgrade}`, `/api/keys/*`,
+`/auth/rotate-key`, `/api/config/{reload,rollback}` and `/api/harness*`.
+Re-run `castor up` to mint a new admin token.
 
 Error responses use `{"error": "...", "code": "HTTP_NNN", "status": NNN}` (not `{"detail": "..."}`).
 

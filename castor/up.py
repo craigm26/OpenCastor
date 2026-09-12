@@ -35,6 +35,7 @@ Design rules, each earned the hard way:
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 import secrets
@@ -777,6 +778,38 @@ def ensure_console_token(home: Path) -> tuple[str, bool]:
     return token, False
 
 
+#: Where the runtime looks for the admin bearer's DIGEST. Resolved from
+#: ``ROBOT_HOME``, which the castor unit already sets (see :func:`unit_files`),
+#: so no new environment plumbing and no new hand-edited file.
+ADMIN_TOKEN_DIGEST_FILE = "admin-token.sha256"
+
+
+def mint_admin_token(home: Path) -> str:
+    """Mint the admin bearer, store only its digest, and return the secret.
+
+    THE OPPOSITE CONTRACT FROM EVERY OTHER TOKEN `up` WRITES. The bearers and
+    the console token are identity: they ride in the pairing QR and rotating
+    them un-pairs the phone, so they are reused forever. The admin bearer rides
+    in nothing. It is the human's credential for the four or five acts a robot's
+    owner performs and its agent must not — authorize a HiTL gate, clear an
+    e-stop, mint a key, reboot the host, apply a remote champion config — so:
+
+    * it is minted FRESH on every run, which makes rerunning `castor up` the
+      recovery path for an operator who closed the terminal it was printed in;
+    * only its SHA-256 lands on disk, in its own 0600 file and NOT in
+      tokens.env. Everything running as the runtime uid can read the robot
+      home. A digest is not a bearer: reading it does not let you present it.
+
+    Returns the plaintext, for the caller to print once and forget.
+    """
+    token = f"oc_admin_{secrets.token_hex(16)}"
+    home.mkdir(parents=True, exist_ok=True)
+    digest_file = home / ADMIN_TOKEN_DIGEST_FILE
+    digest_file.write_text(hashlib.sha256(token.encode("utf-8")).hexdigest() + "\n")
+    digest_file.chmod(0o600)
+    return token
+
+
 # ---------------------------------------------------------------------------
 # Manifest signing
 # ---------------------------------------------------------------------------
@@ -1088,11 +1121,18 @@ def run_up(
         # runtime REFUSES TO START without it (fail closed, correctly). Its
         # own token, not the gateway read bearer: leaking a camera URL must
         # not also hand out the runtime's stop endpoint.
+        #
+        # THE ADMIN BEARER IS NOT IN THIS FILE, and that is the whole point of
+        # the second credential. tokens.env is owned by the runtime uid, so
+        # everything running as the robot — the AI agent included — can read
+        # every line of it. A token in here is a token the agent holds.
         tokens.write_text(
             f"ACTUATE_TOKEN={actuate}\nREAD_TOKEN={read_tok}\n"
             f"OPENCASTOR_API_TOKEN=oc_api_{secrets.token_hex(16)}\n"
         )
         tokens.chmod(0o600)
+    admin_token = mint_admin_token(home)
+    _say("owner token: minted — printed once below, only its digest on disk", started)
     console_token, console_reused = ensure_console_token(home)
     _say(
         "console: token reused" if console_reused else "console: read-only token generated", started
@@ -1253,6 +1293,18 @@ def run_up(
         f"\nDone in {time.monotonic() - started:.0f}s. "
         f"Scan {home / 'pair-qr.png'} {scan_with}, "
         "then follow “Run your first drive”."
+    )
+    # THE ADMIN BEARER IS PRINTED HERE AND NOWHERE ELSE, and the QR does not
+    # carry it — same reasoning as the duck's bridge token below. The phone
+    # scans a credential that drives the robot; this one authorizes the human
+    # gates in front of driving, and the robot must not be able to hand it out.
+    # Only its digest is on disk, so `castor up` is the only way to get another.
+    print(
+        "\n  Owner token (shown once, not saved anywhere you can read it back):\n"
+        f"    {admin_token}\n"
+        "  It is the only credential that can authorize a paused action,\n"
+        "  clear an emergency stop, mint a key, or reboot this host.\n"
+        "  Keep it off the robot. Lost it? Re-run `castor up` for a new one.\n"
     )
     if plan.is_duck:
         # THE TOKEN IS PRINTED, and the QR does not carry it. The pairing QR

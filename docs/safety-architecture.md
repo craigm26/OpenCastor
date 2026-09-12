@@ -70,7 +70,19 @@ agent:
       location_class: human_proximate
 ```
 
-If no authorization arrives within `hitl_timeout_s` (default: 300), the action is cancelled with `HITL_TIMEOUT`. The AI agent has no code path to bypass this gate.
+If no authorization arrives within `hitl_timeout_s` (default: 300), the action is cancelled with `HITL_TIMEOUT`.
+
+**What holds the gate shut is a credential, not the absence of a code path.** `POST /api/hitl/authorize` is the code path, it is reachable from the same network the agent is on, and it resolves any pending gate. What it requires is the `admin` role, and the role split in `castor/api.py` is what keeps that out of the agent's hands:
+
+| credential | where it lives | role |
+| --- | --- | --- |
+| `OPENCASTOR_API_TOKEN` (runtime bearer) | `tokens.env`, readable by everything running as the runtime user, the agent included | `operator` |
+| `OPENCASTOR_ADMIN_TOKEN` (owner bearer) | printed once by `castor up`; only its SHA-256 is stored, in `$ROBOT_HOME/admin-token.sha256` | `admin` |
+| RCAN JWT | signed by the issuer | from the token's own role claim; an absent claim is GUEST → `viewer` |
+
+So the honest statement is: an agent that can read every file the robot owns still cannot authorize a gate, clear an e-stop, mint a key, reboot the host or apply a remote champion config, because none of those accept the credential it can read. An agent that obtains the owner's bearer by some other route can do all of them. Keep that bearer off the robot.
+
+A runtime with no credential configured at all refuses every route above `viewer` with `401 no_auth_configured` rather than serving them openly.
 
 **To verify local safety invariant (structural enforcement):**
 ```bash

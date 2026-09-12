@@ -5725,8 +5725,18 @@ def cmd_approvals(args) -> None:
     deny_id = getattr(args, "deny", None)
     clear = getattr(args, "clear", False)
 
+    # The CLI runs as a person on this host, so the host account is the honest
+    # principal to record. It is not "api" and it is not "operator": the record
+    # has to say which of those two a decision actually came from.
+    import getpass as _getpass
+
+    try:
+        principal = f"cli:{_getpass.getuser()}"
+    except Exception:
+        principal = "cli:unknown"
+
     if approve_id is not None:
-        result = gate.approve(int(approve_id))
+        result = gate.approve(int(approve_id), principal=principal)
         if result is not None:
             print(f"  Approved action {approve_id}.")
         else:
@@ -5734,7 +5744,7 @@ def cmd_approvals(args) -> None:
         return
 
     if deny_id is not None:
-        ok = gate.deny(int(deny_id))
+        ok = gate.deny(int(deny_id), principal=principal)
         if ok:
             print(f"  ✅ Denied action {deny_id}.")
         else:

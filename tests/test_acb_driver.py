@@ -550,8 +550,13 @@ class TestAcbApiEndpoints:
         import castor.api as _api
 
         monkeypatch.setattr(_api, "API_TOKEN", None)
+        # An unconfigured runtime now refuses every route above `viewer` with 401
+        # `no_auth_configured`, so this client carries the admin bearer.
+        monkeypatch.setattr(_api, "ADMIN_TOKEN", "test-admin-bearer")
+        monkeypatch.setattr(_api, "ADMIN_TOKEN_SHA256", None)
+        monkeypatch.delenv("ROBOT_HOME", raising=False)
         _api.state.driver = None
-        return TestClient(_api.app)
+        return TestClient(_api.app, headers={"Authorization": "Bearer test-admin-bearer"})
 
     def test_hardware_scan_returns_devices(self, client):
         with patch(
