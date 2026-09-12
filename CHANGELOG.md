@@ -9,6 +9,36 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+### Security
+
+**The fleet proxy no longer lends this robot's credential to a peer it found
+over mDNS.** `POST /api/fleet/{ruri}/command` used to fall back to this robot's
+own `OPENCASTOR_API_TOKEN` when the caller supplied no peer token, and
+`GET /api/fleet/{ruri}/status` attached that token unconditionally. That token
+maps to role `admin` on this robot, and the destination address came from an
+unauthenticated mDNS answer, so the relay could hand admin here to whoever
+answered a discovery query. Both endpoints now require a caller-supplied peer
+credential (`token` in the command body, `?peer_token=` or the `X-Peer-Token`
+header for status) and refuse with 401 `no_peer_credential` before any HTTP
+client is constructed. This robot's own token is never attached to an outbound
+relay.
+
+**A discovery answer is a hint, not an authorisation.** `_find_fleet_peer` now
+intersects what mDNS reported with the RURIs declared under the config key
+`fleet.peers`; an undeclared RURI gets 404 `peer_not_declared` and is never
+contacted. `castor up` generates `fleet:\n  peers: []` into `robot.rcan.yaml`
+for both archetypes, so the key exists on every new robot and nobody hand-edits
+a file to get the safe default. Every relay attempt, allowed or refused, writes
+one `fleet_relay` audit line naming the initiator, the target RURI, the
+resolved address and a SHA-256 of the instruction.
+
+Also removed: the hardcoded peer map in `castor/agent_tools.py`, which made any
+robot with no `fleet.peers` key believe in two of the author's own hosts.
+`_get_peer_urls()` returns `{}` when the key is absent.
+
+Callers that relied on the implicit token now get a 401 and must pass the peer's
+own credential.
+
 ## [3.4.0] - 2026-09-10
 
 Published on PyPI as `1!3.4.0`.

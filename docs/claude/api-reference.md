@@ -359,10 +359,13 @@ Response:
 ```
 
 ### POST /api/fleet/{ruri}/command
-Proxy a command to a remote robot via RCAN bearer token.
+Proxy a command to a remote robot. The caller supplies the PEER's own bearer in
+`token`; this robot never lends its own. 401 `no_peer_credential` without it,
+404 `peer_not_declared` for a RURI missing from the config key `fleet.peers`.
 
 ### GET /api/fleet/{ruri}/status
-Proxy a status fetch from a remote robot.
+Proxy a status fetch from a remote robot. Same rules; the peer's bearer comes
+from `?peer_token=` or the `X-Peer-Token` header.
 
 ---
 

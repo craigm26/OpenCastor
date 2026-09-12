@@ -22,6 +22,16 @@ physics:
 drivers:
   - protocol: simulation
     backend: mock
+fleet:
+  # Peers this robot will relay to through /api/fleet/{ruri}/command and
+  # /api/fleet/{ruri}/status. EMPTY on purpose, and the emptiness is the
+  # security property: an mDNS answer says where a RURI is, never that this
+  # robot may talk to it, so the proxy intersects what discovery found with
+  # what is listed here and 404s anything undeclared. Add a peer by its RURI
+  # (a bare string, or a mapping with `ruri`/`rrn` and `url`). The caller
+  # still supplies that peer's OWN token per request; this robot never lends
+  # its own.
+  peers: []
 network:
   telemetry_stream: true
 safety:

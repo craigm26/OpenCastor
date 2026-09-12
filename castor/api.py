@@ -31,6 +31,7 @@ from fastapi import (
     Depends,
     FastAPI,
     File,
+    Header,
     HTTPException,
     Query,
     Request,
@@ -6637,23 +6638,96 @@ class _FleetCommandRequest(BaseModel):
     token: Optional[str] = None
 
 
+def _audit_fleet_relay(
+    *,
+    request: Request,
+    endpoint: str,
+    outcome: str,
+    reason: str,
+    ruri: str,
+    address: Optional[str],
+    instruction: str,
+) -> None:
+    """Record one audit line per relay attempt, on the allowed and refused path.
+
+    The point of the line is the initiator: a relay leaves this robot carrying
+    somebody's instruction, and the log has to name who asked, which RURI they
+    asked for, where that resolved to, and a digest of what was sent.
+    """
+    try:
+        get_audit().log(
+            "fleet_relay",
+            source="api",
+            endpoint=endpoint,
+            outcome=outcome,
+            reason=reason,
+            initiator=getattr(request.state, "jwt_username", "unknown"),
+            target_ruri=ruri,
+            target_address=address,
+            instruction_sha256=hashlib.sha256(instruction.encode("utf-8")).hexdigest(),
+        )
+    except Exception as exc:  # an audit failure must not change the decision
+        logger.debug("Fleet relay audit write failed: %s", exc)
+
+
+_NO_PEER_CREDENTIAL = {
+    "deny": "no_peer_credential",
+    "hint": "Supply the PEER robot's own token; this robot never lends its own.",
+}
+
+
 @app.post("/api/fleet/{ruri}/command", dependencies=[Depends(verify_token)])
 async def fleet_command(ruri: str, body: _FleetCommandRequest, request: Request):
-    """Proxy a command to a remote robot identified by RURI."""
+    """Proxy a command to a remote robot identified by RURI.
+
+    The caller supplies the PEER's credential in ``token``. This robot's own
+    ``OPENCASTOR_API_TOKEN`` is never attached to an outbound relay: that token
+    maps to role ``admin`` here (see :func:`verify_token`), and the destination
+    address comes from an unauthenticated mDNS answer, so lending it would hand
+    admin on this robot to whoever answered the discovery query.
+    """
     import httpx
+
+    if not body.token:
+        _audit_fleet_relay(
+            request=request,
+            endpoint="command",
+            outcome="refused",
+            reason="no_peer_credential",
+            ruri=ruri,
+            address=None,
+            instruction=body.instruction,
+        )
+        raise HTTPException(status_code=401, detail=dict(_NO_PEER_CREDENTIAL))
 
     peer = _find_fleet_peer(ruri)
     if not peer:
-        from castor.api_errors import not_found_error
+        _audit_fleet_relay(
+            request=request,
+            endpoint="command",
+            outcome="refused",
+            reason="peer_not_declared",
+            ruri=ruri,
+            address=None,
+            instruction=body.instruction,
+        )
+        raise HTTPException(
+            status_code=404,
+            detail={"error": f"robot/{ruri} not found", "reason": "peer_not_declared"},
+        )
 
-        raise HTTPException(status_code=404, detail=not_found_error(f"robot/{ruri}"))
-
-    url = f"http://{peer['ip']}:{peer['port']}/api/command"
-    headers = {}
-    if body.token:
-        headers["Authorization"] = f"Bearer {body.token}"
-    elif API_TOKEN:
-        headers["Authorization"] = f"Bearer {API_TOKEN}"
+    address = f"{peer['ip']}:{peer['port']}"
+    url = f"http://{address}/api/command"
+    headers = {"Authorization": f"Bearer {body.token}"}
+    _audit_fleet_relay(
+        request=request,
+        endpoint="command",
+        outcome="allowed",
+        reason="peer_declared",
+        ruri=ruri,
+        address=address,
+        instruction=body.instruction,
+    )
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -6666,18 +6740,63 @@ async def fleet_command(ruri: str, body: _FleetCommandRequest, request: Request)
 
 
 @app.get("/api/fleet/{ruri}/status", dependencies=[Depends(verify_token)])
-async def fleet_status(ruri: str):
-    """Proxy a status request to a remote robot identified by RURI."""
+async def fleet_status(
+    ruri: str,
+    request: Request,
+    peer_token: Optional[str] = Query(
+        None, description="The peer robot's own bearer token."
+    ),
+    x_peer_token: Optional[str] = Header(None),
+):
+    """Proxy a status request to a remote robot identified by RURI.
+
+    Same rule as :func:`fleet_command`: the peer's credential comes from the
+    caller (``?peer_token=`` or the ``X-Peer-Token`` header) and this robot's
+    own token is never attached to the outbound request.
+    """
     import httpx
+
+    token = peer_token or x_peer_token
+    if not token:
+        _audit_fleet_relay(
+            request=request,
+            endpoint="status",
+            outcome="refused",
+            reason="no_peer_credential",
+            ruri=ruri,
+            address=None,
+            instruction="status",
+        )
+        raise HTTPException(status_code=401, detail=dict(_NO_PEER_CREDENTIAL))
 
     peer = _find_fleet_peer(ruri)
     if not peer:
-        from castor.api_errors import not_found_error
+        _audit_fleet_relay(
+            request=request,
+            endpoint="status",
+            outcome="refused",
+            reason="peer_not_declared",
+            ruri=ruri,
+            address=None,
+            instruction="status",
+        )
+        raise HTTPException(
+            status_code=404,
+            detail={"error": f"robot/{ruri} not found", "reason": "peer_not_declared"},
+        )
 
-        raise HTTPException(status_code=404, detail=not_found_error(f"robot/{ruri}"))
-
-    url = f"http://{peer['ip']}:{peer['port']}/api/status"
-    headers = {"Authorization": f"Bearer {API_TOKEN}"} if API_TOKEN else {}
+    address = f"{peer['ip']}:{peer['port']}"
+    url = f"http://{address}/api/status"
+    headers = {"Authorization": f"Bearer {token}"}
+    _audit_fleet_relay(
+        request=request,
+        endpoint="status",
+        outcome="allowed",
+        reason="peer_declared",
+        ruri=ruri,
+        address=address,
+        instruction="status",
+    )
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(url, headers=headers)
@@ -6686,8 +6805,39 @@ async def fleet_status(ruri: str):
         raise HTTPException(status_code=502, detail={"error": str(exc)}) from exc
 
 
+def _declared_fleet_peers() -> set:
+    """RURIs the operator declared under config key ``fleet.peers``.
+
+    Generated as an empty list by ``castor up``, so a fresh robot relays to
+    nobody until someone names a peer. Entries may be a bare RURI string or a
+    mapping carrying ``ruri`` (or ``rrn``).
+    """
+    config = state.config or {}
+    fleet = config.get("fleet") or {}
+    declared = set()
+    for entry in fleet.get("peers") or []:
+        if isinstance(entry, str):
+            value = entry
+        elif isinstance(entry, dict):
+            value = entry.get("ruri") or entry.get("rrn") or ""
+        else:
+            continue
+        if value:
+            declared.add(value)
+    return declared
+
+
 def _find_fleet_peer(ruri: str) -> Optional[dict]:
-    """Find a fleet peer by its RURI (exact or partial match)."""
+    """Resolve an address for *ruri* only when it is declared AND discovered.
+
+    A discovery answer is a hint, never an authorisation: mDNS is
+    unauthenticated and anything on the LAN can claim any RURI. The address
+    still comes from the mDNS record, but only for a RURI that appears in
+    ``fleet.peers``. Returns ``None`` when the RURI is undeclared, so the
+    handler answers 404 with reason ``peer_not_declared``.
+    """
+    if ruri not in _declared_fleet_peers():
+        return None
     if not state.mdns_browser:
         return None
     for _, peer in state.mdns_browser.peers.items():

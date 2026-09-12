@@ -469,7 +469,13 @@ def _get_own_rrn() -> str:
 
 
 def _get_peer_urls() -> dict[str, str]:
-    """Return known RRN → HTTP base URL mappings from config or env."""
+    """Return declared RRN → HTTP base URL mappings from config.
+
+    Declared means `fleet.peers` in this robot's RCAN config and nothing else.
+    There used to be a hardcoded fallback naming two of the author's own hosts,
+    which meant any robot that shipped with no `fleet.peers` key silently
+    believed in peers it had never been told about. Absent key → no peers.
+    """
     try:
         from castor.main import get_shared_fs
 
@@ -479,11 +485,7 @@ def _get_peer_urls() -> dict[str, str]:
             return {p["rrn"]: p["url"] for p in peers if "rrn" in p and "url" in p}
     except Exception:
         pass
-    # Hardcoded known peers (fallback)
-    return {
-        "RRN-000000000001": "http://127.0.0.1:8001",  # Bob
-        "RRN-000000000005": "http://alex.local:8000",  # Alex
-    }
+    return {}
 
 
 def _cosine_sim(a: list, b: list) -> float:
