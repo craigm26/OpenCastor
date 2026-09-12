@@ -93,6 +93,35 @@ Callers holding only the runtime bearer now get 403 `insufficient_role` on
 `/api/harness*` and the other routes already gated at `admin`. Use the owner
 token `castor up` printed.
 
+### Fixed
+
+**A stop is acknowledged only once the robot has answered.** `castor bridge`
+wrote `ack_qos: "acknowledged"` onto the command document before it dispatched
+anything, under a comment that called it an immediate ACK. It was not an
+acknowledgement: it was a datastore write the robot had no part in. Worse, the
+dispatch it preceded was going to `POST /api/estop`, a route this runtime has
+never served (it serves `POST /api/stop`), so the stop 404'd while the record
+said acknowledged. The cloud resume had the same drift, `POST /api/resume`
+against a runtime that serves `POST /api/runtime/resume`.
+
+The bridge now writes `ack_qos: "queued"` before dispatch, and the
+acknowledgement comes only from the dispatch result: `"acknowledged"` with the
+robot's own stop body under `stop_receipt` on a 2xx, `"stop_not_confirmed"` with
+the HTTP status or the exception class under `ack_qos_error` on anything else —
+including a stop that was refused before it ever left the bridge, and a stop
+that missed the deadline. `ESTOP_ACK_DEADLINE_S` is now the transport timeout on
+the stop itself plus a latency warning on the queued write; it certifies
+nothing. The offline gate still cannot stand between a stop and the robot, and a
+test pins that. A fleet stop relayed by the cloud function takes the same path
+and is recorded the same way.
+
+Route drift of this kind is now a test failure: `tests/test_cloud_bridge_estop.py`
+asserts that every `/api/...` path the bridge dispatches to resolves against the
+runtime's own route table.
+
+Anyone watching a stop from the app will see `stop_not_confirmed` where the old
+code always showed success. That is the honest reading, not a regression.
+
 ## [3.4.0] - 2026-09-10
 
 Published on PyPI as `1!3.4.0`.
