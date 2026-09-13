@@ -199,6 +199,53 @@ def test_submit_marks_reported_and_second_run_submits_nothing(tmp_path, monkeypa
     assert len(calls) == 1
 
 
+def test_failed_submission_never_marks_reported(tmp_path, monkeypatch, capsys):
+    """OC-13 verifier: reported is a fact about a submission that succeeded.
+
+    RrfClient.submit_compliance raises on any status >= 400, so a refused or
+    errored submission must leave the log exactly as it was.
+    """
+    from castor import cli as cli_mod
+
+    log_path = tmp_path / "incidents.jsonl"
+    log = IncidentLog(log_path)
+    log.record(IncidentSeverity.SERIOUS_HARM, "estop", "ESTOP", {})
+    before = log_path.read_text()
+
+    async def _boom(*, rrf, signer, rrn, incidents):
+        raise RuntimeError("503: registry is down")
+
+    monkeypatch.setattr(
+        "castor.rcan3.compliance.submit_incident_report", _boom, raising=False
+    )
+    monkeypatch.setattr("castor.rcan3.identity.load_or_generate_identity", lambda: object())
+    monkeypatch.setattr("castor.rcan3.signer.CastorSigner", lambda ident: object())
+    monkeypatch.setattr(
+        "castor.rcan3.reader.read_robot_md",
+        lambda p: _Args(rrn="RRN-000000000001", endpoint="https://example.invalid"),
+    )
+
+    class _FakeRrf:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+    monkeypatch.setattr("castor.rcan3.rrf_client.RrfClient", _FakeRrf)
+
+    rc = cli_mod._submit_incident_report(_Args(manifest="ROBOT.md"), log)
+    assert rc == 1
+    assert "submission failed" in capsys.readouterr().err
+    # Nothing appended, nothing stamped.
+    assert log_path.read_text() == before
+    assert log.list_incidents()[0]["reported"] is False
+    assert log.unreported_incidents()
+
+
 def test_submit_with_empty_log_is_refused(tmp_path, capsys):
     from castor import cli as cli_mod
 
