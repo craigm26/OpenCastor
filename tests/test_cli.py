@@ -2910,8 +2910,11 @@ class TestIncidentsCli:
         assert result.returncode == 0
         with open(output_path) as f:
             report = json.load(f)
-        assert report["schema"] == "rcan-incidents-v1"
+        assert report["schema"] == "rcan-incidents-v2"
         assert report["total_incidents"] == 0
+        # OC-13: the serious-incident clock cites Art. 73, not Art. 72.
+        assert "Art. 73" in json.dumps(report["serious_incident_reporting"])
+        assert "Art. 72" not in json.dumps(report["serious_incident_reporting"])
 
 
 class TestIfuCli:

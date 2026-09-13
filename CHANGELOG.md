@@ -93,6 +93,93 @@ Callers holding only the runtime bearer now get 403 `insufficient_role` on
 `/api/harness*` and the other routes already gated at `admin`. Use the owner
 token `castor up` printed.
 
+**The investigator-access handler refuses every requester unless an allowlist
+is configured.** `AuthorityRequestHandler._validate_authority` used to return
+early and accept any caller when `trusted_authority_ids` was `None`, logging
+"accepting in development mode", and the runtime's only construction site
+passed no allowlist at all, so the shipped state was accept-all. The allowlist
+now defaults to the empty set and an empty allowlist refuses every request with
+`AUTHORITY_NOT_RECOGNIZED`. The refusal names the config key in the log line,
+`authority.trusted_authority_ids`, so an operator can see exactly what to set;
+the runtime reads it out of the robot config at startup. Emitting that key into
+the config `castor up` generates is a follow-up, so that registering an
+authority stays a generated default rather than a hand-edited file. The owner
+is still notified and the refusal is still written to the commitment chain.
+Absence of the key is the safe state either way. The 24 hour
+per-authority rate limit now rejects the second request instead of logging and
+letting it through. The transparency-record export no longer imports a function
+that does not exist and hand back a silent empty list: every export field
+carries an `export_notes` entry saying `unavailable` with the reason, or
+`truncated` with the cap and the true total.
+
+An unconfigured robot still comes up. Nothing dispatches to the handler today,
+so failing closed costs a normal robot nothing; it only refuses authority
+requests until an operator registers the authorities the robot will answer.
+
+**The conformance row no longer passes on a config flag.** `rcan_v21.authority_handler`
+used to grade on `authority_handler_enabled` alone and print as satisfied. It
+now requires a non-empty allowlist and a registered handler, and the negative
+outcome is a fail in both default and Annex III strict mode, because the
+shipped runtime refuses every request in that state. `castor iso-check` reads
+the allowlist the same way. Conformance stays self-asserted; conformance is not
+certification.
+
+**Incidents are filed by the system, not by hand.** Nothing in the package ever
+set `reported` to anything but `false`, and the only writer was
+`castor incidents record`, so an estop, a controlled stop or a guardian veto
+filed nothing. `SafetyLayer.estop`, `SafetyLayer.controlled_stop` and
+`GuardianAgent.trigger_estop` now file an incident, with the severity coming
+from the trigger rather than a CLI flag. Filing happens strictly after the stop
+is in effect and every failure is absorbed and logged, so an incident-log
+problem can never keep a stop from happening; there are tests for that ordering.
+
+Records now carry `discovered_at` as a field distinct from `timestamp`, and
+every deadline runs from it. When it is not supplied the record is stamped
+`unknown_discovery: true` and says so, rather than quietly running the clock
+from the event time. `castor incidents list` gained filing-status and
+days-to-deadline columns and exits non-zero when anything is overdue.
+`castor incidents report --submit` builds the submission from the records in
+`incidents.jsonl`, and on a 2xx appends a NEW hash-chained line stamping
+`reported`, `reported_at` and the receipt. No line is ever edited in place.
+
+The two-member severity enum is replaced by categories the short windows
+attach to: `critical_infrastructure` (2 days), `death` (10 days) and
+`serious_harm` (15 days). The 90 day "other" bucket is gone; it matched no
+figure in any document on disk. Every figure is the OpenCastor crosswalk's own
+summary, attributed as such in the generated report, and no statutory text is
+quoted anywhere. The serious-incident reporting clock is relabelled from
+Art. 72 to Art. 73 throughout; Art. 72 survives on the one line that genuinely
+means standing post-market monitoring.
+
+**Signed compliance artifacts are derived from a record.**
+`castor compliance submit safety-benchmark` used to take `passed` from
+`--data`, defaulting to `true`. It now requires `--record PATH` pointing at a
+bench Record or EvalLog JSON, reads the verdict from that record's own
+`decide()` output, and carries the record's `record_sha256` into the signed
+body. A `ci-pass` is a scripted or mock run and does not count as a pass.
+`reference_sha256` and `ink_sha256` are carried only when the record actually
+has them, which a ten-minutes record does not.
+
+`castor compliance submit incident-report` no longer accepts a hand-supplied
+`incidents` list from `--data`; the body comes from the log through
+`IncidentLog`, and a successful submission stamps those records filed.
+
+**BREAKING:** `castor compliance submit eu-register` no longer defaults
+`annex_iii_basis` to `article-6` or `conformity_status` to `declared`, and it
+refuses a submission whose `provider.name` or `provider.contact` is empty. A
+register entry that nobody chose is a claim nobody made. Scripts that relied on
+those defaults will now exit non-zero; pass `--annex-iii-basis`,
+`--conformity-status`, and a real provider identity in `--data`.
+`eu_register.build_submission_package` stamps `fria_signed: false` on a package
+built from an unsigned FRIA instead of letting it pass silently.
+
+**A redacted field leaves a record.** `castor export` bundles used to strip
+`api_key` and any token, secret or key field without saying so, which is
+indistinguishable from a field that was never there. The manifest now carries a
+`withheld[]` array naming every removed field by path and class, and the
+episodes section carries a `truncated` flag and an error marker rather than an
+empty list.
+
 ### Fixed
 
 **A stop is acknowledged only once the robot has answered.** `castor bridge`

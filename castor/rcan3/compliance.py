@@ -162,16 +162,46 @@ async def submit_eu_register(
     rmn: str,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Submit a §26 EU Register entry artifact."""
+    """Submit a §26 EU Register entry artifact.
+
+    Every legally loaded field must be stated explicitly. There is no default
+    Annex III basis and no default conformity status: a register entry that
+    nobody chose is a claim nobody made. Refuses a submission whose provider
+    name or contact is empty (OC-13).
+    """
     _extra = extra or {}
+
+    provider = _extra.get("provider") or {}
+    missing = [k for k in ("name", "contact") if not str(provider.get(k, "")).strip()]
+    if missing:
+        raise ValueError(
+            "eu-register refused: provider."
+            + " and provider.".join(missing)
+            + " is empty. An EU register entry names a real provider; supply "
+            "provider.name and provider.contact in --data."
+        )
+
+    annex_iii_basis = _extra.get("annex_iii_basis")
+    if not annex_iii_basis:
+        raise ValueError(
+            "eu-register refused: annex_iii_basis is required and has no default. "
+            "Pass --annex-iii-basis, or set annex_iii_basis in --data."
+        )
+    conformity_status = _extra.get("conformity_status")
+    if not conformity_status:
+        raise ValueError(
+            "eu-register refused: conformity_status is required and has no default. "
+            "Pass --conformity-status, or set conformity_status in --data."
+        )
+
     body = build_eu_register_entry(
         rmn=rmn,
         fria_ref=_extra.get("fria_ref", f"fria:{rrn}"),
-        provider=_extra.get("provider", {"rrn": rrn}),
+        provider=provider,
         system=_extra.get("system", {"rrn": rrn}),
-        annex_iii_basis=_extra.get("annex_iii_basis", "article-6"),
+        annex_iii_basis=annex_iii_basis,
         generated_at=_now_iso(),
-        conformity_status=_extra.get("conformity_status", "declared"),
+        conformity_status=conformity_status,
     )
     signed = signer.sign(body)
     return await rrf.submit_compliance("eu-register", signed)

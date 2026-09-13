@@ -4,8 +4,13 @@ castor/authority — RCAN v2.1 Authority Access handler (EU AI Act §16(j)).
 Handles AUTHORITY_ACCESS (41) messages from regulatory bodies and generates
 AUTHORITY_RESPONSE (42) messages with the requested audit data.
 
+The handler fails closed. Until the operator registers authority IDs under
+the config key ``authority.trusted_authority_ids`` the allowlist is empty and
+every AUTHORITY_ACCESS request is refused with AUTHORITY_NOT_RECOGNIZED. The
+owner is still notified and the refusal is still logged to the chain.
+
 The handler:
-1. Validates the authority token (RURI-signed, registered in RRF)
+1. Validates the authority ID against the operator's allowlist
 2. Notifies the robot owner via configured notification channel
 3. Packages the requested audit data (commitment chain, SBOM, firmware manifest)
 4. Responds with AUTHORITY_RESPONSE (42)
@@ -22,6 +27,35 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 logger = logging.getLogger("OpenCastor.Authority")
+
+# The config key an operator sets to register the authorities this robot will
+# answer. Until it is set and non-empty the handler refuses every request.
+TRUSTED_AUTHORITY_CONFIG_KEY = "authority.trusted_authority_ids"
+
+# Export caps. When a source has more rows than this the export is truncated
+# and says so in export_notes rather than silently returning a short list.
+AUDIT_CHAIN_EXPORT_LIMIT = 1000
+TRANSPARENCY_EXPORT_LIMIT = 500
+
+
+def trusted_authority_ids_from_config(config: Optional[dict]) -> set[str]:
+    """Read the operator-configured authority allowlist out of a robot config.
+
+    Reads ``authority.trusted_authority_ids`` (the generated-config key) and
+    falls back to a flat top-level ``trusted_authority_ids``. Returns an empty
+    set when neither is present, which is the fail-closed shipped state: the
+    handler then refuses every requester.
+    """
+    cfg = config or {}
+    raw = (cfg.get("authority") or {}).get("trusted_authority_ids")
+    if raw is None:
+        raw = cfg.get("trusted_authority_ids")
+    if raw is None:
+        return set()
+    if isinstance(raw, str):
+        raw = [raw]
+    return {str(x).strip() for x in raw if str(x).strip()}
+
 
 # ---------------------------------------------------------------------------
 # Payload types
@@ -53,6 +87,9 @@ class AuthorityResponseData:
     transparency_records: list[dict] = field(default_factory=list)
     sbom_url: str = ""
     firmware_manifest_url: str = ""
+    # Per-field export notes. An empty list is never left to speak for itself:
+    # a source that is unavailable, errored, or truncated says so here.
+    export_notes: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         d: dict = {}
@@ -64,6 +101,8 @@ class AuthorityResponseData:
             d["sbom_url"] = self.sbom_url
         if self.firmware_manifest_url:
             d["firmware_manifest_url"] = self.firmware_manifest_url
+        if self.export_notes:
+            d["export_notes"] = self.export_notes
         return d
 
 
@@ -96,6 +135,15 @@ class AuthorityRequestExpiredError(AuthorityError):
         )
 
 
+class AuthorityRateLimitedError(AuthorityError):
+    def __init__(self, authority_id: str, window_s: int):
+        super().__init__(
+            f"Authority '{authority_id}' has already made a request in the last "
+            f"{window_s} seconds",
+            code="AUTHORITY_RATE_LIMITED",
+        )
+
+
 # ---------------------------------------------------------------------------
 # Audit data export
 # ---------------------------------------------------------------------------
@@ -113,10 +161,12 @@ class AuditDataExporter:
         result = AuthorityResponseData()
 
         if "audit_chain" in requested_data:
-            result.audit_chain = self._export_audit_chain()
+            result.audit_chain, note = self._export_audit_chain()
+            result.export_notes["audit_chain"] = note
 
         if "transparency_records" in requested_data:
-            result.transparency_records = self._export_transparency_records()
+            result.transparency_records, note = self._export_transparency_records()
+            result.export_notes["transparency_records"] = note
 
         if "sbom" in requested_data:
             result.sbom_url = self.sbom_url or self._derive_sbom_url()
@@ -128,28 +178,54 @@ class AuditDataExporter:
 
         return result
 
-    def _export_audit_chain(self) -> list[dict]:
-        """Export recent commitment chain entries."""
+    def _export_audit_chain(self) -> tuple[list[dict], dict]:
+        """Export recent commitment chain entries plus an explicit export note.
+
+        The note always says what happened. An empty list never has to be read
+        as "nothing to report": it carries either ``unavailable`` with the
+        error, or ``truncated`` with the cap and the true total.
+        """
         try:
             from castor.rcan.commitment_chain import CommitmentChain
 
             chain = CommitmentChain.load()
-            # Export up to 1000 most recent entries
-            return chain.to_list()[-1000:]
+            entries = list(chain.to_list())
         except Exception as e:
             logger.warning("Could not export audit chain: %s", e)
-            return []
+            return [], {
+                "unavailable": True,
+                "source": "castor.rcan.commitment_chain",
+                "error": str(e),
+            }
 
-    def _export_transparency_records(self) -> list[dict]:
-        """Export TRANSPARENCY (type 18) log entries."""
-        try:
-            from castor.audit import load_audit_log
+        total = len(entries)
+        capped = entries[-AUDIT_CHAIN_EXPORT_LIMIT:]
+        return capped, {
+            "unavailable": False,
+            "source": "castor.rcan.commitment_chain",
+            "total": total,
+            "returned": len(capped),
+            "limit": AUDIT_CHAIN_EXPORT_LIMIT,
+            "truncated": total > len(capped),
+        }
 
-            records = load_audit_log(event_type="transparency")
-            return [r for r in records][-500:]
-        except Exception as e:
-            logger.warning("Could not export transparency records: %s", e)
-            return []
+    def _export_transparency_records(self) -> tuple[list[dict], dict]:
+        """Export TRANSPARENCY (type 18) log entries plus an explicit note.
+
+        There is no transparency-record reader in the runtime today. Rather
+        than import a function that does not exist and hand back a silent
+        empty list, this states that the source is unavailable.
+        """
+        return [], {
+            "unavailable": True,
+            "source": "transparency_log",
+            "reason": (
+                "no transparency-record reader is implemented in this runtime; "
+                "the empty list is an absence of a source, not an absence of records"
+            ),
+            "limit": TRANSPARENCY_EXPORT_LIMIT,
+            "truncated": False,
+        }
 
     def _derive_sbom_url(self) -> str:
         if self.rrn and self.rrn != "RRN-UNKNOWN":
@@ -182,15 +258,18 @@ class AuthorityRequestHandler:
         Args:
             rrn: This robot's Registration Number.
             notify_fn: Callable to notify the owner (receives a summary string).
-            trusted_authority_ids: Set of pre-approved authority IDs. If None,
-                validate against RRF on first use (not yet implemented — accept all
-                with a warning in development mode).
+            trusted_authority_ids: Set of operator-approved authority IDs. An
+                omitted, None or empty value means NO authority is recognised
+                and every request is refused. This is the shipped default: the
+                allowlist arrives through the generated config key
+                ``authority.trusted_authority_ids``.
             sbom_url: URL of this robot's SBOM (served at /.well-known/rcan-sbom.json).
             firmware_manifest_url: URL of this robot's firmware manifest.
         """
         self.rrn = rrn
         self.notify_fn = notify_fn
-        self.trusted_authority_ids = trusted_authority_ids
+        # Fail closed: None collapses to the empty set, never to "accept all".
+        self.trusted_authority_ids: set[str] = set(trusted_authority_ids or ())
         self.exporter = AuditDataExporter(
             rrn=rrn,
             sbom_url=sbom_url,
@@ -252,23 +331,26 @@ class AuthorityRequestHandler:
             raise
 
     def _validate_authority(self, authority_id: str) -> None:
-        """Validate that the authority is registered.
+        """Validate that the authority is on the operator's allowlist.
 
-        In production: check against RRF authority registry.
-        In dev mode (trusted_authority_ids=None): accept all with warning.
+        Fails closed. An unconfigured runtime has an empty allowlist and
+        refuses every requester, naming the config key in the log line so the
+        operator can see exactly what to set.
         """
-        if self.trusted_authority_ids is None:
+        if not self.trusted_authority_ids:
             logger.warning(
-                "AUTHORITY_ACCESS from '%s': no authority allowlist configured — "
-                "accepting in development mode. Set trusted_authority_ids for production.",
+                "AUTHORITY_ACCESS from '%s' REFUSED: no authority allowlist is configured. "
+                "Set '%s' in the robot config to register the authorities this robot "
+                "will answer. Until then every authority request is refused.",
                 authority_id,
+                TRUSTED_AUTHORITY_CONFIG_KEY,
             )
-            return
+            raise AuthorityNotRecognizedError(authority_id)
         if authority_id not in self.trusted_authority_ids:
             raise AuthorityNotRecognizedError(authority_id)
 
     def _check_rate_limit(self, authority_id: str) -> None:
-        """Allow max 1 request per authority per 24 hours."""
+        """Allow max 1 request per authority per 24 hours. Rejects, not warns."""
         window = 86400  # 24 hours
         now = time.time()
         timestamps = self._request_counts.setdefault(authority_id, [])
@@ -276,10 +358,11 @@ class AuthorityRequestHandler:
         self._request_counts[authority_id] = [t for t in timestamps if now - t < window]
         if len(self._request_counts[authority_id]) >= 1:
             logger.warning(
-                "AUTHORITY_ACCESS rate limit: '%s' has already made a request in the last 24h",
+                "AUTHORITY_ACCESS rate limit: '%s' has already made a request in the last 24h "
+                "— refusing",
                 authority_id,
             )
-            # Log but do NOT hard-reject — spec says notify + log; enforcement is configurable
+            raise AuthorityRateLimitedError(authority_id, window)
         self._request_counts[authority_id].append(now)
 
     def _notify_owner(self, message: str) -> None:
@@ -324,6 +407,7 @@ def send_authority_response(
     notify_fn: Optional[Callable[[str], None]] = None,
     sbom_url: str = "",
     firmware_manifest_url: str = "",
+    trusted_authority_ids: Optional[set[str]] = None,
 ) -> dict:
     """Process an AUTHORITY_ACCESS payload and return a full AUTHORITY_RESPONSE message dict.
 
@@ -335,6 +419,8 @@ def send_authority_response(
         notify_fn: Owner notification callback.
         sbom_url: SBOM URL for this robot.
         firmware_manifest_url: Firmware manifest URL for this robot.
+        trusted_authority_ids: Operator allowlist. Omitted means empty, which
+            refuses every requester.
 
     Returns:
         A full AUTHORITY_RESPONSE (42) message dict ready to send.
@@ -351,6 +437,7 @@ def send_authority_response(
         notify_fn=notify_fn,
         sbom_url=sbom_url,
         firmware_manifest_url=firmware_manifest_url,
+        trusted_authority_ids=trusted_authority_ids,
     )
     response_payload = handler.handle(request_payload)
 

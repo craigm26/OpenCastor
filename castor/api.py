@@ -6279,7 +6279,11 @@ def _wire_notify_dispatch() -> None:
     """
     import asyncio
 
-    from castor.authority import AuthorityRequestHandler
+    from castor.authority import (
+        TRUSTED_AUTHORITY_CONFIG_KEY,
+        AuthorityRequestHandler,
+        trusted_authority_ids_from_config,
+    )
     from castor.configure import parse_consent_gates, parse_hitl_gates
     from castor.hitl_gate import HiTLGateManager
     from castor.notify_dispatch import NotifyDispatcher
@@ -6366,9 +6370,17 @@ def _wire_notify_dispatch() -> None:
             logger.warning("authority notify_fn called outside event loop; skipped")
 
     rrn = (config.get("metadata") or {}).get("rrn", "RRN-UNKNOWN")
+    _trusted_ids = trusted_authority_ids_from_config(config)
+    if not _trusted_ids:
+        logger.warning(
+            "%s is unset or empty — the AUTHORITY_ACCESS handler will refuse every "
+            "requester. Add the authority IDs this robot should answer under that key.",
+            TRUSTED_AUTHORITY_CONFIG_KEY,
+        )
     state.authority_handler = AuthorityRequestHandler(
         rrn=rrn,
         notify_fn=_owner_notify,
+        trusted_authority_ids=_trusted_ids,
     )
 
     logger.info(

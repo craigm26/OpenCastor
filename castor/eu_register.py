@@ -36,6 +36,11 @@ def build_submission_package(fria: dict, config: dict) -> dict[str, Any]:
             "Run `castor fria generate` to produce a valid FRIA."
         )
 
+    # An unsigned FRIA is not refused here (the package is a draft an operator
+    # still fills in by hand), but it is never allowed to pass silently: the
+    # package says so on its face (OC-13).
+    fria_signed = bool(fria.get("sig")) and bool(fria.get("signing_key"))
+
     meta = config.get("metadata", {}) or {}
     system_info = fria.get("system", {}) or {}
     deployment = fria.get("deployment", {}) or {}
@@ -48,6 +53,15 @@ def build_submission_package(fria: dict, config: dict) -> dict[str, Any]:
         "fria_ref": {
             "generated_at": fria.get("generated_at", ""),
             "schema": fria.get("schema", ""),
+            "fria_signed": fria_signed,
+            "fria_signed_note": (
+                ""
+                if fria_signed
+                else (
+                    "This FRIA carries no signature. The register entry is a draft; "
+                    "sign the FRIA with `castor fria sign` before submitting it."
+                )
+            ),
         },
         "provider": {
             "name": meta.get("provider_name", ""),

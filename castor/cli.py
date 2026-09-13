@@ -67,6 +67,69 @@ def _legacy_rcan_yaml_guard(path: str | None) -> bool:
     return False
 
 
+#: Verdicts a bench Record can reach that count as a pass for a signed
+#: safety-benchmark submission. "ci-pass" is a scripted or mock run and is not
+#: a claim about hardware, so it does not count.
+_BENCH_PASS_VERDICTS = ("pass",)
+
+
+def _load_benchmark_record(record_path: "str | None") -> dict:
+    """Read a bench Record / EvalLog JSON and derive the facts a signed body needs.
+
+    The verdict is whatever the record's own ``decide()`` wrote into it. It is
+    never taken from ``--data``. Raises ValueError with an operator-readable
+    message when the record is missing or unusable.
+    """
+    import hashlib
+    import json
+    from pathlib import Path
+
+    if not record_path:
+        raise ValueError(
+            "--record PATH is required. Point it at a bench Record or EvalLog JSON; "
+            "the signed body's pass/fail is read from that record's own verdict, "
+            "not supplied by hand"
+        )
+    p = Path(record_path)
+    if not p.exists():
+        raise ValueError(f"--record {record_path}: no such file")
+    raw = p.read_bytes()
+    try:
+        rec = json.loads(raw.decode())
+    except Exception as exc:
+        raise ValueError(f"--record {record_path}: not valid JSON ({exc})") from exc
+    if not isinstance(rec, dict):
+        raise ValueError(f"--record {record_path}: expected a JSON object")
+
+    verdict = rec.get("verdict")
+    if not verdict:
+        raise ValueError(
+            f"--record {record_path}: record carries no `verdict` field, so there is "
+            f"nothing for decide() to have decided"
+        )
+
+    details = {
+        "record_sha256": hashlib.sha256(raw).hexdigest(),
+        "record_path": str(p),
+        "record_verdict": verdict,
+        "record_verdict_reason": rec.get("verdict_reason", ""),
+        "record_benchmark": rec.get("benchmark", rec.get("name", "")),
+        "record_elapsed_s": rec.get("elapsed_s"),
+    }
+    # Only a sacpaint record has a reference and a scoring ink; a ten-minutes
+    # record has neither, so these are carried only when the record has them.
+    for key in ("reference_sha256", "ink_sha256"):
+        val = rec.get(key)
+        if val is None:
+            val = (rec.get("evidence") or {}).get(key) if isinstance(
+                rec.get("evidence"), dict
+            ) else None
+        if val:
+            details[key] = val
+
+    return {"passed": verdict in _BENCH_PASS_VERDICTS, "details": details}
+
+
 def _cmd_compliance_submit(args) -> int:
     """v3.0 dispatcher: `castor compliance submit <artifact>` → rcan3 compliance."""
     import asyncio
@@ -78,6 +141,18 @@ def _cmd_compliance_submit(args) -> int:
     from castor.rcan3.reader import read_robot_md
     from castor.rcan3.rrf_client import RrfClient
     from castor.rcan3.signer import CastorSigner
+
+    artifact = args.artifact
+
+    # Argument-only checks run before anything is read, signed or opened, so a
+    # missing record is one clear line rather than a late failure (OC-13).
+    record_facts: dict = {}
+    if artifact == "safety-benchmark":
+        try:
+            record_facts = _load_benchmark_record(getattr(args, "record", None))
+        except ValueError as exc:
+            sys.stderr.write(f"castor compliance submit safety-benchmark: {exc}\n")
+            return 1
 
     manifest = getattr(args, "manifest", None) or "ROBOT.md"
     if _legacy_rcan_yaml_guard(manifest):
@@ -96,8 +171,6 @@ def _cmd_compliance_submit(args) -> int:
     data_path = getattr(args, "data", None)
     if data_path:
         extra = json.loads(Path(data_path).read_text())
-
-    artifact = args.artifact
 
     async def _run() -> int:
         ident = load_or_generate_identity()
@@ -121,27 +194,52 @@ def _cmd_compliance_submit(args) -> int:
                     conformance=conformance_obj,
                 )
             elif artifact == "safety-benchmark":
+                details = dict(extra.get("details") or {})
+                details.update(record_facts["details"])
                 out = await compliance_mod.submit_safety_benchmark(
                     rrf=rrf,
                     signer=signer,
                     rrn=rrn,
                     benchmark_id=extra.get("benchmark_id", "iso-10218-1"),
-                    passed=extra.get("passed", True),
-                    details=extra.get("details"),
+                    # The verdict comes from the record's own decide(), never
+                    # from --data. A pass is a thing the record says (OC-13).
+                    passed=record_facts["passed"],
+                    details=details,
                 )
             elif artifact == "ifu":
                 out = await compliance_mod.submit_ifu(
                     rrf=rrf, signer=signer, rrn=rrn, coverage=extra.get("coverage", {})
                 )
             elif artifact == "incident-report":
+                # The body comes from incidents.jsonl through IncidentLog. It
+                # can no longer be hand-supplied through --data (OC-13).
+                from castor.incidents import IncidentLog
+
+                _inc_log = IncidentLog(getattr(args, "log", None) or None)
+                _pending = _inc_log.unreported_incidents()
+                if not _pending:
+                    sys.stderr.write(
+                        "castor compliance submit incident-report: no unfiled incidents "
+                        "in the log; nothing to submit\n"
+                    )
+                    return 1
                 out = await compliance_mod.submit_incident_report(
-                    rrf=rrf, signer=signer, rrn=rrn, incidents=extra.get("incidents", [])
+                    rrf=rrf, signer=signer, rrn=rrn, incidents=_pending
                 )
+                _inc_log.mark_reported([i["id"] for i in _pending], receipt=out)
             elif artifact == "eu-register":
                 md = (m.frontmatter or {}).get("metadata") or {}
                 rmn = extra.get("rmn") or (
                     f"{md.get('manufacturer', '')}/{md.get('model', '')}/{md.get('version', '')}"
                 )
+                _basis = getattr(args, "annex_iii_basis", None) or extra.get("annex_iii_basis")
+                _status = getattr(args, "conformity_status", None) or extra.get(
+                    "conformity_status"
+                )
+                if _basis:
+                    extra["annex_iii_basis"] = _basis
+                if _status:
+                    extra["conformity_status"] = _status
                 out = await compliance_mod.submit_eu_register(
                     rrf=rrf,
                     signer=signer,
@@ -155,7 +253,14 @@ def _cmd_compliance_submit(args) -> int:
         sys.stdout.write(json.dumps(out, indent=2, default=str) + "\n")
         return 0
 
-    return asyncio.run(_run())
+    try:
+        return asyncio.run(_run())
+    except ValueError as exc:
+        # A refused submission (missing provider fields, missing explicit
+        # Annex III basis, unsigned FRIA) is an operator message, not a stack
+        # trace.
+        sys.stderr.write(f"castor compliance submit {artifact}: {exc}\n")
+        return 1
 
 
 # ---------------------------------------------------------------------------
@@ -2812,7 +2917,14 @@ def cmd_iso_check(args) -> None:
             cfg = yaml.safe_load(_f) or {}
 
     iso_cfg = cfg.get("iso_conformance", {})
-    authority_handler = cfg.get("authority_handler_enabled", False)
+    # The authority handler is only real when an allowlist is configured; the
+    # runtime refuses every requester without one, so the flag alone no longer
+    # counts here (OC-13).
+    from castor.authority import trusted_authority_ids_from_config as _trusted_ids_from_cfg
+
+    authority_handler = bool(cfg.get("authority_handler_enabled", False)) and bool(
+        _trusted_ids_from_cfg(cfg)
+    )
     audit_days = cfg.get("audit_retention_days", 0)
     rcan_version = cfg.get("rcan_version", "?")
     pq_required = cfg.get("pq_signing_required", False)
@@ -5420,24 +5532,31 @@ def cmd_eu_register(args) -> None:
 
 
 def cmd_incidents(args) -> None:
-    """castor incidents — post-market monitoring incident log (EU AI Act Art. 72)."""
+    """castor incidents — serious-incident log and post-market monitoring report."""
     import json as _json
     import sys
 
-    from castor.incidents import IncidentLog, IncidentSeverity, generate_report
+    from castor.incidents import (
+        IncidentLog,
+        days_to_deadline,
+        generate_report,
+        is_overdue,
+        normalize_severity,
+    )
 
     incidents_cmd = getattr(args, "incidents_cmd", None)
     log_path = getattr(args, "log", None)
     log = IncidentLog(log_path) if log_path else IncidentLog()
 
     if incidents_cmd == "record":
-        severity_str = getattr(args, "severity", "other")
-        severity = IncidentSeverity(severity_str)
+        severity_str = getattr(args, "severity", "serious_harm")
         incident_id = log.record(
-            severity=severity,
+            severity=normalize_severity(severity_str),
             category=getattr(args, "category", "unspecified"),
             description=getattr(args, "description", ""),
             system_state={},
+            discovered_at=getattr(args, "discovered_at", None),
+            source="cli",
         )
         print(f"Incident recorded: {incident_id}")
 
@@ -5445,14 +5564,35 @@ def cmd_incidents(args) -> None:
         incidents = log.list_incidents()
         if not incidents:
             print("No incidents recorded.")
-        else:
-            for inc in incidents:
-                print(
-                    f"[{inc['timestamp']}] [{inc['severity'].upper()}] "
-                    f"{inc['category']}: {inc['description']}"
-                )
+            return
+        overdue_any = False
+        for inc in incidents:
+            reported = "filed" if inc.get("reported") else "not filed"
+            remaining = days_to_deadline(inc)
+            if remaining is None:
+                due = "deadline unknown"
+            elif inc.get("reported"):
+                due = "-"
+            else:
+                due = f"{remaining:+.1f}d"
+            if is_overdue(inc):
+                overdue_any = True
+                due += " OVERDUE"
+            print(
+                f"[{inc.get('timestamp')}] [{str(inc.get('severity', '')).upper()}] "
+                f"[{reported}] [{due}] "
+                f"{inc.get('category')}: {inc.get('description')}"
+            )
+        if overdue_any:
+            print(
+                "One or more incidents are past their filing deadline.",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
 
     elif incidents_cmd == "report":
+        if getattr(args, "submit", False):
+            raise SystemExit(_submit_incident_report(args, log))
         report = generate_report(log)
         output = getattr(args, "output", None)
         if output:
@@ -5465,6 +5605,65 @@ def cmd_incidents(args) -> None:
     else:
         print("Usage: castor incidents {record|list|report}", file=sys.stderr)
         raise SystemExit(1)
+
+
+def _submit_incident_report(args, log) -> int:
+    """`castor incidents report --submit` — file the log's unfiled incidents.
+
+    The body is built from the records in incidents.jsonl, never hand-supplied.
+    On a 2xx the log gains a NEW chained submission line stamping reported,
+    reported_at and the receipt; no existing line is ever edited.
+    """
+    import asyncio
+    import sys
+
+    pending = log.unreported_incidents()
+    if not pending:
+        sys.stderr.write(
+            "castor incidents report --submit: no unfiled incidents in the log; "
+            "nothing to submit\n"
+        )
+        return 1
+
+    manifest = getattr(args, "manifest", None) or "ROBOT.md"
+    if _legacy_rcan_yaml_guard(manifest):
+        return 1
+
+    from castor.rcan3 import compliance as compliance_mod
+    from castor.rcan3.identity import load_or_generate_identity
+    from castor.rcan3.reader import read_robot_md
+    from castor.rcan3.rrf_client import RrfClient
+    from castor.rcan3.signer import CastorSigner
+
+    m = read_robot_md(manifest)
+    rrn = getattr(m, "rrn", None)
+    if not rrn:
+        sys.stderr.write(
+            "castor incidents report --submit: manifest has no rrn — "
+            "run `castor register` first\n"
+        )
+        return 1
+    endpoint = getattr(m, "endpoint", None) or "https://rcan.dev"
+
+    async def _run() -> dict:
+        ident = load_or_generate_identity()
+        signer = CastorSigner(ident)
+        async with RrfClient(base_url=endpoint) as rrf:
+            return await compliance_mod.submit_incident_report(
+                rrf=rrf, signer=signer, rrn=rrn, incidents=pending
+            )
+
+    try:
+        receipt = asyncio.run(_run())
+    except Exception as exc:
+        sys.stderr.write(f"castor incidents report --submit: submission failed: {exc}\n")
+        return 1
+
+    submission_id = log.mark_reported([i["id"] for i in pending], receipt=receipt)
+    print(
+        f"Filed {len(pending)} incident(s); submission record {submission_id}",
+    )
+    return 0
 
 
 def cmd_ifu(args) -> None:
@@ -5829,7 +6028,7 @@ def _cmd_audit_art11(args) -> None:
     print(
         f"    {'✅' if loa_on else '⚠️ '}  Safety controls (Art. 9)           LoA={'ON' if loa_on else 'OFF'}"
     )
-    print("    ✅  Post-market monitoring (Art. 72)  BigQuery + Firestore telemetry")
+    print("    ✅  Post-market monitoring            BigQuery + Firestore telemetry")
     print("    ✅  SBOM (Art. 11 §1b)               CycloneDX, RRF-countersigned")
     print("    ⏳  Notified body submission           Deadline: 2026-08-02")
     print()
@@ -8058,6 +8257,34 @@ def main() -> None:
         "--manifest", default="ROBOT.md", help="ROBOT.md path (default: ROBOT.md)"
     )
     _p_comp_submit.add_argument("--data", default=None, help="Path to JSON file with artifact data")
+    _p_comp_submit.add_argument(
+        "--record",
+        default=None,
+        metavar="PATH",
+        help=(
+            "safety-benchmark: bench Record or EvalLog JSON. Required. The signed "
+            "body's pass/fail is read from that record's own verdict and its "
+            "sha256 is carried into the body"
+        ),
+    )
+    _p_comp_submit.add_argument(
+        "--log",
+        default=None,
+        metavar="PATH",
+        help="incident-report: incident log path (default: ~/.opencastor/incidents.jsonl)",
+    )
+    _p_comp_submit.add_argument(
+        "--annex-iii-basis",
+        dest="annex_iii_basis",
+        default=None,
+        help="eu-register: Annex III basis. Required; there is no default",
+    )
+    _p_comp_submit.add_argument(
+        "--conformity-status",
+        dest="conformity_status",
+        default=None,
+        help="eu-register: conformity status. Required; there is no default",
+    )
     p_compliance.add_argument(
         "--config", default="robot.rcan.yaml", help="RCAN config file to check"
     )
@@ -8619,7 +8846,10 @@ def main() -> None:
     # ── incidents ─────────────────────────────────────────────────────────────────
     p_incidents = sub.add_parser(
         "incidents",
-        help="Post-market monitoring incident log (EU AI Act Art. 72)",
+        help=(
+            "Serious-incident log and post-market monitoring report "
+            "(EU AI Act Art. 73 filing clock, OpenCastor crosswalk)"
+        ),
     )
     p_incidents_sub = p_incidents.add_subparsers(dest="incidents_cmd")
     p_incidents.add_argument(
@@ -8632,22 +8862,51 @@ def main() -> None:
     p_incidents_record = p_incidents_sub.add_parser("record", help="Record a new incident")
     p_incidents_record.add_argument(
         "--severity",
-        choices=["life_health", "other"],
-        default="other",
-        help="Incident severity (life_health: 15-day deadline; other: 3-month deadline)",
+        choices=["critical_infrastructure", "death", "serious_harm"],
+        default="serious_harm",
+        help=(
+            "Serious-incident category. Filing windows per the OpenCastor "
+            "crosswalk, counted from discovery: critical_infrastructure 2 days, "
+            "death 10 days, serious_harm 15 days"
+        ),
     )
     p_incidents_record.add_argument("--category", required=True, help="Incident category")
     p_incidents_record.add_argument(
         "--description", required=True, help="Human-readable description"
     )
+    p_incidents_record.add_argument(
+        "--discovered-at",
+        dest="discovered_at",
+        default=None,
+        metavar="ISO8601",
+        help=(
+            "When the provider became aware. The filing clock runs from here. "
+            "Defaults to now, stamped unknown_discovery"
+        ),
+    )
 
-    p_incidents_sub.add_parser("list", help="List all recorded incidents")
+    p_incidents_sub.add_parser(
+        "list",
+        help="List incidents with filing status and days to deadline (exits 1 when overdue)",
+    )
 
     p_incidents_report = p_incidents_sub.add_parser(
-        "report", help="Generate Art. 72 incident report"
+        "report",
+        help="Generate the post-market monitoring report, or file it with --submit",
     )
     p_incidents_report.add_argument(
         "--output", metavar="FILE", help="Output JSON path (default: stdout)"
+    )
+    p_incidents_report.add_argument(
+        "--submit",
+        action="store_true",
+        help=(
+            "Build the submission from the records in incidents.jsonl, POST it, "
+            "and on a 2xx append a chained line stamping reported and the receipt"
+        ),
+    )
+    p_incidents_report.add_argument(
+        "--manifest", default="ROBOT.md", help="ROBOT.md path for --submit (default: ROBOT.md)"
     )
 
     # ── ifu ────────────────────────────────────────────────────────────────────────
