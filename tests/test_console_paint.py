@@ -258,8 +258,15 @@ def test_the_run_names_the_reference_so_the_body_shows_the_right_picture(tmp_pat
 
 
 def test_pictures_lists_the_packaged_one_and_every_upload(
-    client: TestClient, tmp_path: Path
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    pytest.importorskip("inspect_robots")
+    from castor.bench.sacpaint import reference as refmod
+
+    # An empty reference dir, so "not registered" is this machine's state, not a
+    # leftover spec somebody happens to have in ~/.sacpaint/references.
+    monkeypatch.setenv("SACPAINT_REFERENCES", str(tmp_path / "empty-refs"))
+    refmod.refresh()
     body = client.get("/eval/paint/pictures").json()
     names = [p["picture"] for p in body["pictures"]]
     assert names == ["sacramento"]
@@ -273,10 +280,12 @@ def test_pictures_lists_the_packaged_one_and_every_upload(
     (pictures / "starry-night.jpg").write_bytes(b"\xff\xd8ignored")
     listed = {p["picture"]: p for p in client.get("/eval/paint/pictures").json()["pictures"]}
     assert set(listed) == {"sacramento", "starry-night"}
-    # No spec on disk yet, so the console says so rather than pretending.
+    # No spec in the reference dir, so the console says so rather than pretending.
     assert listed["starry-night"]["registered"] is False
     assert listed["starry-night"]["uploaded"] is True
+    assert listed["starry-night"]["task"] == "sacpaint/starry-night"
     assert client.get("/eval/paint/config").json()["pictures"] == list(listed.values())
+    refmod.refresh()
 
 
 def test_a_colour_upload_asks_the_bench_for_a_colour_reference(

@@ -317,12 +317,12 @@ def color_details(
 
     Two terms, averaged:
 
-    * ``accuracy`` — over the pixels the robot painted, one minus the mean
+    * ``accuracy``: over the pixels the robot painted, one minus the mean
       palette distance between the colour it used and the nearest reference
       pixel of any colour within ``tolerance_frac`` of the canvas diagonal. The
       window exists because a stroke a millimetre off would otherwise be judged
       against whatever colour happens to lie under it.
-    * ``coverage`` — over the colour reference's regions, weighted by how much
+    * ``coverage``: over the colour reference's regions, weighted by how much
       of the *stroke skeleton* falls in each, one minus the mean palette
       distance between the region's target colour and the colours actually
       painted there. Regions the skeleton never asks the robot to visit are not

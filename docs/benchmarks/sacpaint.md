@@ -97,6 +97,7 @@ skeleton, `sacramento-photo-v1.ink.png`, whose hash every EvalLog records as
 | `discipline` | 0.15 | 1 − fraction of ink farther than 2.5% of the diagonal (6 mm) from any reference ink, scaled down past 4× the reference's ink. Blank canvas scores 0. |
 | `efficiency` | 0.10 | 1 − steps/max_steps for a declared finish; scaled by `structure` in the composite so finishing a bad drawing fast earns nothing. |
 | `composite` | | The leaderboard number. |
+| `color_fidelity` | none | Colour, on a colour task only. Reported beside the composite and **never folded into it**; see [#colour](#colour). |
 
 Calibration on synthetic canvases:
 
@@ -137,6 +138,80 @@ own rubric (a wash is scored on coverage and edges, a pen on lines), and
 stylised rubrics that reward a named artist's way of seeing the same photo. A
 medium is a `(body, scoring rubric)` pair; the reference stays the photograph.
 
+## Colour
+
+A reference can carry a **colour target** beside its stroke skeleton, and then
+the ink can be laid down in one of twelve named colours. Everything about that
+sentence is deliberately narrow, so here is what it does and does not mean.
+
+**The colour is the ink's, not the robot's.** The arm holds no pen in the
+virtual medium; there is nothing to swap, nothing to dip, nothing to change. A
+colour is one more number the policy attaches to a stroke, and the virtual
+canvas draws that stroke in it. Every gateway call carries exactly the three
+millimetre coordinates it carried before colour existed, and the motion is
+identical whichever colour is asked for. On paper (`medium=pen`) there is one
+real pen and the palette is not offered at all.
+
+**The palette.** Twelve colours, black at index 0:
+
+| 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 |
+|---|---|---|---|---|---|---|---|---|---|----|----|
+| black | slate | crimson | rust | gold | olive | green | teal | azure | indigo | violet | brown |
+
+Every entry's luminance is below the scorers' ink threshold (128). That is a
+design constraint, not an accident: the line scorers binarise the canvas at that
+threshold, so a stroke in any palette colour is ink to them and the composite
+score is unchanged by the choice of colour. A pale yellow would have been
+invisible to the line scorers and would have quietly punished colour runs.
+
+**Making one.** The existing `--auto-trace` path gains one flag:
+
+```bash
+castor bench sacpaint new starry-night --photo starry-night.jpg --canvas 150x119 --auto-trace --color
+```
+
+That writes the same edge skeleton it always wrote, and beside it
+`starry-night.color.png`: the photograph downscaled to 1 px/mm and quantised to
+the palette, plus a coarse 6 x 8 grid of region colour targets recorded in the
+spec. The skeleton, the rubric and the composite are byte-for-byte what they
+would have been without `--color`.
+
+**The task.** A colour reference's action space has a fourth dimension,
+`color`, and its observation space a third camera, `reference_color` (the
+picture reduced to the palette, offered on demand exactly the way the line
+reference is). A mono reference has neither: three dimensions, two cameras, the
+same prompt as always. A three-number action sent to a colour task still means
+black, so a policy that knows nothing about colour runs unchanged.
+
+**Scoring: two numbers, never one.** `composite` stays exactly what it was, and
+it is still line fidelity: landmarks, structure, discipline, efficiency.
+`color_fidelity` is reported beside it and is never folded into it.
+
+| Term | What it measures |
+|---|---|
+| `accuracy` | over the pixels the robot painted, one minus the mean palette distance between the colour used and the nearest reference pixel of any colour within 1% of the canvas diagonal |
+| `coverage` | over the colour reference's grid regions, weighted by how much of the stroke skeleton falls in each, one minus the mean palette distance between the region's target colour and what was painted there. Regions the skeleton never visits are not counted; a region with skeleton and no paint scores zero |
+| `color_fidelity` | the mean of the two |
+
+Distances are Euclidean RGB normalised by the widest gap between two entries of
+this palette, so 1.0 is the right colour and 0.0 is as wrong as this palette
+can be.
+
+Why two numbers and not one weighted score: the composite is the only number
+that can be compared with every run made before colour existed, and folding
+colour into it would silently re-base the leaderboard. It would also conflate
+two different failures. A drawing with the right shapes in the wrong colours and
+a drawing with the right colours in the wrong shapes are not the same mistake,
+and one number cannot say which happened. Measured on a synthetic two-colour
+picture, the oracle scores the same composite whether it paints in colour or
+forced to black (0.9998 either way), while `color_fidelity` moves from 0.89 to
+0.26.
+
+**Colour tasks shipped:** `sacpaint/starry-night`, Van Gogh's *The Starry
+Night* (1889, public domain, Wikimedia Commons / Google Art Project) on a
+150 x 119 mm canvas, its edges traced for the line score and its colours
+quantised to the palette for the colour score.
+
 ## No paper? The virtual easel
 
 A rig with an arm but nothing to draw with can still run the whole loop. With
@@ -175,6 +250,9 @@ castor bench sacpaint new mytown --canvas 210x297 --photo mytown.jpg   # spec + 
 castor bench sacpaint run --task sacpaint/mytown --policy sacpaint_trace --embodiment sacpaint_plotter -- -E reference=mytown
 ```
 
+Add `--auto-trace --color` to get a colour task: the same skeleton, plus a
+palette-quantised colour target beside it. See [#colour](#colour).
+
 A reference is a JSON file of polylines grouped by landmark (millimetres,
 origin bottom-left, y up), optional landmark weights and boxes, relations
 (`above`, `left_of`, `same_x`), tolerances, and optionally a `photo` the model
@@ -197,7 +275,8 @@ on the robot's behalf:
 | `POST /eval/paint` `{"picture": "sacramento", "medium": "virtual"}` | start one `castor bench sacpaint run` as a background job; 409 while one runs, 503 without a profile, 422 for a medium the rig lacks |
 | `GET /eval/paint` | `idle`, or `running` with `steps`, `misses`, `llm_calls`, `elapsed_s`, or `done`/`stopped`/`error` with the `score` |
 | `POST /eval/paint/stop` | end the job; the arm finishes the move it is on |
-| `POST /eval/picture?name=mine` (raw JPEG) | a picture of your own; the robot traces its edges into a scoring skeleton (`castor bench sacpaint new --photo … --auto-trace`) and it becomes task `sacpaint/mine` |
+| `GET /eval/paint/pictures` | what can be painted: the packaged picture and every upload, each with its task, its reference, and whether it is a colour task; plus the palette |
+| `POST /eval/picture?name=mine` (raw JPEG) | a picture of your own; the robot traces its edges into a scoring skeleton (`castor bench sacpaint new --photo … --auto-trace`) and it becomes task `sacpaint/mine`. Add `&color=1` for a colour task |
 | `GET /eval/frame/latest?stream=canvas` | the live canvas: the embodiment posts it after every move (`-E canvas_post_url`) |
 | `GET /eval/paint/canvas.png` | the finished canvas as the scorer read it |
 
@@ -274,6 +353,7 @@ submission/
 | Piece | State |
 |---|---|
 | Task `sacpaint/photo-v1` (the photograph), five scorers, three epochs | done, registered via entry points; `sacpaint/line-v0` kept |
+| Colour: the palette, colour references, `color_fidelity` | done; `sacpaint/starry-night` registered. No colour run on the arm yet |
 | Mock plotter + oracle/idle policies | done; the whole stack runs with no hardware |
 | Marker-free rectification (given corners, ArUco, plain sheet) | done, tested under perspective |
 | `castor bench sacpaint score / new / run / export / worldevals-entry` | done |
@@ -561,7 +641,7 @@ and `-E corners_url="http://<robot>:8002/eval/corners?stream=overhead"`, with
 | `calibration` | — | **Required.** Path to the `canvas.json` from step 3, or `easel` (virtual medium only). |
 | `medium` | `pen` | `pen` (a pen on a photographed sheet) or `virtual` (no paper: the canvas is inked from the arm's measured tip; see above). |
 | `easel_distance_mm` / `easel_elevation_deg` / `easel_azimuth_deg` | `325` / `0` / `0` | Where the virtual easel stands: distance from the base to the sheet's centre, its elevation above the base plane, its bearing left of straight ahead. |
-| `reference` | `sacramento-photo-v1` | Which reference to serve on the `reference` camera. Match the task. |
+| `reference` | `sacramento-photo-v1` | Which reference to serve on the `reference` camera. **Match the task**, or the model is shown one picture while the scorers grade another. It is also how the body learns a task is a colour task: a reference with a colour target adds the `color` action dimension and the `reference_color` camera. The console passes this for you. |
 | `pen_down_z` | `0.002` | Canvas-frame height at or below which the pen marks (metres). |
 | `travel_z` | `0.005` | Height that travels without marking. Must be above `pen_down_z`. |
 | `park_x`, `park_y` | `0.0`, `0.0` | Where `observe_parked()` parks, in canvas metres. Move it if the arm blocks the camera's view of the sheet there. |

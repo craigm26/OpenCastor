@@ -208,7 +208,7 @@ def _canonical_size(name: str) -> tuple[int, int]:
 
 
 def action_space(canvas_mm: tuple[float, float], colored: bool = False) -> Box:
-    """The canvas-frame Cartesian action box — the same contract the mock declares.
+    """The canvas-frame Cartesian action box: the same contract the mock declares.
 
     A colour task adds a fourth dimension, ``color``, the palette index the ink
     is drawn in. The arm does not see it: the gateway call is the same three
