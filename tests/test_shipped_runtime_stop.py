@@ -904,3 +904,142 @@ def test_the_resync_helper_is_inert_without_a_filesystem(monkeypatch):
 
     monkeypatch.setattr(api_mod.state, "fs", None, raising=False)
     assert api_mod._resync_safety_latch() is False
+
+
+# ---------------------------------------------------------------------------
+# 10. `castor resume --clear-estop` insists on the code, or says it did not
+# ---------------------------------------------------------------------------
+# WHAT WAS STILL WRONG. The clear path read `if required and supplied !=
+# required`, so a robot with NO code cleared with NO code, silently. That is
+# the ordinary state of a gateway-only robot: the actuator lives behind the
+# gateway, `castor up` may never have run on this host, and nothing ever
+# provisioned OPENCASTOR_ESTOP_AUTH. The robots with no second factor were the
+# ones that asked for nothing, which is exactly backwards. A missing secret is
+# a missing secret; it is not consent.
+def _latched(tmp_path):
+    from castor.safety import latch as latch_mod
+
+    latch_mod.record_estop(
+        principal="monitor", source="local", reason="bumped the table", home=tmp_path
+    )
+    return latch_mod
+
+
+def test_clear_estop_path_1_code_provisioned_and_supplied(tmp_path, capsys, monkeypatch):
+    """The happy path: the code exists, it is passed, the stop lifts."""
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    monkeypatch.delenv("OPENCASTOR_ESTOP_AUTH", raising=False)
+    from castor.cli import cmd_resume
+
+    latch_mod = _latched(tmp_path)
+    code = ensure_estop_auth(tmp_path)
+
+    cmd_resume(
+        Namespace(clear_estop=True, auth_code=code, no_auth_code=False, home="")
+    )
+    out = capsys.readouterr().out
+    assert latch_mod.load(tmp_path).estop_engaged is False
+    assert "UNAUTHENTICATED" not in out, "a checked clear must not claim it was unchecked"
+
+
+def test_clear_estop_path_2_code_provisioned_and_not_supplied(tmp_path, capsys, monkeypatch):
+    """The code exists and none was passed: refuse, and name the variable."""
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    monkeypatch.delenv("OPENCASTOR_ESTOP_AUTH", raising=False)
+    from castor.cli import cmd_resume
+
+    latch_mod = _latched(tmp_path)
+    ensure_estop_auth(tmp_path)
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_resume(Namespace(clear_estop=True, auth_code="", no_auth_code=False, home=""))
+    assert exc.value.code == 3
+    out = capsys.readouterr().out
+    assert "OPENCASTOR_ESTOP_AUTH" in out
+    assert "tokens.env" in out
+    assert latch_mod.load(tmp_path).estop_engaged is True
+
+    # And --no-auth-code is not a way past a code this robot actually has.
+    with pytest.raises(SystemExit) as exc2:
+        cmd_resume(Namespace(clear_estop=True, auth_code="", no_auth_code=True, home=""))
+    assert exc2.value.code == 3
+    assert "ignored" in capsys.readouterr().out
+    assert latch_mod.load(tmp_path).estop_engaged is True
+
+
+def test_clear_estop_path_3_no_code_anywhere_is_refused(tmp_path, capsys, monkeypatch):
+    """A gateway-only robot with nothing to check against refuses, and says how.
+
+    This is the path that used to clear silently. The message has to name the
+    variable and the one command that provisions it, because an operator who is
+    told only "refused" will reach for the latch file with rm.
+    """
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    monkeypatch.delenv("OPENCASTOR_ESTOP_AUTH", raising=False)
+    from castor.cli import cmd_resume
+
+    latch_mod = _latched(tmp_path)
+    assert not (tmp_path / "tokens.env").exists()
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_resume(Namespace(clear_estop=True, auth_code="", no_auth_code=False, home=""))
+    assert exc.value.code == 3
+    out = capsys.readouterr().out
+    assert "OPENCASTOR_ESTOP_AUTH" in out, "name the variable"
+    assert "castor up" in out, "say how to provision it"
+    assert "ensure_estop_auth" in out
+    assert "--no-auth-code" in out, "say what the escape hatch is"
+    assert latch_mod.load(tmp_path).estop_engaged is True
+
+
+def test_clear_estop_path_4_no_code_with_the_explicit_flag_warns(tmp_path, capsys, monkeypatch):
+    """--no-auth-code clears, and says on the record that nothing checked it."""
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    monkeypatch.delenv("OPENCASTOR_ESTOP_AUTH", raising=False)
+    from castor.cli import cmd_resume
+
+    latch_mod = _latched(tmp_path)
+
+    cmd_resume(Namespace(clear_estop=True, auth_code="", no_auth_code=True, home=""))
+    out = capsys.readouterr().out
+    assert "UNAUTHENTICATED" in out
+    assert "OPENCASTOR_ESTOP_AUTH" in out
+    assert "castor up" in out
+    assert latch_mod.load(tmp_path).estop_engaged is False
+
+
+def test_the_code_may_come_from_the_environment_instead_of_tokens_env(tmp_path, monkeypatch):
+    """"Supplied" means the flag OR the environment, the way the API reads it.
+
+    `castor/fs/safety.py` reads OPENCASTOR_ESTOP_AUTH from the environment at
+    clear time, so a robot whose code lives only in the environment is a robot
+    WITH a code, and the CLI has to agree or the two surfaces enforce different
+    secrets.
+    """
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    monkeypatch.setenv("OPENCASTOR_ESTOP_AUTH", "oc_estop_from_the_env")
+    from castor.cli import _estop_auth_sources, cmd_resume
+
+    required, where = _estop_auth_sources(tmp_path)
+    assert required == "oc_estop_from_the_env"
+    assert "environment" in where
+
+    latch_mod = _latched(tmp_path)
+    cmd_resume(
+        Namespace(clear_estop=True, auth_code="", no_auth_code=False, home="")
+    )
+    assert latch_mod.load(tmp_path).estop_engaged is False
+
+
+def test_no_auth_code_is_in_the_resume_help(capsys, monkeypatch):
+    """Readable from the released CLI, which is this item's outside check."""
+    import sys
+
+    import castor.cli as cli_mod
+
+    monkeypatch.setattr(sys, "argv", ["castor", "resume", "--help"])
+    with pytest.raises(SystemExit):
+        cli_mod.main()
+    text = capsys.readouterr().out
+    assert "--no-auth-code" in text
+    assert "unauthenticated" in text.lower()

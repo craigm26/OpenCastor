@@ -414,6 +414,28 @@ properties behind it.
 This remains a best-effort software hold. It is not a hardware cut, it
 de-energises nothing, and nothing here is safety rated.
 
+**`castor resume --clear-estop` no longer clears unchecked when a robot has no
+clear code.** The check read "if a code is configured and the supplied one does
+not match, refuse", so a robot with no code at all cleared its e-stop with no
+code at all, and said nothing about it. That is the ordinary state of a
+gateway-only robot: the actuator lives behind the gateway, `castor up` may never
+have run on that host, and nothing ever provisioned `OPENCASTOR_ESTOP_AUTH`. The
+robots with no second factor were the ones that asked for nothing, which is
+backwards. A missing secret is a missing secret; it is not consent.
+
+Now: if the code is set in the environment or found in `<home>/tokens.env`, it
+must be supplied by `--auth-code` or in the environment and must match, and
+`--no-auth-code` is refused rather than honoured. If neither source has one, the
+clear is refused with a message naming `OPENCASTOR_ESTOP_AUTH`, naming
+`castor up` and `ensure_estop_auth` as what provisions it, and naming the escape
+hatch. The escape hatch is the new `--no-auth-code` flag, which clears and
+prints a warning that the clear was unauthenticated and that nothing verified
+who ran it.
+
+`_estop_auth_sources()` reports both the code and where it came from, in the
+same order `castor/fs/safety.py` reads it at clear time, so the CLI and the API
+never enforce different secrets.
+
 **A stop is acknowledged only once the robot has answered.** `castor bridge`
 wrote `ack_qos: "acknowledged"` onto the command document before it dispatched
 anything, under a comment that called it an immediate ACK. It was not an
