@@ -144,6 +144,19 @@ def _cmd_compliance_submit(args) -> int:
 
     artifact = args.artifact
 
+    if artifact == "incident-report":
+        # One submit path, shared with `castor incidents report --submit`: the
+        # body comes from incidents.jsonl through IncidentLog, a refusal is an
+        # operator line rather than a traceback, and reported is stamped only
+        # on success (OC-13).
+        from castor.incidents import IncidentLog
+
+        return _file_incident_report(
+            IncidentLog(getattr(args, "log", None) or None),
+            manifest=getattr(args, "manifest", None) or "ROBOT.md",
+            label="castor compliance submit incident-report",
+        )
+
     # Argument-only checks run before anything is read, signed or opened, so a
     # missing record is one clear line rather than a late failure (OC-13).
     record_facts: dict = {}
@@ -210,23 +223,6 @@ def _cmd_compliance_submit(args) -> int:
                 out = await compliance_mod.submit_ifu(
                     rrf=rrf, signer=signer, rrn=rrn, coverage=extra.get("coverage", {})
                 )
-            elif artifact == "incident-report":
-                # The body comes from incidents.jsonl through IncidentLog. It
-                # can no longer be hand-supplied through --data (OC-13).
-                from castor.incidents import IncidentLog
-
-                _inc_log = IncidentLog(getattr(args, "log", None) or None)
-                _pending = _inc_log.unreported_incidents()
-                if not _pending:
-                    sys.stderr.write(
-                        "castor compliance submit incident-report: no unfiled incidents "
-                        "in the log; nothing to submit\n"
-                    )
-                    return 1
-                out = await compliance_mod.submit_incident_report(
-                    rrf=rrf, signer=signer, rrn=rrn, incidents=_pending
-                )
-                _inc_log.mark_reported([i["id"] for i in _pending], receipt=out)
             elif artifact == "eu-register":
                 md = (m.frontmatter or {}).get("metadata") or {}
                 rmn = extra.get("rmn") or (
@@ -5614,25 +5610,32 @@ def cmd_incidents(args) -> None:
         raise SystemExit(1)
 
 
-def _submit_incident_report(args, log) -> int:
-    """`castor incidents report --submit` — file the log's unfiled incidents.
+def _file_incident_report(log, manifest: str, label: str) -> int:
+    """File the log's unfiled incidents. THE ONE INCIDENT SUBMIT PATH.
 
-    The body is built from the records in incidents.jsonl, never hand-supplied.
+    Both CLI entry points come here — ``castor incidents report --submit`` and
+    ``castor compliance submit incident-report`` — so they cannot drift: the
+    body is built from the records in incidents.jsonl and never hand-supplied,
+    a refusal from the registry is an operator line and exit code 1 rather than
+    a traceback, reported is stamped only on a submission that succeeded, and
+    both print the submission record id.
+
     On a 2xx the log gains a NEW chained submission line stamping reported,
     reported_at and the receipt; no existing line is ever edited.
+
+    Args:
+        log: the IncidentLog to read and stamp.
+        manifest: path to ROBOT.md.
+        label: the command name to put in front of an operator message.
     """
     import asyncio
     import sys
 
     pending = log.unreported_incidents()
     if not pending:
-        sys.stderr.write(
-            "castor incidents report --submit: no unfiled incidents in the log; "
-            "nothing to submit\n"
-        )
+        sys.stderr.write(f"{label}: no unfiled incidents in the log; nothing to submit\n")
         return 1
 
-    manifest = getattr(args, "manifest", None) or "ROBOT.md"
     if _legacy_rcan_yaml_guard(manifest):
         return 1
 
@@ -5645,10 +5648,7 @@ def _submit_incident_report(args, log) -> int:
     m = read_robot_md(manifest)
     rrn = getattr(m, "rrn", None)
     if not rrn:
-        sys.stderr.write(
-            "castor incidents report --submit: manifest has no rrn — "
-            "run `castor register` first\n"
-        )
+        sys.stderr.write(f"{label}: manifest has no rrn — run `castor register` first\n")
         return 1
     endpoint = getattr(m, "endpoint", None) or "https://rcan.dev"
 
@@ -5663,14 +5663,24 @@ def _submit_incident_report(args, log) -> int:
     try:
         receipt = asyncio.run(_run())
     except Exception as exc:
-        sys.stderr.write(f"castor incidents report --submit: submission failed: {exc}\n")
+        # RrfError carries the registry's status and body; anything else is a
+        # transport or signing failure. Either way the operator gets a line,
+        # not a traceback, and nothing in the log is stamped.
+        sys.stderr.write(f"{label}: submission failed: {exc}\n")
         return 1
 
     submission_id = log.mark_reported([i["id"] for i in pending], receipt=receipt)
-    print(
-        f"Filed {len(pending)} incident(s); submission record {submission_id}",
-    )
+    print(f"Filed {len(pending)} incident(s); submission record {submission_id}")
     return 0
+
+
+def _submit_incident_report(args, log) -> int:
+    """`castor incidents report --submit` — file the log's unfiled incidents."""
+    return _file_incident_report(
+        log,
+        manifest=getattr(args, "manifest", None) or "ROBOT.md",
+        label="castor incidents report --submit",
+    )
 
 
 def cmd_ifu(args) -> None:
