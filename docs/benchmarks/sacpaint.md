@@ -161,11 +161,33 @@ virtual medium, on each retained receipt's `sacpaint_ink` note beside the
 colour. That note is sacpaint's own record and is never part of the signed
 envelope.
 
+**The policy has to be able to send one: `--policy agent_strokes`.** The
+model-facing tool list is built by the agent plugin out of the embodiment's
+action box, so a body cannot put a tool in front of a model on its own. Turning
+`-E strokes=true` on alone therefore draws exactly the picture it drew before,
+one target per call. `agent_strokes` is the same `agent` with the same wiring
+(same `-P base_url`, `api_key_env`, `model`, `images`, `max_llm_calls`, and the
+same subscription shim) and one more tool on its toolset, `stroke`, beside
+`move_to`, `done`, `give_up` and `take_pic`. A stroke call is planned into the
+targets the body already sends and each one is handed to the plugin's own move
+tool, so the interpolation, the bounds and the speed limit are the ones the
+per-target tool would have applied, and the wire is unchanged. A body started
+without the primitive is refused at bind, naming the flag, rather than quietly
+degrading. The body advertises the primitive and its pen heights as the
+capability `sacpaint_strokes:z=<down>/<travel>`, which is also recorded in the
+EvalLog.
+
 **Opt-in, both ends.** The primitive is off by default and the prompt is
 byte-identical to every run before strokes existed without it. Turn it on with
-the body option, or from the phone by adding one key to `paint.json`:
+the body option and the matching policy, or from the phone by adding one key to
+`paint.json` (which selects `agent_strokes` for you):
 
 ```bash
+# a model drawing with the primitive
+castor bench sacpaint run --task sacpaint/photo-v1 --policy agent_strokes \
+    --embodiment sacpaint_plotter --no-rerun --no-prompt \
+    -- --epochs 1 -E strokes=true
+
 # the oracle, playing every reference stroke back as one stroke
 castor bench sacpaint run --task sacpaint/photo-v1 --policy sacpaint_trace \
     --embodiment sacpaint_plotter --no-rerun --no-prompt \
