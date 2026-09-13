@@ -243,3 +243,30 @@ class TestRotationAndHashCache:
         expected = hashlib.sha256(replacement.strip().encode()).hexdigest()
         assert log._last_line_hash() == expected
         assert log._last_line_hash() != warm
+
+    def test_a_torn_tail_is_terminated_before_the_next_record(self, tmp_path):
+        """A process killed mid-append leaves a line with no newline on it.
+        Appending onto that byte would put two JSON objects on one physical
+        line, and a reader drops the whole line, losing the record that was
+        already written as well as the new one."""
+        path = tmp_path / "incidents.jsonl"
+        torn = json.dumps(
+            {
+                "id": "torn",
+                "record_type": "incident",
+                "prev_sha256": "",
+                "severity": "serious_harm",
+                "timestamp": "2026-01-01T00:00:00+00:00",
+                "discovered_at": "2026-01-01T00:00:00+00:00",
+            }
+        )
+        path.write_text(torn)  # no trailing newline
+
+        log = IncidentLog(path)
+        log.record(IncidentSeverity.SERIOUS_HARM, "estop", "after the tear", {})
+
+        lines = [x for x in path.read_text().splitlines() if x.strip()]
+        assert len(lines) == 2
+        assert lines[0] == torn  # the torn record is still its own line
+        assert json.loads(lines[1])["prev_sha256"] == hashlib.sha256(torn.encode()).hexdigest()
+        assert len(IncidentLog(path).list_incidents()) == 2

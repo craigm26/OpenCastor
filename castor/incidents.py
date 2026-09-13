@@ -393,17 +393,40 @@ class IncidentLog:
         self._cached_stat = self._stat_token()
         logger.info("Incident log rotated to %s (%d bytes)", target.name, size)
 
+    def _ends_with_newline(self) -> bool:
+        """True when the file is empty, absent, or already terminated.
+
+        A process killed mid-append leaves a last line with no newline on it.
+        Appending straight onto that byte would put two JSON objects on one
+        physical line, and a reader drops the whole line, which loses the
+        record that WAS written as well as the one being written now.
+        """
+        try:
+            size = self._path.stat().st_size
+        except OSError:
+            return True
+        if size == 0:
+            return True
+        try:
+            with open(self._path, "rb") as f:
+                f.seek(size - 1)
+                return f.read(1) == b"\n"
+        except OSError:
+            return True
+
     def _append(self, entry: dict[str, Any]) -> None:
         # Rotate, read the tail and append under one cross-process lock. The
-        # in-memory cache is still size-checked inside it, which is what keeps
+        # in-memory cache is still stat-checked inside it, which is what keeps
         # a second writer in THIS process honest; the lock is what keeps a
         # second PROCESS from chaining onto the same line.
         with _chain_lock(self._path):
             self._rotate_if_needed()
             entry["prev_sha256"] = self._last_line_hash()
             line = json.dumps(entry, default=str)
+            # A torn tail gets its terminator back before anything follows it.
+            prefix = "" if self._ends_with_newline() else "\n"
             with open(self._path, "a") as f:
-                f.write(line + "\n")
+                f.write(prefix + line + "\n")
             self._cached_hash = hashlib.sha256(line.encode()).hexdigest()
             self._cached_stat = self._stat_token()
 
