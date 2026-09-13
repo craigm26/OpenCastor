@@ -1001,9 +1001,25 @@ class SafetyLayer:
             return False
         changed = False
         if latch.paused != self._paused:
+            was_detail = self._pause_detail
             self._paused = latch.paused
             self._pause_detail = latch.describe() if latch.paused else ""
             logger.info("pause %s out of process", "set" if latch.paused else "lifted")
+            # AUDITED, not just logged. A pause blocks every motor write, the
+            # same as an e-stop does, and both adopting and lifting one here
+            # happen because another process said so. A hold this robot is
+            # applying with nothing in its own record saying when it started is
+            # a hold nobody can account for afterwards.
+            self._audit_safety(
+                latch.pause_principal or "latch",
+                "/dev/motor",
+                "pause" if latch.paused else "resume",
+                (
+                    f"adopted from the persisted latch — {latch.describe()}"
+                    if latch.paused
+                    else f"lifted out of process — was {was_detail or 'a pause'}"
+                ),
+            )
             changed = True
         if latch.estop_engaged and not self._estop:
             self._estop = True

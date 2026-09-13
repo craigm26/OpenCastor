@@ -990,6 +990,35 @@ def test_a_corrupt_latch_file_does_not_lift_the_stock_gateway_hold(_live_gateway
     assert fs.is_estopped is True
 
 
+def test_adopting_and_lifting_a_pause_out_of_process_is_audited(tmp_path, monkeypatch):
+    """A pause blocks every motor write. It belongs in the safety log.
+
+    The e-stop transitions in resync_from_latch were audited; the pause ones
+    only wrote a log line, so a robot could sit refusing motion with nothing in
+    its own record saying when that started or who asked for it.
+    """
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    from castor.safety import latch as latch_mod
+
+    fs = CastorFS()
+    fs.boot({})
+
+    def _events():
+        rows = fs.ns.read("/var/log/safety") or []
+        return [r.get("event") for r in rows]
+
+    latch_mod.record_pause(principal="craig", reason="battery swap", home=tmp_path)
+    assert fs.safety.resync_from_latch() is True
+    assert "pause" in _events()
+    rows = [r for r in (fs.ns.read("/var/log/safety") or []) if r.get("event") == "pause"]
+    assert rows[-1]["who"] == "craig"
+    assert "battery swap" in rows[-1]["detail"]
+
+    latch_mod.record_resume(home=tmp_path)
+    assert fs.safety.resync_from_latch() is True
+    assert "resume" in _events()
+
+
 def test_the_reconcile_reads_the_latch_on_the_event_loop_and_not_in_a_thread(
     _live_gateway, tmp_path
 ):
