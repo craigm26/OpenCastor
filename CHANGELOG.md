@@ -30,6 +30,21 @@ party's verification; the process that writes these lines can rewrite them all.
 
 ### Security
 
+**`POST /api/estop/clear` and `castor resume --clear-estop` now resolve the
+e-stop clear code the same way.** One resolver,
+`castor.safety.latch.estop_auth_sources`, reads `OPENCASTOR_ESTOP_AUTH` from the
+environment, then `$ROBOT_HOME/tokens.env` (the file `castor up` writes and
+every generated unit loads), then nothing, and both surfaces ask it. The
+endpoint used to read the environment variable alone, so a gateway started by
+hand in a shell without it cleared a stop on an admin bearer alone even on a
+robot whose tokens.env carried a provisioned code, while the CLI on that same
+robot refused. A robot with no code anywhere keeps today's behaviour and the
+escape hatch it is: the clear goes through, and now logs a warning naming
+`ensure_estop_auth` and `castor up`, with `GET /api/fs/estop` reporting the new
+`estop_code_provisioned` field so a phone can show that the second factor is
+missing. The sensor-latch rule is unchanged: a stop an on-device sensor set is
+still cleared only at the robot.
+
 **The fleet proxy no longer lends this robot's credential to a peer it found
 over mDNS.** `POST /api/fleet/{ruri}/command` used to fall back to this robot's
 own `OPENCASTOR_API_TOKEN` when the caller supplied no peer token, and

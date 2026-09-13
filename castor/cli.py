@@ -5931,20 +5931,13 @@ def _cmd_monitor(args) -> None:
 def _estop_auth_sources(home) -> tuple[str, str]:
     """The code this robot expects, and where it was found.
 
-    Two sources, environment first:
-
-    1. ``OPENCASTOR_ESTOP_AUTH`` in the environment.
-    2. ``OPENCASTOR_ESTOP_AUTH=`` in ``<home>/tokens.env``, read the same way
-       systemd reads it, so an operator standing at the robot does not have to
-       export anything.
-
-    THE API IS NOT QUITE THE SAME, and pretending otherwise here would be the
-    comfortable lie. ``SafetyLayer.clear_estop``, which ``POST /api/estop/clear``
-    goes through, reads only the environment variable; it never opens
-    tokens.env. A unit written by `castor up` loads tokens.env into the server's
-    environment, so on a robot built the ten-minute way the two agree. A gateway
-    started by hand in a shell that does not export it has no code to check a
-    clear against. ``docs/safety/hold.md`` says this on the page.
+    ONE RESOLVER, SHARED WITH THE SERVER. This is a thin wrapper over
+    :func:`castor.safety.latch.estop_auth_sources`, which is also what
+    ``SafetyLayer.clear_estop`` (and so ``POST /api/estop/clear``) asks. Both
+    surfaces read the environment first and then ``<home>/tokens.env``, so a
+    gateway started by hand in a shell without the variable enforces the same
+    code an operator standing at the robot would be asked for. They used to
+    differ, and the weaker answer was the remote one.
 
     Returns ``("", "")`` when this robot has NO code at all, which is a real
     state and not an error: a gateway-only robot built before `castor up`
@@ -5952,22 +5945,9 @@ def _estop_auth_sources(home) -> tuple[str, str]:
     cannot read, has nothing to check against. What the caller must not do with
     that answer is treat it as permission; see :func:`cmd_resume`.
     """
-    code = os.environ.get("OPENCASTOR_ESTOP_AUTH", "").strip()
-    if code:
-        return code, "the OPENCASTOR_ESTOP_AUTH environment variable"
-    try:
-        from pathlib import Path as _Path
+    from castor.safety.latch import estop_auth_sources as _sources
 
-        tokens = _Path(home) / "tokens.env"
-        for line in tokens.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if stripped.startswith("OPENCASTOR_ESTOP_AUTH="):
-                found = stripped.split("=", 1)[1].strip()
-                if found:
-                    return found, str(tokens)
-    except Exception:
-        pass
-    return "", ""
+    return _sources(home)
 
 
 def _estop_auth_code(home) -> str:

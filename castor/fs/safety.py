@@ -32,6 +32,12 @@ from castor.safety.protocol import check_write_protocol
 
 logger = logging.getLogger("OpenCastor.FS.Safety")
 
+#: The e-stop clear code's variable name, for the messages in this module. The
+#: resolver that actually finds the code lives in ``castor.safety.latch`` and is
+#: shared with ``castor/cli.py``; this is only the name to print when it finds
+#: nothing. ``castor.up.ESTOP_AUTH_VAR`` is what writes it.
+_ESTOP_AUTH_VAR = "OPENCASTOR_ESTOP_AUTH"
+
 # -----------------------------------------------------------------------
 # Default safety limits (can be overridden via /etc/safety/limits)
 # -----------------------------------------------------------------------
@@ -891,6 +897,33 @@ class SafetyLayer:
         )
         return True
 
+    def _estop_auth_required(self) -> tuple[str, str]:
+        """The code a clear must match, and where it came from. ``("","")``: none.
+
+        THE SHARED RESOLVER, asked here and in ``castor/cli.py`` so that one
+        robot has one answer. Environment first, then ``$ROBOT_HOME/tokens.env``
+        (the file `castor up` writes and the generated unit loads), then
+        nothing.
+
+        If the resolver itself cannot be reached at all, this falls back to the
+        environment variable, which is what this method did before there was a
+        resolver. Falling back to "no code required" would turn an import error
+        into a weaker robot, and a stop is the wrong place to be generous.
+        """
+        try:
+            from castor.safety.latch import estop_auth_sources
+
+            return estop_auth_sources()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "E-stop clear code resolver unavailable (%s); falling back to %s "
+                "in this process' environment only",
+                exc,
+                _ESTOP_AUTH_VAR,
+            )
+            code = (os.environ.get(_ESTOP_AUTH_VAR) or "").strip()
+            return (code, f"the {_ESTOP_AUTH_VAR} environment variable") if code else ("", "")
+
     def clear_estop(
         self,
         principal: str = "root",
@@ -899,10 +932,25 @@ class SafetyLayer:
     ) -> bool:
         """Clear emergency stop. Requires root or CAP_SAFETY_OVERRIDE.
 
-        If the ``OPENCASTOR_ESTOP_AUTH`` environment variable is set, the
-        caller must supply a matching *auth_code* to authorise the clear.
-        ``castor up`` now writes that variable into the generated tokens.env,
-        so on a robot built by the ten-minute path the code is always required.
+        THE SECOND FACTOR, RESOLVED THE SAME WAY THE CLI RESOLVES IT.
+        ``castor.safety.latch.estop_auth_sources`` reads
+        ``OPENCASTOR_ESTOP_AUTH`` from the environment and then, failing that,
+        from ``$ROBOT_HOME/tokens.env``, which is the file `castor up` writes
+        and every generated unit loads. If it finds a code, the caller must
+        supply a matching *auth_code* (``X-Estop-Auth`` on the endpoint) or this
+        refuses. This used to read the environment variable alone, so a gateway
+        somebody started by hand in a shell that did not export it cleared a
+        stop on an admin bearer alone even though the robot had a provisioned
+        code sitting in its own tokens.env. The CLI asked for that code on the
+        same robot. Now both ask the one resolver.
+
+        A ROBOT WITH NO CODE ANYWHERE still clears on the admin bearer alone,
+        deliberately: refusing there would strand a stop that nothing on the
+        network could lift, on exactly the robots that were never run through
+        `castor up`. It is not silent. Every such clear logs a warning naming
+        ``castor.up.ensure_estop_auth`` and `castor up`, and
+        ``GET /api/fs/estop`` reports ``estop_code_provisioned: false`` so the
+        phone can say so before anybody needs it.
 
         A latch set by an on-device sensor is NOT clearable from a remote
         source. That rule was already advertised in the docstring of
@@ -935,17 +983,35 @@ class SafetyLayer:
                 )
                 return False
 
-        required_code = os.environ.get("OPENCASTOR_ESTOP_AUTH")
+        required_code, code_source = self._estop_auth_required()
         if required_code:
             if auth_code != required_code:
                 self._audit_safety(
                     principal,
                     "/dev/motor",
                     "deny_clear_estop",
-                    "invalid or missing auth code",
+                    f"invalid or missing auth code (expected the code from {code_source})"
+                    if code_source
+                    else "invalid or missing auth code",
                 )
                 logger.warning("clear_estop denied for %s: bad auth code", principal)
                 return False
+        else:
+            # NOT a refusal, and not silence either. See the docstring: a robot
+            # nobody provisioned keeps its escape hatch, and every use of it
+            # says what is missing and how to stop needing it.
+            logger.warning(
+                "clear_estop by %s (source=%s) was UNAUTHENTICATED: this robot has no "
+                "e-stop clear code. %s is not in this process' environment and not in "
+                "$ROBOT_HOME/tokens.env, so the admin bearer alone lifted this stop. "
+                "Provision one by running `castor up` on this robot "
+                "(castor.up.ensure_estop_auth mints it and writes it into tokens.env), "
+                "or export %s for both this server and the CLI.",
+                principal,
+                source,
+                _ESTOP_AUTH_VAR,
+                _ESTOP_AUTH_VAR,
+            )
 
         with self._hold_lock:
             self._estop = False

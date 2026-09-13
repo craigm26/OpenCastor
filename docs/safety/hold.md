@@ -108,14 +108,27 @@ Every clear taken at the robot appends `estop_cleared` to
 them, so an unauthenticated one can be found afterwards rather than only
 having been printed once to a terminal.
 
-WHERE THE TWO PATHS DIFFER, which is worth knowing before relying on either.
-The CLI looks for the code in `OPENCASTOR_ESTOP_AUTH` and then in
-`$ROBOT_HOME/tokens.env`. `POST /api/estop/clear` checks only the environment
-variable of the server process. A unit written by `castor up` loads
-`tokens.env`, so on a robot built the ten-minute way the two agree. A gateway
-started by hand in a shell that does not export the variable has nothing to
-check against, and there an admin bearer alone clears the stop. Start the
-gateway with the variable set, or let `castor up` write the unit.
+### Where both paths look for the code
+
+One resolver answers for both of them: `castor.safety.latch.estop_auth_sources`.
+It reads `OPENCASTOR_ESTOP_AUTH` from the process environment first, then
+`$ROBOT_HOME/tokens.env`, which is the file `castor up` writes and every
+generated unit loads, and then it has no code. `castor resume --clear-estop`
+asks it, and so does `SafetyLayer.clear_estop`, which is what
+`POST /api/estop/clear` goes through. A gateway started by hand in a shell that
+never exported the variable now finds the code its own robot was provisioned
+with and asks for it, the same as the CLI standing at the robot. Before this,
+the endpoint read only the environment variable, and on that hand-started
+gateway an admin bearer alone lifted a stop that the CLI, on the same robot,
+would have refused to lift without the code.
+
+A robot with no code in either place keeps the escape hatch: the endpoint
+clears on the admin bearer alone, because refusing there would strand a stop
+that nothing on the network could lift on the robots that were never run
+through `castor up`. Every such clear writes a warning to the server log naming
+`castor.up.ensure_estop_auth` and `castor up`, and `GET /api/fs/estop` reports
+`estop_code_provisioned: false`, so a phone can say the second factor is
+missing before anyone needs the stop rather than after.
 
 ## Why a sensor latch clears only at the robot
 
@@ -145,6 +158,7 @@ latch is cleared only by `POST /api/estop/clear` or
 | Thing | File |
 |---|---|
 | The latch file, its format and its rules | `castor/safety/latch.py` |
+| The e-stop clear code resolver, `estop_auth_sources` | `castor/safety/latch.py` |
 | The in-process hold, `resync_from_latch`, `clear_estop` | `castor/fs/safety.py` |
 | The stock gateway's reconcile task, `/api/estop/clear`, `/api/fs/estop` | `castor/api.py` |
 | `castor pause` / `castor resume` | `castor/cli.py` |
