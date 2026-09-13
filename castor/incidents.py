@@ -32,6 +32,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -41,7 +42,15 @@ from typing import Any
 logger = logging.getLogger("OpenCastor.Incidents")
 
 INCIDENT_SCHEMA_VERSION = "rcan-incidents-v2"
-DEFAULT_INCIDENT_LOG_PATH = Path.home() / ".opencastor" / "incidents.jsonl"
+
+#: Env override for the incident log location. Since incidents are filed by the
+#: system rather than by hand, anything that trips a stop now writes to this
+#: path. A test run, a fixture robot or a second instance on one machine sets
+#: CASTOR_INCIDENT_LOG so it does not append to the operator's own log.
+INCIDENT_LOG_ENV = "CASTOR_INCIDENT_LOG"
+DEFAULT_INCIDENT_LOG_PATH = Path(
+    os.environ.get(INCIDENT_LOG_ENV) or (Path.home() / ".opencastor" / "incidents.jsonl")
+)
 
 # OpenCastor crosswalk of the serious-incident reporting windows. Every clock
 # runs from discovery (``discovered_at``), never from the event timestamp.

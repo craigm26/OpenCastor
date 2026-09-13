@@ -141,6 +141,11 @@ from the trigger rather than a CLI flag. Filing happens strictly after the stop
 is in effect and every failure is absorbed and logged, so an incident-log
 problem can never keep a stop from happening; there are tests for that ordering.
 
+Because anything that trips a stop now writes to the log, the log path takes an
+env override, `CASTOR_INCIDENT_LOG`. A test run, a fixture robot or a second
+instance on one machine sets it and leaves the operator's own
+`~/.opencastor/incidents.jsonl` alone.
+
 Records now carry `discovered_at` as a field distinct from `timestamp`, and
 every deadline runs from it. When it is not supplied the record is stamped
 `unknown_discovery: true` and says so, rather than quietly running the clock
