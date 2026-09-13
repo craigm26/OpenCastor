@@ -107,6 +107,12 @@ monitor:
     load_warn_multiplier: 16.0
     force_warn_n: 40.0
     force_max_n: 50.0
+# Investigator access (RCAN AUTHORITY_ACCESS, message type 41). Empty on purpose:
+# with no ids listed the runtime refuses every authority request and says so in
+# its log, which is the shipped state. To let a registered authority read this
+# robot's records, list its registry ids here. Nothing else turns the handler on.
+authority:
+  trusted_authority_ids: []
 rcan_protocol:
   port: {port_runtime}
   # On, and it is the RUNTIME's copy of the record {name}-discovery.service

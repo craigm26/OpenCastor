@@ -219,3 +219,26 @@ class TestConformanceRowRequiresAllowlist:
         row = ConformanceChecker(cfg)._v21_authority_handler()
         assert row.status == "fail"
         assert "not registered" in row.detail
+
+
+# ---------------------------------------------------------------------------
+# The generated config carries the allowlist key, so registering an authority is
+# an edit to a generated default rather than a hand-written block.
+# ---------------------------------------------------------------------------
+class TestGeneratedConfigCarriesTheAllowlist:
+    def test_castor_up_emits_an_empty_allowlist(self, tmp_path):
+        import yaml
+        from castor.authority import trusted_authority_ids_from_config
+        from castor.up import render
+        from tests.test_shipped_runtime_stop import _plan
+
+        for archetype in ("rc-car", "microduck"):
+            self._check(yaml, render, _plan, trusted_authority_ids_from_config, tmp_path, archetype)
+
+    @staticmethod
+    def _check(yaml, render, _plan, reader, tmp_path, archetype):
+
+        cfg = yaml.safe_load(render("robot.rcan.yaml.tmpl", _plan(tmp_path, archetype)))
+        assert cfg["authority"] == {"trusted_authority_ids": []}
+        # and the reader agrees that this is the fail-closed shipped state
+        assert reader(cfg) == set()
