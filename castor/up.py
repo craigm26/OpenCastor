@@ -487,6 +487,7 @@ Environment=ROBOT_MANIFEST={home}/ROBOT.md
 Environment=ROBOT_RUNTIME_PORT={plan.runtime_port}
 Environment=ROBOT_CONSOLE_PORT={plan.console_port}
 Environment=OPENCASTOR_CONFIG={home}/robot.rcan.yaml
+Environment=OPENCASTOR_COMMITMENT_SECRET_FILE={home}/{COMMITMENT_KEY_FILE}
 ExecStart={python} {home}/runtime.py
 Restart=on-failure
 RestartSec=2
@@ -782,6 +783,40 @@ def ensure_console_token(home: Path) -> tuple[str, bool]:
 #: ``ROBOT_HOME``, which the castor unit already sets (see :func:`unit_files`),
 #: so no new environment plumbing and no new hand-edited file.
 ADMIN_TOKEN_DIGEST_FILE = "admin-token.sha256"
+
+#: Where the runtime's commitment chain looks for its HMAC key. Named in the
+#: castor unit as ``OPENCASTOR_COMMITMENT_SECRET_FILE`` (see :func:`unit_files`).
+COMMITMENT_KEY_FILE = "keys/commitment.key"
+
+
+def mint_commitment_key(home: Path) -> tuple[Path, bool]:
+    """Mint the commitment chain's HMAC key, 0600, under the robot home.
+
+    THIS IS WHY THE CHAIN CAN BE OFF BY DEFAULT. Until 3.5 the chain fell back
+    to a literal secret compiled into the wheel, so every robot on earth sealed
+    its action records with the same key and any of them could forge another's.
+    Removing that literal makes an unprovisioned robot record nothing at all,
+    which is only an improvement if provisioning is not a step a human has to
+    remember. So it is a generated default: `castor up` writes the key, the
+    generated unit names the file, and the ten-minute path never mentions it.
+
+    Identity, not a session credential: REUSED whenever the file already
+    exists. Rotating it would orphan every record already in the log, because
+    the seals in that log can only be recomputed with the key that made them.
+    The mode is re-asserted on reuse for the same reason the console token's
+    is: a file restored from a backup or copied with `cp` takes the umask, not
+    the source mode, and a world-readable HMAC key is a forgeable chain.
+
+    Returns (path, reused).
+    """
+    key_file = home / COMMITMENT_KEY_FILE
+    key_file.parent.mkdir(parents=True, exist_ok=True)
+    if key_file.exists() and key_file.read_bytes().strip():
+        key_file.chmod(0o600)
+        return key_file, True
+    key_file.write_bytes(secrets.token_bytes(32))
+    key_file.chmod(0o600)
+    return key_file, False
 
 
 def mint_admin_token(home: Path) -> str:
@@ -1133,6 +1168,11 @@ def run_up(
         tokens.chmod(0o600)
     admin_token = mint_admin_token(home)
     _say("owner token: minted — printed once below, only its digest on disk", started)
+    _commit_key, _commit_reused = mint_commitment_key(home)
+    _say(
+        "commitment key: reused" if _commit_reused else "commitment key: minted (0600)",
+        started,
+    )
     console_token, console_reused = ensure_console_token(home)
     _say(
         "console: token reused" if console_reused else "console: read-only token generated", started

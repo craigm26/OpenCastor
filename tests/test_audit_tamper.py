@@ -1,10 +1,10 @@
-"""Tests for tamper-evident audit log hash chaining."""
+"""Tests for audit log hash chaining."""
 
 import json
 
 import pytest
 
-from castor.audit import AuditLog, _hash_entry
+from castor.audit import CHAIN_BROKEN, CHAIN_NO_LOG, CHAIN_OK, AuditLog, _hash_entry
 
 
 @pytest.fixture
@@ -15,9 +15,13 @@ def audit_log(tmp_path):
 
 class TestHashChainCreation:
     def test_empty_log_verifies(self, audit_log):
+        # An EXISTING but empty log is a log with no entries, which verifies.
+        # A MISSING log is a different answer entirely (see TestEdgeCases).
+        open(audit_log._path, "w").close()
         valid, idx = audit_log.verify_chain()
         assert valid is True
         assert idx is None
+        assert audit_log.verify_chain_state() == (CHAIN_OK, None)
 
     def test_single_entry_genesis(self, audit_log):
         audit_log.log("test_event", source="test")
@@ -143,7 +147,7 @@ class TestTamperDetection:
 
 class TestBackwardCompatibility:
     def test_legacy_entries_no_hash(self, audit_log):
-        """Old entries without prev_hash should not break verification."""
+        """Pre-chaining entries verify only behind the explicit tolerance."""
         # Write legacy entries (no prev_hash)
         with open(audit_log._path, "w") as f:
             f.write(
@@ -153,7 +157,10 @@ class TestBackwardCompatibility:
                 json.dumps({"ts": "2024-01-01T00:01:00", "event": "old2", "source": "sys"}) + "\n"
             )
 
-        valid, idx = audit_log.verify_chain()
+        # Default: an entry nothing links to is a break.
+        assert audit_log.verify_chain() == (False, 0)
+        # Opt in, out loud, and the legacy format reads.
+        valid, idx = audit_log.verify_chain(allow_unchained=True)
         assert valid is True
 
     def test_legacy_then_chained(self, audit_log):
@@ -175,7 +182,8 @@ class TestBackwardCompatibility:
         new_entry = json.loads(lines[2])
         assert new_entry["prev_hash"] == _hash_entry(lines[1])
 
-        valid, idx = audit_log.verify_chain()
+        assert audit_log.verify_chain() == (False, 0)
+        valid, idx = audit_log.verify_chain(allow_unchained=True)
         assert valid is True
 
     def test_mixed_legacy_and_chained(self, audit_log):
@@ -190,15 +198,18 @@ class TestBackwardCompatibility:
         for i in range(3):
             audit_log.log(f"new_{i}", source="test")
 
-        valid, idx = audit_log.verify_chain()
+        assert audit_log.verify_chain() == (False, 0)
+        valid, idx = audit_log.verify_chain(allow_unchained=True)
         assert valid is True
 
 
 class TestEdgeCases:
     def test_nonexistent_file(self, tmp_path):
+        """A missing log is NOT an intact chain. It used to report one."""
         log = AuditLog(log_path=str(tmp_path / "nope.log"))
+        assert log.verify_chain_state() == (CHAIN_NO_LOG, None)
         valid, idx = log.verify_chain()
-        assert valid is True
+        assert valid is False
 
     def test_corrupt_json_line(self, audit_log):
         audit_log.log("good")
@@ -207,6 +218,7 @@ class TestEdgeCases:
         valid, idx = audit_log.verify_chain()
         assert valid is False
         assert idx == 1
+        assert audit_log.verify_chain_state() == (CHAIN_BROKEN, 1)
 
     def test_convenience_methods_chain(self, audit_log):
         audit_log.log_startup("/etc/config.yaml")

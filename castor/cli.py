@@ -1245,6 +1245,8 @@ def cmd_inspect(args) -> None:
         output["commitment_chain"] = {
             "records": count,
             "valid": valid,
+            "enabled": cc.enabled,
+            "disabled_reason": cc.disabled_reason,
             "errors": errors[:3] if errors else [],
         }
     except Exception:
@@ -1331,8 +1333,13 @@ def cmd_inspect(args) -> None:
 
     if "commitment_chain" in output:
         cc = output["commitment_chain"]
-        valid_str = "✅" if cc.get("valid") else "⚠️"
-        _pr(f"\n[bold]Commitment Chain[/bold]  {valid_str} {cc.get('records', 0)} records")
+        if not cc.get("enabled", True):
+            # Say why it is empty. "0 records" on its own reads as "nothing
+            # happened" when it means "nothing was recorded".
+            _pr(f"\n[bold]Commitment Chain[/bold]  ⚠️  off: {cc.get('disabled_reason', '')}")
+        else:
+            valid_str = "✅" if cc.get("valid") else "⚠️"
+            _pr(f"\n[bold]Commitment Chain[/bold]  {valid_str} {cc.get('records', 0)} records")
 
     if "compliance" in output:
         comp = output["compliance"]
@@ -5836,8 +5843,14 @@ def _cmd_audit_art11(args) -> None:
 
 
 def cmd_audit(args) -> None:
-    """castor audit — view and verify the tamper-evident audit log."""
-    from castor.audit import get_audit, print_audit
+    """castor audit — view and verify the hash-chained local audit log."""
+    from castor.audit import (
+        CHAIN_BROKEN,
+        CHAIN_NO_LOG,
+        get_audit,
+        orphaned_legacy_log,
+        print_audit,
+    )
 
     audit = get_audit()
 
@@ -5845,12 +5858,27 @@ def cmd_audit(args) -> None:
         _cmd_audit_art11(args)
         return
 
+    # One line, every invocation, when a pre-3.5 cwd-relative log is sitting
+    # in this directory. It is not read, not merged and not moved.
+    _orphan = orphaned_legacy_log()
+    if _orphan:
+        print(
+            f"  note: {_orphan} is a pre-3.5 audit log left by an older runtime. "
+            f"It is not read and not moved; the live log is {audit._path}"
+        )
+
     if getattr(args, "verify", False):
-        ok, broken_idx = audit.verify_chain()
-        if ok:
-            print("  ✅ Audit chain intact — no tampering detected.")
-        else:
+        allow_unchained = getattr(args, "allow_unchained", False)
+        state, broken_idx = audit.verify_chain_state(allow_unchained=allow_unchained)
+        if state == CHAIN_NO_LOG:
+            # NOT "intact". There is no record here to have an opinion about.
+            print(f"  ❌ No audit log found at {audit._path} — nothing to verify.")
+            raise SystemExit(2)
+        if state == CHAIN_BROKEN:
             print(f"  ❌ Chain broken at entry index {broken_idx}.")
+            raise SystemExit(1)
+        print(f"  ✅ Chain links check out at {audit._path}.")
+        print("     A link check is not an outside party's verification.")
         return
 
     entries = audit.read(
@@ -9873,6 +9901,14 @@ def main() -> None:
     )
     p_audit.add_argument("--limit", type=int, default=50, help="Max entries to show (default: 50)")
     p_audit.add_argument("--verify", action="store_true", help="Verify hash chain integrity")
+    p_audit.add_argument(
+        "--allow-unchained",
+        action="store_true",
+        help=(
+            "With --verify: tolerate legacy entries that carry no prev_hash. "
+            "Off by default; an unlinked entry is a break."
+        ),
+    )
     p_audit.add_argument(
         "--art11",
         action="store_true",

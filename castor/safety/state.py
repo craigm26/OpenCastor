@@ -73,11 +73,15 @@ def compute_safety_score(snap: SafetyStateSnapshot) -> float:
 class SafetyTelemetry:
     """Captures safety state snapshots from a SafetyLayer.
 
-    Supports optional persistence to a rolling JSONL file so operators can
-    review historical safety score trends across sessions.
+    Optional persistence writes snapshots to a ROTATING RING, not an archive.
+    ``_rotate_if_needed`` trims the file back to :attr:`MAX_LOG_LINES`, so the
+    oldest snapshots are discarded as new ones arrive. It is there so an
+    operator can see the last few hours of safety score trend; it is not a
+    retained record and nothing downstream should treat a gap in it as
+    evidence that nothing happened.
     """
 
-    #: Max lines kept in the rolling log file (older lines are trimmed on rotate).
+    #: Max lines kept in the rolling ring (older lines are DROPPED on rotate).
     MAX_LOG_LINES = 10_000
 
     def __init__(
@@ -96,7 +100,10 @@ class SafetyTelemetry:
     def enable_persistence(
         self, log_path: Optional[str] = None, interval_seconds: float = 5.0
     ) -> None:
-        """Enable rolling-file persistence for snapshot history.
+        """Enable rolling-ring persistence for snapshot history.
+
+        The file is trimmed to :attr:`MAX_LOG_LINES` on rotate, so this keeps
+        a recent window and drops everything older.
 
         Args:
             log_path: Path to the JSONL file (default: ~/.opencastor/safety_telemetry.jsonl).

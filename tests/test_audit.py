@@ -265,3 +265,228 @@ class TestAuditLogWatermarkIndex:
         audit.log_motor_command(action)  # no watermark_token
 
         assert len(audit._watermark_index) == 0
+
+
+# =====================================================================
+# OC-06: the verifier must tell "no log" from "chain intact", the path
+# must be absolute, an unlinked entry must be a break, and the
+# POST_TOOL_USE hook must write into the same chain.
+# =====================================================================
+import os  # noqa: E402
+import subprocess  # noqa: E402
+from argparse import Namespace  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+import pytest  # noqa: E402
+
+import castor.audit as audit_mod  # noqa: E402
+from castor.audit import (  # noqa: E402
+    CHAIN_BROKEN,
+    CHAIN_NO_LOG,
+    CHAIN_OK,
+    _hash_entry,
+    orphaned_legacy_log,
+    resolve_audit_path,
+)
+
+
+class TestVerifyReportsMissingLog:
+    def test_verify_reports_missing_log(self, tmp_path):
+        """A log that does not exist is `no_log`, never "intact".
+
+        This is the defect the item names: `castor audit --verify` in an empty
+        directory printed that the chain was intact and exited 0.
+        """
+        audit = AuditLog(log_path=str(tmp_path / "never-written.log"))
+
+        assert audit.verify_chain_state() == (CHAIN_NO_LOG, None)
+        assert audit.verify_chain() == (False, None)
+
+        # An existing but empty file is a different answer: it is a log.
+        open(audit._path, "w").close()
+        assert audit.verify_chain_state() == (CHAIN_OK, None)
+
+    def test_cli_verify_exits_non_zero_with_no_log(self, tmp_path, monkeypatch, capsys):
+        from castor.cli import cmd_audit
+
+        missing = tmp_path / "nowhere" / "audit.log"
+        monkeypatch.setattr(audit_mod, "_audit", AuditLog(log_path=str(missing)))
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(SystemExit) as excinfo:
+            cmd_audit(Namespace(verify=True, art11=False, allow_unchained=False))
+
+        assert excinfo.value.code != 0
+        out = capsys.readouterr().out
+        assert "No audit log found" in out
+        assert "intact" not in out
+
+    def test_cli_verify_exits_one_on_a_break(self, tmp_path, monkeypatch, capsys):
+        from castor.cli import cmd_audit
+
+        audit = AuditLog(log_path=str(tmp_path / "audit.log"))
+        audit.log("one")
+        audit.log("two")
+        lines = Path(audit._path).read_text().splitlines()
+        entry = json.loads(lines[0])
+        entry["event"] = "TAMPERED"
+        lines[0] = json.dumps(entry)
+        Path(audit._path).write_text("\n".join(lines) + "\n")
+
+        monkeypatch.setattr(audit_mod, "_audit", audit)
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(SystemExit) as excinfo:
+            cmd_audit(Namespace(verify=True, art11=False, allow_unchained=False))
+        assert excinfo.value.code == 1
+        assert "broken" in capsys.readouterr().out
+
+
+class TestUnchainedTail:
+    def test_unchained_tail_is_a_break(self, tmp_path):
+        """A fabricated tail with no prev_hash used to verify clean."""
+        audit = AuditLog(log_path=str(tmp_path / "audit.log"))
+        audit.log("real_1")
+        audit.log("real_2")
+        assert audit.verify_chain() == (True, None)
+
+        with open(audit._path, "a") as f:
+            f.write(json.dumps({"ts": "2026-01-01T00:00:00", "event": "fabricated"}) + "\n")
+
+        state, idx = audit.verify_chain_state()
+        assert state == CHAIN_BROKEN
+        assert idx == 2
+
+    def test_allow_unchained_is_the_only_way_back(self, tmp_path):
+        audit = AuditLog(log_path=str(tmp_path / "audit.log"))
+        with open(audit._path, "w") as f:
+            f.write(json.dumps({"ts": "2024-01-01T00:00:00", "event": "legacy"}) + "\n")
+
+        assert audit.verify_chain_state() == (CHAIN_BROKEN, 0)
+        assert audit.verify_chain_state(allow_unchained=True) == (CHAIN_OK, None)
+
+
+class TestAbsoluteAuditPath:
+    def test_absolute_audit_path_is_stable_across_cwd(self, tmp_path, monkeypatch):
+        """The path must not depend on where anyone happened to be standing."""
+        robot_home = tmp_path / "robot-home"
+        robot_home.mkdir()
+        monkeypatch.delenv("OPENCASTOR_AUDIT_LOG", raising=False)
+        monkeypatch.setenv("ROBOT_HOME", str(robot_home))
+
+        here = tmp_path / "here"
+        there = tmp_path / "there"
+        here.mkdir()
+        there.mkdir()
+
+        monkeypatch.chdir(here)
+        from_here = resolve_audit_path()
+        monkeypatch.chdir(there)
+        from_there = resolve_audit_path()
+
+        assert from_here == from_there
+        assert os.path.isabs(from_here)
+        assert from_here == str(robot_home / "audit.log")
+
+    def test_module_default_is_absolute(self):
+        assert os.path.isabs(audit_mod.AUDIT_LOG_PATH)
+        assert audit_mod.AUDIT_LOG_PATH != audit_mod.LEGACY_AUDIT_FILE
+
+    def test_explicit_override_wins(self, tmp_path, monkeypatch):
+        target = tmp_path / "elsewhere" / "audit.log"
+        monkeypatch.setenv("OPENCASTOR_AUDIT_LOG", str(target))
+        monkeypatch.setenv("ROBOT_HOME", str(tmp_path / "ignored"))
+        assert resolve_audit_path() == str(target)
+
+    def test_default_creates_its_directory(self, tmp_path):
+        target = tmp_path / "fresh" / "deep" / "audit.log"
+        audit = AuditLog(log_path=str(target))
+        audit.log("hello")
+        assert target.exists()
+
+    def test_orphaned_legacy_log_is_named_not_moved(self, tmp_path):
+        """The migration note. We say where the old file is; we never touch it."""
+        legacy = tmp_path / audit_mod.LEGACY_AUDIT_FILE
+        legacy.write_text("{}\n")
+
+        found = orphaned_legacy_log(cwd=str(tmp_path))
+        assert found == str(legacy)
+        assert legacy.exists()
+        assert legacy.read_text() == "{}\n"
+
+        assert orphaned_legacy_log(cwd=str(tmp_path / "empty-dir")) is None
+
+
+class TestPostToolHook:
+    def test_post_tool_hook_writes_a_chained_line(self, tmp_path, monkeypatch):
+        """The generated hook must emit parseable JSON into the one chain.
+
+        Two defects met here: run_post_tool() had no caller so the hook never
+        fired, and the script echoed a double-quoted brace holding the payload
+        unescaped, so a `$` or a backtick in a tool argument was expanded by
+        the shell on the way to disk.
+        """
+        import castor.hooks.default_hooks as dh
+        from castor.hooks.runner import HookEvent, HookRunner
+
+        audit_path = tmp_path / "home" / "audit.log"
+        audit_path.parent.mkdir(parents=True)
+        monkeypatch.setattr(dh, "_HOOKS_DIR", tmp_path / "hooks")
+        monkeypatch.setenv("OPENCASTOR_AUDIT_LOG", str(audit_path))
+
+        hooks = dh.get_default_hooks()
+        post = [h for h in hooks if h.event == HookEvent.POST_TOOL_USE]
+        assert post, "the default set must still install a POST_TOOL_USE audit hook"
+
+        runner = HookRunner(hooks)
+        # A payload full of every character the old echo would have eaten.
+        runner.run_post_tool("robot_move", {"note": "$HOME `id` $(whoami) \"quoted\""})
+        runner.run_post_tool("robot_stop", {"note": "second"})
+
+        lines = [ln for ln in audit_path.read_text().splitlines() if ln.strip()]
+        assert len(lines) == 2
+
+        first, second = (json.loads(ln) for ln in lines)
+        # jq-parseable, and it says what the tool call actually said.
+        assert first["prev_hash"] == "GENESIS"
+        assert first["payload"]["tool"] == "robot_move"
+        assert "$(whoami)" in first["payload"]["result"]["note"]
+        # Chained the way castor.audit chains, into the same file.
+        assert second["prev_hash"] == _hash_entry(lines[0])
+
+        audit = AuditLog(log_path=str(audit_path))
+        assert audit.verify_chain() == (True, None)
+        # And the runtime's own next line continues the hook's chain.
+        audit.log("runtime_event")
+        assert audit.verify_chain() == (True, None)
+
+    def test_hook_script_is_rewritten_when_the_marker_is_stale(self, tmp_path, monkeypatch):
+        import castor.hooks.default_hooks as dh
+
+        hooks_dir = tmp_path / "hooks"
+        hooks_dir.mkdir()
+        monkeypatch.setattr(dh, "_HOOKS_DIR", hooks_dir)
+
+        stale = hooks_dir / "audit_log.sh"
+        stale.write_text("#!/usr/bin/env bash\n# opencastor-hook-version: 0\nexit 0\n")
+        dh.get_default_hooks()
+        assert f"{dh._MARKER_PREFIX} {dh.HOOK_SCRIPT_VERSION}" in stale.read_text()
+
+        # An unmarked script is somebody's own edit and is left alone.
+        mine = hooks_dir / "safety_check.sh"
+        mine.write_text("#!/usr/bin/env bash\n# mine\nexit 0\n")
+        dh.get_default_hooks()
+        assert mine.read_text() == "#!/usr/bin/env bash\n# mine\nexit 0\n"
+
+    def test_generated_script_is_valid_bash(self, tmp_path, monkeypatch):
+        import castor.hooks.default_hooks as dh
+
+        monkeypatch.setattr(dh, "_HOOKS_DIR", tmp_path / "hooks")
+        dh.get_default_hooks()
+        for name in ("audit_log.sh", "safety_check.sh"):
+            proc = subprocess.run(
+                ["bash", "-n", str(tmp_path / "hooks" / name)],
+                capture_output=True,
+                text=True,
+            )
+            assert proc.returncode == 0, proc.stderr

@@ -201,7 +201,9 @@ def action_to_commitment_record(
     Create a :class:`rcan.CommitmentRecord` from an OpenCastor action execution.
 
     The record is *not* sealed here — call ``.seal(secret)`` with your HMAC
-    secret to produce a tamper-evident commitment.
+    secret to produce a sealed commitment. The seal is a shared-secret HMAC:
+    anyone holding that secret can recompute it, so it detects a change made
+    by someone without the key and proves nothing to a party that has it.
 
     Args:
         action_type:    Command name (e.g. ``"move_forward"``).

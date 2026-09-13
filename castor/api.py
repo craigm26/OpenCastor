@@ -2673,8 +2673,10 @@ async def watermark_verify(token: str, rrn: str):
     """Verify an RCAN AI output watermark token (§16.5).
 
     Public endpoint — no authentication required. Returns the full audit entry
-    if the token is found in the tamper-evident audit log, proving both
-    cryptographic validity and that the command was logged (Art. 12 + Art. 50).
+    if the token is found in this robot's hash-chained audit log, which shows
+    the token is well formed and that the command was logged here (Art. 12 +
+    Art. 50). The log is a local file this runtime writes, so a hit is this
+    robot's own account of itself, not an outside party's verification.
 
     Args:
         token: Watermark token, e.g. ``rcan-wm-v1:a3f9c1d2b8e47f20a3f9c1d2b8e47f20``.
@@ -2977,6 +2979,7 @@ async def rcan_message_endpoint(request: Request):
         # PreToolUse hook gate — runs before INVOKE dispatch (#817)
         _msg_type = getattr(msg, "msg_type", None)
         _INVOKE_TYPE = 11
+        _skill_name: str | None = None
         if _msg_type == _INVOKE_TYPE and state.hook_runner is not None:
             _skill_name = getattr(msg, "skill", None) or body.get("skill", "")
             _skill_params = getattr(msg, "params", None) or body.get("params", {})
@@ -2988,7 +2991,18 @@ async def rcan_message_endpoint(request: Request):
                 )
 
         response = state.rcan_router.route(msg, principal)
-        return response.to_dict()
+        _payload = response.to_dict()
+        # PostToolUse hooks. Until 3.5 run_post_tool() had no caller anywhere
+        # in the runtime, so the POST_TOOL_USE audit hook that every robot
+        # installs could never fire and the audit line it exists to write was
+        # never written. Fire-and-forget: a hook failure is logged inside the
+        # runner and never changes the answer the caller already earned.
+        if _skill_name is not None and state.hook_runner is not None:
+            try:
+                state.hook_runner.run_post_tool(_skill_name, _payload)
+            except Exception as _hook_exc:  # pragma: no cover - defensive
+                logger.debug("Post-tool hook dispatch failed (ignored): %s", _hook_exc)
+        return _payload
     except HTTPException:
         raise
     except Exception as e:

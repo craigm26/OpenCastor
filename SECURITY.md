@@ -70,11 +70,18 @@ Critical and High findings: we request a CVE via GitHub's CVE numbering authorit
 OpenCastor is the reference runtime for the [RCAN protocol](https://rcan.dev). The following RCAN-specific security surfaces apply:
 
 ### Commitment Chain
-Every robot action is recorded as an HMAC-chained entry in the commitment log (`~/.local/share/opencastor/commitments.jsonl` by default, XDG-compliant). Chain integrity can be verified with:
+Each robot action can be recorded as an HMAC-chained entry in the commitment log (`~/.local/share/opencastor/commitments.jsonl` by default, XDG-compliant). Chain links can be checked with:
 ```bash
 rcan-validate audit ~/.local/share/opencastor/commitments.jsonl
 ```
-The HMAC secret defaults to an environment variable (`OPENCASTOR_COMMITMENT_SECRET`) and falls back to a built-in default for development. **Production deployments must override this secret.**
+
+**There is no default HMAC secret, and the chain is off until a key is provisioned.** Releases before 3.5 fell back to a literal secret compiled into the wheel whenever `OPENCASTOR_COMMITMENT_SECRET` was unset, and this document described that fallback as an acceptable development default. It was not one. The variable appeared in no template and no generated unit, so the fallback was not a development case at all: it was the shipped state of every install, sealing every action record with a key that anyone who had the package also had. A seal that anyone can recompute is not evidence of anything, and a log full of such seals is worse than no log, because it reads as though it were.
+
+The key is now a generated default. `castor up` mints 32 random bytes into `<robot home>/keys/commitment.key` at mode 0600 and renders `OPENCASTOR_COMMITMENT_SECRET_FILE` into the generated castor unit. Nobody edits a file on the robot to get this. A robot that has never run `castor up` since 3.5 has no key, and on that robot `CommitmentChain.enabled` is False, `append_action` returns None after one warning, and nothing is written. That is the intended behaviour: no key, no record, and the tooling says so rather than producing records it cannot stand behind.
+
+Resolution order for the secret: the `secret=` argument, then `$OPENCASTOR_COMMITMENT_SECRET`, then `$OPENCASTOR_COMMITMENT_SECRET_FILE`, then nothing.
+
+Treat the key file the way you treat a private key. Anyone who can read it can both verify and forge a record. Keeping it on the robot means the chain detects a change made by someone who never had shell on the robot, and nothing more than that. It is not an outside party's verification, and no OpenCastor command renders one.
 
 ### Confidence Gates
 `agent.confidence_gates` in the RCAN config are a configurable safety surface — actions below the configured threshold are automatically blocked. Misconfigured or absent gates may allow low-confidence AI actions to execute unvetted.

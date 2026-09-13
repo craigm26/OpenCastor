@@ -1,11 +1,30 @@
 """
-RCAN Commitment Chain — cryptographically sealed action audit trail.
+RCAN Commitment Chain: an HMAC-chained log of the actions this robot took.
 
 Every robot action executed by OpenCastor can be sealed into a
 :class:`rcan.CommitmentRecord` and appended to a persistent HMAC-chained
-log. This provides forensic-grade proof of what the robot did, when, at
-what confidence, and under which authorization — independently verifiable
-by any party with the shared HMAC secret.
+log. A record says what the robot did, when, at what confidence, and under
+which authorization. The seal is only as good as the key: anyone holding the
+HMAC secret can recompute it, so the chain is a record the key holder keeps,
+not a proof to an outside party, and nothing here renders a record "verified".
+
+THE CHAIN IS OFF UNLESS A KEY WAS PROVISIONED. There is no built-in default
+secret. Until the 3.5 line there was one, a literal in this module, which
+meant every wheel shipped the key that sealed every record: a seal anyone
+could forge is not evidence of anything, and a log of such seals is worse
+than no log because it reads as though it were. When no key resolves,
+:attr:`CommitmentChain.enabled` is False, :meth:`append_action` returns None
+after one log line, and nothing is written.
+
+A key is provisioned by the generator, never by hand: `castor up` mints
+``{robot home}/keys/commitment.key`` at 0600 and renders
+``OPENCASTOR_COMMITMENT_SECRET_FILE`` into the castor unit.
+
+Resolution order for the secret:
+    1. the ``secret=`` argument
+    2. ``$OPENCASTOR_COMMITMENT_SECRET``
+    3. ``$OPENCASTOR_COMMITMENT_SECRET_FILE`` (the generated path)
+    4. nothing: the chain is disabled
 
 Usage:
     chain = CommitmentChain(secret="your-secret", log_path=".opencastor-commitments.jsonl")
@@ -85,12 +104,16 @@ class CommitmentChain:
         self._secret = self._resolve_secret(secret)
         self._last_hash: str | None = self._load_last_hash()
 
+        self._chain: Any | None = None
+        if self._secret is None:
+            # No key, no chain object. _resolve_secret already said why.
+            return
         try:
             from rcan.audit import AuditChain
 
-            self._chain: AuditChain | None = AuditChain(self._secret)
+            self._chain = AuditChain(self._secret)
         except ImportError:
-            logger.warning("rcan package not installed — commitment chain disabled")
+            logger.warning("rcan package not installed - commitment chain disabled")
             self._chain = None
 
     # ------------------------------------------------------------------
@@ -148,10 +171,24 @@ class CommitmentChain:
             logger.warning("CommitmentRecord failed (non-fatal): %s", exc)
             return None
 
+    @property
+    def disabled_reason(self) -> str:
+        """Why the chain is off, or an empty string when it is on."""
+        if self._secret is None:
+            return "no commitment key provisioned (see SECURITY.md)"
+        if self._chain is None:
+            return "rcan package not installed"
+        return ""
+
     def verify(self) -> bool:
-        """Verify the in-memory chain integrity. Returns True if valid."""
+        """Verify the in-memory chain integrity. Returns True if valid.
+
+        A disabled chain returns False, not True: there is nothing to verify,
+        and saying "valid" about an absent record is the failure this module
+        was rewritten to stop.
+        """
         if not self.enabled:
-            return True
+            return False
         try:
             return self._chain.verify_all()
         except Exception:
@@ -163,7 +200,12 @@ class CommitmentChain:
 
         Returns:
             (valid: bool, count: int, errors: list[str])
+
+        A disabled chain reports (False, 0, [reason]). "No records" and
+        "records intact" are different answers and must not print the same.
         """
+        if not self.enabled:
+            return False, 0, [self.disabled_reason]
         if not self._log_path.exists():
             return True, 0, []
 
@@ -251,17 +293,48 @@ class CommitmentChain:
         return None
 
     @staticmethod
-    def _resolve_secret(secret: str | bytes | None) -> bytes:
+    def _resolve_secret(secret: str | bytes | None) -> bytes | None:
+        """Resolve the HMAC secret, or None when no key was provisioned.
+
+        RETURNING NONE IS THE POINT. The old last line of this function was a
+        literal default secret, and because a non-empty bytestring is truthy,
+        `enabled` was True on every install that had never been given a key.
+        The runtime then sealed a record for every action under a key that
+        shipped inside the wheel. Fail closed instead: no key, no chain, and
+        one warning that says so.
+        """
         if secret:
             return secret.encode() if isinstance(secret, str) else secret
         env_secret = os.environ.get("OPENCASTOR_COMMITMENT_SECRET", "")
         if env_secret:
             return env_secret.encode()
-        # Default: warn but allow operation with a weak default
+        # The generated path: `castor up` writes the key file and the castor
+        # unit names it. Nothing here creates the file.
+        secret_file = os.environ.get("OPENCASTOR_COMMITMENT_SECRET_FILE", "")
+        if secret_file:
+            try:
+                raw = Path(secret_file).expanduser().read_bytes().strip()
+            except OSError as exc:
+                logger.warning(
+                    "OPENCASTOR_COMMITMENT_SECRET_FILE=%s could not be read (%s) "
+                    "- commitment chain disabled",
+                    secret_file,
+                    exc,
+                )
+                return None
+            if raw:
+                return raw
+            logger.warning(
+                "OPENCASTOR_COMMITMENT_SECRET_FILE=%s is empty - commitment chain disabled",
+                secret_file,
+            )
+            return None
         logger.warning(
-            "OPENCASTOR_COMMITMENT_SECRET not set — using default (not suitable for production)"
+            "No commitment key provisioned (OPENCASTOR_COMMITMENT_SECRET or "
+            "OPENCASTOR_COMMITMENT_SECRET_FILE) - commitment chain disabled, "
+            "seal is a no-op. Run `castor up` to mint one."
         )
-        return b"opencastor-default-commitment-secret"
+        return None
 
 
 # Module-level singleton

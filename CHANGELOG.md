@@ -93,6 +93,79 @@ Callers holding only the runtime bearer now get 403 `insufficient_role` on
 `/api/harness*` and the other routes already gated at `admin`. Use the owner
 token `castor up` printed.
 
+**The commitment chain no longer ships its own key, and is disabled unless a
+key is provisioned at install time.** `CommitmentChain._resolve_secret` used to
+end by returning a literal secret compiled into the package whenever
+`OPENCASTOR_COMMITMENT_SECRET` was unset. That variable appeared in no
+template, no generated unit and no runtime template, so the fallback was not a
+development convenience: it was the shipped state. Every install sealed a
+`CommitmentRecord` for every action under a key that anyone holding the package
+also held, which means every one of those seals was forgeable by anyone, and
+the log that collected them read as evidence while being none. The literal is
+gone. With no key, `CommitmentChain.enabled` is False, `append_action` returns
+None after one warning line, `verify()` returns False and `verify_log()`
+reports `no commitment key provisioned` rather than a clean bill.
+
+The key is a generated default, not a file anyone edits. `castor up` mints 32
+random bytes into `<robot home>/keys/commitment.key` at mode 0600 and renders
+`OPENCASTOR_COMMITMENT_SECRET_FILE` into the generated castor unit; an existing
+key file is reused, never rotated, because rotating it would orphan every
+record already sealed. `castor up` must be re-run once on an existing robot to
+mint the key. A robot where it is not re-run keeps running normally and simply
+records no commitments.
+
+**The audit verifier now tells "no log" apart from "chain intact".**
+`castor audit --verify` used to return `(True, None)` when the log file did not
+exist, so running it in a directory with no log printed that the chain was
+intact and exited 0: a verifier answering "intact" about a record it does not
+have is the failure this project's own canon names. `verify_chain_state()`
+returns three states, `no_log`, `ok` and `broken`. `castor audit --verify`
+prints `No audit log found at <path>` and exits 2 for the first, exits 1 on a
+break, and on success says only that the links check out, adding that a link
+check is not an outside party's verification.
+
+**An audit entry with no `prev_hash` is now a break.** The walk used to skip
+such an entry and carry on, so a fabricated unchained tail appended to the log
+verified clean. The pre-chaining legacy format is still readable, but only
+behind the new explicit `castor audit --verify --allow-unchained`.
+
+**The audit log has one absolute path instead of three divergent ones.**
+`castor.audit` wrote the cwd-relative `.opencastor-audit.log`, so which file a
+service wrote depended on the directory it started in and which file the CLI
+read depended on where you were standing, while the POST_TOOL_USE hook wrote
+`~/.opencastor/audit.log` and nothing joined them. The path is now resolved
+once at import from `$OPENCASTOR_AUDIT_LOG`, else `$ROBOT_HOME/audit.log` (the
+generated castor unit already sets `ROBOT_HOME`), else
+`~/.opencastor/audit.log`, and the generated hook script is rendered against
+that same value. An old cwd-relative log is left exactly where it is and is
+never merged or moved; `castor audit` prints one line naming it when it finds
+one, because a tool that silently relocates an audit log has edited it.
+
+**The POST_TOOL_USE hook can now fire, and writes a chained line.**
+`HookRunner.run_post_tool()` had no caller anywhere in the runtime, so the
+audit hook every robot installs never ran. It is now called after INVOKE
+dispatch. The generated `audit_log.sh` was also emitting its line with an
+`echo` of a double-quoted brace holding the tool payload unescaped, so a `$`,
+a backtick or a `$(...)` inside a tool argument was expanded by the shell on
+the way to disk and an unbalanced quote broke the JSON outright; it now uses
+`printf '%s'` with the payload as an argument, and computes `prev_hash` the way
+the runtime does so its line joins the same chain. Generated hook scripts carry
+a version marker and are rewritten when it goes stale, so the fix reaches
+robots without anyone hand-editing a script. A script with no marker is
+treated as an operator's own and left alone.
+
+**The word "tamper-evident" is gone from the runtime source.** It overclaimed
+in both directions. The audit log is a local file the writing process owns, so
+the same process that appends a line can rewrite the file and re-chain it; the
+commitment seal is a shared-secret HMAC, so anyone holding the key can
+recompute it. Both detect a change made by someone who did not have the file or
+the key. Neither is a verification by an outside party, and nothing here
+renders one.
+
+Also: `SafetyTelemetry.enable_persistence()` had no caller either and is now
+called where the safety layer is built, labelled honestly as a rotating ring,
+since `_rotate_if_needed` trims the oldest snapshots away.
+
 ## [3.4.0] - 2026-09-10
 
 Published on PyPI as `1!3.4.0`.

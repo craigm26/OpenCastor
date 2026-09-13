@@ -116,10 +116,18 @@ class SafetyLayer:
         # Last write denial reason (set on every return False in write())
         self._last_write_denial: str = ""
 
-        # Safety telemetry
+        # Safety telemetry. enable_persistence() had no caller anywhere in the
+        # runtime, so the rolling history it writes never existed and an
+        # operator asking "what was the safety state an hour ago" had nothing
+        # to read. It is a ROTATING RING, not an archive: _rotate_if_needed
+        # trims the file back to MAX_LOG_LINES, so old snapshots are dropped.
         from castor.safety.state import SafetyTelemetry
 
         self._telemetry = SafetyTelemetry()
+        try:
+            self._telemetry.enable_persistence()
+        except Exception as exc:
+            logger.warning("Safety telemetry persistence unavailable: %s", exc)
 
         # Physical bounds checker
         self._bounds_checker = BoundsChecker.from_virtual_fs(ns)

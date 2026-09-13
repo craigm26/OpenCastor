@@ -254,8 +254,21 @@ def _check_commitments() -> CheckResult:
         from castor.rcan.commitment_chain import get_commitment_chain
 
         chain = get_commitment_chain()
-        count = chain.count() if hasattr(chain, "count") else "?"
-        return CheckResult("Commitment chain", "ok", f"{count} records")
+        # A disabled chain is not an "ok" chain with an unknown count. Since
+        # the shipped default secret was removed, an unprovisioned robot has
+        # no chain at all, and saying "ok" about it is the same failure the
+        # audit verifier had: no record and intact record printing the same.
+        if not chain.enabled:
+            return CheckResult(
+                "Commitment chain",
+                "warn",
+                f"disabled: {chain.disabled_reason}",
+                fix="castor up",
+            )
+        valid, count, errors = chain.verify_log()
+        if not valid:
+            return CheckResult("Commitment chain", "warn", errors[0] if errors else "chain broken")
+        return CheckResult("Commitment chain", "ok", f"{count} records, links check out")
     except Exception:
         return CheckResult("Commitment chain", "skip", "rcan not installed (optional)")
 

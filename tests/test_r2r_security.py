@@ -344,7 +344,12 @@ class TestCommitmentChain:
     def _fresh_chain(self, tmp_path):
         from castor.rcan.commitment_chain import CommitmentChain
 
-        return CommitmentChain(log_path=str(tmp_path / "chain.jsonl"))
+        # An explicit key. This used to pass no secret at all and still seal,
+        # because the module fell back to a literal shipped in the wheel; with
+        # that literal gone, a chain with no key is correctly disabled.
+        return CommitmentChain(
+            secret="r2r-test-commitment-key", log_path=str(tmp_path / "chain.jsonl")
+        )
 
     def _append(self, chain, action: str, robot_uri: str = "rcan://test/bot"):
         chain.append_action(action, {"ts": time.time()}, robot_uri=robot_uri)
