@@ -274,6 +274,7 @@ class TestAuditLogWatermarkIndex:
 # =====================================================================
 import os  # noqa: E402
 import subprocess  # noqa: E402
+import time  # noqa: E402
 from argparse import Namespace  # noqa: E402
 from pathlib import Path  # noqa: E402
 
@@ -490,3 +491,91 @@ class TestPostToolHook:
                 text=True,
             )
             assert proc.returncode == 0, proc.stderr
+
+    def test_generated_script_resolves_robot_home_at_run_time(self, tmp_path, monkeypatch):
+        """The hook must read the path when it runs, not when it was written.
+
+        Baking AUDIT_LOG_PATH in as the only value reopens the divergence this
+        change closes: the process that generated the script would decide the
+        path forever, and because its version marker is current nothing would
+        ever rewrite it. A script generated with no ROBOT_HOME must still land
+        in $ROBOT_HOME/audit.log when the runtime that runs it has one.
+        """
+        import castor.hooks.default_hooks as dh
+
+        monkeypatch.delenv("OPENCASTOR_AUDIT_LOG", raising=False)
+        monkeypatch.delenv("ROBOT_HOME", raising=False)
+        monkeypatch.setattr(dh, "_HOOKS_DIR", tmp_path / "hooks")
+        dh.get_default_hooks()
+        script = tmp_path / "hooks" / "audit_log.sh"
+
+        robot_home = tmp_path / "robot-home"
+        robot_home.mkdir()
+        env = dict(os.environ)
+        env.pop("OPENCASTOR_AUDIT_LOG", None)
+        env["ROBOT_HOME"] = str(robot_home)
+        subprocess.run(
+            ["bash", str(script)],
+            input=json.dumps({"tool": "robot_move", "result": {}}),
+            capture_output=True,
+            text=True,
+            env=env,
+            check=True,
+        )
+
+        landed = robot_home / "audit.log"
+        assert landed.exists(), "hook wrote somewhere other than $ROBOT_HOME/audit.log"
+        assert json.loads(landed.read_text().strip())["prev_hash"] == "GENESIS"
+
+    def test_hook_and_runtime_do_not_break_the_chain_when_interleaved(
+        self, tmp_path, monkeypatch
+    ):
+        """Two writers, one file, one chain.
+
+        Unifying the path made the hook a second process appending to the file
+        the runtime appends to, and a threading.Lock does not see another
+        process. Without a cross-process lock, one writer's read-last-line can
+        straddle the other's append and produce a prev_hash pointing at a line
+        that is no longer last: a break the verifier reports as tampering when
+        nothing was tampered with.
+        """
+        import threading
+
+        import castor.hooks.default_hooks as dh
+
+        monkeypatch.setattr(dh, "_HOOKS_DIR", tmp_path / "hooks")
+        dh.get_default_hooks()
+        script = tmp_path / "hooks" / "audit_log.sh"
+
+        log_path = tmp_path / "home" / "audit.log"
+        log_path.parent.mkdir(parents=True)
+        env = dict(os.environ)
+        env["OPENCASTOR_AUDIT_LOG"] = str(log_path)
+
+        audit = AuditLog(log_path=str(log_path))
+
+        def runtime_writes():
+            for i in range(24):
+                audit.log(f"runtime_{i}", source="test")
+                time.sleep(0.004)
+
+        def hook_writes():
+            for i in range(24):
+                subprocess.run(
+                    ["bash", str(script)],
+                    input=json.dumps({"tool": f"t{i}", "result": {}}),
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                )
+
+        threads = [threading.Thread(target=runtime_writes), threading.Thread(target=hook_writes)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        lines = [ln for ln in log_path.read_text().splitlines() if ln.strip()]
+        assert len(lines) == 48
+        state, idx = audit.verify_chain_state()
+        assert state == CHAIN_OK, f"chain broke at entry {idx} with two writers"

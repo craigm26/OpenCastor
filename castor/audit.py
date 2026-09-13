@@ -35,6 +35,7 @@ Usage:
     castor audit --verify                # Verify hash chain integrity
 """
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -101,6 +102,48 @@ def orphaned_legacy_log(cwd: Optional[str] = None) -> Optional[str]:
     if os.path.abspath(candidate) == os.path.abspath(AUDIT_LOG_PATH):
         return None
     return candidate if os.path.exists(candidate) else None
+
+
+@contextlib.contextmanager
+def _cross_process_lock(path: str):
+    """Hold an advisory lock on ``<path>.lock`` for the duration of the block.
+
+    The runtime and the generated POST_TOOL_USE hook now append to the SAME
+    file, which is the whole point of resolving one absolute path. That makes
+    the in-process :class:`threading.Lock` insufficient on its own: the hook is
+    a separate bash process, and a read-last-line from one writer interleaved
+    with an append from the other produces a ``prev_hash`` pointing at a line
+    that is no longer last, i.e. a break the verifier would report as tampering
+    when nothing was tampered with. ``audit_log.sh`` takes ``flock`` on exactly
+    this file, so taking it here puts both writers in the same queue.
+
+    Best effort by design: on a platform without ``fcntl``, or a filesystem
+    that refuses the lock, the block still runs. A missed lock costs the same
+    interleaving that existed before; failing the audit write instead would be
+    worse.
+    """
+    lock_file = None
+    try:
+        import fcntl
+
+        lock_file = open(path + ".lock", "a")
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+    except Exception as exc:  # pragma: no cover - platform dependent
+        logger.debug("Audit cross-process lock unavailable (%s); continuing", exc)
+        if lock_file is not None:
+            lock_file.close()
+            lock_file = None
+    try:
+        yield
+    finally:
+        if lock_file is not None:
+            try:
+                import fcntl
+
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            except Exception:  # pragma: no cover - platform dependent
+                pass
+            lock_file.close()
 
 
 def _hash_entry(line: str) -> str:
@@ -208,8 +251,10 @@ class AuditLog:
         }
         entry.update(kwargs)
 
-        with self._lock:
-            # Compute prev_hash from the last line in the log
+        with self._lock, _cross_process_lock(self._path):
+            # Compute prev_hash from the last line in the log. Read and append
+            # both happen inside the cross-process lock, because the hook is a
+            # second writer on this same file.
             last = self._last_line()
             if last is None:
                 entry["prev_hash"] = "GENESIS"
