@@ -462,6 +462,23 @@ the perception-action loop and is not the e-stop latch. Linked from the safety
 module map in `docs/safety-architecture.md` and from the README's Protocol 66
 section.
 
+**The arm branch of the generated runtime's stop is tested against a gateway
+that answers.** The tool selection was pinned with a stub `_invoke`, which
+never builds an envelope, never opens a socket and never reads a status line.
+The arm is the archetype where the whole hop is the point, because the joints
+live in the gateway and `arm.estop` is the only thing that reaches them. Three
+new tests run the template's real `_invoke` against a local HTTP server
+standing in for the gateway: an arm that declares `arm.estop` is asked for it
+first and a 2xx yields the tool name and the gateway's own body; an arm whose
+config forgot to declare a stop finds it after a real 404 on `drive.stop`; and
+a gateway that refuses everything is reported as `stop_not_confirmed` after
+`STOP_ATTEMPTS` asks rather than as a stop that landed. What the tests assert
+includes what the server received: the path, the bearer, the envelope type and
+that the scope is `HALT`.
+
+Still not covered, and still a manual step: a signed receipt from a real
+gateway. That needs the arm.
+
 **A stop is acknowledged only once the robot has answered.** `castor bridge`
 wrote `ack_qos: "acknowledged"` onto the command document before it dispatched
 anything, under a comment that called it an immediate ACK. It was not an

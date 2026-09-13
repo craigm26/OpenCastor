@@ -1121,3 +1121,165 @@ def test_the_hold_doc_is_linked_from_where_safety_docs_are_indexed():
     assert "safety/hold.md" in arch, "the safety module map has to point at it"
     assert "docs/safety/hold.md" in readme, "and so does the README's P66 section"
 
+
+# ---------------------------------------------------------------------------
+# 13. The arm branch, against a gateway that actually answers
+# ---------------------------------------------------------------------------
+# WHY THIS IS NOT ANOTHER STUB. `test_the_stop_asks_for_the_declared_stop_
+# capability` proves the tool selection with a stub `_invoke`, which is
+# honest as far as it goes and goes no further than this process: it never
+# builds an envelope, never opens a socket and never reads a status line. The
+# arm is the archetype where the whole hop matters, because the joints are in
+# the gateway and `arm.estop` is the only thing that reaches them. So this one
+# runs the template's REAL `_invoke` against a real HTTP server standing in for
+# the gateway, and asserts what that server saw.
+#
+# What it still is not: a receipt from Bob's gateway. The signed-receipt check
+# needs the arm and stays a manual step. This closes the distance between a
+# stub and that.
+class _FakeGateway:
+    """A gateway that allowlists exactly one stop tool, and records every ask."""
+
+    def __init__(self, answers: str = "arm.estop"):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        self.seen: list[dict] = []
+        outer = self
+
+        class _Handler(BaseHTTPRequestHandler):
+            def log_message(self, *_a):  # keep pytest output readable
+                pass
+
+            def do_POST(self):  # noqa: N802 - BaseHTTPRequestHandler's spelling
+                length = int(self.headers.get("Content-Length") or 0)
+                envelope = json.loads(self.rfile.read(length) or b"{}")
+                envelope["_path"] = self.path
+                envelope["_authorization"] = self.headers.get("Authorization")
+                outer.seen.append(envelope)
+                if envelope.get("tool_name") == answers:
+                    body = json.dumps(
+                        {"ok": True, "receipt": {"signed": True, "tool": answers}}
+                    ).encode()
+                    self.send_response(200)
+                else:
+                    # What a real gateway says about a tool this robot has not
+                    # declared: a 4xx, which no amount of retrying changes.
+                    body = json.dumps({"detail": "tool not allowlisted"}).encode()
+                    self.send_response(404)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+        self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
+
+    def __enter__(self):
+        import threading
+
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        return self
+
+    def __exit__(self, *_exc):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+
+
+def _live_stop_namespace(tmp_path, gateway_url, capabilities):
+    """The template's real stop path, wired to a real URL.
+
+    Four functions come out of the rendered source this time, `_invoke` and
+    `_hold` included, so the envelope, the bearer, the transport and the status
+    handling are the template's own and not a test's idea of them.
+    """
+    import urllib.error
+    import urllib.request
+    import uuid
+
+    text = render("runtime.py.tmpl", _plan(tmp_path, "rc-car"))
+    tree = ast.parse(text)
+    wanted = {"_invoke", "_hold", "_stop_at_actuator", "_declared_stop_tools"}
+    fns = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in wanted]
+    assert {f.name for f in fns} == wanted, "the template lost a stop helper"
+    ns = {
+        "GATEWAY_URL": gateway_url,
+        "READ_TOKEN": "oc_read_bearer",
+        "MANIFEST_PATH": str(tmp_path / "ROBOT.md"),
+        "HELD_SCOPES_ALLOWED": ("HALT", "OBSERVE"),
+        "STOP_ATTEMPTS": 3,
+        "FALLBACK_STOP_TOOLS": ("drive.stop", "arm.estop"),
+        "_stop_tool_that_answered": None,
+        "state": Namespace(config={"rcan_protocol": {"capabilities": list(capabilities)}},
+                           fs=None),
+        "load_latch": lambda: __import__(
+            "castor.safety.latch", fromlist=["LatchState"]
+        ).LatchState(),
+        "logger": _QuietLogger(),
+        "json": json,
+        "time": time,
+        "uuid": uuid,
+        "urllib": urllib,
+    }
+    exec(compile(ast.Module(body=fns, type_ignores=[]), "<tmpl>", "exec"), ns)
+    return ns
+
+
+def test_an_arm_is_stopped_through_a_gateway_that_advertises_arm_estop(tmp_path):
+    """The arm branch, end to end inside this process: envelope, hop, 2xx, name."""
+    with _FakeGateway(answers="arm.estop") as gw:
+        ns = _live_stop_namespace(
+            tmp_path, gw.url, capabilities=["arm.move", "arm.grip", "arm.estop"]
+        )
+
+        # Resolution first: an arm's stop is arm.estop, ahead of everything.
+        assert ns["_declared_stop_tools"]() == ("arm.estop",), (
+            "an arm that declares arm.estop must not be asked for drive.stop"
+        )
+
+        ok, detail = ns["_stop_at_actuator"]("critical thermal reading")
+
+    assert ok is True, "a 2xx from the gateway is a confirmed stop"
+    assert detail["stop_tool"] == "arm.estop", "the 2xx yields the tool name"
+    assert detail["receipt"]["signed"] is True, "the gateway's own body comes back"
+
+    # And what the gateway actually received, which a stub could not show.
+    assert len(gw.seen) == 1, "the first ask answered; there is nothing to retry"
+    asked = gw.seen[0]
+    assert asked["tool_name"] == "arm.estop"
+    assert asked["scope"] == "HALT", "a stop is a HALT, which is allowed while held"
+    assert asked["_path"] == "/v1/invoke"
+    assert asked["_authorization"] == "Bearer oc_read_bearer"
+    assert asked["type"] == "rcan/v1/invoke"
+    assert asked["nonce"] and asked["msg_id"]
+
+
+def test_an_arm_whose_config_forgot_arm_estop_still_finds_it_over_the_wire(tmp_path):
+    """The fallback, against a gateway that refuses drive.stop for real.
+
+    A 404 is what an undeclared tool looks like from a gateway. The candidate
+    is dropped, the next one is asked, and the tool that answered is the one
+    reported: `stop_not_confirmed` would be wrong here, and so would claiming
+    drive.stop stopped anything.
+    """
+    with _FakeGateway(answers="arm.estop") as gw:
+        ns = _live_stop_namespace(tmp_path, gw.url, capabilities=[])
+        ok, detail = ns["_stop_at_actuator"]("no declared stop")
+
+    assert ok is True
+    assert detail["stop_tool"] == "arm.estop"
+    assert [e["tool_name"] for e in gw.seen] == ["drive.stop", "arm.estop"]
+    assert ns["_stop_tool_that_answered"] == "arm.estop", "ask the one that works first"
+
+
+def test_a_gateway_that_refuses_everything_is_stop_not_confirmed(tmp_path):
+    """An arm holding torque behind a gateway that says no is not a stopped arm."""
+    with _FakeGateway(answers="nothing.at.all") as gw:
+        ns = _live_stop_namespace(tmp_path, gw.url, capabilities=["arm.move", "arm.estop"])
+        ok, detail = ns["_stop_at_actuator"]("everything refused")
+
+    assert ok is False, "a refusal must never be reported as a stop that landed"
+    assert detail["gateway_status"] == 404
+    assert "not allowlisted" in detail["reason"]
+    assert len(gw.seen) == 3, "STOP_ATTEMPTS asks, then it says it did not land"
