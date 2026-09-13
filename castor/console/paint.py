@@ -24,9 +24,12 @@ operator writes ``<ROBOT_HOME>/paint.json`` once, on the robot::
 
 ``"strokes": true`` turns on the body's stroke primitive: the policy sends a
 list of points and the body draws the polyline through them, as the same
-per-target motions and the same gateway calls it always made. It is off unless
-the profile asks for it, and with it off the prompt and the run are what they
-were before strokes existed.
+per-target motions and the same gateway calls it always made. It also switches
+the run's policy from ``agent`` to ``agent_strokes``, which is the same agent
+with the same brain wiring and the stroke tool added to what the model can
+call: the body's primitive is unreachable otherwise. It is off unless the
+profile asks for it, and with it off the prompt and the run are what they were
+before strokes existed.
 
 The phone chooses the picture (the packaged photograph of Sacramento, or one it
 uploads) and, among the media the robot offers, which one. ``GET
@@ -65,6 +68,11 @@ DEFAULT_REFERENCE = "sacramento-photo-v1"
 _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 MAX_PICTURE_BYTES = 12 * 1024 * 1024
 CANVAS_STREAM = "canvas"
+#: The two policies this console starts. They are the same agent with the same
+#: wiring; ``agent_strokes`` also offers the body's stroke tool, so it is the
+#: one that goes with ``"strokes": true``.
+POLICY_AGENT = "agent"
+POLICY_STROKES = "agent_strokes"
 
 
 def paint_config_path() -> Path:
@@ -154,7 +162,7 @@ def build_command(
         "--task",
         job.task,
         "--policy",
-        "agent",
+        POLICY_STROKES if config.get("strokes") else POLICY_AGENT,
         "--embodiment",
         str(config.get("embodiment") or "opencastor"),
         "--no-rerun",
@@ -172,6 +180,9 @@ def build_command(
     if config.get("strokes"):
         # One call, many segments: the body plans the polyline into the targets it
         # already sends. The wire, the receipts and the scoring are unchanged.
+        # The policy above is the matching one: the tool has to be in front of the
+        # model, and only `agent_strokes` puts it there. Turning the body's
+        # primitive on without it would draw the same picture one target per call.
         flags["strokes"] = "true"
     max_calls = config.get("max_llm_calls")
     if max_calls:
@@ -607,6 +618,8 @@ def _reset_for_tests() -> None:
 __all__ = [
     "router",
     "build_command",
+    "POLICY_AGENT",
+    "POLICY_STROKES",
     "pictures",
     "read_config",
     "paint_config_path",

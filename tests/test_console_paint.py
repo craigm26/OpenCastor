@@ -334,3 +334,19 @@ def test_the_profile_turns_strokes_on_and_off(tmp_path: Path) -> None:
     assert "strokes" not in flags(_profile(tmp_path))
     assert flags(_profile(tmp_path, strokes=True))["strokes"] == "true"
     assert "strokes" not in flags(_profile(tmp_path, strokes=False))
+
+
+def test_the_profile_that_asks_for_strokes_gets_the_policy_that_can_send_them(
+    tmp_path: Path,
+) -> None:
+    """The body's primitive is unreachable unless the tool is in front of the model."""
+
+    def policy(cfg: dict) -> str:
+        job = paint._Job("j", "sacramento", "virtual", "sacpaint/photo-v1")
+        job.dir = tmp_path / "paint" / "j"
+        cmd, _ = paint.build_command(job, cfg, console_url="http://127.0.0.1:8082", python="py")
+        return cmd[cmd.index("--policy") + 1]
+
+    assert policy(_profile(tmp_path)) == paint.POLICY_AGENT == "agent"
+    assert policy(_profile(tmp_path, strokes=True)) == paint.POLICY_STROKES == "agent_strokes"
+    assert policy(_profile(tmp_path, strokes=False)) == paint.POLICY_AGENT
