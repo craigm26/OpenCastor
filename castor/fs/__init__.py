@@ -278,6 +278,16 @@ class CastorFS:
         return self.safety.estop_source
 
     @property
+    def is_paused(self) -> bool:
+        """True when `castor pause` stood this robot down. Not an e-stop."""
+        return self.safety.is_paused
+
+    @property
+    def pause_detail(self) -> str:
+        """Who paused, when and why, or "" when nothing is paused."""
+        return self.safety.pause_detail
+
+    @property
     def last_write_denial(self) -> str:
         """Reason the most recent write() was denied by the safety layer."""
         return self.safety.last_write_denial

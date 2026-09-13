@@ -772,3 +772,135 @@ def test_safety_layer_alone_still_works_with_no_robot_home(monkeypatch):
     assert sl.is_estopped is False
     assert sl.estop_source == ""
     assert sl.resync_from_latch() is False
+
+
+# ---------------------------------------------------------------------------
+# 9. The STOCK gateway reconciles the latch too, not just the generated runtime
+# ---------------------------------------------------------------------------
+# WHAT WAS STILL WRONG AFTER THE FIRST PASS. `SafetyLayer.resync_from_latch`
+# existed and only the GENERATED runtime templates called it. A robot whose
+# actuator lives behind the gateway runs the stock `castor gateway` app, and
+# that app never called it, so `castor pause --reason ...` typed at a shell
+# wrote the latch file and then waited for a restart. From outside, a pause
+# that takes effect at the next restart and a pause that does nothing look
+# exactly the same.
+@pytest.fixture()
+def _live_gateway(monkeypatch, tmp_path):
+    """The stock app under its REAL lifespan, with the heavy startup skipped.
+
+    The point of this fixture is the lifespan wiring itself, so it must not be
+    replaced with a no-op the way `_api_client` replaces it. `on_startup` opens
+    cameras, channels and mDNS, none of which this is about, so those two
+    coroutines are stubbed and everything the lifespan itself does is real.
+    """
+    import castor.api as api_mod
+
+    for var in ("OPENCASTOR_USERS", "OPENCASTOR_JWT_SECRET", "JWT_SECRET"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    monkeypatch.setenv("OPENCASTOR_API_TOKEN", RUNTIME_TOKEN)
+    monkeypatch.setattr(api_mod, "API_TOKEN", RUNTIME_TOKEN)
+    monkeypatch.setattr(api_mod, "ADMIN_TOKEN", ADMIN_TOKEN)
+    monkeypatch.setattr(api_mod, "ADMIN_TOKEN_SHA256", None)
+    # A cadence a test can wait out. The shipped value is SAFETY_LATCH_RESYNC_S,
+    # which is the generated runtime's HOLD_REASSERT_S, which is 5 seconds.
+    monkeypatch.setattr(api_mod, "SAFETY_LATCH_RESYNC_S", 0.05)
+
+    fs = CastorFS()
+    fs.boot({})
+
+    async def _no_startup():
+        api_mod.state.thought_history = collections.deque(maxlen=50)
+        api_mod.state.boot_time = time.time()
+        api_mod.state.fs = fs
+
+    async def _no_shutdown():
+        api_mod.state.fs = None
+
+    monkeypatch.setattr(api_mod, "on_startup", _no_startup)
+    monkeypatch.setattr(api_mod, "on_shutdown", _no_shutdown)
+
+    with TestClient(api_mod.app, raise_server_exceptions=False) as client:
+        yield client, api_mod, fs
+
+
+def _hold_within_a_cycle(client, want: bool, timeout: float = 5.0) -> dict:
+    """Poll /api/fs/estop until `held` is what we want, or give up loudly."""
+    deadline = time.time() + timeout
+    body: dict = {}
+    while time.time() < deadline:
+        body = client.get("/api/fs/estop", headers=_ADMIN).json()
+        if body.get("held") is want:
+            return body
+        time.sleep(0.02)
+    raise AssertionError(f"held never became {want}; last body was {body}")
+
+
+def test_the_stock_gateway_notices_a_pause_written_out_of_process(_live_gateway, tmp_path):
+    """`castor pause` from a shell reaches a RUNNING stock server, not the next one."""
+    client, _api_mod, fs = _live_gateway
+    from castor.safety import latch as _latch
+
+    assert client.get("/api/fs/estop", headers=_ADMIN).json()["held"] is False
+
+    _latch.record_pause(principal="craig", reason="battery swap", home=tmp_path)
+    body = _hold_within_a_cycle(client, True)
+
+    assert body["paused"] is True
+    assert body["estopped"] is False, "a pause is not an e-stop"
+    assert "battery swap" in body["hold_detail"]
+    assert body["hold_kind"] == "best_effort_software_hold"
+    # And the hold is real: the runtime refuses its own motor writes.
+    assert fs.write("/dev/motor", {"type": "move", "linear": 0.3}, principal="api") is False
+
+    _latch.record_resume(home=tmp_path)
+    lifted = _hold_within_a_cycle(client, False)
+    assert lifted["paused"] is False
+    assert fs.write("/dev/motor", {"type": "move", "linear": 0.3}, principal="api") is not False
+
+
+def test_the_stock_gateway_adopts_an_estop_written_out_of_process(_live_gateway, tmp_path):
+    """The same reconcile, for the latch that matters most."""
+    client, _api_mod, _fs = _live_gateway
+    from castor.safety import latch as _latch
+
+    _latch.record_estop(principal="craig", source="local", reason="smoke", home=tmp_path)
+    body = _hold_within_a_cycle(client, True)
+    assert body["estopped"] is True
+    assert body["source"] == "local"
+
+    _latch.record_clear(home=tmp_path)
+    lifted = _hold_within_a_cycle(client, False)
+    assert lifted["estopped"] is False
+
+
+def test_a_deleted_latch_file_does_not_lift_the_stock_gateway_hold(_live_gateway, tmp_path):
+    """`rm safety-latch.json` is not a clear, and the reconcile loop is not a way in.
+
+    A clear always LEAVES a file behind (`record_clear` writes engaged=false),
+    so the absence of one is never evidence that anybody cleared anything. The
+    rule lives in SafetyLayer.resync_from_latch; this pins that running the
+    reconcile on a timer did not create a way around it.
+    """
+    client, _api_mod, fs = _live_gateway
+    from castor.safety import latch as _latch
+
+    _latch.record_estop(principal="craig", source="sensor", reason="cpu_temp=95C", home=tmp_path)
+    _hold_within_a_cycle(client, True)
+
+    (tmp_path / "safety-latch.json").unlink()
+    time.sleep(0.3)  # several reconcile cycles at the fixture's cadence
+
+    body = client.get("/api/fs/estop", headers=_ADMIN).json()
+    assert body["held"] is True, "deleting the latch file must not clear a stop"
+    assert body["estopped"] is True
+    assert body["source"] == "sensor"
+    assert fs.is_estopped is True
+
+
+def test_the_resync_helper_is_inert_without_a_filesystem(monkeypatch):
+    """No fs, no latch, no crash: the loop must survive a gateway with no robot."""
+    import castor.api as api_mod
+
+    monkeypatch.setattr(api_mod.state, "fs", None, raising=False)
+    assert api_mod._resync_safety_latch() is False

@@ -593,7 +593,10 @@ async def _lifespan_with_safety_guard(scope_app):
         finally:
             if guard_task is not None:
                 guard_task.cancel()
-                with contextlib.suppress(Exception):
+                # CancelledError is a BaseException, not an Exception: catching
+                # only Exception lets the cancellation we just asked for escape
+                # the lifespan and surface as a shutdown error.
+                with contextlib.suppress(asyncio.CancelledError, Exception):
                     await guard_task
             for component in (monitor, watchdog):
                 if component is not None:

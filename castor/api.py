@@ -90,12 +90,81 @@ logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 # ---------------------------------------------------------------------------
 # App & state
 # ---------------------------------------------------------------------------
+
+#: How often the stock gateway reconciles its in-memory hold with the latch
+#: file on disk. The same number the generated runtime's guard loop uses
+#: (``HOLD_REASSERT_S`` in the runtime templates), on purpose: a stop that
+#: takes a different length of time to be noticed depending on which of two
+#: servers you happen to be running is a stop nobody can reason about.
+SAFETY_LATCH_RESYNC_S = 5.0
+
+
+def _resync_safety_latch() -> bool:
+    """Reconcile this process' hold with $ROBOT_HOME/safety-latch.json.
+
+    WHY THIS EXISTS AT ALL. ``castor pause --reason ...`` and ``castor resume``
+    run in a DIFFERENT PROCESS from the server: they write the latch file and
+    then rely on the running server to notice. The generated runtime templates
+    notice, because their always-on guard loop calls ``resync_from_latch``
+    every cycle. The stock ``castor gateway`` app, which is what a robot whose
+    arm lives behind the gateway actually runs, never called it, so a pause
+    typed at a shell took effect at the next restart and not before. That is
+    indistinguishable, from the outside, from a pause that does not work.
+
+    Synchronous and blocking: ``load()`` reads a file and ``resync_from_latch``
+    can write an audit row. It is called from a thread, never inline on the
+    event loop.
+
+    Returns True when the in-memory hold changed. A DELETED latch file never
+    lifts a hold: that rule lives in ``SafetyLayer.resync_from_latch`` and this
+    function deliberately adds nothing to it.
+    """
+    fs = getattr(state, "fs", None)
+    if fs is None:
+        return False
+    safety = getattr(fs, "safety", None)
+    if safety is None or not hasattr(safety, "resync_from_latch"):
+        return False
+    return bool(safety.resync_from_latch())
+
+
+async def _safety_latch_resync_loop() -> None:
+    """Always on, request or no request, for the life of the process.
+
+    Reconciles once immediately so a server that starts while a pause is
+    latched is holding before it serves its first request, then once every
+    :data:`SAFETY_LATCH_RESYNC_S`. Never raises out of the loop: the guard has
+    to outlive its own bugs, because the failure mode of a dead guard is a hold
+    nobody is applying.
+    """
+    while True:
+        try:
+            if await asyncio.to_thread(_resync_safety_latch):
+                logger.warning(
+                    "safety hold reconciled from the latch file; see the audit row"
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - a guard that dies is worse than a slow one
+            logger.warning("safety latch resync failed", exc_info=True)
+        await asyncio.sleep(max(0.01, SAFETY_LATCH_RESYNC_S))
+
+
 @contextlib.asynccontextmanager
 async def lifespan(app: "FastAPI"):  # noqa: F821
     """FastAPI lifespan context manager (replaces deprecated @app.on_event)."""
     await on_startup()
-    yield
-    await on_shutdown()
+    latch_task = asyncio.create_task(_safety_latch_resync_loop())
+    try:
+        yield
+    finally:
+        latch_task.cancel()
+        # CancelledError is a BaseException, not an Exception: suppressing only
+        # Exception here would let the cancellation we just asked for escape
+        # the lifespan and surface as a shutdown error.
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await latch_task
+        await on_shutdown()
 
 
 app = FastAPI(
@@ -1051,10 +1120,20 @@ async def get_estop_status():
 
     Returns:
         estopped: True if e-stop is active (motor writes blocked).
+        paused: True if `castor pause` stood this robot down. Not an e-stop,
+            blocks motor writes the same way.
+        held: estopped or paused. The one field to read to answer "will this
+            robot move".
+        hold_detail: Who set the hold, when, and why.
         proc_status: Current /proc/status value (active, estop, idle, ...).
         last_denial: Reason for the most recent safety layer write rejection.
         source: Where the active latch came from ('sensor', 'api', 'rcan', ...).
         latch: The persisted latch, including any `castor pause` and its reason.
+
+    `estopped` and `paused` are THIS PROCESS' state, reconciled from the latch
+    file by the background task in the lifespan; `latch` is the file itself.
+    They agree within one reconcile cycle, and reporting both is what makes a
+    disagreement visible instead of silent.
 
     This reports a best-effort SOFTWARE hold. `estopped: true` means this
     robot's own software refuses motion and has asked its actuator to stop. It
@@ -1067,15 +1146,27 @@ async def get_estop_status():
             latch = _latch_dump()
         except Exception:
             latch = {}
+        estopped = state.fs.is_estopped
+        paused = bool(getattr(state.fs, "is_paused", False))
         return {
-            "estopped": state.fs.is_estopped,
+            "estopped": estopped,
+            "paused": paused,
+            "held": bool(estopped or paused),
+            "hold_detail": getattr(state.fs, "pause_detail", "") or "",
             "source": getattr(state.fs, "estop_source", ""),
             "proc_status": state.fs.read("/proc/status", principal="api") or "unknown",
             "last_denial": state.fs.last_write_denial,
             "latch": latch,
             "hold_kind": "best_effort_software_hold",
+            "resync_interval_s": SAFETY_LATCH_RESYNC_S,
         }
-    return {"estopped": False, "proc_status": "no_fs", "last_denial": ""}
+    return {
+        "estopped": False,
+        "paused": False,
+        "held": False,
+        "proc_status": "no_fs",
+        "last_denial": "",
+    }
 
 
 # ---------------------------------------------------------------------------

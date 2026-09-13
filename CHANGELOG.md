@@ -387,6 +387,33 @@ empty list.
 
 ### Fixed
 
+**`castor pause` reaches a running stock gateway, not the next restart.** The
+persisted safety latch was reconciled only by the generated runtime templates,
+whose always-on guard loop calls `SafetyLayer.resync_from_latch` every cycle.
+The stock `castor gateway` app never called it, and that app is what a robot
+whose actuator lives behind the gateway actually runs. So `castor pause --reason
+"..."` and `castor resume`, typed at a shell on the robot, wrote the latch file
+and then waited for a restart. From outside, a pause that takes effect at the
+next restart and a pause that does nothing look the same.
+
+`castor.api`'s lifespan now starts one background task that reconciles the
+latch on the same five second cadence the generated runtime uses, on a worker
+thread so a file read never sits on the event loop, once immediately at startup
+and then on the timer. The audit rows are the ones `resync_from_latch` already
+wrote. A DELETED latch file still never lifts a hold: a clear leaves a file
+behind saying so, and the absence of one is not evidence that anybody cleared
+anything.
+
+`GET /api/fs/estop` now also reports `paused`, `held`, `hold_detail` and
+`resync_interval_s`, so a caller can tell a pause from an e-stop and can see
+this process' own state next to the file it was reconciled from. A server that
+reported `estopped: false` while refusing every motion command was lying by
+omission. `CastorFS.is_paused` and `CastorFS.pause_detail` are the new
+properties behind it.
+
+This remains a best-effort software hold. It is not a hardware cut, it
+de-energises nothing, and nothing here is safety rated.
+
 **A stop is acknowledged only once the robot has answered.** `castor bridge`
 wrote `ack_qos: "acknowledged"` onto the command document before it dispatched
 anything, under a comment that called it an immediate ACK. It was not an

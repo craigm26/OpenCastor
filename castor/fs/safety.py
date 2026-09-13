@@ -1029,6 +1029,21 @@ class SafetyLayer:
         return self._estop_source
 
     @property
+    def is_paused(self) -> bool:
+        """True when a person stood this robot down with ``castor pause``.
+
+        A pause is not an e-stop, but it blocks motor writes the same way. It
+        is a separate property because a caller that reports "e-stopped: false"
+        while refusing every motion command is lying by omission.
+        """
+        return self._paused
+
+    @property
+    def pause_detail(self) -> str:
+        """Who paused, when, and why, or "" when nothing is paused."""
+        return self._pause_detail
+
+    @property
     def last_write_denial(self) -> str:
         """Human-readable reason for the most recent write() returning False."""
         return self._last_write_denial
