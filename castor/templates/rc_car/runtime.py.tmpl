@@ -103,7 +103,11 @@ from castor.api import (  # noqa: E402
     verify_token,
 )
 from castor.safety.latch import load as load_latch  # noqa: E402
-from castor.safety.monitor import SensorMonitor, wire_safety_layer  # noqa: E402
+from castor.safety.monitor import (  # noqa: E402
+    MonitorThresholds,
+    SensorMonitor,
+    wire_safety_layer,
+)
 from castor.watchdog import BrainWatchdog  # noqa: E402
 
 import asyncio  # noqa: E402
@@ -251,32 +255,102 @@ _drive_state = _DriveStateCache()
 # The stop itself, and the always-on guard that keeps asserting it
 # --------------------------------------------------------------------------
 
-def _stop_at_actuator(reason: str = "") -> tuple[bool, dict]:
-    """Ask the thing that owns the wheels to stop. Retries. Never raises.
+#: The stop tools this runtime knows how to ask for when the robot declares
+#: none. Order matters only here, and only as a last resort: a drive archetype
+#: answers the first, an arm answers the second (`arm.estop` is the SO-ARM101
+#: actuator's stop tool). A robot that declares its own stop capability never
+#: reaches this tuple.
+FALLBACK_STOP_TOOLS = ("drive.stop", "arm.estop")
 
-    This is the ONLY call in this process that can make the car stop moving:
-    the wheels belong to the rc-car actuator inside the gateway and this
-    runtime holds the READ bearer on purpose. A latch in this process that
+#: The tool that last answered a stop, remembered so the next hold cycle asks
+#: the one that works first instead of walking the list again. Reset to None
+#: when the remembered tool stops answering.
+_stop_tool_that_answered: str | None = None
+
+
+def _declared_stop_tools() -> tuple[str, ...]:
+    """The stop capability this robot DECLARES, most recently confirmed first.
+
+    WHY THIS IS NOT JUST "drive.stop". The wheels are one archetype. The same
+    generated runtime in front of an arm has no drive at all: the SO-ARM101
+    actuator's stop tool is `arm.estop`, and a hold that only ever asks for
+    `drive.stop` on that robot gets a refusal from the gateway and reports
+    `stop_not_confirmed` forever while the arm holds torque.
+
+    The declaration is read from the config's `rcan_protocol.capabilities`,
+    which is the same list ROBOT.md publishes as `capabilities:` and the same
+    list the gateway allowlists. So a robot whose manifest gained `arm.estop`
+    is asked for `arm.estop`, with no edit to this file. Anything ending
+    `.estop` is preferred over anything ending `.stop`: on a robot that
+    declares both, the e-stop is the one meant for this path.
+
+    Falls back to FALLBACK_STOP_TOOLS when the config declares neither, which
+    is the only case where this process guesses.
+    """
+    caps: list = []
+    try:
+        caps = list(((state.config or {}).get("rcan_protocol") or {}).get("capabilities") or [])
+    except Exception:  # noqa: BLE001 - a malformed config must not disarm the stop
+        caps = []
+    estops = [c for c in caps if isinstance(c, str) and c.endswith(".estop")]
+    stops = [c for c in caps if isinstance(c, str) and c.endswith(".stop")]
+    declared = tuple(dict.fromkeys(estops + stops))
+    if not declared:
+        declared = FALLBACK_STOP_TOOLS
+    if _stop_tool_that_answered in declared:
+        return (_stop_tool_that_answered,) + tuple(
+            t for t in declared if t != _stop_tool_that_answered
+        )
+    return declared
+
+
+def _stop_at_actuator(reason: str = "") -> tuple[bool, dict]:
+    """Ask the thing that owns the actuator to stop. Retries. Never raises.
+
+    This is the ONLY call in this process that can make the robot stop moving:
+    the wheels (or the joints) belong to an actuator inside the gateway and
+    this runtime holds the READ bearer on purpose. A latch in this process that
     never reaches here is a flag, not a stop.
+
+    WHICH TOOL IT ASKS FOR is the robot's own declared stop capability, not a
+    constant: `drive.stop` on a drive, `arm.estop` on an arm. See
+    :func:`_declared_stop_tools`. The tool that answered is recorded, returned
+    as `stop_tool`, and asked first next time.
 
     THE NETWORK IS IN THE PATH, and that is a real dependency rather than a
     footnote. A stop that cannot reach the gateway does not become a stop by
     being logged. Retries STOP_ATTEMPTS times, then returns ok=False so every
     caller can report `stop_not_confirmed` instead of a comfortable success.
+    Neither tool answering 2xx is still `stop_not_confirmed`.
 
     Best effort, in software. It asks; it does not cut power.
     """
+    global _stop_tool_that_answered
+    candidates = list(_declared_stop_tools())
     last: dict = {}
     for attempt in range(1, STOP_ATTEMPTS + 1):
-        status, body = _invoke("drive.stop", "HALT", {})
-        if status == 200:
-            if attempt > 1:
-                logger.warning("drive.stop confirmed on attempt %d", attempt)
-            return True, body
-        last = {"gateway_status": status,
-                "reason": body.get("detail") or body.get("error") or "no confirmation"}
-        logger.error("drive.stop attempt %d/%d did not confirm: %s",
-                     attempt, STOP_ATTEMPTS, last["reason"])
+        for tool in list(candidates):
+            status, body = _invoke(tool, "HALT", {})
+            if status == 200:
+                if attempt > 1 or tool != candidates[0]:
+                    logger.warning("%s confirmed the stop on attempt %d", tool, attempt)
+                _stop_tool_that_answered = tool
+                return True, {**body, "stop_tool": tool}
+            last = {"gateway_status": status,
+                    "stop_tool": tool,
+                    "tools_tried": list(candidates),
+                    "reason": body.get("detail") or body.get("error") or "no confirmation"}
+            logger.error("%s attempt %d/%d did not confirm: %s",
+                         tool, attempt, STOP_ATTEMPTS, last["reason"])
+            if tool == _stop_tool_that_answered:
+                _stop_tool_that_answered = None
+            # A 4xx from the gateway means THIS ROBOT does not have that tool
+            # (unknown, not allowlisted, wrong tier), which no amount of
+            # retrying changes. Drop it and keep the one that might answer;
+            # never drop the last candidate, or the next attempt would ask
+            # nothing at all.
+            if 400 <= status < 500 and len(candidates) > 1:
+                candidates.remove(tool)
         if attempt < STOP_ATTEMPTS:
             time.sleep(0.4 * attempt)
     return False, last
@@ -296,6 +370,61 @@ def _latch_locally(reason: str, source: str) -> None:
         logger.warning("local safety latch failed", exc_info=True)
 
 
+def _monitor_settings() -> tuple[MonitorThresholds | None, float, int]:
+    """The sensor thresholds and interval, from the config's `monitor:` block.
+
+    READ FROM THE CONFIG, exactly the way castor/main.py:1095 reads it, and for
+    a reason that is the biggest regression risk in this whole file: with the
+    LIBRARY defaults, three consecutive critical readings latch a `source=
+    sensor` e-stop, and a sensor latch is deliberately NOT clearable over the
+    network. A benchmark that pushed a fanless Pi past the library's 80 C for
+    fifteen seconds would stop the robot, hold it stopped, and refuse every
+    remote resume. That is a ten-minute failure manufactured by the safety
+    feature, on hardware that was merely warm.
+
+    So `castor up` writes a conservative `monitor:` block into the generated
+    robot.rcan.yaml (cpu_temp and disk are the honest triggers on a Pi; load and
+    memory are set where a benchmark cannot reach them) and this reads it. An
+    operator who wants the library's numbers writes them in that block.
+
+    Unknown keys are dropped with a warning rather than raised: a typo in one
+    threshold must not take the whole guard down, which is what
+    ``MonitorThresholds(**cfg)`` would do inside the caller's try/except.
+    """
+    cfg = {}
+    raw = {}
+    try:
+        cfg = (state.config or {}).get("monitor", {}) or {}
+        raw = cfg.get("thresholds", {}) or {}
+    except Exception:  # noqa: BLE001
+        cfg, raw = {}, {}
+    known = set(getattr(MonitorThresholds, "__dataclass_fields__", {}))
+    unknown = sorted(k for k in raw if k not in known)
+    if unknown:
+        logger.warning("monitor.thresholds: ignoring unknown key(s) %s", unknown)
+    thresholds = None
+    kept = {k: float(v) for k, v in raw.items() if k in known}
+    if kept:
+        try:
+            thresholds = MonitorThresholds(**kept)
+        except Exception:  # noqa: BLE001
+            logger.warning("monitor.thresholds could not be applied; using defaults",
+                           exc_info=True)
+    try:
+        interval = float(cfg.get("interval", 5.0))
+    except (TypeError, ValueError):
+        interval = 5.0
+    try:
+        consecutive = int(cfg.get("consecutive_critical", 3))
+    except (TypeError, ValueError):
+        consecutive = 3
+    logger.info(
+        "sensor monitor: interval=%.1fs, %d consecutive criticals, thresholds=%s",
+        interval, consecutive, "from config" if thresholds else "library defaults",
+    )
+    return thresholds, interval, consecutive
+
+
 def _build_safety_guard() -> tuple[SensorMonitor, BrainWatchdog]:
     """Construct the monitor and the watchdog this runtime never had.
 
@@ -311,7 +440,10 @@ def _build_safety_guard() -> tuple[SensorMonitor, BrainWatchdog]:
     watchdog, not a second brain. Porting main.py's loop into the API process
     would double every actuation path this archetype has.
     """
-    monitor = SensorMonitor()
+    thresholds, interval, consecutive = _monitor_settings()
+    monitor = SensorMonitor(
+        thresholds=thresholds, interval=interval, consecutive_critical=consecutive
+    )
 
     # wire_safety_layer installs the local latch as the monitor's e-stop
     # callback. We keep it and wrap it, because a latch that does not travel to

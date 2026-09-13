@@ -92,7 +92,11 @@ if not CONFIG.is_file():
 
 from castor.api import app, state  # noqa: E402
 from castor.safety.latch import load as load_latch  # noqa: E402
-from castor.safety.monitor import SensorMonitor, wire_safety_layer  # noqa: E402
+from castor.safety.monitor import (  # noqa: E402
+    MonitorThresholds,
+    SensorMonitor,
+    wire_safety_layer,
+)
 from castor.watchdog import BrainWatchdog  # noqa: E402
 
 #: How often the always-on guard re-asserts a latched stop at the servos.
@@ -174,6 +178,60 @@ def _latch_locally(reason: str, source: str) -> None:
         logger.warning("local safety latch failed", exc_info=True)
 
 
+def _monitor_settings() -> tuple[MonitorThresholds | None, float, int]:
+    """The sensor thresholds and interval, from the config's `monitor:` block.
+
+    READ FROM THE CONFIG, exactly the way castor/main.py:1095 reads it, and for
+    a reason that is the biggest regression risk in this whole file: with the
+    LIBRARY defaults, three consecutive critical readings latch a `source=
+    sensor` e-stop, and a sensor latch is deliberately NOT clearable over the
+    network. A benchmark that pushed a fanless Pi past the library's 80 C for
+    fifteen seconds would stop the duck, hold it stopped, and refuse every
+    remote resume. That is a ten-minute failure manufactured by the safety
+    feature, on hardware that was merely warm.
+
+    So `castor up` writes a conservative `monitor:` block into the generated
+    robot.rcan.yaml (cpu_temp and disk are the honest triggers on a Pi; load and
+    memory are set where a benchmark cannot reach them) and this reads it. An
+    operator who wants the library's numbers writes them in that block.
+
+    Unknown keys are dropped with a warning rather than raised: a typo in one
+    threshold must not take the whole guard down.
+    """
+    cfg = {}
+    raw = {}
+    try:
+        cfg = (state.config or {}).get("monitor", {}) or {}
+        raw = cfg.get("thresholds", {}) or {}
+    except Exception:  # noqa: BLE001
+        cfg, raw = {}, {}
+    known = set(getattr(MonitorThresholds, "__dataclass_fields__", {}))
+    unknown = sorted(k for k in raw if k not in known)
+    if unknown:
+        logger.warning("monitor.thresholds: ignoring unknown key(s) %s", unknown)
+    thresholds = None
+    kept = {k: float(v) for k, v in raw.items() if k in known}
+    if kept:
+        try:
+            thresholds = MonitorThresholds(**kept)
+        except Exception:  # noqa: BLE001
+            logger.warning("monitor.thresholds could not be applied; using defaults",
+                           exc_info=True)
+    try:
+        interval = float(cfg.get("interval", 5.0))
+    except (TypeError, ValueError):
+        interval = 5.0
+    try:
+        consecutive = int(cfg.get("consecutive_critical", 3))
+    except (TypeError, ValueError):
+        consecutive = 3
+    logger.info(
+        "sensor monitor: interval=%.1fs, %d consecutive criticals, thresholds=%s",
+        interval, consecutive, "from config" if thresholds else "library defaults",
+    )
+    return thresholds, interval, consecutive
+
+
 def _build_safety_guard() -> tuple[SensorMonitor, BrainWatchdog]:
     """Construct the sensor monitor and the brain watchdog, here, in the file
     the duck actually runs.
@@ -181,7 +239,10 @@ def _build_safety_guard() -> tuple[SensorMonitor, BrainWatchdog]:
     WHAT IS DELIBERATELY NOT HERE: the perception loop. A monitor and a
     watchdog, not a second brain.
     """
-    monitor = SensorMonitor()
+    thresholds, interval, consecutive = _monitor_settings()
+    monitor = SensorMonitor(
+        thresholds=thresholds, interval=interval, consecutive_critical=consecutive
+    )
     if state.fs is not None:
         wire_safety_layer(monitor, state.fs.safety)
     inner_estop = monitor._estop_callback

@@ -101,8 +101,12 @@ def test_generated_runtime_latches_and_reasserts_at_the_actuator(tmp_path, arche
     assert "_hold()" in text
     if archetype == "rc-car":
         # The wheels are in the gateway process; the only thing that can stop
-        # them is the signed invoke.
-        assert '_invoke("drive.stop", "HALT", {})' in text
+        # them is the signed invoke. WHICH TOOL it invokes is the robot's own
+        # declared stop capability rather than a constant, so the same runtime
+        # in front of an arm asks for arm.estop.
+        assert '_invoke(tool, "HALT", {})' in text
+        assert "_declared_stop_tools" in text
+        assert 'FALLBACK_STOP_TOOLS = ("drive.stop", "arm.estop")' in text
     else:
         # The duck's driver is real.
         assert "driver.stop()" in text
@@ -272,6 +276,27 @@ def test_a_latch_cleared_out_of_process_is_adopted_by_a_running_one(tmp_path, mo
     assert fs.safety.resync_from_latch() is True
     assert fs.is_estopped is True
     assert fs.estop_source == "local"
+
+
+def test_deleting_the_latch_file_does_not_lift_a_hold(tmp_path, monkeypatch):
+    """A stale or absent file must never release a stop silently.
+
+    ``latch.load()`` reads a missing file as "nothing held", which is the right
+    answer at boot and the wrong one during a resync: allowed to reconcile, a
+    plain ``rm`` of the latch would clear a sensor e-stop inside one guard
+    cycle, with no auth code and without the sensor rule ever running. A real
+    clear always leaves a file behind saying engaged=false.
+    """
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    fs = CastorFS()
+    fs.boot({})
+    fs.estop(principal="root", source="sensor", reason="thermal")
+    assert fs.is_estopped is True
+
+    (tmp_path / "safety-latch.json").unlink()
+    assert fs.safety.resync_from_latch() is False
+    assert fs.is_estopped is True, "rm is not a clear"
+    assert fs.estop_source == "sensor"
 
 
 def test_no_robot_home_means_no_state_file_anywhere(tmp_path, monkeypatch):
@@ -566,40 +591,175 @@ def test_sensor_auto_estop_latches_with_source_sensor(tmp_path, monkeypatch):
     assert fs.write("/dev/motor", {"type": "move", "linear": 0.4}, principal="api") is False
 
 
-def test_stop_retries_then_reports_stop_not_confirmed(tmp_path):
-    """A stop over a hop that can fail must not be reported as one that landed.
+def _stop_namespace(tmp_path, _invoke, capabilities=None):
+    """Lift the rc-car template's stop path out of the rendered source and run it.
 
-    Exercised against the rendered rc-car source: ``_stop_at_actuator`` is
-    lifted out of the template and run with a stub ``_invoke`` that never
-    confirms, which is exactly what an unreachable gateway looks like.
+    The template is not importable (it needs ROBOT_HOME, a gateway URL and a
+    read token in the environment before its first import), so the two
+    functions that decide WHICH tool is asked and WHETHER it answered are
+    compiled on their own against a stub ``_invoke`` and a stub ``state``. That
+    is the honest way to test generated code: the thing under test is the text
+    `castor up` writes to disk.
     """
     text = render("runtime.py.tmpl", _plan(tmp_path, "rc-car"))
     tree = ast.parse(text)
-    fn = next(
-        n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_stop_at_actuator"
-    )
+    wanted = {"_stop_at_actuator", "_declared_stop_tools"}
+    fns = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in wanted]
+    assert {f.name for f in fns} == wanted, "the template lost a stop helper"
+    config = {}
+    if capabilities is not None:
+        config = {"rcan_protocol": {"capabilities": list(capabilities)}}
+    ns = {
+        "_invoke": _invoke,
+        "STOP_ATTEMPTS": 3,
+        "FALLBACK_STOP_TOOLS": ("drive.stop", "arm.estop"),
+        "_stop_tool_that_answered": None,
+        "state": Namespace(config=config),
+        "logger": _QuietLogger(),
+        "time": time,
+    }
+    exec(compile(ast.Module(body=fns, type_ignores=[]), "<tmpl>", "exec"), ns)
+    return ns
+
+
+def test_stop_retries_then_reports_stop_not_confirmed(tmp_path):
+    """A stop over a hop that can fail must not be reported as one that landed.
+
+    Exercised against the rendered rc-car source with a stub ``_invoke`` that
+    never confirms, which is exactly what an unreachable gateway looks like.
+    """
     calls = {"n": 0}
 
     def _invoke(tool, scope, args=None, timeout=3.0):
         calls["n"] += 1
         return 0, {"error": "ConnectionRefusedError"}
 
-    ns = {
-        "_invoke": _invoke,
-        "STOP_ATTEMPTS": 3,
-        "logger": _QuietLogger(),
-        "time": time,
-    }
-    exec(compile(ast.Module(body=[fn], type_ignores=[]), "<tmpl>", "exec"), ns)
+    ns = _stop_namespace(tmp_path, _invoke, capabilities=["drive.set", "drive.stop"])
     ok, detail = ns["_stop_at_actuator"]("test")
     assert ok is False
     assert calls["n"] == 3, "one attempt is not a retry"
     assert "ConnectionRefusedError" in detail["reason"]
 
 
+def test_the_stop_asks_for_the_declared_stop_capability(tmp_path):
+    """An arm is stopped with arm.estop, a drive with drive.stop.
+
+    THE HALF THIS FIXES. `_stop_at_actuator` used to be hard-wired to
+    drive.stop, so the same generated runtime in front of an SO-ARM101 asked
+    for a tool that robot does not have, got a refusal, and reported
+    stop_not_confirmed forever while the arm held torque. The tool comes from
+    the robot's own declared capabilities now.
+    """
+    asked = []
+
+    def _invoke(tool, scope, args=None, timeout=3.0):
+        asked.append(tool)
+        return 200, {"receipt": "signed"}
+
+    arm = _stop_namespace(tmp_path, _invoke, capabilities=["arm.move", "arm.estop"])
+    ok, detail = arm["_stop_at_actuator"]("arm")
+    assert ok is True
+    assert asked == ["arm.estop"], "an arm must not be asked for drive.stop"
+    assert detail["stop_tool"] == "arm.estop", "the tool that answered is recorded"
+
+    asked.clear()
+    drive = _stop_namespace(tmp_path, _invoke, capabilities=["drive.set", "drive.stop"])
+    ok, detail = drive["_stop_at_actuator"]("drive")
+    assert ok is True
+    assert asked == ["drive.stop"]
+    assert detail["stop_tool"] == "drive.stop"
+
+
+def test_an_undeclared_stop_tries_both_and_records_which_answered(tmp_path):
+    """No declared stop capability is the only case where this process guesses."""
+    asked = []
+
+    def _invoke(tool, scope, args=None, timeout=3.0):
+        asked.append(tool)
+        # This robot is an arm whose config forgot to declare its stop.
+        if tool == "arm.estop":
+            return 200, {"receipt": "signed"}
+        return 404, {"detail": "unknown tool"}
+
+    ns = _stop_namespace(tmp_path, _invoke, capabilities=[])
+    ok, detail = ns["_stop_at_actuator"]("guess")
+    assert ok is True
+    assert asked == ["drive.stop", "arm.estop"]
+    assert detail["stop_tool"] == "arm.estop"
+    assert ns["_stop_tool_that_answered"] == "arm.estop", "ask the one that works first"
+
+
+def test_neither_tool_answering_is_still_stop_not_confirmed(tmp_path):
+    """Trying two tools instead of one must not turn a failure into a success."""
+
+    def _invoke(tool, scope, args=None, timeout=3.0):
+        return 403, {"detail": "not allowlisted"}
+
+    ns = _stop_namespace(tmp_path, _invoke, capabilities=[])
+    ok, detail = ns["_stop_at_actuator"]("nothing answers")
+    assert ok is False
+    assert "not allowlisted" in detail["reason"]
+    assert detail["stop_tool"] in ("drive.stop", "arm.estop")
+
+
 class _QuietLogger:
     def __getattr__(self, _name):
         return lambda *a, **k: None
+
+
+# ---------------------------------------------------------------------------
+# The sensor thresholds are generated, not the library's
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("archetype", ["rc-car", "microduck"])
+def test_the_generated_runtime_reads_the_monitor_block(tmp_path, archetype):
+    """SensorMonitor is configured from the config, the way castor/main.py does.
+
+    Constructed with the LIBRARY defaults it was the biggest regression risk in
+    this item: three consecutive criticals latch a source='sensor' e-stop that
+    nothing on the network can clear, and the library calls 80 C critical,
+    which a fanless Pi under a benchmark reaches while working perfectly.
+    """
+    text = render("runtime.py.tmpl", _plan(tmp_path, archetype))
+    assert "MonitorThresholds" in text
+    assert '(state.config or {}).get("monitor", {})' in text
+    assert "consecutive_critical=consecutive" in text
+    assert "SensorMonitor()" not in text, "the library defaults must not be the shipped ones"
+
+
+@pytest.mark.parametrize("archetype", ["rc-car", "microduck"])
+def test_castor_up_writes_conservative_monitor_defaults(tmp_path, archetype):
+    """A benchmark must not be able to latch a stop nobody can clear remotely."""
+    import yaml
+
+    cfg = yaml.safe_load(render("robot.rcan.yaml.tmpl", _plan(tmp_path, archetype)))
+    thresholds = cfg["monitor"]["thresholds"]
+
+    # CPU LOAD: critical is load_warn_multiplier x 2 x CPU count. At the
+    # library's 2.0 that is 4x the core count, which a parallel benchmark on a
+    # four-core Pi can reach. The generated value puts it out of reach.
+    assert thresholds["load_warn_multiplier"] >= 8.0, "a benchmark's load must not stop the robot"
+
+    # CPU TEMP is an honest trigger, above the Pi's own hard throttle (85 C) so
+    # that a merely hot board is not a stopped one.
+    assert thresholds["cpu_temp_critical"] > 85.0
+
+    # DISK is the other honest one: a full disk breaks the audit log first.
+    assert 95.0 <= thresholds["disk_critical"] <= 98.0
+
+    # MEMORY at the library's 95 is reachable by a benchmark; the OOM killer is
+    # already acting by the generated value.
+    assert thresholds["memory_critical"] >= 99.0
+
+    # And the block the runtime actually reads is complete enough to build
+    # MonitorThresholds from, with no key the dataclass does not have.
+    from castor.safety.monitor import MonitorThresholds
+
+    MonitorThresholds(**{k: float(v) for k, v in thresholds.items()})
+
+    # The watchdog is still NOT armed by the generated config: nothing in the
+    # runtime feeds it heartbeats, so a top-level `watchdog:` block would stop
+    # every fresh robot ten seconds after boot.
+    assert cfg.get("watchdog") is None
 
 
 def test_safety_layer_alone_still_works_with_no_robot_home(monkeypatch):

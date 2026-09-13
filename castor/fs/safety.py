@@ -903,12 +903,29 @@ class SafetyLayer:
 
         Returns True when the flag changed. Cheap and safe to call often: with
         ``ROBOT_HOME`` unset there is no file and this does nothing at all.
+
+        A MISSING FILE NEVER LIFTS A HOLD. ``load()`` reads an absent latch as
+        "nothing held", which is right at boot and wrong here: if that answer
+        were allowed to reconcile, ``rm $ROBOT_HOME/safety-latch.json`` would
+        clear a latched e-stop within one guard cycle, with no auth code and
+        without the sensor rule ever being consulted. A clear always LEAVES a
+        file behind (``record_clear`` writes engaged=false), so the absence of
+        one is never evidence that anybody cleared anything.
         """
         try:
             from castor.safety.latch import latch_path
             from castor.safety.latch import load as _load_latch
 
-            if latch_path() is None:
+            path = latch_path()
+            if path is None:
+                return False
+            if not path.exists():
+                if self._estop or self._paused:
+                    logger.warning(
+                        "safety latch file %s is gone; the hold in this process STANDS. "
+                        "Clear it with `castor resume --clear-estop` or POST /api/estop/clear.",
+                        path,
+                    )
                 return False
             latch = _load_latch()
         except Exception as exc:  # noqa: BLE001

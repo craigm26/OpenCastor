@@ -7523,7 +7523,9 @@ input[type=range]{{width:110px;accent-color:#58a6ff;}}
     if (justPressed(gp,8))
       api("/api/estop/clear").then(r => fb(
         r && r.ok ? "Stop cleared (gamepad Sel)"
-                  : "Clearing a stop needs the owner token `castor up` printed",
+                  : "Clearing a stop needs the owner token AND the e-stop code "
+                  + "`castor up` printed. Send it as X-Estop-Auth, or run "
+                  + "`castor resume --clear-estop` at the robot",
         r && r.ok ? "#3fb950" : "#da3633"));
   }}
 

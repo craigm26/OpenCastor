@@ -36,6 +36,39 @@ network:
   telemetry_stream: true
 safety:
   estop_enabled: true
+# The on-device sensor monitor the generated runtime constructs at startup.
+# CONSERVATIVE ON PURPOSE, and these numbers are not the library's. Three
+# consecutive critical readings latch an e-stop whose source is 'sensor', and a
+# sensor latch is deliberately not clearable over the network: lifting it means
+# `castor resume --clear-estop` standing at the robot. So a threshold a
+# BENCHMARK can cross is not a safety feature, it is a ten-minute failure that
+# looks like broken hardware.
+#
+#   cpu_temp   the honest trigger on a Pi. 90 C is ABOVE the board's own hard
+#              throttle (85 C), so reaching it sustained means thermal control
+#              has already failed, not that the robot is working hard.
+#   disk       the other honest one. A full disk breaks the audit log first.
+#   memory     99 is where the OOM killer is already acting. A benchmark that
+#              legitimately uses 95 percent of a Pi must not stop the robot.
+#   load       critical is load_warn_multiplier x 2 x CPU count, so 16 x 4 = 64
+#              on a four-core Pi: a number a busy benchmark cannot reach and a
+#              runaway fork bomb can.
+#
+# Raise or lower them here. This block is what the runtime reads; deleting it
+# falls back to the library defaults, which are tighter than a benchmark likes.
+monitor:
+  interval: 5.0
+  consecutive_critical: 3
+  thresholds:
+    cpu_temp_warn: 80.0
+    cpu_temp_critical: 90.0
+    memory_warn: 95.0
+    memory_critical: 99.0
+    disk_warn: 90.0
+    disk_critical: 97.0
+    load_warn_multiplier: 16.0
+    force_warn_n: 40.0
+    force_max_n: 50.0
 rcan_protocol:
   port: {port_runtime}
   # On. It was off for a concrete reason, now fixed: castor advertised the

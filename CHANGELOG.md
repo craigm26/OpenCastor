@@ -251,6 +251,35 @@ longer default to `principal="root"` and raise `ValueError` when none is given.
 A no-argument `fs.clear_estop()` was a capability-free clear, because root
 bypasses the capability gate.
 
+Verifier follow-ups, same change. The stop the guard asserts now asks for the
+robot's OWN declared stop capability rather than a constant: `arm.estop` on an
+arm, `drive.stop` on a drive, read from `rcan_protocol.capabilities` in the
+config (the same list ROBOT.md publishes and the gateway allowlists). A robot
+that declares neither has the two tried in turn and the one that answered is
+remembered and asked first next time. Neither answering is still
+`stop_not_confirmed`. Before this, the same generated runtime in front of an
+SO-ARM101 asked for a tool that robot does not have and reported the stop as
+unconfirmed while the arm held torque.
+
+The sensor monitor is configured from the config's `monitor:` block, the way
+`castor/main.py` has always read it, and `castor up` writes a conservative block
+into the generated `robot.rcan.yaml`. The library defaults were the wrong
+numbers to ship on this path: three consecutive criticals latch a
+`source=sensor` e-stop that nothing on the network can clear, and the library
+calls 80 C critical, which a fanless Pi reaches during a benchmark while working
+perfectly. The generated block puts CPU load and memory where a benchmark cannot
+reach them and keeps CPU temperature and disk, the two honest triggers on a Pi,
+above the board's own hard throttle and near a full disk respectively. Deleting
+the block falls back to the library numbers.
+
+`SafetyLayer.resync_from_latch()` no longer treats a MISSING latch file as a
+clear. `latch.load()` reads an absent file as "nothing held", which is right at
+boot and wrong during a resync: allowed to reconcile, `rm
+$ROBOT_HOME/safety-latch.json` lifted a latched e-stop inside one guard cycle,
+with no auth code and without the sensor rule running. A real clear always
+leaves a file behind saying `engaged: false`, so an absent file is never
+evidence that anybody cleared anything.
+
 What this is: a best-effort software hold. The robot's own software stops
 issuing motion and asks its actuator to stop. It is not a hardware cut, it
 de-energises nothing, nothing here is safety rated, and `GET /api/fs/estop`
