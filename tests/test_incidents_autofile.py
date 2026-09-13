@@ -12,6 +12,7 @@ Art. 73, and no value under the serious-incident keys cites Art. 72.
 
 from __future__ import annotations
 
+import inspect
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -450,3 +451,190 @@ def test_legacy_rows_read_back_without_being_re_dated(tmp_path):
     assert is_overdue(by_id["legacy-other"]) is False
     # The 15-day row is 30 days past its own deadline.
     assert is_overdue(by_id["legacy-life-health"]) is True
+
+
+# ---------------------------------------------------------------------------
+# One submit path, two entry points
+# ---------------------------------------------------------------------------
+
+
+def _compliance_args(log_path, **kw):
+    return _Args(
+        artifact="incident-report",
+        manifest="ROBOT.md",
+        log=str(log_path),
+        data=None,
+        **kw,
+    )
+
+
+def test_compliance_submit_incident_report_marks_reported(tmp_path, monkeypatch, capsys):
+    """`castor compliance submit incident-report` takes the shared path."""
+    from castor import cli as cli_mod
+
+    log_path = tmp_path / "incidents.jsonl"
+    log = IncidentLog(log_path)
+    inc_id = log.record(IncidentSeverity.SERIOUS_HARM, "estop", "ESTOP", {})
+
+    calls: list[list[dict]] = []
+
+    async def _fake_submit(*, rrf, signer, rrn, incidents):
+        calls.append(list(incidents))
+        return {"status": "accepted", "receipt_id": "rcpt-c"}
+
+    _patch_submission_path(monkeypatch, _fake_submit)
+
+    rc = cli_mod._cmd_compliance_submit(_compliance_args(log_path))
+    assert rc == 0
+    assert [i["id"] for i in calls[0]] == [inc_id]
+
+    out = capsys.readouterr().out
+    assert "submission record" in out  # both entry points print the record id
+
+    entries = IncidentLog(log_path).list_incidents()
+    assert entries[0]["reported"] is True
+    assert entries[0]["report_receipt"]["receipt_id"] == "rcpt-c"
+
+    # And a second run has nothing left to file.
+    rc2 = cli_mod._cmd_compliance_submit(_compliance_args(log_path))
+    assert rc2 == 1
+    assert len(calls) == 1
+
+
+def test_compliance_submit_incident_report_failure_is_an_operator_line(
+    tmp_path, monkeypatch, capsys
+):
+    """An RrfError is one line and exit 1, and nothing is stamped."""
+    from castor import cli as cli_mod
+    from castor.rcan3.rrf_client import RrfError
+
+    log_path = tmp_path / "incidents.jsonl"
+    log = IncidentLog(log_path)
+    log.record(IncidentSeverity.SERIOUS_HARM, "estop", "ESTOP", {})
+    before = log_path.read_text()
+
+    async def _boom(*, rrf, signer, rrn, incidents):
+        raise RrfError("503: registry is down")
+
+    _patch_submission_path(monkeypatch, _boom)
+
+    rc = cli_mod._cmd_compliance_submit(_compliance_args(log_path))
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "castor compliance submit incident-report: submission failed" in err
+    assert "503" in err
+    assert log_path.read_text() == before
+    assert IncidentLog(log_path).list_incidents()[0]["reported"] is False
+
+
+def test_compliance_submit_incident_report_empty_log_is_refused(tmp_path, capsys):
+    from castor import cli as cli_mod
+
+    rc = cli_mod._cmd_compliance_submit(_compliance_args(tmp_path / "incidents.jsonl"))
+    assert rc == 1
+    assert "nothing to submit" in capsys.readouterr().err
+
+
+def test_incidents_report_submit_rrf_error_is_an_operator_line(tmp_path, monkeypatch, capsys):
+    """The other entry point turns the same RrfError into the same shape."""
+    from castor import cli as cli_mod
+    from castor.rcan3.rrf_client import RrfError
+
+    log_path = tmp_path / "incidents.jsonl"
+    log = IncidentLog(log_path)
+    log.record(IncidentSeverity.SERIOUS_HARM, "estop", "ESTOP", {})
+
+    async def _boom(*, rrf, signer, rrn, incidents):
+        raise RrfError("422: refused")
+
+    _patch_submission_path(monkeypatch, _boom)
+
+    rc = cli_mod._submit_incident_report(_Args(manifest="ROBOT.md"), log)
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "castor incidents report --submit: submission failed" in err
+    assert "422" in err
+    assert log.list_incidents()[0]["reported"] is False
+
+
+def test_both_entry_points_share_one_helper():
+    """The two paths are the same code, not two copies of it."""
+    from castor import cli as cli_mod
+
+    assert hasattr(cli_mod, "_file_incident_report")
+    src = inspect.getsource(cli_mod._cmd_compliance_submit)
+    assert "_file_incident_report(" in src
+    assert "submit_incident_report(" not in src
+
+
+# ---------------------------------------------------------------------------
+# POST /api/stop files an incident even with no safety layer attached
+# ---------------------------------------------------------------------------
+
+
+def _stop_client(monkeypatch, driver):
+    from starlette.testclient import TestClient
+
+    from castor import api as api_mod
+
+    api_mod.state.fs = None
+    api_mod.state.driver = driver
+    monkeypatch.setattr(api_mod, "API_TOKEN", None, raising=False)
+    return TestClient(api_mod.app, raise_server_exceptions=False), api_mod
+
+
+def test_api_stop_without_a_safety_layer_still_files_an_incident(tmp_path, monkeypatch):
+    log_path = tmp_path / "incidents.jsonl"
+    monkeypatch.setattr("castor.incidents.DEFAULT_INCIDENT_LOG_PATH", log_path)
+
+    class _Driver:
+        def __init__(self):
+            self.stopped = False
+
+        def stop(self):
+            self.stopped = True
+
+    driver = _Driver()
+    client, api_mod = _stop_client(monkeypatch, driver)
+    try:
+        resp = client.post("/api/stop")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "stopped"
+        assert driver.stopped is True
+
+        entries = IncidentLog(log_path).list_incidents()
+        assert len(entries) == 1
+        inc = entries[0]
+        assert inc["category"] == "estop"
+        assert inc["source"] == "estop"
+        assert inc["severity"] == IncidentSeverity.SERIOUS_HARM.value
+        assert inc["system_state"]["safety_layer"] is False
+        assert inc["reported"] is False
+    finally:
+        api_mod.state.driver = None
+
+
+def test_api_stop_files_strictly_after_the_stop_and_absorbs_a_write_failure(
+    tmp_path, monkeypatch
+):
+    """The stop happens first, and a failed write cannot break the endpoint."""
+    order: list[str] = []
+
+    class _Driver:
+        def stop(self):
+            order.append("stop")
+
+    def _boom(**kwargs):
+        order.append("file")
+        raise RuntimeError("incident log is unwritable")
+
+    monkeypatch.setattr("castor.incidents.file_incident", _boom)
+
+    client, api_mod = _stop_client(monkeypatch, _Driver())
+    try:
+        resp = client.post("/api/stop")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "stopped"
+        assert order == ["stop", "file"]
+    finally:
+        api_mod.state.driver = None

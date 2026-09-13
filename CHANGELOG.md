@@ -321,8 +321,10 @@ used to grade on `authority_handler_enabled` alone and print as satisfied. It
 now requires a non-empty allowlist and a registered handler, and the negative
 outcome is a fail in both default and Annex III strict mode, because the
 shipped runtime refuses every request in that state. `castor iso-check` reads
-the allowlist the same way. Conformance stays self-asserted; conformance is not
-certification.
+the allowlist the same way, and so does the `iso_conformance.eu_ai_act` field in
+the DISCOVER handshake, which used to be derived from the bare config flag and
+could announce a capability the handler refuses. Conformance stays
+self-asserted; conformance is not certification.
 
 **Incidents are filed by the system, not by hand.** Nothing in the package ever
 set `reported` to anything but `false`, and the only writer was
@@ -355,6 +357,36 @@ summary, attributed as such in the generated report, and no statutory text is
 quoted anywhere. The serious-incident reporting clock is relabelled from
 Art. 72 to Art. 73 throughout; Art. 72 survives on the one line that genuinely
 means standing post-market monitoring.
+
+`POST /api/stop` files one too. It used to file only through the safety layer,
+so on a runtime started with no safety layer attached the driver stop happened
+and nothing was ever written. That branch now files the incident itself,
+strictly after the stop and fully absorbed on failure.
+
+**Migrating an existing incident log.** Two things to know about a robot whose
+`~/.opencastor/incidents.jsonl` predates this release. First, legacy rows: an
+incident line written before this version carries no `reporting_deadline_days`,
+so its deadline falls back to the 15 day serious-harm window, counted from
+`discovered_at`, which for a legacy row is that row's own `timestamp`. Nothing
+is rewritten, no line is re-dated and no legacy row is re-hashed; the fallback
+is applied at read time. Second, rotation: the active log is now bounded, by
+default at 4 MB and settable with `CASTOR_INCIDENT_LOG_MAX_BYTES` next to
+`CASTOR_INCIDENT_LOG`. An existing log larger than the bound is not touched
+until the next incident is filed; that append rolls the file to
+`incidents.<date>.jsonl` and opens the new file with a carry-over line whose
+`prev_sha256` is the rotated file's last line, so the hash chain crosses the
+boundary. Readers take rotated files before the active one, so
+`castor incidents list` and the submitter still see every record, including
+ones filed before the roll. The tail hash is also cached in memory now instead
+of re-reading the whole file on every append; the cache is keyed on which file
+this is and how long it was, so a rotation or another writer's append drops it
+rather than forking the chain. Appends themselves take an advisory lock on
+`incidents.jsonl.lock`, the same thing the audit log does, because reading the
+last line and appending the next one are two steps and the runtime is not the
+only writer: a `castor incidents report --submit` stamps from another process.
+The wait for that lock is bounded at five seconds and then the append goes
+ahead without it, because a record write must never be able to keep a robot
+from stopping.
 
 **Signed compliance artifacts are derived from a record.**
 `castor compliance submit safety-benchmark` used to take `passed` from

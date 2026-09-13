@@ -242,3 +242,125 @@ class TestGeneratedConfigCarriesTheAllowlist:
         assert cfg["authority"] == {"trusted_authority_ids": []}
         # and the reader agrees that this is the fail-closed shipped state
         assert reader(cfg) == set()
+
+
+# ---------------------------------------------------------------------------
+# /discover answers the same question the fleet document and the conformance
+# row answer, through the same reader.
+# ---------------------------------------------------------------------------
+class TestDiscoverReadsTheSameFlag:
+    """OC-13 follow-up: one reader for 'can this robot answer an authority?'"""
+
+    def _discover(self, cfg: dict) -> dict:
+        from fastapi.testclient import TestClient
+
+        from castor.api import app, state
+
+        state.config = cfg
+        state.rcan_router = None
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post("/api/rcan/message", json={"msg_type": 1, "source": "rcan://t/c"})
+        assert resp.status_code == 200
+        return resp.json()
+
+    def test_unconfigured_robot_discovers_eu_ai_act_false(self):
+        # The shipped state: nothing configured at all.
+        data = self._discover({})
+        assert data["iso_conformance"]["eu_ai_act"] is False
+
+    def test_flag_without_an_allowlist_discovers_false(self):
+        # The old behaviour read the bare flag and would have said True here,
+        # while the handler refuses every requester.
+        data = self._discover({"authority_handler_enabled": True})
+        assert data["iso_conformance"]["eu_ai_act"] is False
+
+    def test_flag_with_an_allowlist_discovers_true(self):
+        data = self._discover(
+            {
+                "authority_handler_enabled": True,
+                "authority": {"trusted_authority_ids": ["eu.aiact.notified-body.001"]},
+            }
+        )
+        assert data["iso_conformance"]["eu_ai_act"] is True
+
+    def test_discover_and_the_fleet_document_agree(self):
+        from castor.authority import authority_handler_enabled
+        from castor.cloud.bridge import _authority_handler_enabled as _fleet_reader
+
+        for cfg in (
+            {},
+            {"authority_handler_enabled": True},
+            {
+                "authority_handler_enabled": True,
+                "authority": {"trusted_authority_ids": ["eu.aiact.notified-body.001"]},
+            },
+        ):
+            expected = authority_handler_enabled(cfg)
+            assert _fleet_reader(cfg) is expected
+            assert self._discover(cfg)["iso_conformance"]["eu_ai_act"] is expected
+
+
+# ---------------------------------------------------------------------------
+# `castor iso-check` answers the same question through the same reader.
+# ---------------------------------------------------------------------------
+class TestIsoCheckReadsTheSameFlag:
+    """OC-13 follow-up: no consumer re-implements flag AND allowlist."""
+
+    @staticmethod
+    def _iso_rows(tmp_path, cfg, name):
+        import io
+        import json
+        import sys
+
+        import yaml
+
+        from castor.cli import cmd_iso_check
+
+        p = tmp_path / f"{name}.rcan.yaml"
+        p.write_text(yaml.dump(cfg))
+
+        class Args:
+            config = str(p)
+            json = True
+
+        buf = io.StringIO()
+        sys.stdout = buf
+        try:
+            cmd_iso_check(Args())
+        finally:
+            sys.stdout = sys.__stdout__
+        return json.loads(buf.getvalue())["iso_checks"]
+
+    @staticmethod
+    def _sub(rows, standard, prefix):
+        row = next(r for r in rows if r["standard"] == standard)
+        return next(passed for desc, passed in row["checks"] if desc.startswith(prefix))
+
+    def test_iso_check_agrees_with_the_one_reader(self, tmp_path):
+        from castor.authority import authority_handler_enabled
+
+        cases = [
+            ({}, "unconfigured"),
+            ({"authority_handler_enabled": True}, "flag_only"),
+            (
+                {
+                    "authority_handler_enabled": True,
+                    "authority": {"trusted_authority_ids": ["eu.aiact.notified-body.001"]},
+                },
+                "flag_and_allowlist",
+            ),
+        ]
+        for cfg, name in cases:
+            expected = authority_handler_enabled(cfg)
+            rows = self._iso_rows(tmp_path, dict(cfg), name)
+            assert self._sub(rows, "EU AI Act (Reg. 2024/1689)", "Art. 16(j)") is expected, name
+            assert self._sub(rows, "ISO/IEC 42001:2023", "Authority handler") is expected, name
+
+    def test_iso_check_does_not_reimplement_the_reader(self):
+        import inspect
+
+        from castor import cli as cli_mod
+
+        src = inspect.getsource(cli_mod.cmd_iso_check)
+        assert "authority_handler_enabled(" in src
+        assert "trusted_authority_ids_from_config" not in src
