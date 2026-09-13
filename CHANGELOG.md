@@ -397,12 +397,27 @@ and then waited for a restart. From outside, a pause that takes effect at the
 next restart and a pause that does nothing look the same.
 
 `castor.api`'s lifespan now starts one background task that reconciles the
-latch on the same five second cadence the generated runtime uses, on a worker
-thread so a file read never sits on the event loop, once immediately at startup
-and then on the timer. The audit rows are the ones `resync_from_latch` already
-wrote. A DELETED latch file still never lifts a hold: a clear leaves a file
-behind saying so, and the absence of one is not evidence that anybody cleared
-anything.
+latch on the same five second cadence the generated runtime uses, once
+immediately at startup and then on the timer. It runs on the event loop rather
+than on a worker thread, and so does the generated runtime's guard loop, which
+used to hand the same work to a thread: every other mutator of the in-memory
+hold is an async handler, so from a thread the reconcile can be descheduled
+between reading the latch file and comparing it with the flag, and a stop that
+lands in that window reads as somebody else's clear and is reverted until a
+later cycle re-adopts it. The work is one small local file read.
+
+A DELETED latch file still never lifts a hold: a clear leaves a file behind
+saying so, and the absence of one is not evidence that anybody cleared
+anything. Neither does an UNREADABLE one now: empty, truncated or non-JSON
+reads as "nothing held" as well, and a process that is already holding treats
+that as a file it could not read rather than as a clear. Zero bytes is the
+likeliest corruption there is. Boot still comes up clear on an unreadable
+latch, deliberately.
+
+Adopting or lifting a pause out of process is now audited the way the e-stop
+transitions already were. A pause blocks every motor write, and a robot
+refusing motion with nothing in its own safety log saying when that started is
+the sticky pause the mandatory reason string exists to prevent.
 
 `GET /api/fs/estop` now also reports `paused`, `held`, `hold_detail` and
 `resync_interval_s`, so a caller can tell a pause from an e-stop and can see
@@ -432,9 +447,20 @@ hatch. The escape hatch is the new `--no-auth-code` flag, which clears and
 prints a warning that the clear was unauthenticated and that nothing verified
 who ran it.
 
-`_estop_auth_sources()` reports both the code and where it came from, in the
-same order `castor/fs/safety.py` reads it at clear time, so the CLI and the API
-never enforce different secrets.
+`_estop_auth_sources()` reports both the code and where it came from: the
+`OPENCASTOR_ESTOP_AUTH` environment variable first, then `<home>/tokens.env`.
+`SafetyLayer.clear_estop`, which is what `POST /api/estop/clear` goes through,
+reads only the environment variable. A unit written by `castor up` loads
+tokens.env, so on a robot built the ten-minute way the two agree; a gateway
+started by hand in a shell without the variable has nothing to check a clear
+against. `docs/safety/hold.md` says so on the page rather than leaving it to be
+discovered.
+
+Every clear taken at the robot now appends `estop_cleared` to
+`<home>/audit.log`, the same hash-chained log the API's clear writes to,
+carrying who took it and whether anything checked them. A warning printed once
+to a terminal nobody kept is not a record. A refused clear writes nothing,
+because nothing was lifted.
 
 **The bundled `/gamepad` page can clear a hold again.** Once
 `POST /api/estop/clear` started demanding `X-Estop-Auth`, the page's fetch
