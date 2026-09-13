@@ -75,6 +75,14 @@ DEFAULT_INCIDENT_LOG_MAX_BYTES = 4 * 1024 * 1024
 #: file's last-line hash as its ``prev_sha256``, so the chain crosses the
 #: rotation and a reader can follow it from the oldest rotated file to the
 #: active one.
+#:
+#: A note for whoever writes the chain verifier this module does not yet have:
+#: this line is the one place where a hash points at something outside the file
+#: it sits in, so a line that merely SAYS ``log_rotation`` must never be enough
+#: to excuse a discontinuity. Anything that can append to the log can write one.
+#: A carry-over line is only a carry-over line when ``rotated_to`` names a file
+#: that is actually there and that file's last line hashes to this line's
+#: ``prev_sha256``; anything else is a break, and should be reported as one.
 ROTATION_RECORD_TYPE = "log_rotation"
 
 #: How long a writer waits for the chain lock before appending without it. A
