@@ -615,7 +615,7 @@ def test_sensor_auto_estop_latches_with_source_sensor(tmp_path, monkeypatch):
     assert fs.write("/dev/motor", {"type": "move", "linear": 0.4}, principal="api") is False
 
 
-def _stop_namespace(tmp_path, _invoke, capabilities=None):
+def _stop_namespace(tmp_path, _invoke, capabilities=None, logger=None):
     """Lift the rc-car template's stop path out of the rendered source and run it.
 
     The template is not importable (it needs ROBOT_HOME, a gateway URL and a
@@ -639,7 +639,7 @@ def _stop_namespace(tmp_path, _invoke, capabilities=None):
         "FALLBACK_STOP_TOOLS": ("drive.stop", "arm.estop"),
         "_stop_tool_that_answered": None,
         "state": Namespace(config=config),
-        "logger": _QuietLogger(),
+        "logger": logger if logger is not None else _QuietLogger(),
         "time": time,
     }
     exec(compile(ast.Module(body=fns, type_ignores=[]), "<tmpl>", "exec"), ns)
@@ -724,6 +724,102 @@ def test_neither_tool_answering_is_still_stop_not_confirmed(tmp_path):
     assert ok is False
     assert "not allowlisted" in detail["reason"]
     assert detail["stop_tool"] in ("drive.stop", "arm.estop")
+
+
+def test_the_generated_runtime_addresses_its_own_rrn(tmp_path):
+    """Two robots generated from one template must not share one identity.
+
+    FOUND ON THE ROVER, proving OC-05's last clause. The rc-car runtime template
+    carried the first rover's RRN as a literal in both the module constant and
+    the invoke envelope, while ROBOT.md and robot.rcan.yaml beside it used the
+    generator's `{rrn}` placeholder. So every robot generated after the first
+    asked its own gateway to stop under another robot's identity. With the
+    gateway's RRN binding on (MF-003) that is a 403 `rrn_binding` and the
+    robot's own stop never reaches its actuator; with it off the stop lands and
+    the receipt names the wrong robot, which is the worse failure, because the
+    audit reads fine.
+    """
+    a = render("runtime.py.tmpl", _plan(tmp_path, "rc-car"))
+    other = UpPlan(
+        name="second",
+        home=tmp_path / "second",
+        archetype="rc-car",
+        rrn="RRN-SECOND-0000000001",
+        robot_uuid="4a1f0000-0000-0000-0000-000000000001",
+        base_port=8300,
+    )
+    b = render("runtime.py.tmpl", other)
+
+    ast.parse(a)
+    ast.parse(b)
+
+    assert 'RRN = "RRN-LOCAL-0123456789"' in a
+    assert 'RRN = "RRN-SECOND-0000000001"' in b
+    assert "RRN-SECOND-0000000001" not in a
+    assert "RRN-LOCAL-0123456789" not in b
+
+    # And the envelope this robot posts is addressed from that constant rather
+    # than from a literal that only the first robot ever matched.
+    for text in (a, b):
+        assert 'f"rcan://{RRN}/{tool_name}"' in text
+        assert "rcan://RRN-000000000012" not in text, "the rover's RRN is baked in again"
+
+
+def test_a_confirmed_stop_logs_the_receipt_that_proves_it(tmp_path):
+    """A stop that landed has to be findable in the ROBOT's own log.
+
+    THE HALF THIS FIXES, measured on the rover. The sensor latch logged, the
+    hold logged, and then a `drive.stop` that the gateway allowed, executed and
+    signed logged NOTHING at all on its first attempt — so the robot's journal
+    was identical whether the stop reached the actuator or died in the socket.
+    The only record lived in the gateway process, whose audit chain is in memory
+    and restart-wiped. The corr_id and the kid are what pull the signed outcome
+    out of the gateway's action-trace export and into scripts/verify_receipt.py.
+    """
+    lines = []
+
+    class _Recorder:
+        def warning(self, fmt, *args):
+            lines.append(fmt % args)
+
+        def __getattr__(self, _name):
+            return lambda *a, **k: None
+
+    def _invoke(tool, scope, args=None, timeout=3.0):
+        return 200, {
+            "ok": True,
+            "outcome": {
+                "corr_id": "runtime-224775d39a3f",
+                "status": "ok",
+                "envelope_signature": {"kid": "rover-gw-attest-2026", "alg": "Ed25519"},
+            },
+        }
+
+    ns = _stop_namespace(
+        tmp_path, _invoke, capabilities=["drive.set", "drive.stop"], logger=_Recorder()
+    )
+    ok, detail = ns["_stop_at_actuator"]("sensor auto-estop")
+
+    assert ok is True
+    assert len(lines) == 1, "one confirmed stop, one line; no more and no fewer"
+    logged = lines[0]
+    assert "runtime-224775d39a3f" in logged, "without the corr_id the receipt cannot be found"
+    assert "rover-gw-attest-2026" in logged, "and without the kid it cannot be verified"
+    assert "drive.stop" in logged
+    assert "sensor auto-estop" in logged, "which stop this was is the point of the line"
+
+    # A stop that did NOT land must not produce that line.
+    lines.clear()
+
+    def _refused(tool, scope, args=None, timeout=3.0):
+        return 0, {"error": "ConnectionRefusedError"}
+
+    ns = _stop_namespace(
+        tmp_path, _refused, capabilities=["drive.set", "drive.stop"], logger=_Recorder()
+    )
+    ok, _detail = ns["_stop_at_actuator"]("sensor auto-estop")
+    assert ok is False
+    assert not any("stop confirmed" in line for line in lines)
 
 
 class _QuietLogger:
@@ -1533,6 +1629,11 @@ def _live_stop_namespace(tmp_path, gateway_url, capabilities):
     assert {f.name for f in fns} == wanted, "the template lost a stop helper"
     ns = {
         "GATEWAY_URL": gateway_url,
+        # This robot's own RRN, taken from the SAME plan that rendered the
+        # source above, because that is what the rendered module's own
+        # `RRN = "{rrn}"` line resolves to. Only whole-module statements are
+        # skipped by this harness, not the value.
+        "RRN": _plan(tmp_path, "rc-car").rrn,
         "READ_TOKEN": "oc_read_bearer",
         "MANIFEST_PATH": str(tmp_path / "ROBOT.md"),
         "HELD_SCOPES_ALLOWED": ("HALT", "OBSERVE"),
@@ -1581,6 +1682,11 @@ def test_an_arm_is_stopped_through_a_gateway_that_advertises_arm_estop(tmp_path)
     assert asked["_authorization"] == "Bearer oc_read_bearer"
     assert asked["type"] == "rcan/v1/invoke"
     assert asked["nonce"] and asked["msg_id"]
+    # THE ENVELOPE NAMES THIS ROBOT. A gateway with RRN binding on (MF-003)
+    # compares this against its own manifest's metadata.rrn and 403s a
+    # mismatch, so a runtime addressing another robot's RRN cannot stop its
+    # own actuator at all.
+    assert asked["ruri"] == "rcan://RRN-LOCAL-0123456789/arm.estop"
 
 
 def test_an_arm_whose_config_forgot_arm_estop_still_finds_it_over_the_wire(tmp_path):

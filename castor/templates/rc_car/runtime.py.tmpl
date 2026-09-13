@@ -76,7 +76,18 @@ os.environ.setdefault("OPENCASTOR_CONFIG", str(HOME_DIR / "robot.rcan.yaml"))
 
 GATEWAY_URL = os.environ["ROBOT_GATEWAY_URL"]
 MANIFEST_PATH = os.environ.get("ROBOT_MANIFEST", str(HOME_DIR / "ROBOT.md"))
-RURI = "rcan://RRN-000000000012/robot"
+#: THIS robot's RRN, filled in by `castor up` from the same plan that writes it
+#: into ROBOT.md and robot.rcan.yaml. It was a hardcoded literal here — the
+#: first rover's number — while every other generated file used the placeholder,
+#: so the second robot generated from this template addressed its own gateway
+#: with the FIRST robot's identity. Two things then go wrong and only one of
+#: them is loud: with the gateway's RRN binding on (MF-003,
+#: ROBOT_MD_REQUIRE_RRN_BINDING) every invoke from this runtime is denied
+#: `rrn_binding`, so the robot's own stop never reaches its actuator; with it
+#: off the stop lands but every receipt and every action-trace row it produces
+#: names the wrong robot, which is worse, because the audit reads fine.
+RRN = "{rrn}"
+RURI = f"rcan://{RRN}/robot"
 READ_TOKEN = os.environ.get("READ_TOKEN", "")
 
 if not os.environ.get("OPENCASTOR_API_TOKEN"):
@@ -186,7 +197,7 @@ def _invoke(tool_name: str, scope: str, tool_args: dict | None = None,
     envelope = {
         "msg_id": f"runtime-{uuid.uuid4().hex[:12]}",
         "type": "rcan/v1/invoke",
-        "ruri": f"rcan://RRN-000000000012/{tool_name}",
+        "ruri": f"rcan://{RRN}/{tool_name}",
         "scope": scope,
         "tool_name": tool_name,
         "tool_args": tool_args or {},
@@ -332,8 +343,30 @@ def _stop_at_actuator(reason: str = "") -> tuple[bool, dict]:
         for tool in list(candidates):
             status, body = _invoke(tool, "HALT", {})
             if status == 200:
-                if attempt > 1 or tool != candidates[0]:
-                    logger.warning("%s confirmed the stop on attempt %d", tool, attempt)
+                # SAY WHICH RECEIPT, and say it on the way through. A stop that
+                # landed used to log NOTHING on the first attempt, so the robot's
+                # own journal showed the sensor latch, showed `holding: ...`, and
+                # then went quiet — indistinguishable from a latch that never
+                # reached the actuator. The only record was in the gateway's
+                # process, whose audit chain is in memory and restart-wiped.
+                # The corr_id and kid printed here are the two fields that find
+                # the signed outcome in the gateway's action-trace export and
+                # hand it to scripts/verify_receipt.py, which is the difference
+                # between a claim and a receipt somebody else can check.
+                receipt = body.get("outcome") or {}
+                signature = (
+                    receipt.get("envelope_signature")
+                    or body.get("envelope_signature")
+                    or {}
+                )
+                logger.warning(
+                    "stop confirmed at the actuator by %s on attempt %d: "
+                    "corr_id=%s kid=%s (%s)",
+                    tool, attempt,
+                    receipt.get("corr_id") or "unknown",
+                    signature.get("kid") or "UNSIGNED",
+                    reason or "no reason given",
+                )
                 _stop_tool_that_answered = tool
                 return True, {**body, "stop_tool": tool}
             last = {"gateway_status": status,
