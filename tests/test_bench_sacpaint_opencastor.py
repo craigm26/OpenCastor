@@ -1193,6 +1193,13 @@ def test_virtual_medium_carries_on_from_the_measured_pose_after_a_miss(gateway, 
     obs = body.step(Action(data=np.array([0.12, 0.10, 0.002]))).observation
     assert obs.extra["misses"] == 1
     assert obs.state["eef_pos"] == pytest.approx([0.116, 0.10, 0.002], abs=1e-6)
+    # The miss is kept with its place, not only counted: a run's misses cluster
+    # somewhere, and a bare count cannot say where.
+    assert len(body.miss_log) == 1
+    logged = body.miss_log[0]
+    assert logged["error_mm"] == pytest.approx(4.0)
+    assert logged["measured_m"] == pytest.approx([0.116, 0.10, 0.002], abs=1e-3)
+    assert len(logged["target_mm"]) == 3
     ink = obs.images["overhead"][:, :, 0] < 128
     cols = np.nonzero(ink)[1]
     assert cols.min() == pytest.approx(80, abs=3) and cols.max() == pytest.approx(
