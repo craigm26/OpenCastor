@@ -152,6 +152,13 @@ class CastorFS:
         self.proc.bootstrap(config)
         self.proc.update_status("active")
 
+        # ...unless a latch survived the restart. The SafetyLayer restored the
+        # flag in its constructor; without this line boot() would immediately
+        # paint /proc/status "active" over it, and every dashboard reading that
+        # path would show a stopped robot as running.
+        if self.safety.is_estopped:
+            self.proc.update_status("estop")
+
         # Store active config
         if config:
             self.ns.write("/etc/rcan", config)
@@ -224,17 +231,51 @@ class CastorFS:
     # ------------------------------------------------------------------
     # Safety operations
     # ------------------------------------------------------------------
-    def estop(self, principal: str = "root") -> bool:
-        """Trigger emergency stop."""
-        return self.safety.estop(principal=principal)
+    def estop(self, principal: str, source: str = "local", reason: str = "") -> bool:
+        """Trigger emergency stop.
 
-    def clear_estop(self, principal: str = "root") -> bool:
-        """Clear emergency stop (requires root or CAP_SAFETY_OVERRIDE)."""
-        return self.safety.clear_estop(principal=principal)
+        *principal* is REQUIRED. It used to default to ``"root"``, which meant
+        an in-process caller who named nobody got the capability set that can
+        do anything — and, worse, that the audit row said "root" for a stop
+        whose real origin nobody could recover afterwards.
+        """
+        if not principal:
+            raise ValueError(
+                "estop() requires an explicit principal: the audit row has to "
+                "name who stopped this robot."
+            )
+        return self.safety.estop(principal=principal, source=source, reason=reason)
+
+    def clear_estop(
+        self,
+        principal: str,
+        auth_code: Optional[str] = None,
+        source: str = "local",
+    ) -> bool:
+        """Clear emergency stop (requires root or CAP_SAFETY_OVERRIDE).
+
+        *principal* is REQUIRED, and the reason is sharper here than for
+        :meth:`estop`. With the old ``principal="root"`` default, any code
+        inside this process could call ``fs.clear_estop()`` with no arguments
+        and lift a stop with no capability check at all, because root bypasses
+        the capability gate. Resuming motion a person halted is the one act
+        that must never be available by omission.
+        """
+        if not principal:
+            raise ValueError(
+                "clear_estop() requires an explicit principal: clearing a stop "
+                "with no named caller was a capability-free clear."
+            )
+        return self.safety.clear_estop(principal=principal, auth_code=auth_code, source=source)
 
     @property
     def is_estopped(self) -> bool:
         return self.safety.is_estopped
+
+    @property
+    def estop_source(self) -> str:
+        """Where the active latch came from, or "" when nothing is latched."""
+        return self.safety.estop_source
 
     @property
     def last_write_denial(self) -> str:

@@ -819,6 +819,47 @@ def mint_commitment_key(home: Path) -> tuple[Path, bool]:
     return key_file, False
 
 
+#: The environment variable ``castor/fs/safety.py`` has always read before it
+#: allows an e-stop to be cleared, and which nothing ever set. It goes in
+#: tokens.env because that is the file every generated unit already names as an
+#: EnvironmentFile: no new plumbing, no new prompt, no hand-edited file.
+ESTOP_AUTH_VAR = "OPENCASTOR_ESTOP_AUTH"
+
+
+def ensure_estop_auth(home: Path) -> str:
+    """Make sure tokens.env carries an e-stop auth code. Returns it.
+
+    THE ONE PLACE tokens.env IS TOUCHED AFTER CREATION, and only ever by
+    APPENDING a line that is absent. The file's rule is that it is written once
+    and never rewritten, because rotating what is in it un-pairs the phone.
+    Appending a key that was never there rotates nothing. The alternative was a
+    second file nobody's unit reads, which is how the console token ended up
+    needing its own explanation.
+
+    REUSED, never rotated: this is the code a human wrote down, and a rerun of
+    `castor up` that silently changed it would strand every operator who had
+    already saved the old one. (The admin bearer is the opposite contract on
+    purpose; see :func:`mint_admin_token`.)
+    """
+    tokens = home / "tokens.env"
+    existing = ""
+    if tokens.exists():
+        existing = tokens.read_text(encoding="utf-8")
+        for line in existing.splitlines():
+            stripped = line.strip()
+            if stripped.startswith(f"{ESTOP_AUTH_VAR}="):
+                value = stripped.split("=", 1)[1].strip()
+                if value:
+                    return value
+    code = f"oc_estop_{secrets.token_hex(8)}"
+    home.mkdir(parents=True, exist_ok=True)
+    suffix = "" if (not existing or existing.endswith("\n")) else "\n"
+    with tokens.open("a", encoding="utf-8") as fh:
+        fh.write(f"{suffix}{ESTOP_AUTH_VAR}={code}\n")
+    tokens.chmod(0o600)
+    return code
+
+
 def mint_admin_token(home: Path) -> str:
     """Mint the admin bearer, store only its digest, and return the secret.
 
@@ -1166,6 +1207,7 @@ def run_up(
             f"OPENCASTOR_API_TOKEN=oc_api_{secrets.token_hex(16)}\n"
         )
         tokens.chmod(0o600)
+    estop_auth = ensure_estop_auth(home)
     admin_token = mint_admin_token(home)
     _say("owner token: minted — printed once below, only its digest on disk", started)
     _commit_key, _commit_reused = mint_commitment_key(home)
@@ -1345,6 +1387,16 @@ def run_up(
         "  It is the only credential that can authorize a paused action,\n"
         "  clear an emergency stop, mint a key, or reboot this host.\n"
         "  Keep it off the robot. Lost it? Re-run `castor up` for a new one.\n"
+    )
+    # A SECOND FACTOR FOR ONE ACT ONLY: clearing a stop. The owner token proves
+    # who you are; this proves you meant this. It is reused across reruns, so it
+    # is printed every time rather than once.
+    print(
+        f"  E-stop clear code: {estop_auth}\n"
+        f"  (also {home / 'tokens.env'}). Clearing a stop needs BOTH this and the\n"
+        "  owner token. A stop a sensor set is not clearable over the network at\n"
+        "  all: run `castor resume --clear-estop` at the robot. This is a\n"
+        "  best-effort software hold, not a hardware cut.\n"
     )
     if plan.is_duck:
         # THE TOKEN IS PRINTED, and the QR does not carry it. The pairing QR

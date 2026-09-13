@@ -107,8 +107,36 @@ class SafetyLayer:
         self._violations: dict[str, int] = {}
         self._lockouts: dict[str, float] = {}
 
-        # Emergency stop flag
+        # Emergency stop flag. RESTORED FROM DISK, not defaulted to False: a
+        # robot that e-stopped and was then restarted by systemd twelve seconds
+        # later used to come back free, because the only record of the stop was
+        # a bool in the process that died. castor/safety/latch.py reads the
+        # latch out of ROBOT_HOME, which every generated unit already exports;
+        # with ROBOT_HOME unset (a test, a notebook) there is no file and this
+        # is the old behaviour exactly.
         self._estop = False
+        self._estop_source = ""
+        #: A pause is a person standing the robot down: not an e-stop, but it
+        #: blocks motor writes exactly the same way. Restored from the same
+        #: latch, lifted by `castor resume`.
+        self._paused = False
+        self._pause_detail = ""
+        try:
+            from castor.safety.latch import load as _load_latch
+
+            _latch = _load_latch()
+            if _latch.estop_engaged:
+                self._estop = True
+                self._estop_source = _latch.estop_source or "unknown"
+                logger.warning(
+                    "EMERGENCY STOP restored from the persisted latch: %s", _latch.describe()
+                )
+            if _latch.paused:
+                self._paused = True
+                self._pause_detail = _latch.describe()
+                logger.warning("PAUSE restored from the persisted latch: %s", _latch.describe())
+        except Exception as exc:  # noqa: BLE001 - a boot must not die on this
+            logger.warning("Safety latch could not be read: %s", exc)
 
         # Per-principal session-expiry stop flags (separate from full estop)
         self._session_expired_stops: set[str] = set()
@@ -455,6 +483,21 @@ class SafetyLayer:
             self._last_write_denial = "Emergency stop is active. POST /api/estop/clear to resume."
             return False
 
+        # A PAUSE IS NOT AN E-STOP, and it still has to stop the robot moving.
+        # `castor pause` is a person standing the robot down; it does not latch
+        # the e-stop (nothing is wrong, and lifting it must not need the e-stop
+        # clear code). But a pause that let the next /api/action through would
+        # be a note in a file. Checked here so both the duck's real driver path
+        # and the car's mock one refuse, and `castor resume` lifts it.
+        if self._paused and path.startswith("/dev/motor"):
+            logger.warning("WRITE denied: %s", self._pause_detail or "paused")
+            self._audit_safety(principal, path, "deny_paused", self._pause_detail or "paused")
+            self._last_write_denial = (
+                f"This robot is paused ({self._pause_detail or 'no reason recorded'}). "
+                "Run `castor resume` at the robot."
+            )
+            return False
+
         if self._is_locked_out(principal):
             logger.warning("WRITE denied: %s is locked out", principal)
             self._last_write_denial = (
@@ -740,7 +783,17 @@ class SafetyLayer:
             self._audit_safety(principal, "/dev/motor", "deny_estop", "missing CAP_ESTOP")
             return False
         self._estop = True
+        self._estop_source = source
         self.ns.write("/proc/status", "estop")
+        # Persist BEFORE auditing: if this process dies in the next millisecond
+        # the next one must still come back stopped. A missing audit row is a
+        # gap in the record; a forgotten stop is a robot that moves.
+        try:
+            from castor.safety.latch import record_estop as _record_estop
+
+            _record_estop(principal=principal, source=source, reason=reason)
+        except Exception as exc:  # noqa: BLE001 - never let the stop itself fail
+            logger.warning("Safety latch could not be persisted: %s", exc)
         detail = f"ESTOP activated — source={source}" + (f" — {reason}" if reason else "")
         self._audit_safety(principal, "/dev/motor", "estop", detail)
         logger.warning("EMERGENCY STOP [%s] activated by %s: %s", source, principal, reason)
@@ -768,12 +821,42 @@ class SafetyLayer:
         logger.warning("CONTROLLED STOP [%s] by %s: %s", source, principal, reason)
         return True
 
-    def clear_estop(self, principal: str = "root", auth_code: Optional[str] = None) -> bool:
+    def clear_estop(
+        self,
+        principal: str = "root",
+        auth_code: Optional[str] = None,
+        source: str = "local",
+    ) -> bool:
         """Clear emergency stop. Requires root or CAP_SAFETY_OVERRIDE.
 
         If the ``OPENCASTOR_ESTOP_AUTH`` environment variable is set, the
         caller must supply a matching *auth_code* to authorise the clear.
+        ``castor up`` now writes that variable into the generated tokens.env,
+        so on a robot built by the ten-minute path the code is always required.
+
+        A latch set by an on-device sensor is NOT clearable from a remote
+        source. That rule was already advertised in the docstring of
+        ``POST /api/safety/rcan``; until now nothing enforced it. *source* says
+        where this clear came from: 'local' is the CLI on the robot's own host,
+        and is the only source allowed to lift a sensor latch.
         """
+        blocked = ""
+        try:
+            from castor.safety.latch import clear_blocked_by
+
+            blocked = clear_blocked_by(self._estop_source, source)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Sensor-latch rule could not be evaluated: %s", exc)
+        if self._estop and blocked:
+            self._audit_safety(
+                principal,
+                "/dev/motor",
+                "deny_clear_estop",
+                f"latched source={self._estop_source or 'unknown'}, clearing source={source}",
+            )
+            logger.warning("clear_estop denied for %s: %s", principal, blocked)
+            return False
+
         if principal != "root":
             caps = self.perms.get_caps(principal)
             if not (caps & Cap.SAFETY_OVERRIDE):
@@ -795,14 +878,87 @@ class SafetyLayer:
                 return False
 
         self._estop = False
+        self._estop_source = ""
         self.ns.write("/proc/status", "active")
-        self._audit_safety(principal, "/dev/motor", "clear_estop", "emergency stop cleared")
-        logger.info("Emergency stop cleared by %s", principal)
+        try:
+            from castor.safety.latch import record_clear as _record_clear
+
+            _record_clear()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Safety latch could not be cleared on disk: %s", exc)
+        self._audit_safety(
+            principal, "/dev/motor", "clear_estop", f"emergency stop cleared — source={source}"
+        )
+        logger.info("Emergency stop cleared by %s (source=%s)", principal, source)
         return True
+
+    def resync_from_latch(self) -> bool:
+        """Reconcile the in-memory e-stop flag with the latch file on disk.
+
+        THE FILE IS THE SOURCE OF TRUTH ACROSS PROCESSES, and it has to be:
+        `castor pause`, `castor resume` and the CLI's clear all run in a
+        different process from the runtime, and without this the runtime would
+        hold a stop the operator cleared thirty seconds ago and had no way to
+        see. Called from the generated runtime's always-on guard loop.
+
+        Returns True when the flag changed. Cheap and safe to call often: with
+        ``ROBOT_HOME`` unset there is no file and this does nothing at all.
+        """
+        try:
+            from castor.safety.latch import latch_path
+            from castor.safety.latch import load as _load_latch
+
+            if latch_path() is None:
+                return False
+            latch = _load_latch()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("latch resync skipped: %s", exc)
+            return False
+        changed = False
+        if latch.paused != self._paused:
+            self._paused = latch.paused
+            self._pause_detail = latch.describe() if latch.paused else ""
+            logger.info("pause %s out of process", "set" if latch.paused else "lifted")
+            changed = True
+        if latch.estop_engaged and not self._estop:
+            self._estop = True
+            self._estop_source = latch.estop_source or "unknown"
+            self.ns.write("/proc/status", "estop")
+            self._audit_safety(
+                latch.estop_principal or "latch",
+                "/dev/motor",
+                "estop",
+                f"adopted from the persisted latch — source={self._estop_source}",
+            )
+            logger.warning("EMERGENCY STOP adopted from the latch: %s", latch.describe())
+            return True
+        if not latch.estop_engaged and self._estop:
+            cleared_from = self._estop_source
+            self._estop = False
+            self._estop_source = ""
+            self.ns.write("/proc/status", "active")
+            self._audit_safety(
+                "latch",
+                "/dev/motor",
+                "clear_estop",
+                f"cleared out of process — previous source={cleared_from or 'unknown'}",
+            )
+            logger.info("Emergency stop lifted out of process (was source=%s)", cleared_from)
+            return True
+        return changed
 
     @property
     def is_estopped(self) -> bool:
         return self._estop
+
+    @property
+    def estop_source(self) -> str:
+        """Where the current latch came from: 'sensor', 'api', 'rcan', 'local'.
+
+        Empty when nothing is latched. This is the value the sensor-latch rule
+        in :meth:`clear_estop` reads, and it survives a restart with the latch.
+        """
+        return self._estop_source
 
     @property
     def last_write_denial(self) -> str:

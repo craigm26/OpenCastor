@@ -979,32 +979,69 @@ async def emergency_stop():
     if state.driver:
         state.driver.stop()
     if state.fs:
-        state.fs.estop(principal="api")
+        state.fs.estop(principal="api", source="api", reason="POST /api/stop")
     return {"status": "stopped"}
 
 
 @app.post("/api/estop/clear", dependencies=[Depends(verify_token)])
 async def clear_estop(request: Request):
-    """Clear emergency stop. Requires admin role.
+    """Clear emergency stop. Requires admin role AND the e-stop auth code.
 
     Setting a stop is anybody's right (``POST /api/stop`` stays open to every
     authenticated caller); CLEARING one is the human's. The runtime bearer the
     agent carries reaches `operator`, so an agent cannot resume the motion a
     person halted — the same rule that keeps it off ``/api/hitl/authorize``.
+
+    THE SECOND FACTOR. ``castor up`` writes ``OPENCASTOR_ESTOP_AUTH`` into the
+    generated tokens.env, so on any robot built after that change this endpoint
+    also needs that code, supplied as the ``X-Estop-Auth`` header or as
+    ``auth_code`` in a JSON body. Without it this answers 403. The code and the
+    admin bearer are different secrets held in different places on purpose.
+
+    AND A STOP A SENSOR SET IS NOT CLEARABLE HERE AT ALL. Three consecutive
+    critical thermal, load or force readings latch with ``source='sensor'``;
+    lifting that needs somebody who can see the robot, which means
+    ``castor resume --clear-estop`` on the robot's own host. This is a
+    best-effort software hold, not a hardware cut: clearing it re-enables this
+    robot's software motion path, it does not energise or de-energise anything.
     """
     _check_min_role(request, "admin")
     actor = getattr(request.state, "jwt_username", "unknown")
+    auth_code = request.headers.get("X-Estop-Auth")
+    if not auth_code:
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                auth_code = body.get("auth_code")
+        except Exception:
+            auth_code = None
     if state.fs:
+        latched_source = getattr(state.fs, "estop_source", "")
         # `principal="api"` names the CastorFS capability holder, which is a
         # different namespace from the API identity (castor/fs/safety.py reads
         # it against Cap.SAFETY_OVERRIDE). The API identity goes in the record.
-        if state.fs.clear_estop(principal="api"):
+        if state.fs.clear_estop(principal="api", auth_code=auth_code, source="api"):
             try:
                 get_audit().log("estop_cleared", source="api", actor=actor)
             except Exception as exc:
                 logger.debug("E-stop clear audit write failed: %s", exc)
             return {"status": "cleared", "cleared_by": actor}
-        raise HTTPException(status_code=403, detail="Insufficient permissions")
+        if (latched_source or "").lower() == "sensor":
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "This stop was latched by an on-device sensor reading. Check the "
+                    "robot, then clear it at the robot with `castor resume --clear-estop`."
+                ),
+            )
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Insufficient permissions, or a missing or wrong e-stop auth code. "
+                "The code is OPENCASTOR_ESTOP_AUTH in the robot's tokens.env; send it "
+                "as the X-Estop-Auth header."
+            ),
+        )
     return {"status": "no_fs"}
 
 
@@ -1016,12 +1053,27 @@ async def get_estop_status():
         estopped: True if e-stop is active (motor writes blocked).
         proc_status: Current /proc/status value (active, estop, idle, ...).
         last_denial: Reason for the most recent safety layer write rejection.
+        source: Where the active latch came from ('sensor', 'api', 'rcan', ...).
+        latch: The persisted latch, including any `castor pause` and its reason.
+
+    This reports a best-effort SOFTWARE hold. `estopped: true` means this
+    robot's own software refuses motion and has asked its actuator to stop. It
+    is not a hardware cut and nothing here is safety rated.
     """
     if state.fs:
+        try:
+            from castor.safety.latch import dump as _latch_dump
+
+            latch = _latch_dump()
+        except Exception:
+            latch = {}
         return {
             "estopped": state.fs.is_estopped,
+            "source": getattr(state.fs, "estop_source", ""),
             "proc_status": state.fs.read("/proc/status", principal="api") or "unknown",
             "last_denial": state.fs.last_write_denial,
+            "latch": latch,
+            "hold_kind": "best_effort_software_hold",
         }
     return {"estopped": False, "proc_status": "no_fs", "last_denial": ""}
 
@@ -5074,14 +5126,33 @@ async def rcan_safety_message(req: _RCANSafetyRequest):
             result["accepted"] = ok
             result["detail"] = "Controlled STOP initiated" if ok else state.fs.last_write_denial
         elif event == "RESUME":
-            ok = state.fs.clear_estop(principal="rcan_remote")
+            # source="rcan" is what makes the advertised rule real: a latch set
+            # by an on-device sensor refuses a remote RESUME in
+            # castor/fs/safety.py, which reads it through latch.clear_blocked_by.
+            ok = state.fs.clear_estop(principal="rcan_remote", source="rcan")
             result["accepted"] = ok
             result["detail"] = "RESUME accepted" if ok else state.fs.last_write_denial
             if not ok and state.fs.is_estopped:
-                result["hint"] = (
-                    "E-stop may have been triggered by a local sensor — "
-                    "verify physical safety before clearing locally via POST /api/estop/clear"
-                )
+                latched = getattr(state.fs, "estop_source", "") or "unknown"
+                result["latched_source"] = latched
+                if latched.lower() == "sensor":
+                    result["hint"] = (
+                        "E-stop was latched by an on-device sensor reading, so a remote "
+                        "RESUME cannot lift it. Verify physical safety, then clear it at "
+                        "the robot with `castor resume --clear-estop`"
+                    )
+                else:
+                    # The other reason a RESUME fails on a robot built by
+                    # `castor up`: OPENCASTOR_ESTOP_AUTH is set, and this path
+                    # carries no auth code. That is deliberate. A resume that
+                    # needs no second factor is a resume anything on the network
+                    # can send.
+                    result["hint"] = (
+                        f"E-stop was latched by source={latched}. A remote RESUME carries "
+                        "no e-stop auth code: clear it with POST /api/estop/clear and the "
+                        "X-Estop-Auth header, or with `castor resume --clear-estop` at the "
+                        "robot"
+                    )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Safety handler error: {exc}") from exc
 

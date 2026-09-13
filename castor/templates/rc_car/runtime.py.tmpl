@@ -3,9 +3,26 @@
 live in another process.
 
 This is the OpenCastor runtime (`castor.api:app`, opencastor 3.0.2) with exactly
-two routes replaced. Everything else — /health, the 401 on an unauthenticated
-/api/health/detail that makes the app's "Secured" badge light up, the auth
-layers, uptime and identity reporting — is the stock runtime, unmodified.
+two routes replaced and one always-on safety guard added. Everything else —
+/health, the 401 on an unauthenticated /api/health/detail that makes the app's
+"Secured" badge light up, the auth layers, uptime and identity reporting — is
+the stock runtime, unmodified.
+
+WHY A SAFETY GUARD IS STARTED HERE AND NOT IN castor/main.py. The unit `castor
+up` writes runs THIS FILE. Everything main.py starts — the sensor monitor's
+automatic e-stop after three consecutive critical readings, wire_safety_layer,
+the brain watchdog — was on a path the shipped robot never reached: the code
+existed, the server never constructed it. The only periodic work this file had
+lived inside the /ws/telemetry handler, so it ran only while a phone was
+connected. `_lifespan_with_safety_guard` below constructs the monitor and the
+watchdog at startup and runs `_hold_loop` for the life of the process, and
+`_hold()` is checked before every outbound scope that is not HALT or OBSERVE.
+
+WHAT THAT STOP IS AND IS NOT. It is a best-effort SOFTWARE hold: this runtime
+stops asking for motion and asks the actuator to stop, over a network hop that
+can fail, in which case every caller is told `stop_not_confirmed` rather than a
+comfortable 200. It is not a hardware cut, it de-energises nothing, and nothing
+in this file is safety rated.
 
 WHY TWO ROUTES ARE REPLACED, and not more:
 
@@ -85,16 +102,67 @@ from castor.api import (  # noqa: E402
     state,
     verify_token,
 )
+from castor.safety.latch import load as load_latch  # noqa: E402
+from castor.safety.monitor import SensorMonitor, wire_safety_layer  # noqa: E402
+from castor.watchdog import BrainWatchdog  # noqa: E402
 
 import asyncio  # noqa: E402
+import contextlib  # noqa: E402
 import logging  # noqa: E402
 
 logger = logging.getLogger("robot.runtime")
+
+#: How often the always-on guard re-asserts a latched stop at the actuator.
+#: Not a heartbeat and not a deadman: the actuator has its own. This exists
+#: because the stop travels a network hop, and the one thing worse than a stop
+#: that did not arrive is a stop that did not arrive quietly.
+HOLD_REASSERT_S = 5.0
+
+#: How many times a stop is retried before this process says it did not land.
+STOP_ATTEMPTS = 3
 
 
 # --------------------------------------------------------------------------
 # Talking to the gateway
 # --------------------------------------------------------------------------
+
+#: Scopes this runtime may send while a stop or a pause is latched. HALT is the
+#: stop itself; OBSERVE only reads. Everything else is refused before it leaves
+#: this process, which is what "the loop checks the e-stop before every
+#: actuation" means on an archetype whose wheels are in another process.
+HELD_SCOPES_ALLOWED = ("HALT", "OBSERVE")
+
+
+def _hold() -> str:
+    """"" when this robot may act, else one line saying why it may not.
+
+    THE FILE FIRST, then the in-memory flag. `castor pause`, `castor resume`
+    and the CLI's e-stop clear all run in a DIFFERENT PROCESS from this one, so
+    a runtime that trusted only its own flag would keep holding a stop the
+    operator cleared thirty seconds ago with no way to see why. resync_from_latch
+    reconciles the flag in both directions and audits the change. The flag is
+    still consulted afterwards, as the backstop for a stop this process latched
+    but could not write to disk.
+    """
+    try:
+        if state.fs is not None:
+            state.fs.safety.resync_from_latch()
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        latch = load_latch()
+        if latch.held:
+            return latch.describe()
+    except Exception:  # noqa: BLE001 - an unreadable latch must not wedge the robot
+        pass
+    try:
+        if state.fs is not None and state.fs.is_estopped:
+            return (f"e-stop latched (source="
+                    f"{getattr(state.fs, 'estop_source', '') or 'unknown'})")
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
 
 def _invoke(tool_name: str, scope: str, tool_args: dict | None = None,
             timeout: float = 3.0) -> tuple[int, dict]:
@@ -102,7 +170,15 @@ def _invoke(tool_name: str, scope: str, tool_args: dict | None = None,
 
     Never raises: the caller is either a stop path or a telemetry frame, and
     neither may die because the gateway was slow.
+
+    REFUSES BEFORE IT SENDS when a stop or a pause is latched, unless the scope
+    is HALT or OBSERVE. The gateway does not know about this robot's latch, so
+    if this check is not here the latch is a note in a file that stops nothing.
     """
+    held = _hold()
+    if held and scope.upper() not in HELD_SCOPES_ALLOWED:
+        logger.warning("refusing %s (scope=%s): %s", tool_name, scope, held)
+        return 423, {"error": "held", "detail": held, "tool_name": tool_name}
     envelope = {
         "msg_id": f"runtime-{uuid.uuid4().hex[:12]}",
         "type": "rcan/v1/invoke",
@@ -172,6 +248,231 @@ _drive_state = _DriveStateCache()
 
 
 # --------------------------------------------------------------------------
+# The stop itself, and the always-on guard that keeps asserting it
+# --------------------------------------------------------------------------
+
+def _stop_at_actuator(reason: str = "") -> tuple[bool, dict]:
+    """Ask the thing that owns the wheels to stop. Retries. Never raises.
+
+    This is the ONLY call in this process that can make the car stop moving:
+    the wheels belong to the rc-car actuator inside the gateway and this
+    runtime holds the READ bearer on purpose. A latch in this process that
+    never reaches here is a flag, not a stop.
+
+    THE NETWORK IS IN THE PATH, and that is a real dependency rather than a
+    footnote. A stop that cannot reach the gateway does not become a stop by
+    being logged. Retries STOP_ATTEMPTS times, then returns ok=False so every
+    caller can report `stop_not_confirmed` instead of a comfortable success.
+
+    Best effort, in software. It asks; it does not cut power.
+    """
+    last: dict = {}
+    for attempt in range(1, STOP_ATTEMPTS + 1):
+        status, body = _invoke("drive.stop", "HALT", {})
+        if status == 200:
+            if attempt > 1:
+                logger.warning("drive.stop confirmed on attempt %d", attempt)
+            return True, body
+        last = {"gateway_status": status,
+                "reason": body.get("detail") or body.get("error") or "no confirmation"}
+        logger.error("drive.stop attempt %d/%d did not confirm: %s",
+                     attempt, STOP_ATTEMPTS, last["reason"])
+        if attempt < STOP_ATTEMPTS:
+            time.sleep(0.4 * attempt)
+    return False, last
+
+
+def _latch_locally(reason: str, source: str) -> None:
+    """Latch this runtime's own safety layer so it refuses its own writes.
+
+    Separate from the actuator stop above and not a substitute for it. This is
+    what makes the runtime stop ASKING; that is what makes the car stop MOVING.
+    """
+    if state.fs is None:
+        return
+    try:
+        state.fs.estop(principal="monitor", source=source, reason=reason)
+    except Exception:  # noqa: BLE001
+        logger.warning("local safety latch failed", exc_info=True)
+
+
+def _build_safety_guard() -> tuple[SensorMonitor, BrainWatchdog]:
+    """Construct the monitor and the watchdog this runtime never had.
+
+    THE FINDING THIS ANSWERS. `castor up` renders a unit whose ExecStart is
+    THIS FILE, and this file serves `castor.api:app`. Everything in
+    castor/main.py — the sensor monitor's auto e-stop after three consecutive
+    critical readings, wire_safety_layer, the brain watchdog — lived on a code
+    path the shipped robot never started. The safety monitor existed and was
+    never constructed. So it is constructed here, in the generated runtime,
+    which is the file the robot actually runs.
+
+    WHAT IS DELIBERATELY NOT HERE: the perception loop. This is a monitor and a
+    watchdog, not a second brain. Porting main.py's loop into the API process
+    would double every actuation path this archetype has.
+    """
+    monitor = SensorMonitor()
+
+    # wire_safety_layer installs the local latch as the monitor's e-stop
+    # callback. We keep it and wrap it, because a latch that does not travel to
+    # the actuator stops nothing on this archetype.
+    if state.fs is not None:
+        wire_safety_layer(monitor, state.fs.safety)
+    inner_estop = monitor._estop_callback
+
+    def _on_critical_estop() -> None:
+        if inner_estop is not None:
+            try:
+                inner_estop()
+            except Exception:  # noqa: BLE001
+                logger.warning("local estop callback failed", exc_info=True)
+        else:
+            _latch_locally("SensorMonitor auto-estop", "sensor")
+        ok, detail = _stop_at_actuator("sensor auto-estop")
+        if not ok:
+            logger.critical("stop_not_confirmed after sensor auto-estop: %s", detail)
+
+    monitor.set_estop_callback(_on_critical_estop)
+
+    def _watchdog_stop() -> None:
+        _latch_locally("BrainWatchdog: brain unresponsive", "sensor")
+        ok, detail = _stop_at_actuator("watchdog")
+        if not ok:
+            logger.critical("stop_not_confirmed after watchdog stop: %s", detail)
+
+    watchdog = BrainWatchdog(state.config or {}, stop_fn=_watchdog_stop)
+    # CONSTRUCTED ALWAYS, ARMED ONLY ON AN EXPLICIT OPT-IN, and this is the one
+    # place where shipping the watchdog naively would have been worse than not
+    # shipping it. BrainWatchdog stops the robot when no brain response has
+    # arrived for `timeout_s` (default 10). NOTHING IN THIS PROCESS FEEDS IT:
+    # the heartbeat is called from castor/main.py's perception loop, which this
+    # runtime deliberately does not run. Armed by default it would stop every
+    # freshly generated robot ten seconds after boot, latch a sensor e-stop, and
+    # look exactly like broken hardware — a ten-minute failure manufactured by
+    # the safety feature. So it arms only when the config says
+    # `watchdog: {enabled: true}` at the TOP LEVEL, which `castor up` does not
+    # write, and which only makes sense for an operator running a brain loop
+    # that calls `heartbeat()`. Below, the guard feeds it from observed brain
+    # activity so an opted-in robot is measuring something real.
+    if (state.config or {}).get("watchdog", {}).get("enabled") is not True:
+        watchdog.enabled = False
+        logger.info(
+            "brain watchdog constructed but NOT armed: this runtime runs no brain "
+            "loop, so nothing would feed it heartbeats. Set watchdog.enabled: true "
+            "in robot.rcan.yaml only if something in this process does."
+        )
+    return monitor, watchdog
+
+
+def _feed_watchdog(watchdog) -> None:
+    """Heartbeat the watchdog from brain activity this process can actually see.
+
+    `state.thought_history` grows by one every time this runtime gets a thought
+    back from the brain. That is the only brain liveness signal an API runtime
+    has, and it is honest: no new thought means no new brain response. An idle
+    robot nobody is talking to produces none either, which is why the watchdog
+    is not armed unless an operator opted in.
+    """
+    if watchdog is None or not getattr(watchdog, "enabled", False):
+        return
+    history = getattr(state, "thought_history", None)
+    count = len(history) if history is not None else 0
+    if count != _feed_watchdog.last:  # type: ignore[attr-defined]
+        _feed_watchdog.last = count  # type: ignore[attr-defined]
+        watchdog.heartbeat()
+
+
+_feed_watchdog.last = -1  # type: ignore[attr-defined]
+
+
+async def _hold_loop(watchdog=None) -> None:
+    """Always on, client or no client.
+
+    The only periodic work this runtime had was inside the /ws/telemetry
+    handler, so it ran only while a phone was connected — which is to say it
+    was absent in exactly the situation a hold matters. This task runs for the
+    life of the process and re-asserts a latched stop at the actuator, so a
+    car that was latched, then power-cycled, then restarted by systemd comes
+    back and is TOLD to stop rather than merely remembering that it should be.
+    """
+    announced = False
+    cycles = 0
+    while True:
+        try:
+            _feed_watchdog(watchdog)
+            held = await asyncio.to_thread(_hold)
+            if held:
+                if not announced:
+                    logger.warning("holding: %s", held)
+                    announced = True
+                    cycles = 0
+                # RE-ASSERTED, NOT SPAMMED. Every stop is a signed invoke with a
+                # receipt, so a robot left latched overnight at one every five
+                # seconds would write thousands of identical receipts and bury
+                # the one that matters. Hard for the first three cycles, when a
+                # stop that did not land is worth retrying, then once a minute.
+                if cycles < 3 or cycles % 12 == 0:
+                    ok, detail = await asyncio.to_thread(_stop_at_actuator, held)
+                    if not ok:
+                        logger.critical("stop_not_confirmed while holding: %s", detail)
+                cycles += 1
+            elif announced:
+                logger.info("hold lifted; this runtime will send motion again")
+                announced = False
+                cycles = 0
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - the guard outlives its own bugs
+            logger.warning("hold loop error", exc_info=True)
+        await asyncio.sleep(HOLD_REASSERT_S)
+
+
+# WRAPPING THE LIFESPAN, NOT @app.on_event("startup"). `castor.api` builds its
+# FastAPI with `lifespan=lifespan`, and when a lifespan context is given
+# Starlette runs THAT and ignores `router.on_startup` entirely — an
+# `@app.on_event("startup")` handler here would be registered, would never run,
+# and would leave this file looking like it started a monitor. The wiring also
+# has to happen AFTER the inner lifespan, because that is what constructs
+# `state.fs`.
+_inner_lifespan = app.router.lifespan_context
+
+
+@contextlib.asynccontextmanager
+async def _lifespan_with_safety_guard(scope_app):
+    async with _inner_lifespan(scope_app):
+        monitor = watchdog = None
+        guard_task = None
+        try:
+            monitor, watchdog = _build_safety_guard()
+            monitor.start()
+            watchdog.start()
+            logger.info("safety guard online: sensor monitor + brain watchdog")
+        except Exception:  # noqa: BLE001 - never refuse to serve /health
+            logger.warning("safety guard could not start", exc_info=True)
+        held = _hold()
+        if held:
+            logger.warning("starting HELD: %s", held)
+            ok, detail = _stop_at_actuator(held)
+            if not ok:
+                logger.critical("stop_not_confirmed at startup: %s", detail)
+        guard_task = asyncio.create_task(_hold_loop(watchdog))
+        try:
+            yield
+        finally:
+            if guard_task is not None:
+                guard_task.cancel()
+                with contextlib.suppress(Exception):
+                    await guard_task
+            for component in (monitor, watchdog):
+                if component is not None:
+                    with contextlib.suppress(Exception):
+                        component.stop()
+
+
+app.router.lifespan_context = _lifespan_with_safety_guard
+
+
+# --------------------------------------------------------------------------
 # Route surgery
 # --------------------------------------------------------------------------
 
@@ -196,9 +497,11 @@ async def robot_stop():
     cheerful 200 — the operator pressed STOP and deserves to know it did not
     land.
     """
-    status, body = await asyncio.to_thread(_invoke, "drive.stop", "HALT", {})
+    ok, body = await asyncio.to_thread(_stop_at_actuator, "POST /api/stop")
     # The runtime's own mock driver and safety filesystem still get their stop,
-    # so the stock e-stop state stays coherent with what the app sees.
+    # so the stock e-stop state stays coherent with what the app sees. The
+    # latch is written to disk by the safety layer, so a restart comes back
+    # stopped instead of free.
     if state.driver:
         try:
             state.driver.stop()
@@ -206,18 +509,20 @@ async def robot_stop():
             logger.warning("mock driver stop() raised", exc_info=True)
     if state.fs:
         try:
-            state.fs.estop(principal="api")
+            state.fs.estop(principal="api", source="api", reason="POST /api/stop")
         except Exception:
             logger.warning("safety-fs estop raised", exc_info=True)
 
-    if status == 200:
+    if ok:
         return {"status": "stopped", "actuator": body.get("telemetry", {}),
-                "receipt": body}
+                "receipt": body, "hold_kind": "best_effort_software_hold"}
     return {
         "status": "stop_not_confirmed",
         "stopped": False,
-        "gateway_status": status,
-        "reason": body.get("detail") or body.get("error") or "gateway did not confirm",
+        "gateway_status": body.get("gateway_status", 0),
+        "reason": body.get("reason") or "gateway did not confirm",
+        "latched": True,
+        "hold_kind": "best_effort_software_hold",
     }
 
 
@@ -251,6 +556,10 @@ async def robot_ws_telemetry(websocket: WebSocket, token: str = ""):
             drive = await _drive_state.get()
             frame["drive"] = drive
             frame["envelope"] = drive.get("envelope")
+            # "" when free. A phone showing an envelope with seconds left on it
+            # while the robot is latched would be showing an approval that
+            # cannot be spent.
+            frame["held"] = await asyncio.to_thread(_hold)
             try:
                 await websocket.send_json(frame)
             except Exception:
@@ -263,7 +572,7 @@ async def robot_ws_telemetry(websocket: WebSocket, token: str = ""):
             while True:
                 data = await websocket.receive_json()
                 if isinstance(data, dict) and data.get("cmd") == "stop":
-                    await asyncio.to_thread(_invoke, "drive.stop", "HALT", {})
+                    await asyncio.to_thread(_stop_at_actuator, "ws stop")
         except Exception:
             return
 

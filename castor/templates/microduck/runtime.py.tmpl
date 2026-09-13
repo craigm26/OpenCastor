@@ -41,9 +41,25 @@ Pi in a crash-loop, and `castor doctor` and the console both need a runtime
 alive to explain the problem through. Set OPENCASTOR_DUCK_REQUIRE_HARDWARE=1
 to make it fatal instead — the right setting for a demo, a benchmark run, or
 anything whose result would be a lie if the duck were not there.
+
+AND ONE THING THIS FILE NOW STARTS, for the same reason the file exists at all.
+The unit `castor up` writes runs THIS FILE, not castor/main.py, so everything
+main.py starts — the sensor monitor's automatic e-stop after three consecutive
+critical readings, wire_safety_layer, the brain watchdog — was on a path the
+shipped duck never reached. The code existed and the server never constructed
+it. `_lifespan_with_safety_guard` below constructs it, and `_hold_loop` runs for
+the life of the process, re-asserting a latched stop at the servos whether or
+not a phone is connected. The latch is persisted under ROBOT_HOME, so a duck
+that stopped and was restarted comes back stopped rather than free.
+
+It is a best-effort SOFTWARE hold: `driver.stop()` reaches the servos through
+the bridge, and when the bridge cannot be reached the guard says
+`stop_not_confirmed` rather than logging a success. It is not a hardware cut
+and nothing here is safety rated.
 """
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 import os
@@ -75,6 +91,199 @@ if not CONFIG.is_file():
     )
 
 from castor.api import app, state  # noqa: E402
+from castor.safety.latch import load as load_latch  # noqa: E402
+from castor.safety.monitor import SensorMonitor, wire_safety_layer  # noqa: E402
+from castor.watchdog import BrainWatchdog  # noqa: E402
+
+#: How often the always-on guard re-asserts a latched stop at the servos.
+HOLD_REASSERT_S = 5.0
+
+#: How many times a stop is retried before this process says it did not land.
+STOP_ATTEMPTS = 3
+
+
+def _hold() -> str:
+    """"" when this duck may act, else one line saying why it may not.
+
+    THE FILE FIRST, then the in-memory flag. `castor pause` and `castor resume`
+    run in a DIFFERENT PROCESS, so a runtime that trusted only its own flag
+    would keep holding a stop the operator cleared. resync_from_latch reconciles
+    the flag in both directions and audits the change; the flag is still
+    consulted afterwards as the backstop for a stop that could not be written.
+    """
+    try:
+        if state.fs is not None:
+            state.fs.safety.resync_from_latch()
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        latch = load_latch()
+        if latch.held:
+            return latch.describe()
+    except Exception:  # noqa: BLE001 - an unreadable latch must not wedge the duck
+        pass
+    try:
+        if state.fs is not None and state.fs.is_estopped:
+            return (f"e-stop latched (source="
+                    f"{getattr(state.fs, 'estop_source', '') or 'unknown'})")
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
+def _stop_at_actuator(reason: str = "") -> tuple[bool, dict]:
+    """Stop the servos, for real, and say so honestly when it did not happen.
+
+    Unlike the rc-car archetype, `state.driver` here IS a real MicroduckDriver
+    and `driver.stop()` reaches the servos through the bridge. What it shares
+    with the car is the failure mode: the bridge is a hop, the hop can be down,
+    and trap 7 of the Microduck review is a driver that degrades to a mock and
+    keeps answering success. So a stop is retried, and a driver that is absent
+    or in mock mode is reported as `stop_not_confirmed` rather than counted.
+    """
+    driver = getattr(state, "driver", None)
+    if driver is None:
+        return False, {"reason": "no driver was constructed; nothing to stop"}
+    mode = getattr(driver, "_mode", None)
+    last: dict = {}
+    for attempt in range(1, STOP_ATTEMPTS + 1):
+        try:
+            driver.stop()
+            if mode is not None and mode != "hardware":
+                return False, {
+                    "reason": f"driver is in {mode!r} mode, not 'hardware': "
+                              "stop() returned success and nothing moved"
+                }
+            if attempt > 1:
+                logger.warning("driver.stop() succeeded on attempt %d", attempt)
+            return True, {"reason": reason}
+        except Exception as exc:  # noqa: BLE001
+            last = {"reason": f"{type(exc).__name__}: {exc}"}
+            logger.error("driver.stop() attempt %d/%d failed: %s",
+                         attempt, STOP_ATTEMPTS, last["reason"])
+    return False, last
+
+
+def _latch_locally(reason: str, source: str) -> None:
+    """Latch this runtime's own safety layer so it refuses its own motor writes."""
+    if state.fs is None:
+        return
+    try:
+        state.fs.estop(principal="monitor", source=source, reason=reason)
+    except Exception:  # noqa: BLE001
+        logger.warning("local safety latch failed", exc_info=True)
+
+
+def _build_safety_guard() -> tuple[SensorMonitor, BrainWatchdog]:
+    """Construct the sensor monitor and the brain watchdog, here, in the file
+    the duck actually runs.
+
+    WHAT IS DELIBERATELY NOT HERE: the perception loop. A monitor and a
+    watchdog, not a second brain.
+    """
+    monitor = SensorMonitor()
+    if state.fs is not None:
+        wire_safety_layer(monitor, state.fs.safety)
+    inner_estop = monitor._estop_callback
+
+    def _on_critical_estop() -> None:
+        if inner_estop is not None:
+            try:
+                inner_estop()
+            except Exception:  # noqa: BLE001
+                logger.warning("local estop callback failed", exc_info=True)
+        else:
+            _latch_locally("SensorMonitor auto-estop", "sensor")
+        ok, detail = _stop_at_actuator("sensor auto-estop")
+        if not ok:
+            logger.critical("stop_not_confirmed after sensor auto-estop: %s", detail)
+
+    monitor.set_estop_callback(_on_critical_estop)
+
+    def _watchdog_stop() -> None:
+        _latch_locally("BrainWatchdog: brain unresponsive", "sensor")
+        ok, detail = _stop_at_actuator("watchdog")
+        if not ok:
+            logger.critical("stop_not_confirmed after watchdog stop: %s", detail)
+
+    watchdog = BrainWatchdog(state.config or {}, stop_fn=_watchdog_stop)
+    # CONSTRUCTED ALWAYS, ARMED ONLY ON AN EXPLICIT OPT-IN, and this is the one
+    # place where shipping the watchdog naively would have been worse than not
+    # shipping it. BrainWatchdog stops the robot when no brain response has
+    # arrived for `timeout_s` (default 10). NOTHING IN THIS PROCESS FEEDS IT:
+    # the heartbeat is called from castor/main.py's perception loop, which this
+    # runtime deliberately does not run. Armed by default it would stop every
+    # freshly generated robot ten seconds after boot, latch a sensor e-stop, and
+    # look exactly like broken hardware — a ten-minute failure manufactured by
+    # the safety feature. So it arms only when the config says
+    # `watchdog: {enabled: true}` at the TOP LEVEL, which `castor up` does not
+    # write, and which only makes sense for an operator running a brain loop
+    # that calls `heartbeat()`. Below, the guard feeds it from observed brain
+    # activity so an opted-in robot is measuring something real.
+    if (state.config or {}).get("watchdog", {}).get("enabled") is not True:
+        watchdog.enabled = False
+        logger.info(
+            "brain watchdog constructed but NOT armed: this runtime runs no brain "
+            "loop, so nothing would feed it heartbeats. Set watchdog.enabled: true "
+            "in robot.rcan.yaml only if something in this process does."
+        )
+    return monitor, watchdog
+
+
+def _feed_watchdog(watchdog) -> None:
+    """Heartbeat the watchdog from brain activity this process can actually see.
+
+    `state.thought_history` grows by one every time this runtime gets a thought
+    back from the brain. That is the only brain liveness signal an API runtime
+    has, and it is honest: no new thought means no new brain response. An idle
+    robot nobody is talking to produces none either, which is why the watchdog
+    is not armed unless an operator opted in.
+    """
+    if watchdog is None or not getattr(watchdog, "enabled", False):
+        return
+    history = getattr(state, "thought_history", None)
+    count = len(history) if history is not None else 0
+    if count != _feed_watchdog.last:  # type: ignore[attr-defined]
+        _feed_watchdog.last = count  # type: ignore[attr-defined]
+        watchdog.heartbeat()
+
+
+_feed_watchdog.last = -1  # type: ignore[attr-defined]
+
+
+async def _hold_loop(watchdog=None) -> None:
+    """Always on, phone or no phone: re-assert a latched stop at the servos."""
+    announced = False
+    cycles = 0
+    while True:
+        try:
+            _feed_watchdog(watchdog)
+            held = await asyncio.to_thread(_hold)
+            if held:
+                if not announced:
+                    logger.warning("holding: %s", held)
+                    announced = True
+                    cycles = 0
+                # RE-ASSERTED, NOT SPAMMED. Every stop crosses the bridge to
+                # robotd, so a duck left latched overnight at one every five
+                # seconds would put thousands of identical stops through a link
+                # whose whole job is carrying the next real command. Hard for
+                # the first three cycles, when a stop that did not land is worth
+                # retrying, then once a minute.
+                if cycles < 3 or cycles % 12 == 0:
+                    ok, detail = await asyncio.to_thread(_stop_at_actuator, held)
+                    if not ok:
+                        logger.critical("stop_not_confirmed while holding: %s", detail)
+                cycles += 1
+            elif announced:
+                logger.info("hold lifted; this runtime will move again")
+                announced = False
+                cycles = 0
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - the guard outlives its own bugs
+            logger.warning("hold loop error", exc_info=True)
+        await asyncio.sleep(HOLD_REASSERT_S)
 
 
 def _report_link() -> None:
@@ -115,7 +324,7 @@ _inner_lifespan = app.router.lifespan_context
 
 
 @contextlib.asynccontextmanager
-async def _lifespan_with_link_report(scope_app):
+async def _lifespan_with_safety_guard(scope_app):
     async with _inner_lifespan(scope_app):
         try:
             _report_link()
@@ -123,10 +332,37 @@ async def _lifespan_with_link_report(scope_app):
             raise
         except Exception:  # noqa: BLE001 - a reporting bug must not stop the robot
             logger.warning("duck link: could not be reported", exc_info=True)
-        yield
+
+        monitor = watchdog = None
+        guard_task = None
+        try:
+            monitor, watchdog = _build_safety_guard()
+            monitor.start()
+            watchdog.start()
+            logger.info("safety guard online: sensor monitor + brain watchdog")
+        except Exception:  # noqa: BLE001 - never refuse to serve /health
+            logger.warning("safety guard could not start", exc_info=True)
+        held = _hold()
+        if held:
+            logger.warning("starting HELD: %s", held)
+            ok, detail = _stop_at_actuator(held)
+            if not ok:
+                logger.critical("stop_not_confirmed at startup: %s", detail)
+        guard_task = asyncio.create_task(_hold_loop(watchdog))
+        try:
+            yield
+        finally:
+            if guard_task is not None:
+                guard_task.cancel()
+                with contextlib.suppress(Exception):
+                    await guard_task
+            for component in (monitor, watchdog):
+                if component is not None:
+                    with contextlib.suppress(Exception):
+                        component.stop()
 
 
-app.router.lifespan_context = _lifespan_with_link_report
+app.router.lifespan_context = _lifespan_with_safety_guard
 
 
 def main() -> None:

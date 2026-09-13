@@ -178,6 +178,84 @@ Also: `SafetyTelemetry.enable_persistence()` had no caller either and is now
 called where the safety layer is built, labelled honestly as a rotating ring,
 since `_rotate_if_needed` trims the oldest snapshots away.
 
+**The shipped robot now starts the safety monitor it shipped with, and its stop
+survives a restart.** `castor up` renders a systemd unit whose ExecStart is
+`{python} {home}/runtime.py`, and that file serves `castor.api:app`. So
+everything in `castor/main.py` (the sensor monitor's automatic e-stop after
+three consecutive critical readings, `wire_safety_layer`, the brain watchdog)
+sat on a code path the shipped robot never started: the code existed and the
+server never constructed it. The only periodic work in the generated rc-car
+runtime lived inside the `/ws/telemetry` handler, so it ran only while a phone
+was connected.
+
+Both generated runtime templates now construct `SensorMonitor` and
+`BrainWatchdog` at FastAPI startup by wrapping the lifespan (an
+`@app.on_event("startup")` handler would be registered and never run, because
+`castor.api` passes its own `lifespan=`), wire the monitor to the local safety
+layer, and run an always-on `_hold_loop` for the life of the process. The
+perception loop is deliberately not ported over. A critical sensor reading
+latches the stop locally and asks the actuator to stop: through the signed
+`drive.stop` invoke on the rc-car archetype, whose wheels live in the gateway
+process, and through the real `driver.stop()` on the duck. That stop travels a
+hop that can fail, so it is retried and an unconfirmed stop is reported as
+`stop_not_confirmed` instead of a comfortable 200. The rc-car runtime also
+refuses, before sending, any outbound scope that is not HALT or OBSERVE while a
+hold is in force.
+
+The brain watchdog is constructed in both templates and armed only on an
+explicit opt-in (`watchdog: {enabled: true}` at the top level of
+`robot.rcan.yaml`, which `castor up` does not write). Its heartbeat is called
+from `castor/main.py`'s perception loop, which the generated runtime does not
+run, so arming it by default would stop every freshly generated robot ten
+seconds after boot and latch a sensor e-stop: a ten-minute failure manufactured
+by the safety feature. When it is armed, the guard feeds it from the one brain
+liveness signal an API runtime actually has, the growth of
+`state.thought_history`.
+
+The e-stop is no longer only a bool in one process. `castor/safety/latch.py`
+persists it to `$ROBOT_HOME/safety-latch.json` (0600, written atomically), and
+`SafetyLayer` restores it at construction, so a robot that stopped and was then
+restarted by systemd comes back stopped rather than free. `ROBOT_HOME` is
+already exported by every generated unit, so there is no new plumbing and no new
+prompt on the ten-minute path. With `ROBOT_HOME` unset there is no file and the
+library behaves exactly as before.
+
+A latch carries its source. A stop set by an on-device sensor reading is refused
+a clear from anywhere that cannot see the robot: `POST /api/safety/rcan` RESUME
+and `POST /api/estop/clear` both answer with a denial and a `deny_clear_estop`
+audit row naming the source. The docstring of `POST /api/safety/rcan` had
+advertised that rule since it was written; nothing enforced it. Lifting such a
+stop now means `castor resume --clear-estop` at the robot.
+
+`castor up` writes `OPENCASTOR_ESTOP_AUTH` into the generated `tokens.env`, so
+the second factor `castor/fs/safety.py` has always read is finally set.
+`POST /api/estop/clear` needs it as the `X-Estop-Auth` header or an `auth_code`
+body field on top of the admin role, and answers 403 without it. The code is
+reused across reruns of `castor up`, never rotated, and printed each time.
+
+One consequence worth stating plainly: on a robot generated after this change,
+a RESUME arriving at `POST /api/safety/rcan` no longer clears anything, because
+that path carries no auth code. A resume that needs no second factor is a resume
+anything on the network can send. The response says so and names the two paths
+that do work.
+
+Two new subcommands, `castor pause --reason "..."` and `castor resume`. Pause is
+not an e-stop: it is a person standing the robot down, and the reason string is
+required because a sticky pause nobody can account for is a ten-minute failure
+that looks like broken hardware. Resume prints who paused, when, and why before
+it lifts anything. Both write the same latch file, and the running runtime
+adopts an out-of-process change through `SafetyLayer.resync_from_latch()`.
+
+Breaking, in-process only: `CastorFS.estop()` and `CastorFS.clear_estop()` no
+longer default to `principal="root"` and raise `ValueError` when none is given.
+A no-argument `fs.clear_estop()` was a capability-free clear, because root
+bypasses the capability gate.
+
+What this is: a best-effort software hold. The robot's own software stops
+issuing motion and asks its actuator to stop. It is not a hardware cut, it
+de-energises nothing, nothing here is safety rated, and `GET /api/fs/estop`
+says so in its own payload as `hold_kind: best_effort_software_hold`.
+
 ## [3.4.0] - 2026-09-10
 
 Published on PyPI as `1!3.4.0`.

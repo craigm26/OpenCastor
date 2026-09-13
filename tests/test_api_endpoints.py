@@ -499,7 +499,11 @@ class TestStopEndpoint:
         api_mod.state.fs = _make_mock_fs()
         resp = client.post("/api/stop")
         assert resp.status_code == 200
-        api_mod.state.fs.estop.assert_called_once_with(principal="api")
+        # source= and reason= are what the persisted latch records, and the
+        # source is what decides whether a clear is allowed later.
+        api_mod.state.fs.estop.assert_called_once_with(
+            principal="api", source="api", reason="POST /api/stop"
+        )
 
     def test_stop_with_auth(self, client, api_mod):
         api_mod.API_TOKEN = "tok"

@@ -418,7 +418,11 @@ def wire_safety_layer(monitor: SensorMonitor, safety_layer) -> None:
             reason = "SensorMonitor auto-estop: consecutive critical sensor readings"
         logger.critical("Wiring estop to SafetyLayer: %s", reason)
         try:
-            safety_layer.estop(principal="monitor", reason=reason)
+            # source="sensor" is load-bearing, not decoration: it is what makes
+            # this latch unclearable by a remote RESUME. Somebody who cannot see
+            # the robot must not be able to lift a stop a thermal or force
+            # reading set. See castor/safety/latch.py:clear_blocked_by.
+            safety_layer.estop(principal="monitor", source="sensor", reason=reason)
         except Exception:
             logger.exception("wire_safety_layer: estop call failed")
 

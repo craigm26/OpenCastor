@@ -5669,6 +5669,140 @@ def _cmd_monitor(args) -> None:
     pass
 
 
+# ── castor pause / castor resume ─────────────────────────────────────────────
+#
+# A STOP A PERSON CAN EXPLAIN. The persisted latch under ROBOT_HOME is what
+# makes an e-stop survive a restart; these two commands are the human end of
+# it. `castor pause` is deliberately NOT an e-stop: nothing is on fire, someone
+# just wants the robot to stand still for a while. The reason string is
+# required for exactly one reason — a sticky pause nobody can account for is a
+# ten-minute failure that looks like broken hardware, and the next person to
+# walk up needs to learn what the last one meant without reading a log.
+
+
+def _estop_auth_code(home) -> str:
+    """The robot's e-stop clear code, from the environment or tokens.env.
+
+    `castor up` writes OPENCASTOR_ESTOP_AUTH into tokens.env, which the
+    generated unit loads, so the runtime has it. The CLI usually does not: this
+    reads the file the same way systemd does, so an operator standing at the
+    robot does not have to export anything.
+    """
+    code = os.environ.get("OPENCASTOR_ESTOP_AUTH", "").strip()
+    if code:
+        return code
+    try:
+        from pathlib import Path as _Path
+
+        tokens = _Path(home) / "tokens.env"
+        for line in tokens.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped.startswith("OPENCASTOR_ESTOP_AUTH="):
+                return stripped.split("=", 1)[1].strip()
+    except Exception:
+        pass
+    return ""
+
+
+def cmd_pause(args) -> None:
+    """castor pause --reason "..." — stand this robot down until someone resumes it.
+
+    Writes the pause to the latch file under ROBOT_HOME. The running runtime's
+    always-on guard picks it up within a few seconds, refuses to send anything
+    but HALT and OBSERVE, and asks the actuator to stop. Best effort, in
+    software: it is not a hardware cut and it de-energises nothing.
+    """
+    from castor.safety import latch as _latch
+
+    home = _latch.robot_home(getattr(args, "home", None))
+    if home is None:
+        print(
+            "\n  No robot home. Set ROBOT_HOME, or pass --home, or run `castor up`"
+            " first.\n"
+        )
+        raise SystemExit(2)
+    reason = (getattr(args, "reason", "") or "").strip()
+    if not reason:
+        print("\n  --reason is required. A pause nobody can explain reads as broken"
+              " hardware.\n")
+        raise SystemExit(2)
+    principal = (getattr(args, "principal", "") or "").strip() or _current_operator()
+    state = _latch.record_pause(principal=principal, reason=reason, home=home)
+    print(f"\n  Paused by {principal}: {reason}")
+    print(f"  Latched in {_latch.latch_path(home)}")
+    if state.estop_engaged:
+        print(f"  Note: an e-stop is ALSO latched ({state.estop_source or 'unknown'}).")
+    print("  This is a best-effort software hold, not a hardware cut.")
+    print("  Lift it with `castor resume`.\n")
+
+
+def cmd_resume(args) -> None:
+    """castor resume — lift a pause, and say who set it, when, and why.
+
+    ``--clear-estop`` also lifts an e-stop latch. That is the ONLY path that can
+    lift a stop an on-device sensor set: a remote RESUME is refused, because
+    whoever sends it cannot see the robot. It needs the e-stop clear code that
+    `castor up` printed and wrote into tokens.env.
+    """
+    from castor.safety import latch as _latch
+
+    home = _latch.robot_home(getattr(args, "home", None))
+    if home is None:
+        print("\n  No robot home. Set ROBOT_HOME, or pass --home.\n")
+        raise SystemExit(2)
+    before = _latch.load(home)
+    if not before.held:
+        print("\n  Nothing to resume: this robot is not paused and not e-stopped.\n")
+        return
+
+    if before.paused:
+        # WHO, WHEN, WHY — printed before anything is lifted, because this is
+        # the whole point of making the reason mandatory at pause time.
+        print(f"\n  Paused by {before.pause_principal or 'unknown'}")
+        print(f"  At       {_latch._stamp(before.paused_at)}")
+        print(f"  Because  {before.pause_reason or '(no reason recorded)'}")
+        _latch.record_resume(home)
+        print("  Pause lifted.")
+
+    if before.estop_engaged:
+        if not getattr(args, "clear_estop", False):
+            print(
+                f"\n  An e-stop is still latched (source="
+                f"{before.estop_source or 'unknown'})"
+            )
+            print(f"  Set by   {before.estop_principal or 'unknown'}")
+            print(f"  At       {_latch._stamp(before.estop_at)}")
+            print(f"  Because  {before.estop_reason or '(no reason recorded)'}")
+            print("  Check the robot, then re-run with --clear-estop.\n")
+            return
+        required = _estop_auth_code(home)
+        supplied = (getattr(args, "auth_code", "") or "").strip()
+        if required and supplied != required:
+            print(
+                "\n  Refused: wrong or missing --auth-code. The code is"
+                " OPENCASTOR_ESTOP_AUTH\n  in this robot's tokens.env, and"
+                " `castor up` prints it.\n"
+            )
+            raise SystemExit(3)
+        _latch.record_clear(home)
+        print(
+            f"\n  E-stop cleared at the robot by {_current_operator()} "
+            f"(was source={before.estop_source or 'unknown'})."
+        )
+        print("  The running runtime picks this up within a few seconds.")
+    print("  This robot may move again.\n")
+
+
+def _current_operator() -> str:
+    """A name for the audit row. The OS login, not a guess at a person."""
+    try:
+        import getpass
+
+        return getpass.getuser() or "unknown"
+    except Exception:
+        return "unknown"
+
+
 # ── Auto-generated placeholders ──────────────────────────────────────────────
 
 
@@ -9931,6 +10065,44 @@ def main() -> None:
         "--interval", type=float, default=5.0, help="Seconds between readings (default: 5)"
     )
 
+    # castor pause / castor resume — the human end of the persisted safety latch.
+    p_pause = sub.add_parser(
+        "pause",
+        help=(
+            "Stand this robot down until someone resumes it (best-effort "
+            "software hold, not a hardware cut)"
+        ),
+        epilog=(
+            "The reason is required: a pause nobody can explain reads as broken\n"
+            "hardware to the next person who walks up. The pause is written to\n"
+            "the latch file under ROBOT_HOME, so it survives a restart.\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_pause.add_argument("--reason", required=True, help="Why this robot is standing down")
+    p_pause.add_argument("--principal", default="", help="Who is pausing (default: the OS login)")
+    p_pause.add_argument("--home", default="", help="Robot home (default: $ROBOT_HOME)")
+
+    p_resume = sub.add_parser(
+        "resume",
+        help="Lift a pause, printing who paused, when and why",
+        epilog=(
+            "--clear-estop also lifts an e-stop latch, and is the only path that\n"
+            "can lift one an on-device sensor set: a remote RESUME is refused\n"
+            "because whoever sends it cannot see the robot. It needs the e-stop\n"
+            "clear code `castor up` printed (OPENCASTOR_ESTOP_AUTH in tokens.env).\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_resume.add_argument(
+        "--clear-estop",
+        action="store_true",
+        dest="clear_estop",
+        help="Also clear a latched e-stop (needs --auth-code)",
+    )
+    p_resume.add_argument("--auth-code", default="", dest="auth_code", help="E-stop clear code")
+    p_resume.add_argument("--home", default="", help="Robot home (default: $ROBOT_HOME)")
+
     # castor login
     p_login = sub.add_parser(
         "login",
@@ -10717,6 +10889,9 @@ def main() -> None:
         "plugin": cmd_plugin,
         "audit": cmd_audit,
         "monitor": _cmd_monitor,
+        # The human end of the persisted safety latch (castor/safety/latch.py).
+        "pause": cmd_pause,
+        "resume": cmd_resume,
         "safety": cmd_safety,
         "conformance": cmd_conformance,
         "iso-check": cmd_iso_check,
