@@ -378,8 +378,15 @@ until the next incident is filed; that append rolls the file to
 boundary. Readers take rotated files before the active one, so
 `castor incidents list` and the submitter still see every record, including
 ones filed before the roll. The tail hash is also cached in memory now instead
-of re-reading the whole file on every append; the cache is dropped whenever the
-file's size changed underneath, so a second writer cannot fork the chain.
+of re-reading the whole file on every append; the cache is keyed on which file
+this is and how long it was, so a rotation or another writer's append drops it
+rather than forking the chain. Appends themselves take an advisory lock on
+`incidents.jsonl.lock`, the same thing the audit log does, because reading the
+last line and appending the next one are two steps and the runtime is not the
+only writer: a `castor incidents report --submit` stamps from another process.
+The wait for that lock is bounded at five seconds and then the append goes
+ahead without it, because a record write must never be able to keep a robot
+from stopping.
 
 **Signed compliance artifacts are derived from a record.**
 `castor compliance submit safety-benchmark` used to take `passed` from
