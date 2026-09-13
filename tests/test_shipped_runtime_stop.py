@@ -33,6 +33,7 @@ import ast
 import collections
 import contextlib
 import json
+import logging
 import time
 from argparse import Namespace
 from pathlib import Path
@@ -582,6 +583,192 @@ def test_fs_estop_status_says_what_kind_of_hold_this_is(_api_client, tmp_path):
     assert body["source"] == "api"
     assert body["hold_kind"] == "best_effort_software_hold"
     assert body["latch"]["estop_reason"] == "stop button"
+
+
+# ---------------------------------------------------------------------------
+# 7b. ONE RESOLVER for the clear code, asked by the API and by the CLI
+# ---------------------------------------------------------------------------
+# WHAT WAS STILL WRONG. `castor/cli.py` looked for the code in
+# OPENCASTOR_ESTOP_AUTH and then in <robot home>/tokens.env.
+# `SafetyLayer.clear_estop`, which POST /api/estop/clear goes through, read only
+# the environment variable of the server process. A unit written by `castor up`
+# loads tokens.env, so on a robot built the ten-minute way the two agreed. A
+# gateway somebody started by hand in a shell without the variable did not: the
+# CLI asked for the robot's provisioned code and the endpoint took an admin
+# bearer alone, on the same robot, against the same secret sitting in the same
+# file. The remote path was the weaker one, which is backwards.
+def test_the_api_finds_the_code_in_tokens_env_with_nothing_exported(
+    _api_client, tmp_path, monkeypatch
+):
+    """The hand-started gateway case: a provisioned robot, an unset variable."""
+    client, api_mod = _api_client
+    monkeypatch.delenv("OPENCASTOR_ESTOP_AUTH", raising=False)
+    code = ensure_estop_auth(tmp_path)  # tokens.env under ROBOT_HOME, and nothing else
+
+    fs = CastorFS()
+    fs.boot({})
+    api_mod.state.fs = fs
+    fs.estop(principal="api", source="api", reason="stop button")
+
+    denied = client.post("/api/estop/clear", headers=_ADMIN)
+    assert denied.status_code == 403, denied.text
+    assert "auth code" in denied.json()["error"]
+    assert fs.is_estopped is True, "the admin bearer alone must not lift this"
+
+    allowed = client.post("/api/estop/clear", headers={**_ADMIN, "X-Estop-Auth": code})
+    assert allowed.status_code == 200, allowed.text
+    assert fs.is_estopped is False
+
+
+def test_a_clear_with_no_code_anywhere_still_works_and_says_what_is_missing(
+    _api_client, tmp_path, monkeypatch, caplog
+):
+    """The escape hatch, kept on purpose, and never silent.
+
+    Refusing here would strand a stop nothing on the network could lift, on
+    exactly the robots that were never run through `castor up`. So the clear
+    goes through and the log says what was missing and how to stop needing it.
+    """
+    client, api_mod = _api_client
+    monkeypatch.delenv("OPENCASTOR_ESTOP_AUTH", raising=False)
+    assert not (tmp_path / "tokens.env").exists(), "this robot was never provisioned"
+
+    fs = CastorFS()
+    fs.boot({})
+    api_mod.state.fs = fs
+    fs.estop(principal="api", source="api", reason="stop button")
+
+    with caplog.at_level(logging.WARNING, logger="OpenCastor.FS.Safety"):
+        resp = client.post("/api/estop/clear", headers=_ADMIN)
+    assert resp.status_code == 200, resp.text
+    assert fs.is_estopped is False
+
+    text = caplog.text
+    assert "UNAUTHENTICATED" in text
+    assert "OPENCASTOR_ESTOP_AUTH" in text
+    assert "ensure_estop_auth" in text, "name the function that mints one"
+    assert "castor up" in text, "and the command an operator actually runs"
+
+
+def test_the_environment_wins_over_tokens_env(_api_client, tmp_path, monkeypatch):
+    """Order matters and the order is the same on both surfaces."""
+    from castor.safety.latch import estop_auth_sources
+
+    client, api_mod = _api_client
+    on_disk = ensure_estop_auth(tmp_path)
+    exported = "oc_estop_from_the_env"
+    assert on_disk != exported
+    monkeypatch.setenv("OPENCASTOR_ESTOP_AUTH", exported)
+
+    required, where = estop_auth_sources()
+    assert required == exported
+    assert "environment" in where
+
+    fs = CastorFS()
+    fs.boot({})
+    api_mod.state.fs = fs
+    fs.estop(principal="api", source="api", reason="stop button")
+
+    stale = client.post("/api/estop/clear", headers={**_ADMIN, "X-Estop-Auth": on_disk})
+    assert stale.status_code == 403, "the shadowed tokens.env value is not the code"
+    assert fs.is_estopped is True
+
+    ok = client.post("/api/estop/clear", headers={**_ADMIN, "X-Estop-Auth": exported})
+    assert ok.status_code == 200, ok.text
+    assert fs.is_estopped is False
+
+
+def test_fs_estop_reports_whether_a_clear_code_is_provisioned(
+    _api_client, tmp_path, monkeypatch
+):
+    """The phone can say the second factor is missing BEFORE anyone needs it."""
+    client, api_mod = _api_client
+    monkeypatch.delenv("OPENCASTOR_ESTOP_AUTH", raising=False)
+    fs = CastorFS()
+    fs.boot({})
+    api_mod.state.fs = fs
+
+    body = client.get("/api/fs/estop", headers=_ADMIN).json()
+    assert body["estop_code_provisioned"] is False
+
+    ensure_estop_auth(tmp_path)
+    body = client.get("/api/fs/estop", headers=_ADMIN).json()
+    assert body["estop_code_provisioned"] is True
+
+    # It never carries the code itself: this endpoint answers any authenticated
+    # caller, and what they need is whether a second factor is asked for.
+    assert ensure_estop_auth(tmp_path) not in json.dumps(body)
+
+
+@pytest.mark.parametrize("layout", ["env", "tokens_env", "nothing"])
+def test_the_cli_and_the_api_agree_across_every_source_layout(
+    _api_client, tmp_path, monkeypatch, capsys, layout
+):
+    """Same robot, same question, one answer, however the code was provisioned.
+
+    The one place they differ is deliberate and is asserted here too: on a robot
+    with NO code, the CLI refuses until somebody types --no-auth-code at the
+    robot, and the endpoint clears on the admin bearer alone rather than leaving
+    a stop nothing remote can lift.
+    """
+    from castor.cli import _estop_auth_sources, cmd_resume
+    from castor.safety import latch as latch_mod
+
+    client, api_mod = _api_client
+    monkeypatch.delenv("OPENCASTOR_ESTOP_AUTH", raising=False)
+
+    code = ""
+    if layout == "env":
+        code = "oc_estop_only_in_the_env"
+        monkeypatch.setenv("OPENCASTOR_ESTOP_AUTH", code)
+    elif layout == "tokens_env":
+        code = ensure_estop_auth(tmp_path)
+
+    # One resolver, asked from either side and from the server's own layer.
+    assert _estop_auth_sources(tmp_path)[0] == code
+    assert latch_mod.estop_auth_sources()[0] == code
+    assert CastorFS().safety._estop_auth_required()[0] == code
+
+    # The API half.
+    fs = CastorFS()
+    fs.boot({})
+    api_mod.state.fs = fs
+    fs.estop(principal="api", source="api", reason="bumped the table")
+    bare = client.post("/api/estop/clear", headers=_ADMIN)
+    if code:
+        assert bare.status_code == 403, bare.text
+        assert fs.is_estopped is True
+        with_code = client.post(
+            "/api/estop/clear", headers={**_ADMIN, "X-Estop-Auth": code}
+        )
+        assert with_code.status_code == 200, with_code.text
+    else:
+        assert bare.status_code == 200, bare.text
+    assert fs.is_estopped is False
+
+    # The CLI half, against the same tmp_path robot home.
+    _latched(tmp_path)
+    with pytest.raises(SystemExit):
+        cmd_resume(
+            Namespace(clear_estop=True, auth_code="wrong", no_auth_code=False, home="")
+        )
+    assert latch_mod.load(tmp_path).estop_engaged is True
+
+    if code:
+        cmd_resume(
+            Namespace(clear_estop=True, auth_code=code, no_auth_code=False, home="")
+        )
+    else:
+        with pytest.raises(SystemExit):
+            cmd_resume(
+                Namespace(clear_estop=True, auth_code="", no_auth_code=False, home="")
+            )
+        assert latch_mod.load(tmp_path).estop_engaged is True
+        cmd_resume(
+            Namespace(clear_estop=True, auth_code="", no_auth_code=True, home="")
+        )
+    assert latch_mod.load(tmp_path).estop_engaged is False
+    capsys.readouterr()
 
 
 # ---------------------------------------------------------------------------

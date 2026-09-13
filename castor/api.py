@@ -1180,6 +1180,23 @@ async def clear_estop(request: Request):
     return {"status": "no_fs"}
 
 
+def _estop_code_provisioned() -> bool:
+    """Does this robot have an e-stop clear code at all?
+
+    Asks the one resolver ``SafetyLayer.clear_estop`` asks, so the field cannot
+    drift from the check it describes. Never raises and never returns the code
+    itself: this is reported to any authenticated caller, and the answer that
+    matters to them is whether clearing a stop here needs a second factor.
+    """
+    try:
+        from castor.safety.latch import estop_auth_code
+
+        return bool(estop_auth_code())
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Could not resolve the e-stop clear code: %s", exc)
+        return False
+
+
 @app.get("/api/fs/estop", dependencies=[Depends(verify_token)])
 async def get_estop_status():
     """GET /api/fs/estop — Return current emergency stop state.
@@ -1195,6 +1212,14 @@ async def get_estop_status():
         last_denial: Reason for the most recent safety layer write rejection.
         source: Where the active latch came from ('sensor', 'api', 'rcan', ...).
         latch: The persisted latch, including any `castor pause` and its reason.
+        estop_code_provisioned: Whether this robot HAS an e-stop clear code, by
+            the one resolver both this server and `castor resume --clear-estop`
+            ask: OPENCASTOR_ESTOP_AUTH in the environment, then
+            $ROBOT_HOME/tokens.env. False means `POST /api/estop/clear` will
+            lift a stop on the admin bearer alone, because there is nothing to
+            check a second factor against. The phone shows it so that is
+            visible before somebody needs the stop, not after. Run `castor up`
+            on the robot to provision one.
 
     `estopped` and `paused` are THIS PROCESS' state, reconciled from the latch
     file by the background task in the lifespan; `latch` is the file itself.
@@ -1205,6 +1230,7 @@ async def get_estop_status():
     robot's own software refuses motion and has asked its actuator to stop. It
     is not a hardware cut and nothing here is safety rated.
     """
+    provisioned = _estop_code_provisioned()
     if state.fs:
         try:
             from castor.safety.latch import dump as _latch_dump
@@ -1225,6 +1251,7 @@ async def get_estop_status():
             "latch": latch,
             "hold_kind": "best_effort_software_hold",
             "resync_interval_s": SAFETY_LATCH_RESYNC_S,
+            "estop_code_provisioned": provisioned,
         }
     return {
         "estopped": False,
@@ -1232,6 +1259,7 @@ async def get_estop_status():
         "held": False,
         "proc_status": "no_fs",
         "last_denial": "",
+        "estop_code_provisioned": provisioned,
     }
 
 

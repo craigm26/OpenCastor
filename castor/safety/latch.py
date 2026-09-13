@@ -130,6 +130,80 @@ def latch_path(home: Optional[str | Path] = None) -> Optional[Path]:
     return (base / LATCH_FILENAME) if base else None
 
 
+# ---------------------------------------------------------------------------
+# The e-stop clear code, resolved ONCE for every surface that checks it
+# ---------------------------------------------------------------------------
+# WHY THIS LIVES HERE. There used to be two answers to "what code does this
+# robot expect". ``castor/cli.py`` looked in the environment and then in
+# ``<robot home>/tokens.env``; ``SafetyLayer.clear_estop``, which
+# ``POST /api/estop/clear`` goes through, read only the environment variable of
+# the server process. A unit written by `castor up` loads tokens.env, so the
+# two agreed on a robot built the ten-minute way. A gateway somebody started by
+# hand in a shell without the variable did not: the CLI refused a clear with no
+# code while the API took the admin bearer alone, on the same robot, against
+# the same provisioned secret. One resolver, used by both, is the whole fix.
+#
+# It sits in this module and not in ``castor/up.py`` because both callers
+# already import it (the latch is what they are clearing), and because
+# importing the installer from the hot path of a stop is the wrong dependency.
+
+#: The variable every generated unit carries, via tokens.env. The name is
+#: mirrored in ``castor.up.ESTOP_AUTH_VAR``, which is what WRITES it.
+ESTOP_AUTH_VAR = "OPENCASTOR_ESTOP_AUTH"
+
+#: The file the generated unit names as its ``EnvironmentFile``. Read directly
+#: here so a server started by hand, with a robot home but no exported
+#: variable, still finds the code its own robot was provisioned with.
+TOKENS_FILENAME = "tokens.env"
+
+
+def estop_auth_sources(home: Optional[str | Path] = None) -> tuple[str, str]:
+    """The code this robot expects, and where it was found.
+
+    Two sources, in order:
+
+    1. ``OPENCASTOR_ESTOP_AUTH`` in the process environment.
+    2. ``OPENCASTOR_ESTOP_AUTH=`` in ``<robot home>/tokens.env``, read the same
+       way systemd reads it, so nobody has to export anything by hand.
+
+    The robot home comes from *home* when given and from ``ROBOT_HOME``
+    otherwise, which is what every generated unit exports. A server started by
+    hand with neither has no second source, and that is the honest answer
+    rather than a guess at a directory.
+
+    Returns ``("", "")`` when this robot has NO code at all. That is a real
+    state and not an error: a gateway-only robot built before `castor up`
+    started calling :func:`castor.up.ensure_estop_auth`, or one whose tokens.env
+    this process cannot read, has nothing to check a clear against. What no
+    caller may do with that answer is treat it as permission. The CLI refuses
+    and points at `castor up`; ``SafetyLayer.clear_estop`` keeps the older
+    behaviour for the remote path, so a codeless robot is never left with a stop
+    nobody on the network can lift, and says so in the log every time.
+    """
+    code = os.environ.get(ESTOP_AUTH_VAR, "").strip()
+    if code:
+        return code, f"the {ESTOP_AUTH_VAR} environment variable"
+    try:
+        base = robot_home(home)
+        if base is None:
+            return "", ""
+        tokens = base / TOKENS_FILENAME
+        for line in tokens.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped.startswith(f"{ESTOP_AUTH_VAR}="):
+                found = stripped.split("=", 1)[1].strip()
+                if found:
+                    return found, str(tokens)
+    except Exception:  # noqa: BLE001 - an unreadable file is "no code", not a crash
+        pass
+    return "", ""
+
+
+def estop_auth_code(home: Optional[str | Path] = None) -> str:
+    """The robot's e-stop clear code, or ``""`` when this robot has none."""
+    return estop_auth_sources(home)[0]
+
+
 def load(home: Optional[str | Path] = None) -> LatchState:
     """Read the latch. A missing, empty or corrupt file reads as "not held".
 
