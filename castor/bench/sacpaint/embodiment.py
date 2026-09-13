@@ -116,6 +116,8 @@ CANONICAL_FLAG = "canonical_canvas"
 MEDIUM_KEY = "medium"
 #: ``observation.extra`` keys a colour task adds: the palette, and the colour last commanded.
 PALETTE_KEY = "palette"
+#: How many misses a run keeps with their positions (the count is always kept).
+MAX_MISS_LOG = 500
 COLOR_KEY = "color"
 MEDIUM_PEN = "pen"
 MEDIUM_VIRTUAL = "virtual"
@@ -560,6 +562,7 @@ class OpenCastorEmbodiment:
         self.strokes = bool(strokes)
         self.num_steps = 0
         self.misses = 0
+        self.miss_log: list[dict[str, Any]] = []
         #: One entry per target a stroke sent, so a stroke is auditable target by target.
         self.stroke_log: list[dict[str, Any]] = []
         self._stroke_id = 0
@@ -842,6 +845,19 @@ class OpenCastorEmbodiment:
             self.misses += 1
             previous = self._eef
             self._eef = self._read_eef(default=canvas_target_m.copy())
+            # Keep the miss itself, not only the count: where the sheet was asked
+            # for, where the arm said it got to, and by how much. A run's misses
+            # cluster somewhere (an edge, a corner, one row), and a count cannot
+            # say where. Capped so a bad afternoon does not bloat the record.
+            if len(self.miss_log) < MAX_MISS_LOG:
+                self.miss_log.append(
+                    {
+                        "step": self.num_steps,
+                        "target_mm": [round(float(v), 1) for v in base_mm],
+                        "measured_m": [round(float(v), 4) for v in self._eef],
+                        "error_mm": float(getattr(miss, "error_mm", 0.0) or 0.0),
+                    }
+                )
             self._ink_segment(previous, canvas_target_m)
             self._commanded = canvas_target_m.copy()
             return
@@ -943,6 +959,8 @@ class OpenCastorEmbodiment:
                 if self.colored:
                     payload["color"] = pal.name_of(self.color)
                     payload["palette"] = list(pal.NAMES)
+                if self.miss_log:
+                    payload["miss_log"] = list(self.miss_log)
                 tmp = self._progress_path.with_suffix(".tmp")
                 tmp.write_text(json.dumps(payload))
                 tmp.replace(self._progress_path)
