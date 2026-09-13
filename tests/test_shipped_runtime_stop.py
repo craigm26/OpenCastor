@@ -113,6 +113,30 @@ def test_generated_runtime_latches_and_reasserts_at_the_actuator(tmp_path, arche
 
 
 @pytest.mark.parametrize("archetype", ["rc-car", "microduck"])
+def test_the_generated_runtime_reconciles_the_latch_on_its_own_event_loop(tmp_path, archetype):
+    """`_hold()` must not be handed to a worker thread, in any generated runtime.
+
+    _hold() calls resync_from_latch, and every other mutator of the in-memory
+    flag it reconciles (POST /api/stop, POST /api/estop/clear) is an async
+    handler on the same loop. From a thread the reconcile can be descheduled
+    between reading the latch file and comparing it with the flag, and a stop
+    that lands in that window reads as an out-of-process CLEAR: it is reverted
+    until a later cycle re-adopts it from the file. On the rc-car the telemetry
+    frame ran this five times a second while a phone was connected.
+
+    _stop_at_actuator stays in a thread. That one really does cross a network
+    hop, and it mutates nothing.
+    """
+    text = render("runtime.py.tmpl", _plan(tmp_path, archetype))
+    assert "to_thread(_hold)" not in text, (
+        "the latch reconcile must run on the event loop; in a thread it can "
+        "revert a stop that arrives mid-read"
+    )
+    assert "_hold()" in text
+    assert "to_thread(_stop_at_actuator" in text, "the actuator hop stays off the loop"
+
+
+@pytest.mark.parametrize("archetype", ["rc-car", "microduck"])
 def test_the_watchdog_is_constructed_but_not_armed_by_default(tmp_path, archetype):
     """The ten-minute regression this item could most easily have caused.
 
