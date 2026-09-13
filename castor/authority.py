@@ -69,6 +69,22 @@ def trusted_authority_ids_from_config(config: Optional[dict]) -> set[str]:
     return {str(x).strip() for x in raw if str(x).strip()}
 
 
+def authority_handler_enabled(config: Optional[dict]) -> bool:
+    """True only when this robot can actually answer an AUTHORITY_ACCESS request.
+
+    THE ONE READER. The fleet document, the ``rcan_v21.authority_handler``
+    conformance row and the /discover handshake all answer the same question,
+    so they all ask it here: the operator's ``authority_handler_enabled`` flag
+    AND a non-empty allowlist. Since the handler fails closed, a robot with the
+    flag on and no allowlist refuses every requester, and saying otherwise
+    anywhere would be claiming a capability the runtime does not have.
+    """
+    cfg = config if isinstance(config, dict) else {}
+    if not bool(cfg.get("authority_handler_enabled", False)):
+        return False
+    return bool(trusted_authority_ids_from_config(cfg))
+
+
 # ---------------------------------------------------------------------------
 # Payload types
 # ---------------------------------------------------------------------------

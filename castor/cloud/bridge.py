@@ -314,14 +314,11 @@ def _authority_handler_enabled(config: dict[str, Any] | None) -> bool:
     way ``castor iso-check`` and the ``rcan_v21.authority_handler`` conformance
     row read them. An unconfigured robot publishes False.
     """
-    cfg = config or {}
-    if not bool(cfg.get("authority_handler_enabled", False)):
-        return False
     try:
-        from castor.authority import trusted_authority_ids_from_config
+        from castor.authority import authority_handler_enabled as _enabled
     except Exception:  # pragma: no cover - castor.authority is always present
         return False
-    return bool(trusted_authority_ids_from_config(cfg))
+    return _enabled(config or {})
 
 
 class CastorBridge:
