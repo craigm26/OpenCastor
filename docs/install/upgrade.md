@@ -215,7 +215,15 @@ castor sbom publish --token <your-rrf-token>
 ```yaml
 # robot.rcan.yaml
 authority_handler_enabled: true
-audit_retention_days: 3650   # 10yr — required for EU AI Act Art. 12
+authority:
+  # The flag on its own is not enough. The AUTHORITY_ACCESS (41) handler
+  # fails closed, so with no ids listed here it refuses every requester,
+  # `castor iso-check` and the conformance row grade it as not satisfied,
+  # and the robot discovers eu_ai_act as false. List the registry ids of
+  # the authorities this robot should answer.
+  trusted_authority_ids:
+    - eu.aiact.notified-body.001
+audit_retention_days: 3650   # 10yr, required for EU AI Act Art. 12
 ```
 
 **4. Verify L5 compliance**
