@@ -4,11 +4,15 @@ import hashlib
 import json
 
 from castor.incidents import (
+    CHAIN_BROKEN,
+    CHAIN_NO_LOG,
+    CHAIN_OK,
     INCIDENT_SCHEMA_VERSION,
     ROTATION_RECORD_TYPE,
     IncidentLog,
     IncidentSeverity,
     generate_report,
+    verify_incident_chain,
 )
 
 
@@ -290,3 +294,190 @@ class TestRotationAndHashCache:
             os.utime(p, (1_700_000_000, 1_700_000_000))
 
         assert [i["id"] for i in IncidentLog(path, max_bytes=700).list_incidents()] == ids
+
+
+class TestChainVerifier:
+    """`castor incidents verify` walks every link, rotated files first.
+
+    A pass here says the links hold, which is the writer being consistent with
+    itself. It is not an outside party's check and nothing is rendered
+    "verified".
+    """
+
+    @staticmethod
+    def _fill(path, count=4, max_bytes=None):
+        log = IncidentLog(path, max_bytes=max_bytes) if max_bytes else IncidentLog(path)
+        for i in range(count):
+            log.record(IncidentSeverity.SERIOUS_HARM, "estop", f"stop {i}", {})
+        return log
+
+    @staticmethod
+    def _lines(path):
+        return [x for x in path.read_text().splitlines() if x.strip()]
+
+    # -- the clean cases -------------------------------------------------
+
+    def test_a_clean_single_file_checks_out(self, tmp_path):
+        path = tmp_path / "incidents.jsonl"
+        self._fill(path, 4)
+        check = verify_incident_chain(path)
+        assert check.state == CHAIN_OK
+        assert check.exit_code == 0
+        assert check.records == 4
+        assert [f.records for f in check.files] == [4]
+        assert check.reason is None
+
+    def test_a_clean_chain_across_two_rotations_checks_out(self, tmp_path):
+        path = tmp_path / "incidents.jsonl"
+        log = self._fill(path, 12, max_bytes=900)
+        rotated = log.rotated_paths()
+        assert len(rotated) >= 2, "needs at least two rotations"
+
+        check = IncidentLog(path, max_bytes=900).verify_chain()
+        assert check.state == CHAIN_OK
+        assert check.exit_code == 0
+        # Every file is reported, rotated ones first, then the active log.
+        assert [f.path for f in check.files] == rotated + [path]
+        assert check.records == sum(len(self._lines(p)) for p in rotated + [path])
+        # The carry-over lines are counted as records and are not incidents.
+        assert check.records > 12
+
+    def test_an_existing_empty_file_is_a_log_with_no_records(self, tmp_path):
+        path = tmp_path / "incidents.jsonl"
+        path.write_text("")
+        check = verify_incident_chain(path)
+        assert check.state == CHAIN_OK
+        assert check.exit_code == 0
+        assert check.records == 0
+
+    def test_no_file_at_all_is_not_a_clean_bill(self, tmp_path):
+        path = tmp_path / "nothing-here" / "incidents.jsonl"
+        check = verify_incident_chain(path)
+        assert check.state == CHAIN_NO_LOG
+        assert check.exit_code == 2
+        assert check.files == []
+
+    # -- the breaks ------------------------------------------------------
+
+    def test_a_tampered_middle_line_breaks_the_next_link(self, tmp_path):
+        path = tmp_path / "incidents.jsonl"
+        self._fill(path, 4)
+        lines = self._lines(path)
+        row = json.loads(lines[1])
+        row["description"] = "something else entirely"
+        lines[1] = json.dumps(row)
+        path.write_text("\n".join(lines) + "\n")
+
+        check = verify_incident_chain(path)
+        assert check.state == CHAIN_BROKEN
+        assert check.exit_code == 1
+        assert check.break_path == path
+        assert check.break_line == 3  # the line whose prev_sha256 no longer holds
+        assert "not the hash of the line before it" in check.reason
+
+    def test_a_truncated_last_line_is_a_break(self, tmp_path):
+        path = tmp_path / "incidents.jsonl"
+        self._fill(path, 3)
+        raw = path.read_text()
+        path.write_text(raw[: len(raw) - 40])  # a process killed mid-append
+
+        check = verify_incident_chain(path)
+        assert check.state == CHAIN_BROKEN
+        assert check.exit_code == 1
+        assert check.break_line == 3
+        assert "does not parse as JSON" in check.reason
+
+    def test_a_line_with_no_prev_sha256_is_a_break(self, tmp_path):
+        path = tmp_path / "incidents.jsonl"
+        self._fill(path, 2)
+        with open(path, "a") as f:
+            f.write(json.dumps({"id": "x", "record_type": "incident"}) + "\n")
+
+        check = verify_incident_chain(path)
+        assert check.state == CHAIN_BROKEN
+        assert check.break_line == 3
+        assert "no prev_sha256" in check.reason
+
+    def test_the_head_of_the_chain_must_carry_an_empty_prev_sha256(self, tmp_path):
+        """Genesis here is an EMPTY prev_sha256, not the audit log's GENESIS word."""
+        path = tmp_path / "incidents.jsonl"
+        self._fill(path, 1)
+        first = json.loads(self._lines(path)[0])
+        assert first["prev_sha256"] == ""
+
+        first["prev_sha256"] = "GENESIS"
+        path.write_text(json.dumps(first) + "\n")
+        check = verify_incident_chain(path)
+        assert check.state == CHAIN_BROKEN
+        assert check.break_line == 1
+        assert "head of the chain" in check.reason
+
+    # -- the forged carry-over -------------------------------------------
+
+    def _rotated_log_with_carry_over(self, tmp_path):
+        """A log that has rolled once, with the carry-over line first in the active file."""
+        path = tmp_path / "incidents.jsonl"
+        log = self._fill(path, 12, max_bytes=900)
+        assert log.rotated_paths()
+        active = self._lines(path)
+        carry = json.loads(active[0])
+        assert carry["record_type"] == ROTATION_RECORD_TYPE
+        return path, active, carry
+
+    def test_a_carry_over_naming_a_file_that_is_not_there_is_a_break(self, tmp_path):
+        path, active, carry = self._rotated_log_with_carry_over(tmp_path)
+        carry["rotated_to"] = "incidents.2019-01-01.jsonl"  # never written
+        active[0] = json.dumps(carry)
+        path.write_text("\n".join(active) + "\n")
+
+        check = verify_incident_chain(path)
+        assert check.state == CHAIN_BROKEN
+        assert check.exit_code == 1
+        assert check.break_path == path
+        assert check.break_line == 1
+        assert "not a file next to this log" in check.reason
+
+    def test_a_carry_over_whose_target_ends_on_another_hash_is_a_break(self, tmp_path):
+        path, active, carry = self._rotated_log_with_carry_over(tmp_path)
+        # A real file, sitting next to the log, that this chain never wrote.
+        decoy = tmp_path / "decoy.jsonl"
+        decoy.write_text(json.dumps({"id": "decoy", "prev_sha256": ""}) + "\n")
+        carry["rotated_to"] = decoy.name
+        active[0] = json.dumps(carry)
+        path.write_text("\n".join(active) + "\n")
+
+        check = verify_incident_chain(path)
+        assert check.state == CHAIN_BROKEN
+        assert check.break_line == 1
+        assert "is not that file's last line" in check.reason
+
+    def test_a_line_that_merely_says_log_rotation_does_not_excuse_a_gap(self, tmp_path):
+        """Anything that can append can write a log_rotation line."""
+        path = tmp_path / "incidents.jsonl"
+        self._fill(path, 2)
+        with open(path, "a") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "id": "forged",
+                        "record_type": ROTATION_RECORD_TYPE,
+                        "rotated_to": "incidents.2020-02-02.jsonl",
+                        "prev_sha256": hashlib.sha256(b"whatever").hexdigest(),
+                    }
+                )
+                + "\n"
+            )
+        check = verify_incident_chain(path)
+        assert check.state == CHAIN_BROKEN
+        assert check.break_line == 3
+
+    # -- what a clean result is allowed to say ---------------------------
+
+    def test_a_clean_result_does_not_call_the_log_verified(self, tmp_path):
+        path = tmp_path / "incidents.jsonl"
+        self._fill(path, 2)
+        data = verify_incident_chain(path).to_dict()
+        assert data["state"] == "ok"
+        assert data["break"] is None
+        assert data["note"] == "A link check is not an outside party's verification."
+        assert "verified" not in json.dumps(data).replace(data["note"], "")

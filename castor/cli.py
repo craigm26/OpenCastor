@@ -5591,6 +5591,9 @@ def cmd_incidents(args) -> None:
             )
             raise SystemExit(1)
 
+    elif incidents_cmd == "verify":
+        raise SystemExit(_verify_incident_chain(log, as_json=getattr(args, "json", False)))
+
     elif incidents_cmd == "report":
         if getattr(args, "submit", False):
             raise SystemExit(_submit_incident_report(args, log))
@@ -5604,8 +5607,46 @@ def cmd_incidents(args) -> None:
             print(_json.dumps(report, indent=2, default=str))
 
     else:
-        print("Usage: castor incidents {record|list|report}", file=sys.stderr)
+        print("Usage: castor incidents {record|list|verify|report}", file=sys.stderr)
         raise SystemExit(1)
+
+
+def _verify_incident_chain(log, as_json: bool = False) -> int:
+    """`castor incidents verify` - walk the incident log's hash chain.
+
+    Same three answers and the same three exit codes as ``castor audit
+    --verify``: 2 when there is no log at all, 1 on a break, 0 when every link
+    holds. A clean result says the links check out, never that the log is
+    verified; the process that writes these lines can rewrite them all.
+    """
+    import json as _json
+
+    from castor.incidents import CHAIN_BROKEN, CHAIN_NO_LOG
+
+    check = log.verify_chain()
+
+    if as_json:
+        print(_json.dumps(check.to_dict(), indent=2))
+        return check.exit_code
+
+    if check.state == CHAIN_NO_LOG:
+        # NOT "the chain is fine". There is no record here to have an opinion
+        # about, which is the one answer a verifier must never round up.
+        print(f"  \u274c No incident log found at {check.log_path}. Nothing to check.")
+        return check.exit_code
+
+    if check.state == CHAIN_BROKEN:
+        where = check.break_path.name if check.break_path else str(check.log_path)
+        line = f"line {check.break_line}" if check.break_line else "an unreadable file"
+        print(f"  \u274c Chain broken in {where} at {line}: the line {check.reason}.")
+        print(f"     File: {check.break_path}")
+        return check.exit_code
+
+    print(f"  \u2705 Chain links check out at {check.log_path}.")
+    for entry in check.files:
+        print(f"     {entry.path.name}: {entry.records} record(s)")
+    print(f"     {check.NOT_VERIFICATION}")
+    return check.exit_code
 
 
 def _file_incident_report(log, manifest: str, label: str) -> int:
@@ -9185,6 +9226,28 @@ def main() -> None:
     p_incidents_sub.add_parser(
         "list",
         help="List incidents with filing status and days to deadline (exits 1 when overdue)",
+    )
+
+    p_incidents_verify = p_incidents_sub.add_parser(
+        "verify",
+        help=(
+            "Walk the incident log's hash chain across rotations "
+            "(exit 0 when the links check out, 1 on a break, 2 when there is no log)"
+        ),
+    )
+    p_incidents_verify.add_argument(
+        "--log",
+        metavar="FILE",
+        # SUPPRESS, so `castor incidents --log X verify` keeps the path the
+        # parent parser already put in the namespace. A plain default of None
+        # here would overwrite it when the subparser parses.
+        default=argparse.SUPPRESS,
+        help="Incident log path (default: ~/.opencastor/incidents.jsonl)",
+    )
+    p_incidents_verify.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the check as JSON. The exit code is the same either way",
     )
 
     p_incidents_report = p_incidents_sub.add_parser(

@@ -32,6 +32,11 @@ Usage:
     log = IncidentLog()  # default: ~/.opencastor/incidents.jsonl
     log.record(IncidentSeverity.SERIOUS_HARM, "estop", "ESTOP triggered", state)
     report = generate_report(log)
+    check = log.verify_chain()  # castor incidents verify
+
+The chain check walks the rotated files in write order and then the active one.
+It says whether the links hold, which is not the same as an outside party
+verifying the log: the writer of these lines can rewrite all of them.
 """
 
 from __future__ import annotations
@@ -43,6 +48,7 @@ import logging
 import os
 import time
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
@@ -76,13 +82,13 @@ DEFAULT_INCIDENT_LOG_MAX_BYTES = 4 * 1024 * 1024
 #: rotation and a reader can follow it from the oldest rotated file to the
 #: active one.
 #:
-#: A note for whoever writes the chain verifier this module does not yet have:
-#: this line is the one place where a hash points at something outside the file
+#: This line is the one place where a hash points at something outside the file
 #: it sits in, so a line that merely SAYS ``log_rotation`` must never be enough
 #: to excuse a discontinuity. Anything that can append to the log can write one.
 #: A carry-over line is only a carry-over line when ``rotated_to`` names a file
 #: that is actually there and that file's last line hashes to this line's
-#: ``prev_sha256``; anything else is a break, and should be reported as one.
+#: ``prev_sha256``; anything else is a break, and is reported as one. The chain
+#: verifier, :meth:`IncidentLog.verify_chain`, holds this line to that rule.
 ROTATION_RECORD_TYPE = "log_rotation"
 
 #: How long a writer waits for the chain lock before appending without it. A
@@ -90,6 +96,22 @@ ROTATION_RECORD_TYPE = "log_rotation"
 #: is bounded; past it the append goes ahead unlocked, which is exactly the
 #: behaviour this module had before the lock existed.
 CHAIN_LOCK_TIMEOUT_S = 5.0
+
+#: States :meth:`IncidentLog.verify_chain` can return. The same three the audit
+#: verifier returns (``castor/audit.py``), for the same reason: a log that is
+#: not there is not a log that checks out, so "no log" is its own answer and
+#: never folds into "ok".
+CHAIN_NO_LOG = "no_log"
+CHAIN_OK = "ok"
+CHAIN_BROKEN = "broken"
+
+#: What the first line of the whole chain carries in ``prev_sha256``. The audit
+#: log writes the string "GENESIS"; this log does not. ``_last_line_hash()``
+#: returns the empty string for an absent or empty file and ``_append`` writes
+#: that straight into the record, so the head of the chain is an EMPTY
+#: ``prev_sha256``, and the verifier expects exactly that rather than a marker
+#: word no writer here has ever produced.
+GENESIS_PREV_SHA256 = ""
 
 
 @contextlib.contextmanager
@@ -600,6 +622,228 @@ class IncidentLog:
 
     def overdue_incidents(self, now: datetime | None = None) -> list[dict[str, Any]]:
         return [i for i in self.list_incidents() if is_overdue(i, now=now)]
+
+    # -- verification ----------------------------------------------------
+
+    def verify_chain(self) -> "ChainCheck":
+        """Walk every link of the chain, rotated files first, then the active one.
+
+        What a pass says, and all it says: every line parses, every line carries
+        a ``prev_sha256``, and each one hashes the line before it, including
+        across a rotation. The process that writes these lines can also rewrite
+        them all and re-chain them, so an intact chain is the writer being
+        consistent with itself. It is not an outside party's check and nothing
+        here renders a log "verified".
+
+        A ``log_rotation`` line is the only place a hash points outside the file
+        it sits in, and anything that can append to the log can write one. So a
+        line that merely SAYS ``log_rotation`` never excuses a discontinuity:
+        ``rotated_to`` has to name a file that is there, that file's last line
+        has to hash to this line's ``prev_sha256``, and the link to the line
+        before it still has to hold. Otherwise it is a break like any other.
+        """
+        rotated = self.rotated_paths()
+        files = list(rotated)
+        if self._path.exists():
+            files.append(self._path)
+        if not files:
+            return ChainCheck(state=CHAIN_NO_LOG, log_path=self._path)
+
+        checked: list[ChainFileCheck] = []
+        prev_line: str | None = None
+
+        def broken(path: Path, line_no: int | None, reason: str) -> ChainCheck:
+            return ChainCheck(
+                state=CHAIN_BROKEN,
+                log_path=self._path,
+                files=checked,
+                break_path=path,
+                break_line=line_no,
+                reason=reason,
+            )
+
+        for path in files:
+            try:
+                raw_lines = path.read_text(errors="replace").splitlines()
+            except OSError as exc:
+                return broken(path, None, f"could not be read ({exc})")
+
+            records = 0
+            # Physical line numbers, blank lines counted, so an operator can go
+            # straight to the line with sed -n '<n>p'.
+            for line_no, raw in enumerate(raw_lines, start=1):
+                line = raw.strip()
+                if not line:
+                    continue
+                records += 1
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    return broken(
+                        path,
+                        line_no,
+                        f"does not parse as JSON ({exc.msg}); a torn or edited line",
+                    )
+                if not isinstance(row, dict):
+                    return broken(path, line_no, "is JSON but not a record object")
+                if "prev_sha256" not in row:
+                    return broken(
+                        path,
+                        line_no,
+                        "carries no prev_sha256, so nothing links it to the line before it",
+                    )
+                claimed = str(row.get("prev_sha256") or "")
+                expected = (
+                    hashlib.sha256(prev_line.encode()).hexdigest()
+                    if prev_line is not None
+                    else GENESIS_PREV_SHA256
+                )
+
+                if row.get("record_type") == ROTATION_RECORD_TYPE:
+                    reason = self._rotation_break_reason(path, row, claimed)
+                    if reason:
+                        return broken(path, line_no, reason)
+
+                if claimed != expected:
+                    if prev_line is None:
+                        return broken(
+                            path,
+                            line_no,
+                            "is the head of the chain and must carry an empty prev_sha256, "
+                            f"but carries {_short_hash(claimed)}",
+                        )
+                    return broken(
+                        path,
+                        line_no,
+                        f"has prev_sha256 {_short_hash(claimed)}, which is not the hash of the "
+                        f"line before it ({_short_hash(expected)})",
+                    )
+                prev_line = line
+
+            checked.append(ChainFileCheck(path=path, records=records))
+
+        return ChainCheck(state=CHAIN_OK, log_path=self._path, files=checked)
+
+    def _rotation_break_reason(
+        self, path: Path, row: dict[str, Any], claimed: str
+    ) -> str | None:
+        """Why this ``log_rotation`` line is not a carry-over, or None if it is."""
+        raw_target = row.get("rotated_to")
+        if not raw_target:
+            return (
+                "says log_rotation but names no rotated_to, so nothing says which file "
+                "its prev_sha256 came from"
+            )
+        # Basename only. A rotated_to of ../somewhere is not a file this log
+        # ever wrote, and following it would let the line choose its own witness.
+        name = Path(str(raw_target)).name
+        target = path.parent / name
+        if name != str(raw_target) or not target.is_file():
+            return (
+                f"says log_rotation and points at {raw_target}, which is not a file next "
+                "to this log"
+            )
+        last = _last_nonempty_line(target)
+        if not last:
+            return f"says log_rotation and points at {name}, which has no line to carry over"
+        digest = hashlib.sha256(last.encode()).hexdigest()
+        if digest != claimed:
+            return (
+                f"says log_rotation and points at {name}, but its prev_sha256 "
+                f"{_short_hash(claimed)} is not that file's last line ({_short_hash(digest)})"
+            )
+        return None
+
+
+def _short_hash(digest: str) -> str:
+    """A hash short enough to read in a message, or a word when there is none."""
+    return f"{digest[:12]}..." if digest else "(empty)"
+
+
+def _last_nonempty_line(path: Path) -> str:
+    """The last non-empty line of a file, stripped. Empty string when there is none."""
+    try:
+        lines = path.read_text(errors="replace").splitlines()
+    except OSError:
+        return ""
+    for raw in reversed(lines):
+        if raw.strip():
+            return raw.strip()
+    return ""
+
+
+@dataclass
+class ChainFileCheck:
+    """One file of the chain and how many records were read from it."""
+
+    path: Path
+    records: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"path": str(self.path), "records": self.records}
+
+
+@dataclass
+class ChainCheck:
+    """The result of walking the incident log's hash chain.
+
+    ``state`` is one of :data:`CHAIN_NO_LOG`, :data:`CHAIN_OK`,
+    :data:`CHAIN_BROKEN`. On a break, ``break_path`` and ``break_line`` say
+    where and ``reason`` says what broke.
+    """
+
+    state: str
+    log_path: Path
+    files: list[ChainFileCheck] = field(default_factory=list)
+    break_path: Path | None = None
+    break_line: int | None = None
+    reason: str | None = None
+
+    #: Said on every clean result, in the CLI and in the JSON. Software checks
+    #: links; it does not verify a record.
+    NOT_VERIFICATION = "A link check is not an outside party's verification."
+
+    @property
+    def ok(self) -> bool:
+        return self.state == CHAIN_OK
+
+    @property
+    def records(self) -> int:
+        return sum(f.records for f in self.files)
+
+    @property
+    def exit_code(self) -> int:
+        """Same three codes as ``castor audit --verify``: 0 ok, 1 break, 2 no log."""
+        if self.state == CHAIN_NO_LOG:
+            return 2
+        return 0 if self.state == CHAIN_OK else 1
+
+    def to_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "state": self.state,
+            "log": str(self.log_path),
+            "files": [f.to_dict() for f in self.files],
+            "records": self.records,
+            "note": self.NOT_VERIFICATION,
+        }
+        if self.state == CHAIN_BROKEN:
+            out["break"] = {
+                "file": str(self.break_path) if self.break_path else None,
+                "line": self.break_line,
+                "reason": self.reason,
+            }
+        else:
+            out["break"] = None
+        return out
+
+
+def verify_incident_chain(path: Path | str | None = None) -> ChainCheck:
+    """Walk the incident log at ``path`` (default: the configured log).
+
+    The library entry point ``castor incidents verify`` calls, so the check can
+    be driven straight from a test without a subprocess.
+    """
+    return IncidentLog(path).verify_chain()
 
 
 def generate_report(log: IncidentLog, now: datetime | None = None) -> dict[str, Any]:
