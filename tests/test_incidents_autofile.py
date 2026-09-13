@@ -134,26 +134,33 @@ class _Args:
         self.__dict__.update(kw)
 
 
-def test_submit_marks_reported_and_second_run_submits_nothing(tmp_path, monkeypatch, capsys):
-    from castor import cli as cli_mod
+def _patch_submission_path(monkeypatch, submit_fn):
+    """Point the submit path at a fake registry.
 
-    log_path = tmp_path / "incidents.jsonl"
-    log = IncidentLog(log_path)
-    inc_id = log.record(IncidentSeverity.SERIOUS_HARM, "estop", "ESTOP", {})
+    Patch MODULE OBJECTS, not dotted strings. ``castor.rcan3.__init__`` has a
+    module ``__getattr__`` that resolves symbols lazily but not submodules, so
+    ``monkeypatch.setattr("castor.rcan3.reader.read_robot_md", ...)`` raises
+    AttributeError whenever something earlier in the session left
+    ``castor.rcan3.reader`` in sys.modules without the attribute bound on the
+    package. importlib.import_module does not repair that (the module is
+    already in sys.modules, so nothing rebinds the parent). Resolving the
+    module object once and patching it is order independent.
+    """
+    import importlib
 
-    calls: list[list[dict]] = []
-
-    async def _fake_submit(*, rrf, signer, rrn, incidents):
-        calls.append(list(incidents))
-        return {"status": "accepted", "receipt_id": "rcpt-1"}
+    mods = {
+        name: importlib.import_module(f"castor.rcan3.{name}")
+        for name in ("compliance", "identity", "signer", "reader", "rrf_client")
+    }
 
     monkeypatch.setattr(
-        "castor.rcan3.compliance.submit_incident_report", _fake_submit, raising=False
+        mods["compliance"], "submit_incident_report", submit_fn, raising=False
     )
-    monkeypatch.setattr("castor.rcan3.identity.load_or_generate_identity", lambda: object())
-    monkeypatch.setattr("castor.rcan3.signer.CastorSigner", lambda ident: object())
+    monkeypatch.setattr(mods["identity"], "load_or_generate_identity", lambda: object())
+    monkeypatch.setattr(mods["signer"], "CastorSigner", lambda ident: object())
     monkeypatch.setattr(
-        "castor.rcan3.reader.read_robot_md",
+        mods["reader"],
+        "read_robot_md",
         lambda p: _Args(rrn="RRN-000000000001", endpoint="https://example.invalid"),
     )
 
@@ -167,7 +174,23 @@ def test_submit_marks_reported_and_second_run_submits_nothing(tmp_path, monkeypa
         async def __aexit__(self, *a):
             return False
 
-    monkeypatch.setattr("castor.rcan3.rrf_client.RrfClient", _FakeRrf)
+    monkeypatch.setattr(mods["rrf_client"], "RrfClient", _FakeRrf)
+
+
+def test_submit_marks_reported_and_second_run_submits_nothing(tmp_path, monkeypatch, capsys):
+    from castor import cli as cli_mod
+
+    log_path = tmp_path / "incidents.jsonl"
+    log = IncidentLog(log_path)
+    inc_id = log.record(IncidentSeverity.SERIOUS_HARM, "estop", "ESTOP", {})
+
+    calls: list[list[dict]] = []
+
+    async def _fake_submit(*, rrf, signer, rrn, incidents):
+        calls.append(list(incidents))
+        return {"status": "accepted", "receipt_id": "rcpt-1"}
+
+    _patch_submission_path(monkeypatch, _fake_submit)
 
     args = _Args(manifest="ROBOT.md")
 
@@ -215,27 +238,7 @@ def test_failed_submission_never_marks_reported(tmp_path, monkeypatch, capsys):
     async def _boom(*, rrf, signer, rrn, incidents):
         raise RuntimeError("503: registry is down")
 
-    monkeypatch.setattr(
-        "castor.rcan3.compliance.submit_incident_report", _boom, raising=False
-    )
-    monkeypatch.setattr("castor.rcan3.identity.load_or_generate_identity", lambda: object())
-    monkeypatch.setattr("castor.rcan3.signer.CastorSigner", lambda ident: object())
-    monkeypatch.setattr(
-        "castor.rcan3.reader.read_robot_md",
-        lambda p: _Args(rrn="RRN-000000000001", endpoint="https://example.invalid"),
-    )
-
-    class _FakeRrf:
-        def __init__(self, *a, **kw):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *a):
-            return False
-
-    monkeypatch.setattr("castor.rcan3.rrf_client.RrfClient", _FakeRrf)
+    _patch_submission_path(monkeypatch, _boom)
 
     rc = cli_mod._submit_incident_report(_Args(manifest="ROBOT.md"), log)
     assert rc == 1
