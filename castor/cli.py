@@ -5879,17 +5879,33 @@ def _cmd_monitor(args) -> None:
 # walk up needs to learn what the last one meant without reading a log.
 
 
-def _estop_auth_code(home) -> str:
-    """The robot's e-stop clear code, from the environment or tokens.env.
+def _estop_auth_sources(home) -> tuple[str, str]:
+    """The code this robot expects, and where it was found.
 
-    `castor up` writes OPENCASTOR_ESTOP_AUTH into tokens.env, which the
-    generated unit loads, so the runtime has it. The CLI usually does not: this
-    reads the file the same way systemd does, so an operator standing at the
-    robot does not have to export anything.
+    Two sources, environment first:
+
+    1. ``OPENCASTOR_ESTOP_AUTH`` in the environment.
+    2. ``OPENCASTOR_ESTOP_AUTH=`` in ``<home>/tokens.env``, read the same way
+       systemd reads it, so an operator standing at the robot does not have to
+       export anything.
+
+    THE API IS NOT QUITE THE SAME, and pretending otherwise here would be the
+    comfortable lie. ``SafetyLayer.clear_estop``, which ``POST /api/estop/clear``
+    goes through, reads only the environment variable; it never opens
+    tokens.env. A unit written by `castor up` loads tokens.env into the server's
+    environment, so on a robot built the ten-minute way the two agree. A gateway
+    started by hand in a shell that does not export it has no code to check a
+    clear against. ``docs/safety/hold.md`` says this on the page.
+
+    Returns ``("", "")`` when this robot has NO code at all, which is a real
+    state and not an error: a gateway-only robot built before `castor up`
+    started calling ``ensure_estop_auth``, or one whose tokens.env the CLI
+    cannot read, has nothing to check against. What the caller must not do with
+    that answer is treat it as permission; see :func:`cmd_resume`.
     """
     code = os.environ.get("OPENCASTOR_ESTOP_AUTH", "").strip()
     if code:
-        return code
+        return code, "the OPENCASTOR_ESTOP_AUTH environment variable"
     try:
         from pathlib import Path as _Path
 
@@ -5897,10 +5913,17 @@ def _estop_auth_code(home) -> str:
         for line in tokens.read_text(encoding="utf-8").splitlines():
             stripped = line.strip()
             if stripped.startswith("OPENCASTOR_ESTOP_AUTH="):
-                return stripped.split("=", 1)[1].strip()
+                found = stripped.split("=", 1)[1].strip()
+                if found:
+                    return found, str(tokens)
     except Exception:
         pass
-    return ""
+    return "", ""
+
+
+def _estop_auth_code(home) -> str:
+    """The robot's e-stop clear code, or "" when this robot has none."""
+    return _estop_auth_sources(home)[0]
 
 
 def cmd_pause(args) -> None:
@@ -5974,22 +5997,126 @@ def cmd_resume(args) -> None:
             print(f"  Because  {before.estop_reason or '(no reason recorded)'}")
             print("  Check the robot, then re-run with --clear-estop.\n")
             return
-        required = _estop_auth_code(home)
-        supplied = (getattr(args, "auth_code", "") or "").strip()
-        if required and supplied != required:
+        # THE SECOND FACTOR, AND WHAT HAPPENS WHEN THERE ISN'T ONE.
+        #
+        # This used to read `if required and supplied != required`, which meant
+        # that a robot with no code at all cleared its e-stop with no code at
+        # all, silently. That is the common case on a gateway-only robot: the
+        # actuator lives behind the gateway, `castor up` may never have run on
+        # this host, and so nothing ever provisioned OPENCASTOR_ESTOP_AUTH. The
+        # weakest robots were the ones with no second factor, which is exactly
+        # backwards. A missing secret is a missing secret; it is not consent.
+        required, where = _estop_auth_sources(home)
+        supplied = (getattr(args, "auth_code", "") or "").strip() or os.environ.get(
+            "OPENCASTOR_ESTOP_AUTH", ""
+        ).strip()
+        unauthenticated = bool(getattr(args, "no_auth_code", False))
+
+        if required:
+            if unauthenticated:
+                print(
+                    "\n  --no-auth-code is ignored: this robot HAS an e-stop clear"
+                    f" code\n  (from {where}). Supply it with --auth-code.\n"
+                )
+                raise SystemExit(3)
+            if not supplied:
+                print(
+                    "\n  Refused: this robot has an e-stop clear code and none was"
+                    f" supplied.\n  The code is OPENCASTOR_ESTOP_AUTH, from {where}."
+                    "\n  Pass it as --auth-code, or export it.\n"
+                )
+                raise SystemExit(3)
+            if supplied != required:
+                print(
+                    "\n  Refused: wrong --auth-code. The code is"
+                    f" OPENCASTOR_ESTOP_AUTH,\n  from {where}, and `castor up`"
+                    " prints it.\n"
+                )
+                raise SystemExit(3)
+        elif not unauthenticated:
             print(
-                "\n  Refused: wrong or missing --auth-code. The code is"
-                " OPENCASTOR_ESTOP_AUTH\n  in this robot's tokens.env, and"
-                " `castor up` prints it.\n"
+                "\n  Refused: this robot has no e-stop clear code, so there is"
+                " nothing\n  to check this clear against. OPENCASTOR_ESTOP_AUTH"
+                " is not set in the\n  environment and is not in"
+                f" {os.path.join(str(home), 'tokens.env')}."
+                "\n\n  Provision one by running `castor up` on this robot"
+                " (castor.up.ensure_estop_auth\n  mints it and writes it into"
+                " tokens.env), or export OPENCASTOR_ESTOP_AUTH\n  yourself in"
+                " both this shell and the runtime's environment."
+                "\n\n  To clear anyway, knowing the clear is unauthenticated,"
+                " re-run with\n  --no-auth-code.\n"
             )
             raise SystemExit(3)
+        else:
+            print(
+                "\n  WARNING: this clear is UNAUTHENTICATED. This robot has no"
+                " e-stop clear\n  code (OPENCASTOR_ESTOP_AUTH is unset and is"
+                f" not in {os.path.join(str(home), 'tokens.env')}),\n  so nothing verified"
+                " that whoever ran this was allowed to lift the stop.\n  Run"
+                " `castor up` to provision one."
+            )
         _latch.record_clear(home)
+        _audit_estop_clear(
+            home,
+            authenticated=bool(required),
+            latched_source=before.estop_source,
+            latched_reason=before.estop_reason,
+        )
         print(
             f"\n  E-stop cleared at the robot by {_current_operator()} "
             f"(was source={before.estop_source or 'unknown'})."
         )
         print("  The running runtime picks this up within a few seconds.")
     print("  This robot may move again.\n")
+
+
+def _audit_estop_clear(
+    home,
+    *,
+    authenticated: bool,
+    latched_source: str = "",
+    latched_reason: str = "",
+) -> None:
+    """Write the clear into this robot's append-only audit log. Never raises.
+
+    WHY THE CLI HAS TO DO THIS ITSELF. ``POST /api/estop/clear`` logs
+    ``estop_cleared`` with the API identity; the CLI wrote the latch file and
+    nothing else, so the only trace a shell clear left was the running
+    runtime's ``cleared out of process`` row, which lives in an in-memory ring
+    that dies with the process and does not say who cleared it or whether
+    anything checked them. ``_current_operator`` has said "a name for the audit
+    row" since it was written; this is the row.
+
+    ``authenticated`` is the whole point of recording it. A clear taken with
+    ``--no-auth-code`` on a robot that has no code is a real and allowed thing,
+    and it is also the one a person reading this log afterwards most needs to
+    be able to pick out. Printing a warning to a terminal nobody kept is not a
+    record.
+
+    Written to ``<home>/audit.log`` explicitly rather than through
+    ``get_audit()``: that module resolves its path once at import from
+    ``ROBOT_HOME``, and ``castor resume --home`` can name a different robot.
+    """
+    try:
+        from pathlib import Path as _Path
+
+        from castor.audit import AuditLog
+
+        AuditLog(str(_Path(str(home)) / "audit.log")).log(
+            "estop_cleared",
+            source="cli",
+            actor=_current_operator(),
+            authenticated=bool(authenticated),
+            auth_check=(
+                "OPENCASTOR_ESTOP_AUTH matched"
+                if authenticated
+                else "none: this robot has no e-stop clear code (--no-auth-code)"
+            ),
+            latched_source=latched_source or "unknown",
+            latched_reason=latched_reason or "",
+        )
+    except Exception as exc:  # noqa: BLE001 - a log write must not fail a clear
+        print(f"  (note: the clear could not be written to the audit log: {exc})")
 
 
 def _current_operator() -> str:
@@ -10350,6 +10477,10 @@ def main() -> None:
             "can lift one an on-device sensor set: a remote RESUME is refused\n"
             "because whoever sends it cannot see the robot. It needs the e-stop\n"
             "clear code `castor up` printed (OPENCASTOR_ESTOP_AUTH in tokens.env).\n"
+            "\n"
+            "A robot that has NO clear code cannot check one, so --clear-estop\n"
+            "refuses rather than clearing unchecked. Run `castor up` to provision\n"
+            "a code, or pass --no-auth-code to clear knowing it is unauthenticated.\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -10360,6 +10491,16 @@ def main() -> None:
         help="Also clear a latched e-stop (needs --auth-code)",
     )
     p_resume.add_argument("--auth-code", default="", dest="auth_code", help="E-stop clear code")
+    p_resume.add_argument(
+        "--no-auth-code",
+        action="store_true",
+        dest="no_auth_code",
+        help=(
+            "Clear without a code on a robot that has none provisioned. Prints a "
+            "warning that the clear was unauthenticated. Refused when this robot "
+            "does have a code."
+        ),
+    )
     p_resume.add_argument("--home", default="", help="Robot home (default: $ROBOT_HOME)")
 
     # castor login

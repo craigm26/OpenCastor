@@ -251,6 +251,11 @@ Key invariants:
 - Audit chain required for all flagged commands
 - `GuardianAgent` has veto authority over unsafe actions
 
+Stopping a robot and un-stopping it: [`docs/safety/hold.md`](docs/safety/hold.md)
+covers the latch file, `castor pause` / `castor resume`, the e-stop clear code
+and why a sensor latch clears only at the robot. It is a best-effort software
+hold, not a hardware cut.
+
 P66 manifest: [`sbom/`](sbom/) · Full spec: [rcan.dev/docs/safety/](https://rcan.dev/docs/safety/)
 
 ## Fleet UI

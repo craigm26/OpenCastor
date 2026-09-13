@@ -94,6 +94,20 @@ class SafetyLayer:
         self.perms = perms
         self.limits = {**DEFAULT_LIMITS, **(limits or {})}
         self._lock = threading.Lock()
+        #: Serialises every change to the HOLD (e-stop and pause) against every
+        #: read-then-decide of the latch file. Separate from ``_lock``, which
+        #: counts violations, because the thing being protected is different
+        #: and because this one is held across a file write.
+        #:
+        #: WHY A LOCK AT ALL. The hold is changed from more than one thread: an
+        #: API handler on the event loop, the sensor monitor's own thread when
+        #: three critical readings latch, and the reconcile that reads the latch
+        #: file and decides what it means. Without this, a stop set between the
+        #: reconcile's read of the file and its comparison with the in-memory
+        #: flag reads as "the file says clear, memory says stopped", which is
+        #: the signature of an out-of-process CLEAR, and the stop is reverted.
+        #: Reentrant so a future caller that already holds it cannot deadlock.
+        self._hold_lock = threading.RLock()
         self.capability_broker = capability_broker
 
         # Rate limiting state
@@ -782,18 +796,23 @@ class SafetyLayer:
         if not (caps & Cap.ESTOP) and principal != "root":
             self._audit_safety(principal, "/dev/motor", "deny_estop", "missing CAP_ESTOP")
             return False
-        self._estop = True
-        self._estop_source = source
-        self.ns.write("/proc/status", "estop")
-        # Persist BEFORE auditing: if this process dies in the next millisecond
-        # the next one must still come back stopped. A missing audit row is a
-        # gap in the record; a forgotten stop is a robot that moves.
-        try:
-            from castor.safety.latch import record_estop as _record_estop
+        # UNDER THE HOLD LOCK, flag and file together: a reconcile that read
+        # the file a moment ago must not get to compare it against the flag we
+        # are about to set and call the difference somebody else's clear.
+        with self._hold_lock:
+            self._estop = True
+            self._estop_source = source
+            self.ns.write("/proc/status", "estop")
+            # Persist BEFORE auditing: if this process dies in the next
+            # millisecond the next one must still come back stopped. A missing
+            # audit row is a gap in the record; a forgotten stop is a robot
+            # that moves.
+            try:
+                from castor.safety.latch import record_estop as _record_estop
 
-            _record_estop(principal=principal, source=source, reason=reason)
-        except Exception as exc:  # noqa: BLE001 - never let the stop itself fail
-            logger.warning("Safety latch could not be persisted: %s", exc)
+                _record_estop(principal=principal, source=source, reason=reason)
+            except Exception as exc:  # noqa: BLE001 - never let the stop fail
+                logger.warning("Safety latch could not be persisted: %s", exc)
         detail = f"ESTOP activated — source={source}" + (f" — {reason}" if reason else "")
         self._audit_safety(principal, "/dev/motor", "estop", detail)
         logger.warning("EMERGENCY STOP [%s] activated by %s: %s", source, principal, reason)
@@ -928,15 +947,16 @@ class SafetyLayer:
                 logger.warning("clear_estop denied for %s: bad auth code", principal)
                 return False
 
-        self._estop = False
-        self._estop_source = ""
-        self.ns.write("/proc/status", "active")
-        try:
-            from castor.safety.latch import record_clear as _record_clear
+        with self._hold_lock:
+            self._estop = False
+            self._estop_source = ""
+            self.ns.write("/proc/status", "active")
+            try:
+                from castor.safety.latch import record_clear as _record_clear
 
-            _record_clear()
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Safety latch could not be cleared on disk: %s", exc)
+                _record_clear()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Safety latch could not be cleared on disk: %s", exc)
         self._audit_safety(
             principal, "/dev/motor", "clear_estop", f"emergency stop cleared — source={source}"
         )
@@ -962,7 +982,24 @@ class SafetyLayer:
         without the sensor rule ever being consulted. A clear always LEAVES a
         file behind (``record_clear`` writes engaged=false), so the absence of
         one is never evidence that anybody cleared anything.
+
+        AND NEITHER DOES AN UNREADABLE ONE, for exactly the same reason. An
+        empty, truncated or non-JSON latch also reads as "nothing held", so
+        without this ``echo x > safety-latch.json`` lifted a stop that ``rm
+        safety-latch.json`` could not, which is a strange rule to hold. Zero
+        bytes is the likeliest corruption of all: the rename in ``save()`` is
+        atomic, but a power cut before the data behind it reaches the disk is
+        not. ``LatchState.readable`` is what tells the two apart.
+
+        Takes ``_hold_lock`` for the whole read-then-decide, which is the only
+        way the decision can be sound: the file is read, compared with the flag
+        and acted on with no other thread able to change either in between.
         """
+        with self._hold_lock:
+            return self._resync_from_latch_locked()
+
+    def _resync_from_latch_locked(self) -> bool:
+        """The body of :meth:`resync_from_latch`. Caller holds ``_hold_lock``."""
         try:
             from castor.safety.latch import latch_path
             from castor.safety.latch import load as _load_latch
@@ -982,11 +1019,36 @@ class SafetyLayer:
         except Exception as exc:  # noqa: BLE001
             logger.debug("latch resync skipped: %s", exc)
             return False
+        if not getattr(latch, "readable", True):
+            if self._estop or self._paused:
+                logger.warning(
+                    "safety latch file %s could not be read; the hold in this process "
+                    "STANDS. Clear it with `castor resume --clear-estop` or "
+                    "POST /api/estop/clear.",
+                    path,
+                )
+            return False
         changed = False
         if latch.paused != self._paused:
+            was_detail = self._pause_detail
             self._paused = latch.paused
             self._pause_detail = latch.describe() if latch.paused else ""
             logger.info("pause %s out of process", "set" if latch.paused else "lifted")
+            # AUDITED, not just logged. A pause blocks every motor write, the
+            # same as an e-stop does, and both adopting and lifting one here
+            # happen because another process said so. A hold this robot is
+            # applying with nothing in its own record saying when it started is
+            # a hold nobody can account for afterwards.
+            self._audit_safety(
+                latch.pause_principal or "latch",
+                "/dev/motor",
+                "pause" if latch.paused else "resume",
+                (
+                    f"adopted from the persisted latch — {latch.describe()}"
+                    if latch.paused
+                    else f"lifted out of process — was {was_detail or 'a pause'}"
+                ),
+            )
             changed = True
         if latch.estop_engaged and not self._estop:
             self._estop = True
@@ -1027,6 +1089,21 @@ class SafetyLayer:
         in :meth:`clear_estop` reads, and it survives a restart with the latch.
         """
         return self._estop_source
+
+    @property
+    def is_paused(self) -> bool:
+        """True when a person stood this robot down with ``castor pause``.
+
+        A pause is not an e-stop, but it blocks motor writes the same way. It
+        is a separate property because a caller that reports "e-stopped: false"
+        while refusing every motion command is lying by omission.
+        """
+        return self._paused
+
+    @property
+    def pause_detail(self) -> str:
+        """Who paused, when, and why, or "" when nothing is paused."""
+        return self._pause_detail
 
     @property
     def last_write_denial(self) -> str:

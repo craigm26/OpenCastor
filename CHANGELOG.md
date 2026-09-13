@@ -387,6 +387,124 @@ empty list.
 
 ### Fixed
 
+**`castor pause` reaches a running stock gateway, not the next restart.** The
+persisted safety latch was reconciled only by the generated runtime templates,
+whose always-on guard loop calls `SafetyLayer.resync_from_latch` every cycle.
+The stock `castor gateway` app never called it, and that app is what a robot
+whose actuator lives behind the gateway actually runs. So `castor pause --reason
+"..."` and `castor resume`, typed at a shell on the robot, wrote the latch file
+and then waited for a restart. From outside, a pause that takes effect at the
+next restart and a pause that does nothing look the same.
+
+`castor.api`'s lifespan now starts one background task that reconciles the
+latch on the same five second cadence the generated runtime uses, once
+immediately at startup and then on the timer. It runs on the event loop rather
+than on a worker thread, and so does the generated runtime's guard loop, which
+used to hand the same work to a thread: every other mutator of the in-memory
+hold is an async handler, so from a thread the reconcile can be descheduled
+between reading the latch file and comparing it with the flag, and a stop that
+lands in that window reads as somebody else's clear and is reverted until a
+later cycle re-adopts it. The work is one small local file read.
+
+A DELETED latch file still never lifts a hold: a clear leaves a file behind
+saying so, and the absence of one is not evidence that anybody cleared
+anything. Neither does an UNREADABLE one now: empty, truncated or non-JSON
+reads as "nothing held" as well, and a process that is already holding treats
+that as a file it could not read rather than as a clear. Zero bytes is the
+likeliest corruption there is. Boot still comes up clear on an unreadable
+latch, deliberately.
+
+Adopting or lifting a pause out of process is now audited the way the e-stop
+transitions already were. A pause blocks every motor write, and a robot
+refusing motion with nothing in its own safety log saying when that started is
+the sticky pause the mandatory reason string exists to prevent.
+
+`GET /api/fs/estop` now also reports `paused`, `held`, `hold_detail` and
+`resync_interval_s`, so a caller can tell a pause from an e-stop and can see
+this process' own state next to the file it was reconciled from. A server that
+reported `estopped: false` while refusing every motion command was lying by
+omission. `CastorFS.is_paused` and `CastorFS.pause_detail` are the new
+properties behind it.
+
+This remains a best-effort software hold. It is not a hardware cut, it
+de-energises nothing, and nothing here is safety rated.
+
+**`castor resume --clear-estop` no longer clears unchecked when a robot has no
+clear code.** The check read "if a code is configured and the supplied one does
+not match, refuse", so a robot with no code at all cleared its e-stop with no
+code at all, and said nothing about it. That is the ordinary state of a
+gateway-only robot: the actuator lives behind the gateway, `castor up` may never
+have run on that host, and nothing ever provisioned `OPENCASTOR_ESTOP_AUTH`. The
+robots with no second factor were the ones that asked for nothing, which is
+backwards. A missing secret is a missing secret; it is not consent.
+
+Now: if the code is set in the environment or found in `<home>/tokens.env`, it
+must be supplied by `--auth-code` or in the environment and must match, and
+`--no-auth-code` is refused rather than honoured. If neither source has one, the
+clear is refused with a message naming `OPENCASTOR_ESTOP_AUTH`, naming
+`castor up` and `ensure_estop_auth` as what provisions it, and naming the escape
+hatch. The escape hatch is the new `--no-auth-code` flag, which clears and
+prints a warning that the clear was unauthenticated and that nothing verified
+who ran it.
+
+`_estop_auth_sources()` reports both the code and where it came from: the
+`OPENCASTOR_ESTOP_AUTH` environment variable first, then `<home>/tokens.env`.
+`SafetyLayer.clear_estop`, which is what `POST /api/estop/clear` goes through,
+reads only the environment variable. A unit written by `castor up` loads
+tokens.env, so on a robot built the ten-minute way the two agree; a gateway
+started by hand in a shell without the variable has nothing to check a clear
+against. `docs/safety/hold.md` says so on the page rather than leaving it to be
+discovered.
+
+Every clear taken at the robot now appends `estop_cleared` to
+`<home>/audit.log`, the same hash-chained log the API's clear writes to,
+carrying who took it and whether anything checked them. A warning printed once
+to a terminal nobody kept is not a record. A refused clear writes nothing,
+because nothing was lifted.
+
+**The bundled `/gamepad` page can clear a hold again.** Once
+`POST /api/estop/clear` started demanding `X-Estop-Auth`, the page's fetch
+helper still took only a path and a body, so it could not set the header and
+the page's clear could not succeed on any robot `castor up` had provisioned. It
+answered 403 every time and rendered `d.detail`, a key the gateway does not
+send, so whoever was holding the phone saw the word "error".
+
+The page now has a small code field and a clear button in the top bar, sends
+the code as `X-Estop-Auth`, and renders the server's own refusal, which already
+distinguishes a wrong code from a wrong bearer from a stop a sensor set that has
+to be cleared at the robot. The code lives in the field for as long as the page
+is open and nowhere else: not `localStorage`, not `sessionStorage`, not the URL.
+A phone left on a bench must not still be able to lift a stop tomorrow.
+
+The page's copy now says what the hold is: a best-effort software hold, not a
+hardware cut.
+
+**New page: [`docs/safety/hold.md`](docs/safety/hold.md).** What the hold is (a
+best-effort software hold, not a hardware cut), where the latch file lives and
+why deleting it does not clear anything, `castor pause` and `castor resume`, the
+e-stop clear code and how `castor up` provisions it, why a sensor latch clears
+only at the robot, and one line saying that `POST /api/runtime/resume` pauses
+the perception-action loop and is not the e-stop latch. Linked from the safety
+module map in `docs/safety-architecture.md` and from the README's Protocol 66
+section.
+
+**The arm branch of the generated runtime's stop is tested against a gateway
+that answers.** The tool selection was pinned with a stub `_invoke`, which
+never builds an envelope, never opens a socket and never reads a status line.
+The arm is the archetype where the whole hop is the point, because the joints
+live in the gateway and `arm.estop` is the only thing that reaches them. Three
+new tests run the template's real `_invoke` against a local HTTP server
+standing in for the gateway: an arm that declares `arm.estop` is asked for it
+first and a 2xx yields the tool name and the gateway's own body; an arm whose
+config forgot to declare a stop finds it after a real 404 on `drive.stop`; and
+a gateway that refuses everything is reported as `stop_not_confirmed` after
+`STOP_ATTEMPTS` asks rather than as a stop that landed. What the tests assert
+includes what the server received: the path, the bearer, the envelope type and
+that the scope is `HALT`.
+
+Still not covered, and still a manual step: a signed receipt from a real
+gateway. That needs the arm.
+
 **A stop is acknowledged only once the robot has answered.** `castor bridge`
 wrote `ack_qos: "acknowledged"` onto the command document before it dispatched
 anything, under a comment that called it an immediate ACK. It was not an

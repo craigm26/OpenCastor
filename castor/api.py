@@ -90,12 +90,120 @@ logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 # ---------------------------------------------------------------------------
 # App & state
 # ---------------------------------------------------------------------------
+
+#: How often the stock gateway reconciles its in-memory hold with the latch
+#: file on disk. The same number the generated runtime's guard loop uses
+#: (``HOLD_REASSERT_S`` in the runtime templates), on purpose: a stop that
+#: takes a different length of time to be noticed depending on which of two
+#: servers you happen to be running is a stop nobody can reason about.
+SAFETY_LATCH_RESYNC_S = 5.0
+
+
+def _resync_safety_latch() -> bool:
+    """Reconcile this process' hold with $ROBOT_HOME/safety-latch.json.
+
+    WHY THIS EXISTS AT ALL. ``castor pause --reason ...`` and ``castor resume``
+    run in a DIFFERENT PROCESS from the server: they write the latch file and
+    then rely on the running server to notice. The generated runtime templates
+    notice, because their always-on guard loop calls ``resync_from_latch``
+    every cycle. The stock ``castor gateway`` app, which is what a robot whose
+    arm lives behind the gateway actually runs, never called it, so a pause
+    typed at a shell took effect at the next restart and not before. That is
+    indistinguishable, from the outside, from a pause that does not work.
+
+    CALLED INLINE ON THE EVENT LOOP, NEVER FROM A THREAD. It reads a small
+    local file and, only when something actually changed, appends one row to
+    the in-memory audit ring. That is cheap, and it is the same thing the
+    generated runtime's guard loop does inline in its own event loop.
+
+    A thread was tried and is WRONG here, because it loses stops. Every other
+    mutator of ``SafetyLayer._estop`` in this process is an ``async def``
+    handler (``POST /api/stop``, ``POST /api/estop/clear``), so nothing can
+    interleave with a coroutine that does not await. Run the reconcile in a
+    worker thread instead and it can be descheduled between reading the file
+    and comparing the result against ``self._estop``: an e-stop that arrives in
+    that window is seen as "the file says nothing is engaged but memory says it
+    is", which is the signature of an out-of-process clear, and the stop a
+    person just asked for is reverted, ``/proc/status`` goes back to 'active'
+    and a false ``clear_estop`` row is audited. The next cycle re-adopts it
+    from the file, so the robot is unheld for up to one cadence. One cadence
+    unheld right after somebody hit the stop is the whole failure.
+
+    Returns True when the in-memory hold changed. A DELETED latch file never
+    lifts a hold: that rule lives in ``SafetyLayer.resync_from_latch`` and this
+    function deliberately adds nothing to it.
+    """
+    fs = getattr(state, "fs", None)
+    if fs is None:
+        return False
+    safety = getattr(fs, "safety", None)
+    if safety is None or not hasattr(safety, "resync_from_latch"):
+        return False
+    return bool(safety.resync_from_latch())
+
+
+async def _safety_latch_resync_loop() -> None:
+    """Always on, request or no request, for the life of the process.
+
+    Reconciles once immediately so a server that starts while a pause is
+    latched is holding before it serves its first request, then once every
+    :data:`SAFETY_LATCH_RESYNC_S`. Never raises out of the loop: the guard has
+    to outlive its own bugs, because the failure mode of a dead guard is a hold
+    nobody is applying.
+
+    The reconcile itself runs inline, not in a thread: see
+    :func:`_resync_safety_latch` for why a thread here loses stops.
+    """
+    while True:
+        try:
+            if _resync_safety_latch():
+                logger.warning(
+                    "safety hold reconciled from the latch file; see the audit row"
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - a guard that dies is worse than a slow one
+            logger.warning("safety latch resync failed", exc_info=True)
+        await asyncio.sleep(max(0.01, SAFETY_LATCH_RESYNC_S))
+
+
+def _latch_task_ended(task: "asyncio.Task") -> None:
+    """Say so, loudly, if the reconcile task stops for any reason but shutdown.
+
+    The loop swallows Exception on purpose, so the only things that can end it
+    are the cancellation at shutdown and a BaseException nobody plans for. A
+    guard that died quietly is worse than one that never existed: every /api
+    answer after it goes on reporting this process' hold, correctly, and this
+    process simply stops hearing about anything typed at a shell. This does not
+    restart it, because a task that died of a BaseException will die again; it
+    makes the silence audible.
+    """
+    if task.cancelled():
+        return
+    exc = task.exception()
+    logger.critical(
+        "THE SAFETY LATCH RECONCILE TASK HAS STOPPED (%s). `castor pause` and "
+        "`castor resume` will not reach this process until it is restarted.",
+        repr(exc) if exc is not None else "returned",
+    )
+
+
 @contextlib.asynccontextmanager
 async def lifespan(app: "FastAPI"):  # noqa: F821
     """FastAPI lifespan context manager (replaces deprecated @app.on_event)."""
     await on_startup()
-    yield
-    await on_shutdown()
+    latch_task = asyncio.create_task(_safety_latch_resync_loop())
+    latch_task.add_done_callback(_latch_task_ended)
+    try:
+        yield
+    finally:
+        latch_task.cancel()
+        # CancelledError is a BaseException, not an Exception: suppressing only
+        # Exception here would let the cancellation we just asked for escape
+        # the lifespan and surface as a shutdown error.
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await latch_task
+        await on_shutdown()
 
 
 app = FastAPI(
@@ -1051,10 +1159,20 @@ async def get_estop_status():
 
     Returns:
         estopped: True if e-stop is active (motor writes blocked).
+        paused: True if `castor pause` stood this robot down. Not an e-stop,
+            blocks motor writes the same way.
+        held: estopped or paused. The one field to read to answer "will this
+            robot move".
+        hold_detail: Who set the hold, when, and why.
         proc_status: Current /proc/status value (active, estop, idle, ...).
         last_denial: Reason for the most recent safety layer write rejection.
         source: Where the active latch came from ('sensor', 'api', 'rcan', ...).
         latch: The persisted latch, including any `castor pause` and its reason.
+
+    `estopped` and `paused` are THIS PROCESS' state, reconciled from the latch
+    file by the background task in the lifespan; `latch` is the file itself.
+    They agree within one reconcile cycle, and reporting both is what makes a
+    disagreement visible instead of silent.
 
     This reports a best-effort SOFTWARE hold. `estopped: true` means this
     robot's own software refuses motion and has asked its actuator to stop. It
@@ -1067,15 +1185,27 @@ async def get_estop_status():
             latch = _latch_dump()
         except Exception:
             latch = {}
+        estopped = state.fs.is_estopped
+        paused = bool(getattr(state.fs, "is_paused", False))
         return {
-            "estopped": state.fs.is_estopped,
+            "estopped": estopped,
+            "paused": paused,
+            "held": bool(estopped or paused),
+            "hold_detail": getattr(state.fs, "pause_detail", "") or "",
             "source": getattr(state.fs, "estop_source", ""),
             "proc_status": state.fs.read("/proc/status", principal="api") or "unknown",
             "last_denial": state.fs.last_write_denial,
             "latch": latch,
             "hold_kind": "best_effort_software_hold",
+            "resync_interval_s": SAFETY_LATCH_RESYNC_S,
         }
-    return {"estopped": False, "proc_status": "no_fs", "last_denial": ""}
+    return {
+        "estopped": False,
+        "paused": False,
+        "held": False,
+        "proc_status": "no_fs",
+        "last_denial": "",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -7362,6 +7492,14 @@ html,body{{height:100%;background:#0d1117;color:#e6edf3;font-family:monospace;ov
   padding:9px 18px;font-size:0.9rem;font-family:monospace;font-weight:bold;
   cursor:pointer;touch-action:manipulation;}}
 #estop-btn:active{{opacity:0.75;}}
+#clear-row{{display:flex;align-items:center;gap:6px;}}
+#estop-code{{width:118px;background:#0d1117;color:#e6edf3;border:1px solid #30363d;
+  border-radius:8px;padding:8px 9px;font-family:monospace;font-size:0.8rem;}}
+#estop-code::placeholder{{color:#484f58;}}
+#clear-btn{{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:8px;
+  padding:9px 14px;font-size:0.8rem;font-family:monospace;
+  cursor:pointer;touch-action:manipulation;}}
+#clear-btn:active{{opacity:0.75;}}
 #dpad-wrap{{flex:1;display:flex;align-items:center;justify-content:center;padding:16px;}}
 #dpad{{display:grid;grid-template-columns:repeat(3,var(--btn));
   grid-template-rows:repeat(3,var(--btn));gap:var(--gap);}}
@@ -7393,6 +7531,12 @@ input[type=range]{{width:110px;accent-color:#58a6ff;}}
   <span id="robot-lbl">🤖 {_robot}</span>
   <span id="dir-ind">⬜</span>
   <button id="estop-btn">⏹ E-STOP</button>
+  <span id="clear-row">
+    <input id="estop-code" type="password" autocomplete="off" autocapitalize="off"
+      autocorrect="off" spellcheck="false" placeholder="e-stop code"
+      aria-label="E-stop clear code, sent as the X-Estop-Auth header">
+    <button id="clear-btn" title="Clear the hold. Needs the e-stop code.">clear hold</button>
+  </span>
 </div>
 <div id="dpad-wrap">
   <div id="dpad">
@@ -7426,7 +7570,7 @@ input[type=range]{{width:110px;accent-color:#58a6ff;}}
 </div>
 <div id="statusbar">
   <span id="fb">Ready</span>
-  <span id="hint">hold=move · release=stop · Start=ESTOP · Sel=clear</span>
+  <span id="hint">hold=move · release=stop · Start=ESTOP · Sel=clear · software hold only</span>
 </div>
 <script>
 (function(){{
@@ -7439,14 +7583,45 @@ input[type=range]{{width:110px;accent-color:#58a6ff;}}
     const el = document.getElementById("fb");
     el.textContent = msg; el.style.color = c || "#8b949e";
   }}
-  function api(path, body) {{
+  // `extra` carries X-Estop-Auth. Without it this helper could not send the
+  // e-stop clear code at all, so the page's own clear could never succeed on
+  // any robot `castor up` had provisioned: every attempt came back 403 and the
+  // page had no way to say anything useful about why.
+  function api(path, body, extra) {{
+    const h = Object.assign({{}}, body !== undefined ? jsonH : authH, extra || {{}});
     return fetch(GW + path, {{
-      method: "POST", headers: body !== undefined ? jsonH : authH,
+      method: "POST", headers: h,
       body: body !== undefined ? JSON.stringify(body) : undefined
     }}).then(r => {{
-      if (!r.ok) r.json().then(d => fb(d.detail || "error", "#f85149")).catch(() => {{}});
+      // THE SERVER'S OWN WORDS. The gateway answers {{error: ...}}; older
+      // handlers answer {{detail: ...}}. A refusal that renders as "error"
+      // tells the person holding the phone nothing, and the server already
+      // says whether the code was wrong, whether the bearer was, or whether a
+      // sensor set this stop and it has to be cleared at the robot.
+      if (!r.ok) r.json().then(d => fb(d.error || d.detail || ("HTTP " + r.status),
+                                       "#f85149")).catch(() => {{}});
       return r;
     }}).catch(e => fb("" + e, "#f85149"));
+  }}
+
+  // IN MEMORY, FOR AS LONG AS THIS PAGE IS OPEN, AND NOWHERE ELSE. Not
+  // localStorage, not sessionStorage, not the URL: this is the second factor
+  // in front of lifting a stop, and a phone left on a bench must not still be
+  // able to clear one tomorrow. Reloading the page asks again.
+  function estopCode() {{
+    const el = document.getElementById("estop-code");
+    return el && el.value ? el.value.trim() : "";
+  }}
+
+  function clearHold() {{
+    const code = estopCode();
+    const headers = code ? {{"X-Estop-Auth": code}} : {{}};
+    if (!code) fb("No code entered; the server will almost certainly refuse", "#d29922");
+    api("/api/estop/clear", undefined, headers).then(r => {{
+      if (r && r.ok) fb("Hold cleared. Best-effort software hold, not a hardware cut.",
+                        "#3fb950");
+      // A refusal has already been rendered by api() in the server's own words.
+    }});
   }}
 
   let moveIv = null, activeBtn = null;
@@ -7487,7 +7662,14 @@ input[type=range]{{width:110px;accent-color:#58a6ff;}}
 
   document.getElementById("estop-btn").addEventListener("click", () => {{
     stopMove();
-    api("/api/stop").then(() => fb("E-STOP active — clearing it needs the owner token", "#da3633"));
+    api("/api/stop").then(() => fb(
+      "Hold active (best-effort software hold, not a hardware cut). "
+      + "Clearing it needs the owner token and the e-stop code.", "#da3633"));
+  }});
+
+  document.getElementById("clear-btn").addEventListener("click", clearHold);
+  document.getElementById("estop-code").addEventListener("keydown", e => {{
+    if (e.key === "Enter") clearHold();
   }});
 
   let gpIdx = null, gpRaf = null, prev = {{}}, lastT = 0, lastMoving = false;
@@ -7530,15 +7712,9 @@ input[type=range]{{width:110px;accent-color:#58a6ff;}}
       api("/api/action", {{type:"move", linear:0, angular:0}});
     if (justPressed(gp,9)) {{
       api("/api/stop");
-      fb("E-STOP (gamepad Start)", "#da3633");
+      fb("Hold active (gamepad Start). Best-effort software hold.", "#da3633");
     }}
-    if (justPressed(gp,8))
-      api("/api/estop/clear").then(r => fb(
-        r && r.ok ? "Stop cleared (gamepad Sel)"
-                  : "Clearing a stop needs the owner token AND the e-stop code "
-                  + "`castor up` printed. Send it as X-Estop-Auth, or run "
-                  + "`castor resume --clear-estop` at the robot",
-        r && r.ok ? "#3fb950" : "#da3633"));
+    if (justPressed(gp,8)) clearHold();
   }}
 
   window.addEventListener("gamepadconnected", e => {{

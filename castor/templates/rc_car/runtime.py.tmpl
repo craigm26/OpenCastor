@@ -532,7 +532,17 @@ async def _hold_loop(watchdog=None) -> None:
     while True:
         try:
             _feed_watchdog(watchdog)
-            held = await asyncio.to_thread(_hold)
+            # INLINE, not asyncio.to_thread. _hold() reconciles this process'
+            # flag with the latch file, and every other mutator of that flag
+            # (POST /api/stop, POST /api/estop/clear) is an async handler on
+            # this same loop. From a worker thread the reconcile can be
+            # descheduled between reading the file and comparing it with the
+            # in-memory flag, and a stop that lands in that window reads as an
+            # out-of-process CLEAR: it is reverted, /proc/status goes back to
+            # 'active' and a false clear_estop row is audited, until the next
+            # cycle re-adopts it from the file. The reads are small local
+            # files, which is what makes inline affordable.
+            held = _hold()
             if held:
                 if not announced:
                     logger.warning("holding: %s", held)
@@ -593,7 +603,10 @@ async def _lifespan_with_safety_guard(scope_app):
         finally:
             if guard_task is not None:
                 guard_task.cancel()
-                with contextlib.suppress(Exception):
+                # CancelledError is a BaseException, not an Exception: catching
+                # only Exception lets the cancellation we just asked for escape
+                # the lifespan and surface as a shutdown error.
+                with contextlib.suppress(asyncio.CancelledError, Exception):
                     await guard_task
             for component in (monitor, watchdog):
                 if component is not None:
@@ -691,7 +704,10 @@ async def robot_ws_telemetry(websocket: WebSocket, token: str = ""):
             # "" when free. A phone showing an envelope with seconds left on it
             # while the robot is latched would be showing an approval that
             # cannot be spent.
-            frame["held"] = await asyncio.to_thread(_hold)
+            # Inline for the same reason as the guard loop: a reconcile in a
+            # worker thread can revert a stop that arrives mid-read, and this
+            # one runs five times a second while a phone is connected.
+            frame["held"] = _hold()
             try:
                 await websocket.send_json(frame)
             except Exception:

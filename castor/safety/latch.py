@@ -77,6 +77,16 @@ class LatchState:
     pause_reason: str = ""
     paused_at: float = 0.0
 
+    #: False when :func:`load` could not parse the file it found, and so is
+    #: answering "not held" out of ignorance rather than out of knowledge.
+    #: A missing file is readable=True: absence is a fact, garbage is not.
+    #:
+    #: At boot, "not held" is the deliberate answer either way; see load().
+    #: A RUNNING process must not treat it as a clear, because then
+    #: `echo x > safety-latch.json` lifts a stop that `rm safety-latch.json`
+    #: cannot. SafetyLayer.resync_from_latch reads this and stands its ground.
+    readable: bool = True
+
     @property
     def held(self) -> bool:
         """True when this robot is not allowed to move for either reason."""
@@ -127,18 +137,41 @@ def load(home: Optional[str | Path] = None) -> LatchState:
     refuses to start because a JSON file lost its last byte is a robot nobody
     can use to investigate, and the stop it is failing to remember is
     re-established by the sensor that set it within one monitor interval.
+
+    It comes back with ``readable=False``, though, which is the difference
+    between a file that says nothing is held and a file nobody could read. A
+    process that is ALREADY holding must not take the second one for a clear;
+    see ``SafetyLayer.resync_from_latch``.
     """
     path = latch_path(home)
     if not path or not path.exists():
         return LatchState()
     try:
-        raw = json.loads(path.read_text(encoding="utf-8") or "{}")
+        text = path.read_text(encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001 - never fail a boot on this
+        logger.warning("safety latch at %s could not be read (%s); treating as clear", path, exc)
+        return LatchState(readable=False)
+    if not text.strip():
+        # THE LIKELIEST CORRUPTION THERE IS. save() renames a fully written
+        # temp file over this one, so a torn write cannot produce a short file,
+        # but a power cut before the data behind that rename reaches the disk
+        # very much can, and what comes back is zero bytes. An empty file is
+        # not a latch saying "nothing is held"; it is a latch nobody can read.
+        logger.warning("safety latch at %s is empty; treating as clear", path)
+        return LatchState(readable=False)
+    try:
+        raw = json.loads(text)
     except Exception as exc:  # noqa: BLE001 - never fail a boot on this
         logger.warning("safety latch at %s is unreadable (%s); treating as clear", path, exc)
-        return LatchState()
+        return LatchState(readable=False)
     if not isinstance(raw, dict):
         logger.warning("safety latch at %s is not an object; treating as clear", path)
-        return LatchState()
+        return LatchState(readable=False)
+    if "estop" not in raw and "pause" not in raw:
+        # save() always writes both blocks. A JSON object with neither is not
+        # something this module wrote, so it is not evidence of anything.
+        logger.warning("safety latch at %s has no estop or pause block; treating as clear", path)
+        return LatchState(readable=False)
     estop = raw.get("estop") or {}
     pause = raw.get("pause") or {}
     return LatchState(

@@ -23,6 +23,7 @@ This document maps OpenCastor's safety implementation to the RCAN protocol provi
 | Context injection | §16.4 | `castor/brain/robot_context.py` | `build_context()` |
 | Nightly memory loop | autoDream | `castor/brain/autodream.py` | `AutoDream.run()` |
 | Watchdog | §6 | `castor/watchdog.py` | `Watchdog.start()` |
+| E-stop and pause hold ([hold.md](safety/hold.md)) | §6 | `castor/safety/latch.py` | `load()`, `record_estop()`, `record_pause()` |
 | Privacy policy | §PRIVACY | `castor/privacy.py` | `PrivacyPolicy.check_scope()` |
 
 ---
@@ -182,6 +183,15 @@ castor validate --category safety
 ```
 
 Use `--strict` to treat warnings as failures. Use `--json` for machine-readable output.
+
+---
+
+## Related Pages
+
+- [docs/safety/hold.md](safety/hold.md): the hold. The latch file,
+  `castor pause` / `castor resume`, the e-stop clear code, and why a sensor
+  latch clears only at the robot. It is a best-effort software hold, not a
+  hardware cut.
 
 ---
 

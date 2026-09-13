@@ -113,6 +113,30 @@ def test_generated_runtime_latches_and_reasserts_at_the_actuator(tmp_path, arche
 
 
 @pytest.mark.parametrize("archetype", ["rc-car", "microduck"])
+def test_the_generated_runtime_reconciles_the_latch_on_its_own_event_loop(tmp_path, archetype):
+    """`_hold()` must not be handed to a worker thread, in any generated runtime.
+
+    _hold() calls resync_from_latch, and every other mutator of the in-memory
+    flag it reconciles (POST /api/stop, POST /api/estop/clear) is an async
+    handler on the same loop. From a thread the reconcile can be descheduled
+    between reading the latch file and comparing it with the flag, and a stop
+    that lands in that window reads as an out-of-process CLEAR: it is reverted
+    until a later cycle re-adopts it from the file. On the rc-car the telemetry
+    frame ran this five times a second while a phone was connected.
+
+    _stop_at_actuator stays in a thread. That one really does cross a network
+    hop, and it mutates nothing.
+    """
+    text = render("runtime.py.tmpl", _plan(tmp_path, archetype))
+    assert "to_thread(_hold)" not in text, (
+        "the latch reconcile must run on the event loop; in a thread it can "
+        "revert a stop that arrives mid-read"
+    )
+    assert "_hold()" in text
+    assert "to_thread(_stop_at_actuator" in text, "the actuator hop stays off the loop"
+
+
+@pytest.mark.parametrize("archetype", ["rc-car", "microduck"])
 def test_the_watchdog_is_constructed_but_not_armed_by_default(tmp_path, archetype):
     """The ten-minute regression this item could most easily have caused.
 
@@ -772,3 +796,813 @@ def test_safety_layer_alone_still_works_with_no_robot_home(monkeypatch):
     assert sl.is_estopped is False
     assert sl.estop_source == ""
     assert sl.resync_from_latch() is False
+
+
+# ---------------------------------------------------------------------------
+# 9. The STOCK gateway reconciles the latch too, not just the generated runtime
+# ---------------------------------------------------------------------------
+# WHAT WAS STILL WRONG AFTER THE FIRST PASS. `SafetyLayer.resync_from_latch`
+# existed and only the GENERATED runtime templates called it. A robot whose
+# actuator lives behind the gateway runs the stock `castor gateway` app, and
+# that app never called it, so `castor pause --reason ...` typed at a shell
+# wrote the latch file and then waited for a restart. From outside, a pause
+# that takes effect at the next restart and a pause that does nothing look
+# exactly the same.
+@pytest.fixture()
+def _live_gateway(monkeypatch, tmp_path):
+    """The stock app under its REAL lifespan, with the heavy startup skipped.
+
+    The point of this fixture is the lifespan wiring itself, so it must not be
+    replaced with a no-op the way `_api_client` replaces it. `on_startup` opens
+    cameras, channels and mDNS, none of which this is about, so those two
+    coroutines are stubbed and everything the lifespan itself does is real.
+    """
+    import castor.api as api_mod
+
+    for var in ("OPENCASTOR_USERS", "OPENCASTOR_JWT_SECRET", "JWT_SECRET"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    monkeypatch.setenv("OPENCASTOR_API_TOKEN", RUNTIME_TOKEN)
+    monkeypatch.setattr(api_mod, "API_TOKEN", RUNTIME_TOKEN)
+    monkeypatch.setattr(api_mod, "ADMIN_TOKEN", ADMIN_TOKEN)
+    monkeypatch.setattr(api_mod, "ADMIN_TOKEN_SHA256", None)
+    # A cadence a test can wait out. The shipped value is SAFETY_LATCH_RESYNC_S,
+    # which is the generated runtime's HOLD_REASSERT_S, which is 5 seconds.
+    monkeypatch.setattr(api_mod, "SAFETY_LATCH_RESYNC_S", 0.05)
+
+    fs = CastorFS()
+    fs.boot({})
+
+    async def _no_startup():
+        api_mod.state.thought_history = collections.deque(maxlen=50)
+        api_mod.state.boot_time = time.time()
+        api_mod.state.fs = fs
+
+    async def _no_shutdown():
+        api_mod.state.fs = None
+
+    monkeypatch.setattr(api_mod, "on_startup", _no_startup)
+    monkeypatch.setattr(api_mod, "on_shutdown", _no_shutdown)
+
+    with TestClient(api_mod.app, raise_server_exceptions=False) as client:
+        yield client, api_mod, fs
+
+
+def _hold_within_a_cycle(client, want: bool, timeout: float = 5.0) -> dict:
+    """Poll /api/fs/estop until `held` is what we want, or give up loudly."""
+    deadline = time.time() + timeout
+    body: dict = {}
+    while time.time() < deadline:
+        body = client.get("/api/fs/estop", headers=_ADMIN).json()
+        if body.get("held") is want:
+            return body
+        time.sleep(0.02)
+    raise AssertionError(f"held never became {want}; last body was {body}")
+
+
+def test_the_stock_gateway_notices_a_pause_written_out_of_process(_live_gateway, tmp_path):
+    """`castor pause` from a shell reaches a RUNNING stock server, not the next one."""
+    client, _api_mod, fs = _live_gateway
+    from castor.safety import latch as _latch
+
+    assert client.get("/api/fs/estop", headers=_ADMIN).json()["held"] is False
+
+    _latch.record_pause(principal="craig", reason="battery swap", home=tmp_path)
+    body = _hold_within_a_cycle(client, True)
+
+    assert body["paused"] is True
+    assert body["estopped"] is False, "a pause is not an e-stop"
+    assert "battery swap" in body["hold_detail"]
+    assert body["hold_kind"] == "best_effort_software_hold"
+    # And the hold is real: the runtime refuses its own motor writes.
+    assert fs.write("/dev/motor", {"type": "move", "linear": 0.3}, principal="api") is False
+
+    _latch.record_resume(home=tmp_path)
+    lifted = _hold_within_a_cycle(client, False)
+    assert lifted["paused"] is False
+    assert fs.write("/dev/motor", {"type": "move", "linear": 0.3}, principal="api") is not False
+
+
+def test_the_stock_gateway_adopts_an_estop_written_out_of_process(_live_gateway, tmp_path):
+    """The same reconcile, for the latch that matters most."""
+    client, _api_mod, _fs = _live_gateway
+    from castor.safety import latch as _latch
+
+    _latch.record_estop(principal="craig", source="local", reason="smoke", home=tmp_path)
+    body = _hold_within_a_cycle(client, True)
+    assert body["estopped"] is True
+    assert body["source"] == "local"
+
+    _latch.record_clear(home=tmp_path)
+    lifted = _hold_within_a_cycle(client, False)
+    assert lifted["estopped"] is False
+
+
+def test_a_deleted_latch_file_does_not_lift_the_stock_gateway_hold(_live_gateway, tmp_path):
+    """`rm safety-latch.json` is not a clear, and the reconcile loop is not a way in.
+
+    A clear always LEAVES a file behind (`record_clear` writes engaged=false),
+    so the absence of one is never evidence that anybody cleared anything. The
+    rule lives in SafetyLayer.resync_from_latch; this pins that running the
+    reconcile on a timer did not create a way around it.
+    """
+    client, _api_mod, fs = _live_gateway
+    from castor.safety import latch as _latch
+
+    _latch.record_estop(principal="craig", source="sensor", reason="cpu_temp=95C", home=tmp_path)
+    _hold_within_a_cycle(client, True)
+
+    (tmp_path / "safety-latch.json").unlink()
+    time.sleep(0.3)  # several reconcile cycles at the fixture's cadence
+
+    body = client.get("/api/fs/estop", headers=_ADMIN).json()
+    assert body["held"] is True, "deleting the latch file must not clear a stop"
+    assert body["estopped"] is True
+    assert body["source"] == "sensor"
+    assert fs.is_estopped is True
+
+
+def test_a_stop_that_arrives_mid_reconcile_is_not_reverted(tmp_path, monkeypatch):
+    """The one thing a reconcile on a timer must never do.
+
+    The hold is changed from more than one thread: an API handler, the sensor
+    monitor's thread when three critical readings latch, and the reconcile
+    itself. The reconcile reads the latch file and then compares it with the
+    in-memory flag. A stop set between those two steps makes the comparison
+    read "the file says nothing is engaged, memory says it is", which is the
+    signature of an out-of-process CLEAR, and the stop is thrown away with no
+    auth code and without the sensor rule ever being consulted.
+
+    The window is widened here to make it deterministic. What closes it is
+    _hold_lock: the stop waits for the reconcile to finish rather than landing
+    inside it.
+    """
+    import threading
+
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    from castor.safety import latch as latch_mod
+
+    fs = CastorFS()
+    fs.boot({})
+    # A cleared latch file, which is what any robot that has ever been stopped
+    # has on disk. A missing file is refused earlier and would not reach this.
+    latch_mod.record_clear(tmp_path)
+
+    real_load = latch_mod.load
+    reading = threading.Event()
+
+    def _slow_load(*args, **kwargs):
+        state = real_load(*args, **kwargs)
+        reading.set()
+        time.sleep(0.3)  # the reconcile is descheduled here
+        return state
+
+    monkeypatch.setattr(latch_mod, "load", _slow_load)
+    worker = threading.Thread(target=fs.safety.resync_from_latch)
+    worker.start()
+    try:
+        assert reading.wait(5), "the reconcile never read the latch file"
+        # The stop a person just asked for, arriving inside that window.
+        assert fs.estop(principal="root", source="api", reason="POST /api/stop") is True
+    finally:
+        worker.join(10)
+    monkeypatch.setattr(latch_mod, "load", real_load)
+
+    assert fs.is_estopped is True, "the reconcile reverted a stop that had just been set"
+    assert fs.estop_source == "api"
+    assert latch_mod.load(tmp_path).estop_engaged is True
+    assert fs.read("/proc/status", principal="root") == "estop"
+    assert fs.write("/dev/motor", {"type": "move", "linear": 0.3}, principal="api") is False
+
+
+@pytest.mark.parametrize(
+    "garbage",
+    ["", "   \n", "{", "not json at all", "[]", '{"something": "else"}'],
+    ids=["empty", "whitespace", "truncated", "garbage", "not-an-object", "wrong-object"],
+)
+def test_an_unreadable_latch_file_does_not_lift_a_hold(tmp_path, monkeypatch, garbage):
+    """`echo x > safety-latch.json` must not do what `rm` is not allowed to do.
+
+    A missing latch was already refused as evidence of a clear. An unreadable
+    one reads as "nothing held" too, and without this it reconciled: a stop
+    lifted in one guard cycle by corrupting a file, with no auth code and
+    without the sensor rule ever being consulted.
+
+    Zero bytes is the likeliest corruption of all. save() renames a fully
+    written temp file over this one, so a torn write cannot make a short file,
+    but a power cut before that data reaches the disk can and does.
+    """
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    from castor.safety import latch as latch_mod
+
+    fs = CastorFS()
+    fs.boot({})
+    latch_mod.record_estop(
+        principal="monitor", source="sensor", reason="cpu_temp=95C", home=tmp_path
+    )
+    assert fs.safety.resync_from_latch() is True
+    assert fs.is_estopped is True
+
+    (tmp_path / "safety-latch.json").write_text(garbage, encoding="utf-8")
+    assert latch_mod.load(tmp_path).readable is False
+
+    assert fs.safety.resync_from_latch() is False
+    assert fs.is_estopped is True, "a latch nobody can read is not a clear"
+    assert fs.estop_source == "sensor"
+    assert fs.write("/dev/motor", {"type": "move", "linear": 0.3}, principal="api") is False
+
+
+def test_a_readable_latch_is_still_marked_readable(tmp_path, monkeypatch):
+    """The guard must not be so broad that a real clear stops working."""
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    from castor.safety import latch as latch_mod
+
+    assert latch_mod.load(tmp_path).readable is True, "no file at all is a fact, not garbage"
+    latch_mod.record_estop(principal="monitor", source="local", reason="x", home=tmp_path)
+    assert latch_mod.load(tmp_path).readable is True
+    latch_mod.record_clear(home=tmp_path)
+    state = latch_mod.load(tmp_path)
+    assert state.readable is True and state.estop_engaged is False
+
+
+def test_a_corrupt_latch_file_does_not_lift_the_stock_gateway_hold(_live_gateway, tmp_path):
+    """The same rule, reached through the reconcile loop the gateway runs."""
+    client, _api_mod, fs = _live_gateway
+    from castor.safety import latch as _latch
+
+    _latch.record_estop(principal="craig", source="sensor", reason="smoke", home=tmp_path)
+    _hold_within_a_cycle(client, True)
+
+    (tmp_path / "safety-latch.json").write_text("", encoding="utf-8")
+    time.sleep(0.3)  # several reconcile cycles at the fixture's cadence
+
+    body = client.get("/api/fs/estop", headers=_ADMIN).json()
+    assert body["held"] is True, "corrupting the latch file must not clear a stop"
+    assert body["estopped"] is True
+    assert body["source"] == "sensor"
+    assert fs.is_estopped is True
+
+
+def test_adopting_and_lifting_a_pause_out_of_process_is_audited(tmp_path, monkeypatch):
+    """A pause blocks every motor write. It belongs in the safety log.
+
+    The e-stop transitions in resync_from_latch were audited; the pause ones
+    only wrote a log line, so a robot could sit refusing motion with nothing in
+    its own record saying when that started or who asked for it.
+    """
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    from castor.safety import latch as latch_mod
+
+    fs = CastorFS()
+    fs.boot({})
+
+    def _events():
+        rows = fs.ns.read("/var/log/safety") or []
+        return [r.get("event") for r in rows]
+
+    latch_mod.record_pause(principal="craig", reason="battery swap", home=tmp_path)
+    assert fs.safety.resync_from_latch() is True
+    assert "pause" in _events()
+    rows = [r for r in (fs.ns.read("/var/log/safety") or []) if r.get("event") == "pause"]
+    assert rows[-1]["who"] == "craig"
+    assert "battery swap" in rows[-1]["detail"]
+
+    latch_mod.record_resume(home=tmp_path)
+    assert fs.safety.resync_from_latch() is True
+    assert "resume" in _events()
+
+
+def test_the_reconcile_reads_the_latch_on_the_event_loop_and_not_in_a_thread(
+    _live_gateway, tmp_path
+):
+    """A worker thread here loses stops, so pin that there is not one.
+
+    Every other mutator of the in-memory hold in this process is an ``async
+    def`` handler, so nothing can interleave with a reconcile that does not
+    await. Hand the reconcile to ``asyncio.to_thread`` and it can be
+    descheduled between reading the latch file and comparing the result with
+    ``self._estop``: a ``POST /api/stop`` that lands in that window looks, to
+    the resumed thread, exactly like an out-of-process CLEAR, so the stop is
+    reverted, /proc/status goes back to 'active' and a false clear_estop row is
+    audited. The file re-adopts it a cadence later, which means the robot is
+    unheld for up to one cadence immediately after somebody hit the stop.
+
+    The check: every latch read the SERVER does must find a running event loop
+    under it. A read from a worker thread would not. Reads from this test's own
+    thread are not the server and are excluded by ident.
+    """
+    import asyncio as _asyncio
+    import threading as _threading
+
+    _client, _api_mod, _fs = _live_gateway
+    from castor.safety import latch as _latch
+
+    mine = _threading.get_ident()
+    server_reads: list[bool] = []
+    real_load = _latch.load
+
+    def _watching_load(*args, **kwargs):
+        if _threading.get_ident() != mine:
+            try:
+                _asyncio.get_running_loop()
+                server_reads.append(True)
+            except RuntimeError:
+                server_reads.append(False)
+        return real_load(*args, **kwargs)
+
+    _latch.load = _watching_load
+    try:
+        _latch.record_pause(principal="craig", reason="thread check", home=tmp_path)
+        _hold_within_a_cycle(_client, True)
+    finally:
+        _latch.load = real_load
+
+    assert server_reads, "the server never read the latch file"
+    assert all(server_reads), (
+        "the reconcile read the latch file off the event loop, which is where a "
+        "stop arriving mid-reconcile gets reverted"
+    )
+
+
+def test_a_reconcile_task_that_dies_says_so(caplog):
+    """A guard that died quietly is worse than one that never existed.
+
+    Nothing restarts it: a task that ended on a BaseException will end the same
+    way again. What this pins is that the silence is audible, because every
+    /api answer afterwards keeps reporting this process' hold correctly while
+    the process quietly stops hearing anything typed at a shell.
+    """
+    import logging
+
+    import castor.api as api_mod
+
+    class _Ended:
+        def cancelled(self):
+            return False
+
+        def exception(self):
+            return RuntimeError("the guard fell over")
+
+    with caplog.at_level(logging.CRITICAL, logger="OpenCastor.Gateway"):
+        api_mod._latch_task_ended(_Ended())
+    assert "RECONCILE TASK HAS STOPPED" in caplog.text
+    assert "the guard fell over" in caplog.text
+
+    class _Cancelled(_Ended):
+        def cancelled(self):
+            return True
+
+    caplog.clear()
+    api_mod._latch_task_ended(_Cancelled())
+    assert caplog.text == "", "shutdown is not a failure"
+
+
+def test_the_resync_helper_is_inert_without_a_filesystem(monkeypatch):
+    """No fs, no latch, no crash: the loop must survive a gateway with no robot."""
+    import castor.api as api_mod
+
+    monkeypatch.setattr(api_mod.state, "fs", None, raising=False)
+    assert api_mod._resync_safety_latch() is False
+
+
+# ---------------------------------------------------------------------------
+# 10. `castor resume --clear-estop` insists on the code, or says it did not
+# ---------------------------------------------------------------------------
+# WHAT WAS STILL WRONG. The clear path read `if required and supplied !=
+# required`, so a robot with NO code cleared with NO code, silently. That is
+# the ordinary state of a gateway-only robot: the actuator lives behind the
+# gateway, `castor up` may never have run on this host, and nothing ever
+# provisioned OPENCASTOR_ESTOP_AUTH. The robots with no second factor were the
+# ones that asked for nothing, which is exactly backwards. A missing secret is
+# a missing secret; it is not consent.
+def _latched(tmp_path):
+    from castor.safety import latch as latch_mod
+
+    latch_mod.record_estop(
+        principal="monitor", source="local", reason="bumped the table", home=tmp_path
+    )
+    return latch_mod
+
+
+def test_clear_estop_path_1_code_provisioned_and_supplied(tmp_path, capsys, monkeypatch):
+    """The happy path: the code exists, it is passed, the stop lifts."""
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    monkeypatch.delenv("OPENCASTOR_ESTOP_AUTH", raising=False)
+    from castor.cli import cmd_resume
+
+    latch_mod = _latched(tmp_path)
+    code = ensure_estop_auth(tmp_path)
+
+    cmd_resume(
+        Namespace(clear_estop=True, auth_code=code, no_auth_code=False, home="")
+    )
+    out = capsys.readouterr().out
+    assert latch_mod.load(tmp_path).estop_engaged is False
+    assert "UNAUTHENTICATED" not in out, "a checked clear must not claim it was unchecked"
+
+
+def test_clear_estop_path_2_code_provisioned_and_not_supplied(tmp_path, capsys, monkeypatch):
+    """The code exists and none was passed: refuse, and name the variable."""
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    monkeypatch.delenv("OPENCASTOR_ESTOP_AUTH", raising=False)
+    from castor.cli import cmd_resume
+
+    latch_mod = _latched(tmp_path)
+    ensure_estop_auth(tmp_path)
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_resume(Namespace(clear_estop=True, auth_code="", no_auth_code=False, home=""))
+    assert exc.value.code == 3
+    out = capsys.readouterr().out
+    assert "OPENCASTOR_ESTOP_AUTH" in out
+    assert "tokens.env" in out
+    assert latch_mod.load(tmp_path).estop_engaged is True
+
+    # And --no-auth-code is not a way past a code this robot actually has.
+    with pytest.raises(SystemExit) as exc2:
+        cmd_resume(Namespace(clear_estop=True, auth_code="", no_auth_code=True, home=""))
+    assert exc2.value.code == 3
+    assert "ignored" in capsys.readouterr().out
+    assert latch_mod.load(tmp_path).estop_engaged is True
+
+
+def test_clear_estop_path_3_no_code_anywhere_is_refused(tmp_path, capsys, monkeypatch):
+    """A gateway-only robot with nothing to check against refuses, and says how.
+
+    This is the path that used to clear silently. The message has to name the
+    variable and the one command that provisions it, because an operator who is
+    told only "refused" will reach for the latch file with rm.
+    """
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    monkeypatch.delenv("OPENCASTOR_ESTOP_AUTH", raising=False)
+    from castor.cli import cmd_resume
+
+    latch_mod = _latched(tmp_path)
+    assert not (tmp_path / "tokens.env").exists()
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_resume(Namespace(clear_estop=True, auth_code="", no_auth_code=False, home=""))
+    assert exc.value.code == 3
+    out = capsys.readouterr().out
+    assert "OPENCASTOR_ESTOP_AUTH" in out, "name the variable"
+    assert "castor up" in out, "say how to provision it"
+    assert "ensure_estop_auth" in out
+    assert "--no-auth-code" in out, "say what the escape hatch is"
+    assert latch_mod.load(tmp_path).estop_engaged is True
+
+
+def test_clear_estop_path_4_no_code_with_the_explicit_flag_warns(tmp_path, capsys, monkeypatch):
+    """--no-auth-code clears, and says on the record that nothing checked it."""
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    monkeypatch.delenv("OPENCASTOR_ESTOP_AUTH", raising=False)
+    from castor.cli import cmd_resume
+
+    latch_mod = _latched(tmp_path)
+
+    cmd_resume(Namespace(clear_estop=True, auth_code="", no_auth_code=True, home=""))
+    out = capsys.readouterr().out
+    assert "UNAUTHENTICATED" in out
+    assert "OPENCASTOR_ESTOP_AUTH" in out
+    assert "castor up" in out
+    assert latch_mod.load(tmp_path).estop_engaged is False
+
+
+def _audit_rows(tmp_path) -> list[dict]:
+    log = tmp_path / "audit.log"
+    if not log.exists():
+        return []
+    return [json.loads(line) for line in log.read_text().splitlines() if line.strip()]
+
+
+def test_an_unauthenticated_clear_lands_in_the_audit_log_saying_so(
+    tmp_path, capsys, monkeypatch
+):
+    """A warning printed to a terminal nobody kept is not a record.
+
+    The API logs `estop_cleared` with the identity that sent it. The CLI wrote
+    the latch file and nothing else, so a clear typed at the robot left no
+    durable trace of who took it or whether anything checked them.
+    """
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    monkeypatch.delenv("OPENCASTOR_ESTOP_AUTH", raising=False)
+    from castor.cli import cmd_resume
+
+    _latched(tmp_path)
+    cmd_resume(Namespace(clear_estop=True, auth_code="", no_auth_code=True, home=""))
+    capsys.readouterr()
+
+    rows = [r for r in _audit_rows(tmp_path) if r.get("event") == "estop_cleared"]
+    assert len(rows) == 1, f"expected one estop_cleared row, got {_audit_rows(tmp_path)}"
+    row = rows[0]
+    assert row["source"] == "cli"
+    assert row["authenticated"] is False
+    assert "no e-stop clear code" in row["auth_check"]
+    assert row["latched_source"] == "local"
+
+
+def test_an_authenticated_clear_lands_in_the_audit_log_too(tmp_path, capsys, monkeypatch):
+    """The same row, with the flag the other way, so the two are comparable."""
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    monkeypatch.delenv("OPENCASTOR_ESTOP_AUTH", raising=False)
+    from castor.cli import cmd_resume
+    from castor.up import ensure_estop_auth
+
+    code = ensure_estop_auth(tmp_path)
+    _latched(tmp_path)
+    cmd_resume(Namespace(clear_estop=True, auth_code=code, no_auth_code=False, home=""))
+    capsys.readouterr()
+
+    rows = [r for r in _audit_rows(tmp_path) if r.get("event") == "estop_cleared"]
+    assert len(rows) == 1
+    assert rows[0]["authenticated"] is True
+    assert rows[0]["actor"]
+
+
+def test_a_refused_clear_writes_no_clear_row(tmp_path, capsys, monkeypatch):
+    """The row means a stop was lifted. A refusal did not lift one."""
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    monkeypatch.delenv("OPENCASTOR_ESTOP_AUTH", raising=False)
+    from castor.cli import cmd_resume
+
+    _latched(tmp_path)
+    with pytest.raises(SystemExit):
+        cmd_resume(Namespace(clear_estop=True, auth_code="", no_auth_code=False, home=""))
+    capsys.readouterr()
+    assert [r for r in _audit_rows(tmp_path) if r.get("event") == "estop_cleared"] == []
+
+
+def test_the_code_may_come_from_the_environment_instead_of_tokens_env(tmp_path, monkeypatch):
+    """"Supplied" means the flag OR the environment, the way the API reads it.
+
+    `castor/fs/safety.py` reads OPENCASTOR_ESTOP_AUTH from the environment at
+    clear time, so a robot whose code lives only in the environment is a robot
+    WITH a code, and the CLI has to agree or the two surfaces enforce different
+    secrets.
+    """
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    monkeypatch.setenv("OPENCASTOR_ESTOP_AUTH", "oc_estop_from_the_env")
+    from castor.cli import _estop_auth_sources, cmd_resume
+
+    required, where = _estop_auth_sources(tmp_path)
+    assert required == "oc_estop_from_the_env"
+    assert "environment" in where
+
+    latch_mod = _latched(tmp_path)
+    cmd_resume(
+        Namespace(clear_estop=True, auth_code="", no_auth_code=False, home="")
+    )
+    assert latch_mod.load(tmp_path).estop_engaged is False
+
+
+def test_no_auth_code_is_in_the_resume_help(capsys, monkeypatch):
+    """Readable from the released CLI, which is this item's outside check."""
+    import sys
+
+    import castor.cli as cli_mod
+
+    monkeypatch.setattr(sys, "argv", ["castor", "resume", "--help"])
+    with pytest.raises(SystemExit):
+        cli_mod.main()
+    text = capsys.readouterr().out
+    assert "--no-auth-code" in text
+    assert "unauthenticated" in text.lower()
+
+
+# ---------------------------------------------------------------------------
+# 11. The bundled /gamepad page can send the e-stop code
+# ---------------------------------------------------------------------------
+# WHAT WAS STILL WRONG. Once POST /api/estop/clear started demanding
+# X-Estop-Auth, the page's one-argument fetch helper had no way to set a
+# header, so the gamepad's clear could not succeed on any robot `castor up`
+# had provisioned. It answered 403 every time and rendered `d.detail`, which
+# the gateway does not send, so the person holding the phone saw "error".
+def test_the_gamepad_page_can_send_the_estop_auth_header(_api_client):
+    """The page is tested at the level it is served: the HTML it returns."""
+    client, _api_mod = _api_client
+    html = client.get("/gamepad").text
+
+    assert 'id="estop-code"' in html, "there must be a field to type the code into"
+    assert 'id="clear-btn"' in html, "and a clear button beside it"
+    assert "X-Estop-Auth" in html, "the header the server reads has to be sent"
+    assert "/api/estop/clear" in html
+
+    # The field is never persisted: a phone on a bench must not still be able
+    # to lift a stop tomorrow.
+    assert "localStorage." not in html, "the code must not outlive the page"
+    assert "sessionStorage." not in html
+
+    # The server's own refusal is what gets shown, not the word "error".
+    assert "d.error || d.detail" in html
+
+    # Honest copy, and no claim that any of this is a hardware cut.
+    assert "best-effort software hold" in html
+    assert "not a hardware cut" in html
+    for word in ("safety rated", "fail-safe", "verified"):
+        assert word not in html.lower(), f"the page must not claim {word!r}"
+
+
+# ---------------------------------------------------------------------------
+# 12. The docs page, and the two words it must not use
+# ---------------------------------------------------------------------------
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def test_the_hold_doc_exists_and_says_what_the_hold_is():
+    """One page an operator can read before the robot is already stopped."""
+    doc = _repo_root() / "docs" / "safety" / "hold.md"
+    assert doc.exists(), "docs/safety/hold.md is the page every stop surface points at"
+    text = doc.read_text(encoding="utf-8")
+
+    # What it is, and what it is not.
+    assert "best-effort software hold" in text
+    assert "not a hardware cut" in text
+    assert "safety rated" in text
+
+    # The mechanics an operator actually needs.
+    assert "safety-latch.json" in text
+    assert "castor pause" in text and "castor resume" in text
+    assert "OPENCASTOR_ESTOP_AUTH" in text
+    assert "ensure_estop_auth" in text and "castor up" in text
+    assert "source=sensor" in text or "`sensor`" in text
+
+    # The disambiguation. These two are confused constantly and they are not
+    # the same lever: one pauses the perception loop, one is the latch.
+    assert "/api/runtime/resume" in text
+    assert "perception-action loop" in text
+
+    # House style.
+    assert "—" not in text, "no em-dashes"
+    assert "–" not in text, "no en-dashes either"
+    assert "verified" not in text.lower(), "software never renders anything verified"
+
+
+def test_the_hold_doc_is_linked_from_where_safety_docs_are_indexed():
+    root = _repo_root()
+    arch = (root / "docs" / "safety-architecture.md").read_text(encoding="utf-8")
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    assert "safety/hold.md" in arch, "the safety module map has to point at it"
+    assert "docs/safety/hold.md" in readme, "and so does the README's P66 section"
+
+
+# ---------------------------------------------------------------------------
+# 13. The arm branch, against a gateway that actually answers
+# ---------------------------------------------------------------------------
+# WHY THIS IS NOT ANOTHER STUB. `test_the_stop_asks_for_the_declared_stop_
+# capability` proves the tool selection with a stub `_invoke`, which is
+# honest as far as it goes and goes no further than this process: it never
+# builds an envelope, never opens a socket and never reads a status line. The
+# arm is the archetype where the whole hop matters, because the joints are in
+# the gateway and `arm.estop` is the only thing that reaches them. So this one
+# runs the template's REAL `_invoke` against a real HTTP server standing in for
+# the gateway, and asserts what that server saw.
+#
+# What it still is not: a receipt from Bob's gateway. The signed-receipt check
+# needs the arm and stays a manual step. This closes the distance between a
+# stub and that.
+class _FakeGateway:
+    """A gateway that allowlists exactly one stop tool, and records every ask."""
+
+    def __init__(self, answers: str = "arm.estop"):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        self.seen: list[dict] = []
+        outer = self
+
+        class _Handler(BaseHTTPRequestHandler):
+            def log_message(self, *_a):  # keep pytest output readable
+                pass
+
+            def do_POST(self):  # noqa: N802 - BaseHTTPRequestHandler's spelling
+                length = int(self.headers.get("Content-Length") or 0)
+                envelope = json.loads(self.rfile.read(length) or b"{}")
+                envelope["_path"] = self.path
+                envelope["_authorization"] = self.headers.get("Authorization")
+                outer.seen.append(envelope)
+                if envelope.get("tool_name") == answers:
+                    body = json.dumps(
+                        {"ok": True, "receipt": {"signed": True, "tool": answers}}
+                    ).encode()
+                    self.send_response(200)
+                else:
+                    # What a real gateway says about a tool this robot has not
+                    # declared: a 4xx, which no amount of retrying changes.
+                    body = json.dumps({"detail": "tool not allowlisted"}).encode()
+                    self.send_response(404)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+        self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
+
+    def __enter__(self):
+        import threading
+
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        return self
+
+    def __exit__(self, *_exc):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+
+
+def _live_stop_namespace(tmp_path, gateway_url, capabilities):
+    """The template's real stop path, wired to a real URL.
+
+    Four functions come out of the rendered source this time, `_invoke` and
+    `_hold` included, so the envelope, the bearer, the transport and the status
+    handling are the template's own and not a test's idea of them.
+    """
+    import urllib.error
+    import urllib.request
+    import uuid
+
+    text = render("runtime.py.tmpl", _plan(tmp_path, "rc-car"))
+    tree = ast.parse(text)
+    wanted = {"_invoke", "_hold", "_stop_at_actuator", "_declared_stop_tools"}
+    fns = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in wanted]
+    assert {f.name for f in fns} == wanted, "the template lost a stop helper"
+    ns = {
+        "GATEWAY_URL": gateway_url,
+        "READ_TOKEN": "oc_read_bearer",
+        "MANIFEST_PATH": str(tmp_path / "ROBOT.md"),
+        "HELD_SCOPES_ALLOWED": ("HALT", "OBSERVE"),
+        "STOP_ATTEMPTS": 3,
+        "FALLBACK_STOP_TOOLS": ("drive.stop", "arm.estop"),
+        "_stop_tool_that_answered": None,
+        "state": Namespace(config={"rcan_protocol": {"capabilities": list(capabilities)}},
+                           fs=None),
+        "load_latch": lambda: __import__(
+            "castor.safety.latch", fromlist=["LatchState"]
+        ).LatchState(),
+        "logger": _QuietLogger(),
+        "json": json,
+        "time": time,
+        "uuid": uuid,
+        "urllib": urllib,
+    }
+    exec(compile(ast.Module(body=fns, type_ignores=[]), "<tmpl>", "exec"), ns)
+    return ns
+
+
+def test_an_arm_is_stopped_through_a_gateway_that_advertises_arm_estop(tmp_path):
+    """The arm branch, end to end inside this process: envelope, hop, 2xx, name."""
+    with _FakeGateway(answers="arm.estop") as gw:
+        ns = _live_stop_namespace(
+            tmp_path, gw.url, capabilities=["arm.move", "arm.grip", "arm.estop"]
+        )
+
+        # Resolution first: an arm's stop is arm.estop, ahead of everything.
+        assert ns["_declared_stop_tools"]() == ("arm.estop",), (
+            "an arm that declares arm.estop must not be asked for drive.stop"
+        )
+
+        ok, detail = ns["_stop_at_actuator"]("critical thermal reading")
+
+    assert ok is True, "a 2xx from the gateway is a confirmed stop"
+    assert detail["stop_tool"] == "arm.estop", "the 2xx yields the tool name"
+    assert detail["receipt"]["signed"] is True, "the gateway's own body comes back"
+
+    # And what the gateway actually received, which a stub could not show.
+    assert len(gw.seen) == 1, "the first ask answered; there is nothing to retry"
+    asked = gw.seen[0]
+    assert asked["tool_name"] == "arm.estop"
+    assert asked["scope"] == "HALT", "a stop is a HALT, which is allowed while held"
+    assert asked["_path"] == "/v1/invoke"
+    assert asked["_authorization"] == "Bearer oc_read_bearer"
+    assert asked["type"] == "rcan/v1/invoke"
+    assert asked["nonce"] and asked["msg_id"]
+
+
+def test_an_arm_whose_config_forgot_arm_estop_still_finds_it_over_the_wire(tmp_path):
+    """The fallback, against a gateway that refuses drive.stop for real.
+
+    A 404 is what an undeclared tool looks like from a gateway. The candidate
+    is dropped, the next one is asked, and the tool that answered is the one
+    reported: `stop_not_confirmed` would be wrong here, and so would claiming
+    drive.stop stopped anything.
+    """
+    with _FakeGateway(answers="arm.estop") as gw:
+        ns = _live_stop_namespace(tmp_path, gw.url, capabilities=[])
+        ok, detail = ns["_stop_at_actuator"]("no declared stop")
+
+    assert ok is True
+    assert detail["stop_tool"] == "arm.estop"
+    assert [e["tool_name"] for e in gw.seen] == ["drive.stop", "arm.estop"]
+    assert ns["_stop_tool_that_answered"] == "arm.estop", "ask the one that works first"
+
+
+def test_a_gateway_that_refuses_everything_is_stop_not_confirmed(tmp_path):
+    """An arm holding torque behind a gateway that says no is not a stopped arm."""
+    with _FakeGateway(answers="nothing.at.all") as gw:
+        ns = _live_stop_namespace(tmp_path, gw.url, capabilities=["arm.move", "arm.estop"])
+        ok, detail = ns["_stop_at_actuator"]("everything refused")
+
+    assert ok is False, "a refusal must never be reported as a stop that landed"
+    assert detail["gateway_status"] == 404
+    assert "not allowlisted" in detail["reason"]
+    assert len(gw.seen) == 3, "STOP_ATTEMPTS asks, then it says it did not land"
