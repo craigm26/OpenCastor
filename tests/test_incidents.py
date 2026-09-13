@@ -270,3 +270,23 @@ class TestRotationAndHashCache:
         assert lines[0] == torn  # the torn record is still its own line
         assert json.loads(lines[1])["prev_sha256"] == hashlib.sha256(torn.encode()).hexdigest()
         assert len(IncidentLog(path).list_incidents()) == 2
+
+    def test_rotated_files_stay_in_write_order_past_the_tenth(self, tmp_path):
+        """Two rotations in one day land as incidents.<date>.jsonl and
+        incidents.<date>_1.jsonl. Sorted as text, _10 comes before _2, and
+        mtimes tie on a filesystem with coarse timestamps."""
+        import os
+
+        path = tmp_path / "incidents.jsonl"
+        log = IncidentLog(path, max_bytes=700)
+        ids = [
+            log.record(IncidentSeverity.SERIOUS_HARM, "estop", f"stop {i}", {}) for i in range(14)
+        ]
+        rotated = log.rotated_paths()
+        assert len(rotated) >= 11, "needs enough same-day rotations to pass _9"
+
+        # Force the mtime tie the coarse-timestamp case would give us.
+        for p in rotated:
+            os.utime(p, (1_700_000_000, 1_700_000_000))
+
+        assert [i["id"] for i in IncidentLog(path, max_bytes=700).list_incidents()] == ids

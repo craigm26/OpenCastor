@@ -348,11 +348,18 @@ class IncidentLog:
             if p != self._path and p.is_file()
         ]
 
-        def _key(p: Path) -> tuple[float, str]:
+        def _key(p: Path) -> tuple[float, str, int]:
+            # Second and third keys are the date stamp and the within-the-day
+            # counter, read as a NUMBER. Sorting those names as text puts _10
+            # before _2, and mtimes tie on a filesystem with coarse timestamps,
+            # which would hand a reader the rotated files out of write order.
+            middle = p.name[len(stem) + 1 : -len(suffix)]
+            stamp, _, tail = middle.partition("_")
+            index = int(tail) if tail.isdigit() else 0
             try:
-                return (p.stat().st_mtime, p.name)
+                return (p.stat().st_mtime, stamp, index)
             except OSError:
-                return (0.0, p.name)
+                return (0.0, stamp, index)
 
         return sorted(found, key=_key)
 
