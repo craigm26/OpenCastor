@@ -8,6 +8,12 @@ Nothing here calls a model; every number is reproducible offline from the
 final frame. If ``SACPAINT_ARTIFACTS`` names a directory, the composite scorer
 also writes the rectified final canvas and the full score breakdown there, so
 ``sacpaint export`` can publish them.
+
+``composite`` is line fidelity and nothing else. On a colour reference
+``color_fidelity`` is reported beside it and is never folded into it: the
+composite is the only number comparable with every run made before colour
+existed, and "the right shapes in the wrong colours" is not the same failure as
+its opposite.
 """
 
 from __future__ import annotations
