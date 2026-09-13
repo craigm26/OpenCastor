@@ -922,6 +922,74 @@ def test_a_deleted_latch_file_does_not_lift_the_stock_gateway_hold(_live_gateway
     assert fs.is_estopped is True
 
 
+@pytest.mark.parametrize(
+    "garbage",
+    ["", "   \n", "{", "not json at all", "[]", '{"something": "else"}'],
+    ids=["empty", "whitespace", "truncated", "garbage", "not-an-object", "wrong-object"],
+)
+def test_an_unreadable_latch_file_does_not_lift_a_hold(tmp_path, monkeypatch, garbage):
+    """`echo x > safety-latch.json` must not do what `rm` is not allowed to do.
+
+    A missing latch was already refused as evidence of a clear. An unreadable
+    one reads as "nothing held" too, and without this it reconciled: a stop
+    lifted in one guard cycle by corrupting a file, with no auth code and
+    without the sensor rule ever being consulted.
+
+    Zero bytes is the likeliest corruption of all. save() renames a fully
+    written temp file over this one, so a torn write cannot make a short file,
+    but a power cut before that data reaches the disk can and does.
+    """
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    from castor.safety import latch as latch_mod
+
+    fs = CastorFS()
+    fs.boot({})
+    latch_mod.record_estop(
+        principal="monitor", source="sensor", reason="cpu_temp=95C", home=tmp_path
+    )
+    assert fs.safety.resync_from_latch() is True
+    assert fs.is_estopped is True
+
+    (tmp_path / "safety-latch.json").write_text(garbage, encoding="utf-8")
+    assert latch_mod.load(tmp_path).readable is False
+
+    assert fs.safety.resync_from_latch() is False
+    assert fs.is_estopped is True, "a latch nobody can read is not a clear"
+    assert fs.estop_source == "sensor"
+    assert fs.write("/dev/motor", {"type": "move", "linear": 0.3}, principal="api") is False
+
+
+def test_a_readable_latch_is_still_marked_readable(tmp_path, monkeypatch):
+    """The guard must not be so broad that a real clear stops working."""
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    from castor.safety import latch as latch_mod
+
+    assert latch_mod.load(tmp_path).readable is True, "no file at all is a fact, not garbage"
+    latch_mod.record_estop(principal="monitor", source="local", reason="x", home=tmp_path)
+    assert latch_mod.load(tmp_path).readable is True
+    latch_mod.record_clear(home=tmp_path)
+    state = latch_mod.load(tmp_path)
+    assert state.readable is True and state.estop_engaged is False
+
+
+def test_a_corrupt_latch_file_does_not_lift_the_stock_gateway_hold(_live_gateway, tmp_path):
+    """The same rule, reached through the reconcile loop the gateway runs."""
+    client, _api_mod, fs = _live_gateway
+    from castor.safety import latch as _latch
+
+    _latch.record_estop(principal="craig", source="sensor", reason="smoke", home=tmp_path)
+    _hold_within_a_cycle(client, True)
+
+    (tmp_path / "safety-latch.json").write_text("", encoding="utf-8")
+    time.sleep(0.3)  # several reconcile cycles at the fixture's cadence
+
+    body = client.get("/api/fs/estop", headers=_ADMIN).json()
+    assert body["held"] is True, "corrupting the latch file must not clear a stop"
+    assert body["estopped"] is True
+    assert body["source"] == "sensor"
+    assert fs.is_estopped is True
+
+
 def test_the_reconcile_reads_the_latch_on_the_event_loop_and_not_in_a_thread(
     _live_gateway, tmp_path
 ):

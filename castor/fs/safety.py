@@ -962,6 +962,14 @@ class SafetyLayer:
         without the sensor rule ever being consulted. A clear always LEAVES a
         file behind (``record_clear`` writes engaged=false), so the absence of
         one is never evidence that anybody cleared anything.
+
+        AND NEITHER DOES AN UNREADABLE ONE, for exactly the same reason. An
+        empty, truncated or non-JSON latch also reads as "nothing held", so
+        without this ``echo x > safety-latch.json`` lifted a stop that ``rm
+        safety-latch.json`` could not, which is a strange rule to hold. Zero
+        bytes is the likeliest corruption of all: the rename in ``save()`` is
+        atomic, but a power cut before the data behind it reaches the disk is
+        not. ``LatchState.readable`` is what tells the two apart.
         """
         try:
             from castor.safety.latch import latch_path
@@ -981,6 +989,15 @@ class SafetyLayer:
             latch = _load_latch()
         except Exception as exc:  # noqa: BLE001
             logger.debug("latch resync skipped: %s", exc)
+            return False
+        if not getattr(latch, "readable", True):
+            if self._estop or self._paused:
+                logger.warning(
+                    "safety latch file %s could not be read; the hold in this process "
+                    "STANDS. Clear it with `castor resume --clear-estop` or "
+                    "POST /api/estop/clear.",
+                    path,
+                )
             return False
         changed = False
         if latch.paused != self._paused:
