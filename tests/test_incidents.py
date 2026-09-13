@@ -92,6 +92,14 @@ class TestGenerateReport:
         assert report["total_incidents"] == 0
 
 
+def _concurrent_writer(path: str, tag: str, count: int, max_bytes: int) -> None:
+    """A second process filing incidents into the same log. Module level so it
+    survives being handed to multiprocessing."""
+    log = IncidentLog(path, max_bytes=max_bytes)
+    for i in range(count):
+        log.record(IncidentSeverity.SERIOUS_HARM, "estop", f"{tag}-{i}", {})
+
+
 class TestRotationAndHashCache:
     """OC-13 follow-up: the chain is cached in memory and bounded on disk."""
 
@@ -181,3 +189,57 @@ class TestRotationAndHashCache:
             assert row["prev_sha256"] == prev
             prev = hashlib.sha256(line.encode()).hexdigest()
         assert len(raw) == 3
+
+    def test_two_processes_do_not_fork_the_chain(self, tmp_path):
+        """The runtime files from a stop while a submit stamps in another
+        process. Without a cross-process lock both read the same last line and
+        both chain onto it, which reads back as a broken chain."""
+        import multiprocessing as mp
+
+        path = tmp_path / "incidents.jsonl"
+        max_bytes = 1500  # small enough that the writers also race a rotation
+        ctx = mp.get_context("fork")
+        procs = [
+            ctx.Process(target=_concurrent_writer, args=(str(path), tag, 30, max_bytes))
+            for tag in ("a", "b", "c")
+        ]
+        for p in procs:
+            p.start()
+        for p in procs:
+            p.join(60)
+        assert [p.exitcode for p in procs] == [0, 0, 0]
+
+        log = IncidentLog(path, max_bytes=max_bytes)
+        lines = self._chain_lines(log)
+        prev = ""
+        for raw in lines:
+            row = json.loads(raw)
+            assert row.get("prev_sha256", "") == prev, f"chain forked at {row.get('id')}"
+            prev = hashlib.sha256(raw.encode()).hexdigest()
+
+        # Nothing was lost to the rotations the writers raced through.
+        assert len(log.list_incidents()) == 90
+
+    def test_cache_is_dropped_when_the_file_was_replaced_at_the_same_size(self, tmp_path):
+        """A rotation puts a new file at this path, and that file grows back
+        through the sizes the old one had. A cache keyed on the size alone
+        would recognise one of them and chain onto a hash from a file that is
+        no longer there."""
+        import os
+
+        path = tmp_path / "incidents.jsonl"
+        log = IncidentLog(path)
+        log.record(IncidentSeverity.SERIOUS_HARM, "estop", "first", {})
+        warm = log._last_line_hash()  # cache taken at this size
+
+        # Somebody else rolled the log away and the new file reached exactly
+        # the same length with a different last line.
+        body = path.read_text()
+        os.replace(path, tmp_path / "incidents.2026-01-01.jsonl")
+        replacement = body.replace('"first"', '"firsx"')
+        assert len(replacement) == len(body)
+        path.write_text(replacement)
+
+        expected = hashlib.sha256(replacement.strip().encode()).hexdigest()
+        assert log._last_line_hash() == expected
+        assert log._last_line_hash() != warm

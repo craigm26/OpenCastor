@@ -36,10 +36,12 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
 import os
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -74,6 +76,67 @@ DEFAULT_INCIDENT_LOG_MAX_BYTES = 4 * 1024 * 1024
 #: rotation and a reader can follow it from the oldest rotated file to the
 #: active one.
 ROTATION_RECORD_TYPE = "log_rotation"
+
+#: How long a writer waits for the chain lock before appending without it. A
+#: record write must never be able to keep a robot from stopping, so the wait
+#: is bounded; past it the append goes ahead unlocked, which is exactly the
+#: behaviour this module had before the lock existed.
+CHAIN_LOCK_TIMEOUT_S = 5.0
+
+
+@contextlib.contextmanager
+def _chain_lock(path: Path, timeout: float = CHAIN_LOCK_TIMEOUT_S):
+    """Hold an advisory lock on ``<path>.lock`` while the chain tail is extended.
+
+    Reading the last line and appending the next one are two operations, and
+    another writer's append can land between them: both lines then carry the
+    same ``prev_sha256`` and the chain forks. That is the same break the audit
+    log takes an flock to avoid (``castor/audit.py``), and the incident log has
+    the same two writers, the runtime filing from a stop and a
+    ``castor incidents report --submit`` stamping in another process, so it
+    takes the same kind of lock. Rotation runs under it too, so a rename cannot
+    land between another writer's tail read and its append.
+
+    Best effort and bounded by design: on a platform without ``fcntl``, on a
+    filesystem that refuses the lock, or when a holder does not let go inside
+    ``timeout``, the block still runs.
+    """
+    lock_file = None
+    try:
+        import fcntl
+
+        lock_file = open(str(path) + ".lock", "a")
+        deadline = time.monotonic() + max(0.0, float(timeout))
+        while True:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    logger.warning(
+                        "Incident chain lock held elsewhere for %.1fs; appending without it",
+                        timeout,
+                    )
+                    lock_file.close()
+                    lock_file = None
+                    break
+                time.sleep(0.005)
+    except Exception as exc:  # pragma: no cover - platform dependent
+        logger.debug("Incident chain lock unavailable (%s); continuing", exc)
+        if lock_file is not None:
+            lock_file.close()
+            lock_file = None
+    try:
+        yield
+    finally:
+        if lock_file is not None:
+            try:
+                import fcntl
+
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            except Exception:  # pragma: no cover - platform dependent
+                pass
+            lock_file.close()
 
 
 def _configured_max_bytes() -> int:
@@ -192,11 +255,11 @@ class IncidentLog:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._max_bytes = int(max_bytes) if max_bytes else _configured_max_bytes()
         # Cached tail of the chain, so an append does not re-read the whole
-        # file. ``_cached_size`` is the size the cache was taken at: when the
-        # file's size no longer matches, somebody else appended and the cache
-        # is thrown away rather than used to fork the chain.
+        # file. ``_cached_stat`` is the file's identity and length as the cache
+        # was taken; when it no longer matches, somebody else wrote and the
+        # cache is thrown away rather than used to fork the chain.
         self._cached_hash: str | None = None
-        self._cached_size: int | None = None
+        self._cached_stat: tuple[int, int, int, int] | None = None
 
     # -- writing ---------------------------------------------------------
 
@@ -205,6 +268,22 @@ class IncidentLog:
             return self._path.stat().st_size
         except OSError:
             return None
+
+    def _stat_token(self) -> tuple[int, int, int, int] | None:
+        """What the tail cache is keyed on: which file, and how much of it.
+
+        Size alone is not enough. A rotation puts a NEW file at this path, and
+        that file grows back through the same sizes the old one had, so a
+        writer holding a cache from before the rotation can find the size it
+        remembers and chain onto a hash from the rotated-away file. The inode
+        changes on rotation, and mtime moves on any write, so the two of them
+        together with the size say "the same file, still exactly as I left it".
+        """
+        try:
+            st = self._path.stat()
+        except OSError:
+            return None
+        return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns)
 
     def _read_last_line(self) -> str:
         """The last non-empty raw line of the active file, reading from the tail."""
@@ -231,17 +310,18 @@ class IncidentLog:
         """sha256 of the last raw line, or the empty-chain marker.
 
         Cached in memory after the first read and kept current across appends.
-        The cache is only trusted while the file is exactly the size it was
-        when the cache was taken; a second writer changes the size, which sends
-        this back to the file's tail rather than chaining onto a stale hash.
+        The cache is only trusted while the file is the same file, the same
+        length and untouched since the cache was taken (see ``_stat_token``);
+        anything else sends this back to the file's tail rather than chaining
+        onto a stale hash.
         """
-        size = self._size()
-        if self._cached_hash is not None and self._cached_size == size:
+        token = self._stat_token()
+        if self._cached_hash is not None and self._cached_stat == token:
             return self._cached_hash
         last = self._read_last_line()
         digest = hashlib.sha256(last.encode()).hexdigest() if last else ""
         self._cached_hash = digest
-        self._cached_size = size
+        self._cached_stat = token
         return digest
 
     # -- rotation --------------------------------------------------------
@@ -289,7 +369,7 @@ class IncidentLog:
             logger.error("Could not rotate the incident log: %s", exc)
             return
         self._cached_hash = None
-        self._cached_size = None
+        self._cached_stat = None
         # The new file opens with a carry-over line whose prev_sha256 is the
         # rotated file's last line, so the chain crosses the rotation.
         carry = {
@@ -310,17 +390,22 @@ class IncidentLog:
         with open(self._path, "a") as f:
             f.write(carry_line + "\n")
         self._cached_hash = hashlib.sha256(carry_line.encode()).hexdigest()
-        self._cached_size = self._size()
+        self._cached_stat = self._stat_token()
         logger.info("Incident log rotated to %s (%d bytes)", target.name, size)
 
     def _append(self, entry: dict[str, Any]) -> None:
-        self._rotate_if_needed()
-        entry["prev_sha256"] = self._last_line_hash()
-        line = json.dumps(entry, default=str)
-        with open(self._path, "a") as f:
-            f.write(line + "\n")
-        self._cached_hash = hashlib.sha256(line.encode()).hexdigest()
-        self._cached_size = self._size()
+        # Rotate, read the tail and append under one cross-process lock. The
+        # in-memory cache is still size-checked inside it, which is what keeps
+        # a second writer in THIS process honest; the lock is what keeps a
+        # second PROCESS from chaining onto the same line.
+        with _chain_lock(self._path):
+            self._rotate_if_needed()
+            entry["prev_sha256"] = self._last_line_hash()
+            line = json.dumps(entry, default=str)
+            with open(self._path, "a") as f:
+                f.write(line + "\n")
+            self._cached_hash = hashlib.sha256(line.encode()).hexdigest()
+            self._cached_stat = self._stat_token()
 
     def record(
         self,
