@@ -67,7 +67,10 @@ one meant without reading a log.
 Both commands write the latch file and then rely on the running server to
 notice. It notices within about five seconds: the generated runtime's guard
 loop and the stock `castor gateway` app both reconcile their in-memory hold
-against the file on that cadence, and both write an audit row when it changes.
+against the file on that cadence, and both write a `pause`, `resume`, `estop`
+or `clear_estop` row to `/var/log/safety` when it changes. Both reconcile on
+their own event loop rather than in a worker thread, so a stop arriving
+mid-reconcile cannot be mistaken for somebody else's clear.
 `GET /api/fs/estop` reports `held`, `paused`, `estopped`, `hold_detail` and the
 raw `latch`, so you can see this process' state next to the file it came from.
 
@@ -86,14 +89,33 @@ Two ways to send it:
 
 - `POST /api/estop/clear` with the code in the `X-Estop-Auth` header (or
   `auth_code` in a JSON body), plus an admin bearer. The bundled `/gamepad`
-  page has a field for it. Setting a stop stays open to any authenticated
-  caller; clearing one does not.
+  page has a field for it, held in the page for as long as it is open and
+  nowhere else, so a reload asks again. Setting a stop stays open to any
+  authenticated caller; clearing one does not.
 - `castor resume --clear-estop --auth-code <code>` on the robot's own host.
 
 A robot with no code provisioned cannot check one, so `--clear-estop` refuses
-rather than clearing unchecked, and tells you to run `castor up`. If you must
-clear anyway, `--no-auth-code` does it and prints a warning saying the clear was
-unauthenticated. A missing secret is not consent.
+rather than clearing unchecked, exits 3, and tells you to run `castor up`. A
+wrong `--auth-code`, or none on a robot that has a code, refuses and exits 3
+the same way. If you must clear on a robot that has no code at all,
+`--no-auth-code` does it and prints a warning saying the clear was
+unauthenticated. A missing secret is not consent. On a robot that does have a
+code, `--no-auth-code` is refused with exit 3: it is an escape hatch for
+nothing to check against, not a way around a code that exists.
+
+Every clear taken at the robot appends `estop_cleared` to
+`$ROBOT_HOME/audit.log`, carrying who took it and whether anything checked
+them, so an unauthenticated one can be found afterwards rather than only
+having been printed once to a terminal.
+
+WHERE THE TWO PATHS DIFFER, which is worth knowing before relying on either.
+The CLI looks for the code in `OPENCASTOR_ESTOP_AUTH` and then in
+`$ROBOT_HOME/tokens.env`. `POST /api/estop/clear` checks only the environment
+variable of the server process. A unit written by `castor up` loads
+`tokens.env`, so on a robot built the ten-minute way the two agree. A gateway
+started by hand in a shell that does not export the variable has nothing to
+check against, and there an admin bearer alone clears the stop. Start the
+gateway with the variable set, or let `castor up` write the unit.
 
 ## Why a sensor latch clears only at the robot
 
