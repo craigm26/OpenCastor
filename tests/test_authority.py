@@ -165,6 +165,16 @@ class TestFailClosed:
         ) == {"a", "b"}
         assert trusted_authority_ids_from_config({"trusted_authority_ids": "a"}) == {"a"}
 
+    def test_malformed_config_is_empty_not_accept_all(self):
+        """A bad value fails closed and does not raise, so boot still works."""
+        from castor.authority import trusted_authority_ids_from_config
+
+        assert trusted_authority_ids_from_config({"authority": "not-a-dict"}) == set()
+        assert trusted_authority_ids_from_config({"authority": {}}) == set()
+        assert trusted_authority_ids_from_config({"trusted_authority_ids": 7}) == set()
+        assert trusted_authority_ids_from_config({"trusted_authority_ids": []}) == set()
+        assert trusted_authority_ids_from_config("not-a-config") == set()
+
 
 class TestConformanceRowRequiresAllowlist:
     """OC-13: the conformance row can no longer pass on a config flag."""

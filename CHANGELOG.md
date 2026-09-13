@@ -108,9 +108,17 @@ is still notified and the refusal is still written to the commitment chain.
 Absence of the key is the safe state either way. The 24 hour
 per-authority rate limit now rejects the second request instead of logging and
 letting it through. The transparency-record export no longer imports a function
-that does not exist and hand back a silent empty list: every export field
+that does not exist and hands back a silent empty list: every export field
 carries an `export_notes` entry saying `unavailable` with the reason, or
-`truncated` with the cap and the true total.
+`truncated` with the cap and the true total. A malformed value under that key
+is read as an empty allowlist, with a warning, rather than raising: a bad
+config must not keep a robot from booting and must not be read as accept-all.
+
+The fleet document published to Firestore used to carry the literal
+`authority_handler_enabled: true` for every robot. It now reads the operator's
+flag AND the allowlist, the same way `castor iso-check` and the conformance row
+read them, so an unconfigured robot publishes `false`. A fleet view no longer
+advertises a capability the runtime refuses to exercise.
 
 An unconfigured robot still comes up. Nothing dispatches to the handler today,
 so failing closed costs a normal robot nothing; it only refuses authority

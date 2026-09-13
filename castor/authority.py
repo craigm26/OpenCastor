@@ -46,14 +46,26 @@ def trusted_authority_ids_from_config(config: Optional[dict]) -> set[str]:
     set when neither is present, which is the fail-closed shipped state: the
     handler then refuses every requester.
     """
-    cfg = config or {}
-    raw = (cfg.get("authority") or {}).get("trusted_authority_ids")
+    cfg = config if isinstance(config, dict) else {}
+    authority = cfg.get("authority")
+    raw = authority.get("trusted_authority_ids") if isinstance(authority, dict) else None
     if raw is None:
         raw = cfg.get("trusted_authority_ids")
     if raw is None:
         return set()
     if isinstance(raw, str):
         raw = [raw]
+    if not isinstance(raw, (list, tuple, set, frozenset)):
+        # A malformed value is not an allowlist. Fail closed rather than
+        # raising: a bad config must not keep an unconfigured robot from
+        # booting, and it must not be read as "accept all" either.
+        logger.warning(
+            "%s is set to a %s, which is not a list of authority ids; "
+            "treating it as empty (every authority request is refused).",
+            TRUSTED_AUTHORITY_CONFIG_KEY,
+            type(raw).__name__,
+        )
+        return set()
     return {str(x).strip() for x in raw if str(x).strip()}
 
 

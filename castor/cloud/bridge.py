@@ -305,6 +305,25 @@ def _detect_pick_place_intent(instruction: str) -> tuple[str, str] | None:
     return None
 
 
+def _authority_handler_enabled(config: dict[str, Any] | None) -> bool:
+    """True only when the robot can actually answer an AUTHORITY_ACCESS request.
+
+    Since OC-13 the handler fails closed: with no allowlist under
+    ``authority.trusted_authority_ids`` it refuses every requester. So the
+    fleet document reads both the operator's flag and the allowlist, the same
+    way ``castor iso-check`` and the ``rcan_v21.authority_handler`` conformance
+    row read them. An unconfigured robot publishes False.
+    """
+    cfg = config or {}
+    if not bool(cfg.get("authority_handler_enabled", False)):
+        return False
+    try:
+        from castor.authority import trusted_authority_ids_from_config
+    except Exception:  # pragma: no cover - castor.authority is always present
+        return False
+    return bool(trusted_authority_ids_from_config(cfg))
+
+
 class CastorBridge:
     """Firebase ↔ local castor gateway relay daemon.
 
@@ -986,7 +1005,11 @@ class CastorBridge:
                 "multimodal_enabled": True,
                 "registry_tier": "community",
                 # RCAN v2.1/v2.2 fields
-                "authority_handler_enabled": True,
+                # The handler is only real when an allowlist is configured: the
+                # runtime refuses every requester without one, so publishing a
+                # literal True here would advertise a capability the robot does
+                # not have. Read both the flag and the allowlist (OC-13).
+                "authority_handler_enabled": _authority_handler_enabled(self._rcan_config),
                 "audit_retention_days": 3650,
                 # MCP server config — published for Flutter MCP screen
                 "mcp_clients": _format_mcp_clients(
