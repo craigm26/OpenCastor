@@ -241,3 +241,56 @@ def test_picture_upload_traces_the_photo_into_a_task(
         assert r.status_code == 200 and r.json()["task"] == "sacpaint/river"
         assert launched[0][launched[0].index("--task") + 1] == "sacpaint/river"
         paint._reset_for_tests()
+
+
+# --- colour --------------------------------------------------------------------
+
+
+def test_the_run_names_the_reference_so_the_body_shows_the_right_picture(tmp_path: Path) -> None:
+    """Without -E reference the body served the packaged photograph whatever was asked for."""
+    cfg = _profile(tmp_path)
+    wanted = (("sacramento", "sacramento-photo-v1"), ("starry-night", "starry-night"))
+    for picture, reference in wanted:
+        job = paint._Job("j", picture, "virtual", paint._task_for_picture(picture))
+        job.dir = tmp_path / "paint" / "j"
+        cmd, _ = paint.build_command(job, cfg, console_url="http://127.0.0.1:8082", python="py")
+        assert f"reference={reference}" in cmd
+
+
+def test_pictures_lists_the_packaged_one_and_every_upload(
+    client: TestClient, tmp_path: Path
+) -> None:
+    body = client.get("/eval/paint/pictures").json()
+    names = [p["picture"] for p in body["pictures"]]
+    assert names == ["sacramento"]
+    assert body["pictures"][0]["task"] == "sacpaint/photo-v1"
+    assert body["pictures"][0]["reference"] == "sacramento-photo-v1"
+    assert body["pictures"][0]["color"] is False
+    assert "black" in body["palette"]
+
+    pictures = tmp_path / "paint" / "pictures"
+    pictures.mkdir(parents=True)
+    (pictures / "starry-night.jpg").write_bytes(b"\xff\xd8ignored")
+    listed = {p["picture"]: p for p in client.get("/eval/paint/pictures").json()["pictures"]}
+    assert set(listed) == {"sacramento", "starry-night"}
+    # No spec on disk yet, so the console says so rather than pretending.
+    assert listed["starry-night"]["registered"] is False
+    assert listed["starry-night"]["uploaded"] is True
+    assert client.get("/eval/paint/config").json()["pictures"] == list(listed.values())
+
+
+def test_a_colour_upload_asks_the_bench_for_a_colour_reference(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[list[str]] = []
+
+    class _Done:
+        returncode, stdout, stderr = 0, "", ""
+
+    monkeypatch.setattr(
+        paint.subprocess, "run", lambda cmd, **kw: (calls.append(cmd), _Done())[1]
+    )
+    assert client.post("/eval/picture?name=plain", content=b"\xff\xd8x").json()["color"] is False
+    assert "--color" not in calls[0]
+    assert client.post("/eval/picture?name=vivid&color=1", content=b"\xff\xd8x").json()["color"]
+    assert calls[1][-1] == "--color" and "--auto-trace" in calls[1]

@@ -129,7 +129,9 @@ def cmd_new(args: argparse.Namespace) -> int:
     # The base's colour target belongs to the base's photograph too.
     spec.color, spec.color_palette, spec.color_regions = None, None, []
     if getattr(args, "color", False) and not args.photo:
-        raise SystemExit("--color needs --photo: the colour target is quantised from the photograph")
+        raise SystemExit(
+            "--color needs --photo: the colour target is quantised from the photograph"
+        )
     if args.photo:
         src = Path(args.photo).expanduser()
         if not src.is_file():

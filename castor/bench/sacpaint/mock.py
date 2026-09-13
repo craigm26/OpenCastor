@@ -176,9 +176,7 @@ class PlotterEmbodiment:
         self._canvas = self._blank()
         self._instruction: str | None = None
         self._reference = reference_image(self.spec.name)
-        self._reference_color = (
-            color_reference(self.spec.name) if self.spec.has_color else None
-        )
+        self._reference_color = color_reference(self.spec.name) if self.spec.has_color else None
         self.info = EmbodimentInfo(
             name="sacpaint_plotter",
             action_space=action_space(self.spec),
@@ -196,7 +194,8 @@ class PlotterEmbodiment:
 
     def _park(self) -> np.ndarray:
         """The pen up at the bottom-left corner, in black on a colour task."""
-        return np.array([0.0, 0.0, PEN_UP_Z] + ([float(pal.DEFAULT_INDEX)] if self._dim == 4 else []))
+        park = [0.0, 0.0, PEN_UP_Z]
+        return np.array(park + ([float(pal.DEFAULT_INDEX)] if self._dim == 4 else []))
 
     def _fit(self, data: Any) -> np.ndarray:
         """Accept a 3- or 4-vector, so a mono policy still drives a colour canvas in black."""
@@ -309,9 +308,8 @@ def stroke_color(spec: ReferenceSpec, stroke: list[tuple[float, float]]) -> int:
         for sx, sy in points:
             col = min(max(int(sx / mm_w * w), 0), w - 1)
             row = min(max(int((1.0 - sy / mm_h) * h), 0), h - 1)
-            window = indices[
-                max(row - pad, 0) : row + pad + 1, max(col - pad, 0) : col + pad + 1
-            ]
+            top, left = max(row - pad, 0), max(col - pad, 0)
+            window = indices[top : row + pad + 1, left : col + pad + 1]
             seen.extend(window.reshape(-1).tolist())
     if not seen:
         return pal.DEFAULT_INDEX

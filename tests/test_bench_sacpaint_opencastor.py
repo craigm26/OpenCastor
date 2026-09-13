@@ -1198,3 +1198,129 @@ def test_virtual_medium_carries_on_from_the_measured_pose_after_a_miss(gateway, 
     assert cols.min() == pytest.approx(80, abs=3) and cols.max() == pytest.approx(
         464, abs=3
     )  # inked to where it got, not where it was sent
+
+
+# --- colour: a property of the virtual ink, and of nothing on the arm --------------
+
+
+@pytest.fixture
+def colour_reference(tmp_path, monkeypatch):
+    """Register a small colour reference and hand back its name."""
+    import argparse
+
+    from castor.bench.sacpaint import cli, reference as refmod
+
+    monkeypatch.setenv("SACPAINT_REFERENCES", str(tmp_path / "refs"))
+    refmod.refresh()
+    photo = tmp_path / "source.jpg"
+    img = np.zeros((400, 300, 3), np.uint8)
+    img[:, :150] = (40, 60, 170)
+    img[:, 150:] = (200, 160, 20)
+    for y in range(0, 400, 60):
+        cv2.line(img, (0, y), (299, y), (255, 255, 255), 3)
+    cv2.imwrite(str(photo), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+    cli.cmd_new(
+        argparse.Namespace(
+            name="colourtest",
+            from_reference=DEFAULT_REFERENCE,
+            canvas="150x200",
+            description="",
+            photo=str(photo),
+            photo_credit="",
+            auto_trace=True,
+            color=True,
+            force=True,
+        )
+    )
+    refmod.refresh()
+    yield "colourtest"
+    refmod.refresh()
+
+
+def test_colour_changes_the_ink_and_nothing_on_the_wire(gateway, camera, colour_reference):
+    from castor.bench.sacpaint import palette as pal
+    from castor.bench.sacpaint.embodiment import REFERENCE_COLOR_CAM
+
+    body = _embodiment(
+        gateway, camera, "easel", medium="virtual", overhead_url=None, reference=colour_reference
+    )
+    assert body.colored is True
+    space = body.info.action_space
+    assert space.shape == (4,)
+    assert space.semantics.dim_labels == ("x", "y", "z", "color")
+    assert space.high.tolist()[3] == float(len(pal.NAMES) - 1)
+    # The whole palette is reachable in one step: a delta limit would hide most of it.
+    assert space.semantics.max_step[3] == float(len(pal.NAMES) - 1)
+    assert REFERENCE_COLOR_CAM in {c.name for c in body.info.observation_space.cameras}
+    for name in pal.NAMES:
+        assert name in body.info.docs
+    assert "the arm holds no pen" in body.info.docs
+
+    indigo = float(pal.index_of("indigo"))
+    scene = Scene(id="sacpaint/colourtest", instruction="Draw the reference image.")
+    obs = body.reset(scene)
+    assert obs.extra["color"] == "black" and obs.extra["palette"] == list(pal.NAMES)
+    assert REFERENCE_COLOR_CAM in obs.images
+    body.step(Action(data=np.array([0.02, 0.10, 0.005, indigo])))
+    body.step(Action(data=np.array([0.02, 0.10, 0.002, indigo])))
+    drawn = body.step(Action(data=np.array([0.12, 0.10, 0.002, indigo]))).observation
+
+    canvas = drawn.images[OVERHEAD]
+    inked = canvas.reshape(-1, 3)[(canvas.reshape(-1, 3) != 255).any(axis=1)]
+    used = {tuple(int(v) for v in c) for c in np.unique(inked, axis=0)}
+    assert used == {pal.rgb_of("indigo")}
+    assert drawn.extra["color"] == "indigo"
+
+    # Every gateway call carried the same three millimetres it always carried.
+    moves = [c for c in gateway.calls if c["tool"] == "arm.move_to"]
+    for call in moves:
+        assert set(call["envelope"]["tool_args"]) == {"x_mm", "y_mm", "z_mm"}
+    assert "color" not in json.dumps([c["envelope"] for c in gateway.calls])
+
+    # The retained receipt records the ink under its own key, outside the envelope.
+    ink_notes = [r["sacpaint_ink"] for r in body.receipts if "sacpaint_ink" in r]
+    assert ink_notes[-1] == {
+        "medium": "virtual",
+        "inked": True,
+        "color": "indigo",
+        "rgb": list(pal.rgb_of("indigo")),
+        "note": "virtual ink, recorded by sacpaint; not part of the signed envelope",
+    }
+
+
+def test_a_three_number_action_on_a_colour_task_still_means_black(
+    gateway, camera, colour_reference
+):
+    from castor.bench.sacpaint import palette as pal
+
+    body = _embodiment(
+        gateway, camera, "easel", medium="virtual", overhead_url=None, reference=colour_reference
+    )
+    body.reset(Scene(id="s", instruction="Draw."))
+    body.step(Action(data=np.array([0.02, 0.10, 0.002])))
+    drawn = body.step(Action(data=np.array([0.12, 0.10, 0.002]))).observation
+    canvas = drawn.images[OVERHEAD]
+    inked = canvas.reshape(-1, 3)[(canvas.reshape(-1, 3) != 255).any(axis=1)]
+    used = {tuple(int(v) for v in c) for c in np.unique(inked, axis=0)}
+    assert used == {pal.rgb_of("black")}
+
+
+def test_the_progress_file_a_console_reads_carries_the_colour(
+    gateway, camera, colour_reference, tmp_path
+):
+    from castor.bench.sacpaint import palette as pal
+
+    progress = tmp_path / "progress.json"
+    body = _embodiment(
+        gateway,
+        camera,
+        "easel",
+        medium="virtual",
+        overhead_url=None,
+        reference=colour_reference,
+        progress_path=str(progress),
+    )
+    body.reset(Scene(id="s", instruction="Draw."))
+    body.step(Action(data=np.array([0.02, 0.10, 0.002, float(pal.index_of("gold"))])))
+    payload = json.loads(progress.read_text())
+    assert payload["color"] == "gold" and payload["palette"] == list(pal.NAMES)
