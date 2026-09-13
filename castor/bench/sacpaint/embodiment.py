@@ -526,6 +526,7 @@ class OpenCastorEmbodiment:
         self._started_at = time.time()
         self._receipts_written = False
         self._trial: tuple[str, int] | None = None
+        self._move_receipt: int | None = None
 
         self.num_steps = 0
         self.misses = 0
@@ -722,6 +723,9 @@ class OpenCastorEmbodiment:
     def _move_to(self, canvas_target_m: np.ndarray) -> None:
         """One gateway motion: canvas metres in, arm-base millimetres on the wire."""
         base_mm = self._calibration.canvas_to_base(canvas_target_m)
+        # Which retained receipt this motion will be, so the ink note lands on the
+        # move and not on the state call that may follow it.
+        self._move_receipt = len(self.client.receipts)
         try:
             result = self.client.invoke(
                 self.move_tool, self._move_payload(base_mm), scope=MOTION_SCOPE
@@ -779,16 +783,17 @@ class OpenCastorEmbodiment:
         self._note_ink_on_receipt(down_before and down_now)
 
     def _note_ink_on_receipt(self, inked: bool) -> None:
-        """Record what the virtual ink did on the retained receipt for the call just made.
+        """Record what the virtual ink did on the retained receipt for the move just made.
 
         This annotates the local record only. The signed envelope the gateway
         attested to is untouched: it never carried a colour, because the arm was
         never asked for one. The annotation sits under its own key so a reader
         cannot mistake it for something the gateway verified.
         """
-        if self._ink is None or not self.client.receipts:
+        index = self._move_receipt
+        if self._ink is None or index is None or index >= len(self.client.receipts):
             return
-        self.client.receipts[-1]["sacpaint_ink"] = {
+        self.client.receipts[index]["sacpaint_ink"] = {
             "medium": self.medium,
             "inked": bool(inked),
             "color": pal.name_of(self.color),
