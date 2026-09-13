@@ -8,6 +8,12 @@ Nothing here calls a model; every number is reproducible offline from the
 final frame. If ``SACPAINT_ARTIFACTS`` names a directory, the composite scorer
 also writes the rectified final canvas and the full score breakdown there, so
 ``sacpaint export`` can publish them.
+
+``composite`` is line fidelity and nothing else. On a colour reference
+``color_fidelity`` is reported beside it and is never folded into it: the
+composite is the only number comparable with every run made before colour
+existed, and "the right shapes in the wrong colours" is not the same failure as
+its opposite.
 """
 
 from __future__ import annotations
@@ -286,6 +292,117 @@ def discipline_details(canvas: np.ndarray, ref: np.ndarray, band_frac: float) ->
     return {"value": value, "ink_px": total, "stray_px": stray, "ink_ratio": round(ratio, 3)}
 
 
+# --- colour -------------------------------------------------------------------
+# Colour is scored on its own and never folded into the composite. The composite
+# is line fidelity, and it has to keep meaning the same thing it meant before the
+# palette existed, or every earlier run stops being comparable. A colour run
+# therefore carries two numbers: the same composite as always, and this.
+
+#: How far from a reference pixel a painted pixel may be and still be judged
+#: against that pixel's colour. 1% of the canvas diagonal, the landmark tolerance.
+COLOR_TOLERANCE_FRAC = 0.01
+
+
+def _reference_color_indices(spec: ReferenceSpec, size: tuple[int, int]) -> np.ndarray:
+    """The colour reference as palette indices at ``size`` (width, height), nearest-upscaled."""
+    from castor.bench.sacpaint import palette as pal
+
+    small = pal.quantize(spec.color_reference_image(canonical=False))
+    w, h = size
+    if small.shape[:2] == (h, w):
+        return small
+    return cv2.resize(small, (w, h), interpolation=cv2.INTER_NEAREST)
+
+
+def color_details(
+    canvas: np.ndarray,
+    spec: ReferenceSpec,
+    tolerance_frac: float = COLOR_TOLERANCE_FRAC,
+) -> dict[str, Any]:
+    """How close the painted colours are to the reference's, and how much of it they reach.
+
+    Two terms, averaged:
+
+    * ``accuracy``: over the pixels the robot painted, one minus the mean
+      palette distance between the colour it used and the nearest reference
+      pixel of any colour within ``tolerance_frac`` of the canvas diagonal. The
+      window exists because a stroke a millimetre off would otherwise be judged
+      against whatever colour happens to lie under it.
+    * ``coverage``: over the colour reference's regions, weighted by how much
+      of the *stroke skeleton* falls in each, one minus the mean palette
+      distance between the region's target colour and the colours actually
+      painted there. Regions the skeleton never asks the robot to visit are not
+      counted, and a region with skeleton but no paint scores zero.
+
+    Both are on the palette's own scale: 1.0 is the right colour, 0.0 is as far
+    from it as two entries of this palette ever are.
+    """
+    from castor.bench.sacpaint import palette as pal
+
+    if not spec.has_color:
+        return {"value": 0.0, "note": f"reference {spec.name!r} has no colour target"}
+    h, w = canvas.shape[:2]
+    ref_idx = _reference_color_indices(spec, (w, h))
+    painted = ink_mask(canvas)
+    out: dict[str, Any] = {
+        "palette": pal.PALETTE_VERSION,
+        "painted_px": int(painted.sum()),
+        "regions": len(spec.color_regions),
+    }
+    if not painted.any():
+        out.update({"value": 0.0, "accuracy": 0.0, "coverage": 0.0, "note": "nothing painted"})
+        return out
+
+    ys, xs = np.nonzero(painted)
+    chosen = pal.quantize(canvas[ys, xs].reshape(-1, 1, 3)).reshape(-1)
+    tol = max(1, int(round(tolerance_frac * float(np.hypot(w, h)))))
+    kernel = np.ones((2 * tol + 1, 2 * tol + 1), np.uint8)
+    near = np.stack(
+        [
+            cv2.dilate((ref_idx == i).astype(np.uint8), kernel).astype(bool)
+            for i in range(len(pal.NAMES))
+        ]
+    )
+    available = near[:, ys, xs].T  # (painted, palette)
+    distances = np.where(available, pal.DISTANCE[chosen], np.inf).min(axis=1)
+    accuracy = 1.0 - float(distances.mean())
+
+    ref_ink = ink_mask(reference_ink(spec.name))
+    weight_total = 0.0
+    credit = 0.0
+    unreached = 0
+    scored = 0
+    for region in spec.color_regions:
+        x0, y0, x1, y1 = _bbox_px(list(region["bbox"]), (w, h))
+        weight = float(ref_ink[y0:y1, x0:x1].sum())
+        if weight <= 0:
+            continue  # the skeleton never sends the robot here
+        weight_total += weight
+        scored += 1
+        cell = painted[y0:y1, x0:x1]
+        if not cell.any():
+            unreached += 1
+            continue
+        want = pal.index_of(region["color"])
+        got = pal.quantize(canvas[y0:y1, x0:x1][cell].reshape(-1, 1, 3)).reshape(-1)
+        credit += weight * (1.0 - float(pal.DISTANCE[want][got].mean()))
+    coverage = credit / weight_total if weight_total else 0.0
+
+    counts = np.bincount(chosen, minlength=len(pal.NAMES))
+    out.update(
+        {
+            "accuracy": round(accuracy, 4),
+            "coverage": round(coverage, 4),
+            "value": round(0.5 * accuracy + 0.5 * coverage, 4),
+            "tolerance_px": tol,
+            "regions_scored": scored,
+            "regions_unreached": unreached,
+            "colors_used": {pal.NAMES[i]: int(n) for i, n in enumerate(counts) if n},
+        }
+    )
+    return out
+
+
 def score_canvas(canvas: np.ndarray, spec: ReferenceSpec) -> dict[str, Any]:
     """Every image-only score for a canonical canvas (no trial needed). Used by ``sacpaint score``."""
     ref = reference_ink(spec.name)
@@ -298,7 +415,7 @@ def score_canvas(canvas: np.ndarray, spec: ReferenceSpec) -> dict[str, Any]:
     total = sum(image_weights.values())
     parts = {"landmark_geometry": lm["value"], "structure": st["value"], "discipline": di["value"]}
     composite_photo = sum(image_weights[k] * parts[k] for k in parts) / total if total else 0.0
-    return {
+    out = {
         "reference": spec.name,
         "composite_photo": round(composite_photo, 4),
         "parts": {k: round(v, 4) for k, v in parts.items()},
@@ -307,6 +424,10 @@ def score_canvas(canvas: np.ndarray, spec: ReferenceSpec) -> dict[str, Any]:
         "discipline": di,
         "weights": weights,
     }
+    if spec.has_color:
+        # Beside the composite, never inside it: "parts" is untouched.
+        out["color_fidelity"] = color_details(canvas, spec)
+    return out
 
 
 # --- scorer objects ------------------------------------------------------------
@@ -383,6 +504,37 @@ def discipline() -> _Discipline:
 
 
 @dataclass(frozen=True)
+class _ColorFidelity:
+    name: str = "color_fidelity"
+
+    def __call__(self, record: TrialRecord, target: Target | None) -> Score:
+        spec = spec_for(target)
+        if not spec.has_color:
+            return Score(
+                value=0.0,
+                explanation=f"reference {spec.name!r} is a mono task: no colour target to score",
+                metadata={"applicable": False},
+            )
+        canvas = final_canvas(record, spec)
+        if canvas is None:
+            return _no_frame()
+        d = color_details(canvas, spec)
+        return Score(
+            value=float(d["value"]),
+            explanation=(
+                "mean palette closeness of the painted pixels to the colour reference, "
+                "averaged with region coverage; reported beside the composite, never inside it"
+            ),
+            metadata=d,
+        )
+
+
+def color_fidelity() -> _ColorFidelity:
+    """Colour, scored on its own: the right colours, roughly in the right places."""
+    return _ColorFidelity()
+
+
+@dataclass(frozen=True)
 class _Efficiency:
     max_steps: int
     name: str = "efficiency"
@@ -456,6 +608,10 @@ class _Composite:
             "medium": medium,
             "wire": os.environ.get(WIRE_LABEL_ENV, "api"),
         }
+        if isinstance(details, dict) and "color_fidelity" in details:
+            # Alongside, so a reader can see both without unpacking; the
+            # composite above was computed without it and stays what it was.
+            payload["color_fidelity"] = details["color_fidelity"].get("value")
         artifact = _write_artifacts(record, canvas, payload)
         meta: dict[str, Any] = {
             "parts": parts,

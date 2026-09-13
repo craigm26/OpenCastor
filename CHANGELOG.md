@@ -11,6 +11,47 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ### Added
 
+**Sacramento PaintBench paints in colour, and scores it separately.** A
+reference can now carry a colour target beside its stroke skeleton:
+`castor bench sacpaint new NAME --photo X --auto-trace --color` writes the same
+edges it always wrote and, next to them, the photograph downscaled and
+quantised to a twelve-colour pen palette plus a coarse grid of region colour
+targets. A colour task's action carries one more number, `color`, the palette
+index the ink is laid down in, and the policy is offered one more camera,
+`reference_color`, the picture reduced to that palette. A mono task is exactly
+what it was: three dimensions, two cameras, black ink, the same prompt, and a
+three-number action sent to a colour task still means black.
+
+The colour belongs to the ink and to nothing else. The arm holds no pen in the
+virtual medium, swaps no colour and moves no differently; every gateway call
+carries the same three millimetre coordinates it carried before, and the signed
+envelope is untouched. The colour is recorded in the observation, in the
+progress file the console reads, on the canvas stream, and beside each retained
+receipt under its own `sacpaint_ink` key, which is marked as the benchmark's own
+note rather than anything the gateway attested to.
+
+Scoring stays two numbers. `composite` is unchanged and still means line
+fidelity, so a colour run is comparable with every run made before colour
+existed; `color_fidelity` is reported beside it and never folded into it. It
+averages palette closeness over the painted pixels with coverage of the colour
+reference's regions. Every palette entry is darker than the scorers' ink
+threshold, so colour cannot move the line score: measured on a synthetic
+two-colour picture, the oracle's composite is 0.9998 whether it paints in
+colour or is forced to black, while `color_fidelity` moves from 0.89 to 0.26.
+
+`sacpaint/starry-night` ships as the first colour task: Van Gogh's *The Starry
+Night* (1889, public domain, Wikimedia Commons / Google Art Project) on a
+150 x 119 mm canvas. No colour run has been made on an arm.
+
+**The console names the reference for a paint job.** `build_command` now passes
+`-E reference=<name>`. Without it the body showed the model the packaged
+photograph of Sacramento while the scorers graded whatever picture was asked
+for, and a colour task had no way to know it was one. `GET
+/eval/paint/pictures` lists the packaged picture and every upload with its
+task, its reference and whether it is a colour task; `GET /eval/paint/config`
+carries the palette; `POST /eval/picture?...&color=1` asks for a colour
+reference; a finished job reports `color_fidelity` beside the composite.
+
 **`castor incidents verify` walks the incident log's hash chain.** The log has
 been hash-chained and, since the size bound landed, chained across rotations,
 but nothing read the chain back. The new subcommand does, rotated files in

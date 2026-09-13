@@ -22,8 +22,14 @@ operator writes ``<ROBOT_HOME>/paint.json`` once, on the robot::
     }
 
 The phone chooses the picture (the packaged photograph of Sacramento, or one it
-uploads) and, among the media the robot offers, which one. Nothing here decides
-whether a motion is allowed: every stroke still goes through the gateway.
+uploads) and, among the media the robot offers, which one. ``GET
+/eval/paint/pictures`` lists what is on offer. Nothing here decides whether a
+motion is allowed: every stroke still goes through the gateway.
+
+A picture may be a **colour** task, which means only that its reference carries
+a colour target and the virtual ink can be laid down in one of the palette's
+named colours. The arm holds no pen and changes no colour; the run is the same
+run. Line fidelity and colour are reported as two separate numbers.
 """
 
 from __future__ import annotations
@@ -47,6 +53,8 @@ from castor.console.config import robot_home
 router = APIRouter()
 
 DEFAULT_PICTURE = "sacramento"
+#: The packaged reference the default picture runs against.
+DEFAULT_REFERENCE = "sacramento-photo-v1"
 _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 MAX_PICTURE_BYTES = 12 * 1024 * 1024
 CANVAS_STREAM = "canvas"
@@ -118,6 +126,11 @@ def build_command(
     flags["progress_path"] = str(job.dir / "progress.json")
     flags["canvas_post_url"] = f"{console_url}/eval/frame?stream={CANVAS_STREAM}"
     flags["receipts_dir"] = str(job.dir / "receipts")
+    # The task names the reference for the scorers; the body needs it too, or it
+    # shows the model the packaged photograph while the scorers grade another
+    # picture. A colour task is a colour task because its reference says so, so
+    # this is also how the body learns to offer the palette.
+    flags["reference"] = _reference_for_picture(job.picture)
     if job.medium == "pen":
         # The phone is the eyes: its frames and tapped corners are on this console.
         flags.setdefault(
@@ -166,6 +179,68 @@ def _task_for_picture(picture: str) -> str:
     return f"sacpaint/{picture}"
 
 
+def _reference_for_picture(picture: str) -> str:
+    """The reference name behind a picture. ``sacpaint new NAME`` writes ``NAME``."""
+    return DEFAULT_REFERENCE if picture == DEFAULT_PICTURE else picture
+
+
+def _spec(picture: str) -> Any:
+    """The reference spec for a picture, or None when this build cannot read it."""
+    try:
+        from castor.bench.sacpaint.reference import get_spec
+
+        return get_spec(_reference_for_picture(picture))
+    except Exception:  # noqa: BLE001 - the console must answer even without paintbench
+        return None
+
+
+def _palette_names() -> list[str]:
+    """The pen palette, or an empty list when paintbench is not installed."""
+    try:
+        from castor.bench.sacpaint.palette import NAMES
+
+        return list(NAMES)
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def pictures() -> list[dict[str, Any]]:
+    """Every picture this robot can be asked to paint: the packaged default, then uploads.
+
+    An upload is listed once its JPEG is in ``<ROBOT_HOME>/paint/pictures`` (that
+    is the file ``POST /eval/paint`` checks) and it names the reference
+    ``castor bench sacpaint new`` wrote under ``$SACPAINT_REFERENCES``
+    (``~/.sacpaint/references`` by default). ``color`` says whether that
+    reference carries a colour target.
+    """
+    out: list[dict[str, Any]] = []
+    for name in [DEFAULT_PICTURE, *_uploaded_names()]:
+        spec = _spec(name)
+        out.append(
+            {
+                "picture": name,
+                "task": _task_for_picture(name),
+                "reference": _reference_for_picture(name),
+                "registered": spec is not None,
+                "color": bool(getattr(spec, "color", None)) if spec is not None else False,
+                "description": getattr(spec, "description", "") if spec is not None else "",
+                "uploaded": name != DEFAULT_PICTURE,
+            }
+        )
+    return out
+
+
+def _uploaded_names() -> list[str]:
+    directory = paint_dir() / "pictures"
+    if not directory.is_dir():
+        return []
+    return sorted(
+        path.stem
+        for path in directory.glob("*.jpg")
+        if _NAME_RE.match(path.stem) and path.stem != DEFAULT_PICTURE
+    )
+
+
 def _launch(job: _Job, cmd: list[str], env: dict[str, str]) -> None:
     job.dir.mkdir(parents=True, exist_ok=True)
     log = open(job.dir / "run.log", "ab")  # noqa: SIM115 - the process owns it now
@@ -212,6 +287,9 @@ def _score(job: _Job) -> dict[str, Any] | None:
         return None
     return {
         "composite": data.get("composite"),
+        # Beside the composite, never inside it: line fidelity and colour are
+        # two numbers, so a colour run stays comparable with every earlier run.
+        "color_fidelity": data.get("color_fidelity"),
         "parts": data.get("parts"),
         "medium": data.get("medium"),
         "wire": data.get("wire"),
@@ -256,6 +334,8 @@ def _describe(job: _Job | None, *, running: bool) -> dict[str, Any]:
         "llm_calls": _llm_calls(job),
         "canvas_stream": CANVAS_STREAM,
     }
+    if progress.get("color"):
+        out["color"] = progress["color"]
     if not running:
         out["exit_code"] = job.exit_code
         out["score"] = _score(job)
@@ -292,6 +372,10 @@ def paint_config() -> dict[str, Any]:
         "media": media,
         "default_medium": media[0] if media else None,
         "default_picture": DEFAULT_PICTURE,
+        "pictures": pictures(),
+        # Named colours the virtual ink can be on a colour task. The arm holds no
+        # pen and changes no colour; this is a property of the ink only.
+        "palette": _palette_names(),
         "brain": (
             "subscription"
             if (config.get("brain") or {}).get("subscription")
@@ -301,6 +385,12 @@ def paint_config() -> dict[str, Any]:
         ),
         "config_path": str(paint_config_path()),
     }
+
+
+@router.get("/eval/paint/pictures")
+def paint_pictures() -> dict[str, Any]:
+    """What can be painted: the packaged picture and every upload, with its colour flag."""
+    return {"pictures": pictures(), "palette": _palette_names()}
 
 
 @router.get("/eval/paint")
@@ -363,7 +453,14 @@ async def paint_start(request: Request) -> dict[str, Any]:
             job.exit_code, job.ended_at = -1, time.time()
             _state.last, _state.job = job, None
         raise HTTPException(status_code=500, detail=job.error) from exc
-    return {"ok": True, "job": job.id, "picture": picture, "medium": medium, "task": job.task}
+    return {
+        "ok": True,
+        "job": job.id,
+        "picture": picture,
+        "medium": medium,
+        "task": job.task,
+        "reference": _reference_for_picture(picture),
+    }
 
 
 @router.post("/eval/paint/stop")
@@ -383,12 +480,18 @@ def paint_stop() -> dict[str, Any]:
 
 
 @router.post("/eval/picture")
-async def picture_upload(request: Request, name: str = "mine") -> dict[str, Any]:
+async def picture_upload(
+    request: Request, name: str = "mine", color: bool = False
+) -> dict[str, Any]:
     """Upload a JPEG to paint instead of the default. It becomes task ``sacpaint/<name>``.
 
     The photo's salient edges are traced automatically into the scoring
     skeleton (``castor bench sacpaint new --auto-trace``), so an uploaded
     picture is still scored: on how much of its edge map the robot reproduced.
+
+    ``?color=1`` also stores a colour target: the picture quantised to the pen
+    palette. The skeleton and the composite are exactly the same either way;
+    colour is a second, separate number.
     """
     if not _NAME_RE.match(name) or name == DEFAULT_PICTURE:
         raise HTTPException(
@@ -417,6 +520,8 @@ async def picture_upload(request: Request, name: str = "mine") -> dict[str, Any]
         "--auto-trace",
         "--force",
     ]
+    if color:
+        cmd.append("--color")
     try:
         done = subprocess.run(cmd, capture_output=True, text=True, timeout=120, check=False)
     except (OSError, subprocess.TimeoutExpired) as exc:
@@ -426,7 +531,13 @@ async def picture_upload(request: Request, name: str = "mine") -> dict[str, Any]
             status_code=500,
             detail=f"could not trace the picture: {done.stderr[-400:] or done.stdout[-400:]}",
         )
-    return {"ok": True, "picture": name, "task": f"sacpaint/{name}", "bytes": len(data)}
+    return {
+        "ok": True,
+        "picture": name,
+        "task": f"sacpaint/{name}",
+        "color": bool(color),
+        "bytes": len(data),
+    }
 
 
 @router.get("/eval/picture/{name}.jpg")
@@ -480,4 +591,11 @@ def _reset_for_tests() -> None:
         _state.last = None
 
 
-__all__ = ["router", "build_command", "read_config", "paint_config_path", "shutil"]
+__all__ = [
+    "router",
+    "build_command",
+    "pictures",
+    "read_config",
+    "paint_config_path",
+    "shutil",
+]
