@@ -6049,12 +6049,67 @@ def cmd_resume(args) -> None:
                 " `castor up` to provision one."
             )
         _latch.record_clear(home)
+        _audit_estop_clear(
+            home,
+            authenticated=bool(required),
+            latched_source=before.estop_source,
+            latched_reason=before.estop_reason,
+        )
         print(
             f"\n  E-stop cleared at the robot by {_current_operator()} "
             f"(was source={before.estop_source or 'unknown'})."
         )
         print("  The running runtime picks this up within a few seconds.")
     print("  This robot may move again.\n")
+
+
+def _audit_estop_clear(
+    home,
+    *,
+    authenticated: bool,
+    latched_source: str = "",
+    latched_reason: str = "",
+) -> None:
+    """Write the clear into this robot's append-only audit log. Never raises.
+
+    WHY THE CLI HAS TO DO THIS ITSELF. ``POST /api/estop/clear`` logs
+    ``estop_cleared`` with the API identity; the CLI wrote the latch file and
+    nothing else, so the only trace a shell clear left was the running
+    runtime's ``cleared out of process`` row, which lives in an in-memory ring
+    that dies with the process and does not say who cleared it or whether
+    anything checked them. ``_current_operator`` has said "a name for the audit
+    row" since it was written; this is the row.
+
+    ``authenticated`` is the whole point of recording it. A clear taken with
+    ``--no-auth-code`` on a robot that has no code is a real and allowed thing,
+    and it is also the one a person reading this log afterwards most needs to
+    be able to pick out. Printing a warning to a terminal nobody kept is not a
+    record.
+
+    Written to ``<home>/audit.log`` explicitly rather than through
+    ``get_audit()``: that module resolves its path once at import from
+    ``ROBOT_HOME``, and ``castor resume --home`` can name a different robot.
+    """
+    try:
+        from pathlib import Path as _Path
+
+        from castor.audit import AuditLog
+
+        AuditLog(str(_Path(str(home)) / "audit.log")).log(
+            "estop_cleared",
+            source="cli",
+            actor=_current_operator(),
+            authenticated=bool(authenticated),
+            auth_check=(
+                "OPENCASTOR_ESTOP_AUTH matched"
+                if authenticated
+                else "none: this robot has no e-stop clear code (--no-auth-code)"
+            ),
+            latched_source=latched_source or "unknown",
+            latched_reason=latched_reason or "",
+        )
+    except Exception as exc:  # noqa: BLE001 - a log write must not fail a clear
+        print(f"  (note: the clear could not be written to the audit log: {exc})")
 
 
 def _current_operator() -> str:

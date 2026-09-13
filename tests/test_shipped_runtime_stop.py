@@ -1152,6 +1152,70 @@ def test_clear_estop_path_4_no_code_with_the_explicit_flag_warns(tmp_path, capsy
     assert latch_mod.load(tmp_path).estop_engaged is False
 
 
+def _audit_rows(tmp_path) -> list[dict]:
+    log = tmp_path / "audit.log"
+    if not log.exists():
+        return []
+    return [json.loads(line) for line in log.read_text().splitlines() if line.strip()]
+
+
+def test_an_unauthenticated_clear_lands_in_the_audit_log_saying_so(
+    tmp_path, capsys, monkeypatch
+):
+    """A warning printed to a terminal nobody kept is not a record.
+
+    The API logs `estop_cleared` with the identity that sent it. The CLI wrote
+    the latch file and nothing else, so a clear typed at the robot left no
+    durable trace of who took it or whether anything checked them.
+    """
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    monkeypatch.delenv("OPENCASTOR_ESTOP_AUTH", raising=False)
+    from castor.cli import cmd_resume
+
+    _latched(tmp_path)
+    cmd_resume(Namespace(clear_estop=True, auth_code="", no_auth_code=True, home=""))
+    capsys.readouterr()
+
+    rows = [r for r in _audit_rows(tmp_path) if r.get("event") == "estop_cleared"]
+    assert len(rows) == 1, f"expected one estop_cleared row, got {_audit_rows(tmp_path)}"
+    row = rows[0]
+    assert row["source"] == "cli"
+    assert row["authenticated"] is False
+    assert "no e-stop clear code" in row["auth_check"]
+    assert row["latched_source"] == "local"
+
+
+def test_an_authenticated_clear_lands_in_the_audit_log_too(tmp_path, capsys, monkeypatch):
+    """The same row, with the flag the other way, so the two are comparable."""
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    monkeypatch.delenv("OPENCASTOR_ESTOP_AUTH", raising=False)
+    from castor.cli import cmd_resume
+    from castor.up import ensure_estop_auth
+
+    code = ensure_estop_auth(tmp_path)
+    _latched(tmp_path)
+    cmd_resume(Namespace(clear_estop=True, auth_code=code, no_auth_code=False, home=""))
+    capsys.readouterr()
+
+    rows = [r for r in _audit_rows(tmp_path) if r.get("event") == "estop_cleared"]
+    assert len(rows) == 1
+    assert rows[0]["authenticated"] is True
+    assert rows[0]["actor"]
+
+
+def test_a_refused_clear_writes_no_clear_row(tmp_path, capsys, monkeypatch):
+    """The row means a stop was lifted. A refusal did not lift one."""
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    monkeypatch.delenv("OPENCASTOR_ESTOP_AUTH", raising=False)
+    from castor.cli import cmd_resume
+
+    _latched(tmp_path)
+    with pytest.raises(SystemExit):
+        cmd_resume(Namespace(clear_estop=True, auth_code="", no_auth_code=False, home=""))
+    capsys.readouterr()
+    assert [r for r in _audit_rows(tmp_path) if r.get("event") == "estop_cleared"] == []
+
+
 def test_the_code_may_come_from_the_environment_instead_of_tokens_env(tmp_path, monkeypatch):
     """"Supplied" means the flag OR the environment, the way the API reads it.
 
