@@ -111,9 +111,23 @@ def _resync_safety_latch() -> bool:
     typed at a shell took effect at the next restart and not before. That is
     indistinguishable, from the outside, from a pause that does not work.
 
-    Synchronous and blocking: ``load()`` reads a file and ``resync_from_latch``
-    can write an audit row. It is called from a thread, never inline on the
-    event loop.
+    CALLED INLINE ON THE EVENT LOOP, NEVER FROM A THREAD. It reads a small
+    local file and, only when something actually changed, appends one row to
+    the in-memory audit ring. That is cheap, and it is the same thing the
+    generated runtime's guard loop does inline in its own event loop.
+
+    A thread was tried and is WRONG here, because it loses stops. Every other
+    mutator of ``SafetyLayer._estop`` in this process is an ``async def``
+    handler (``POST /api/stop``, ``POST /api/estop/clear``), so nothing can
+    interleave with a coroutine that does not await. Run the reconcile in a
+    worker thread instead and it can be descheduled between reading the file
+    and comparing the result against ``self._estop``: an e-stop that arrives in
+    that window is seen as "the file says nothing is engaged but memory says it
+    is", which is the signature of an out-of-process clear, and the stop a
+    person just asked for is reverted, ``/proc/status`` goes back to 'active'
+    and a false ``clear_estop`` row is audited. The next cycle re-adopts it
+    from the file, so the robot is unheld for up to one cadence. One cadence
+    unheld right after somebody hit the stop is the whole failure.
 
     Returns True when the in-memory hold changed. A DELETED latch file never
     lifts a hold: that rule lives in ``SafetyLayer.resync_from_latch`` and this
@@ -136,10 +150,13 @@ async def _safety_latch_resync_loop() -> None:
     :data:`SAFETY_LATCH_RESYNC_S`. Never raises out of the loop: the guard has
     to outlive its own bugs, because the failure mode of a dead guard is a hold
     nobody is applying.
+
+    The reconcile itself runs inline, not in a thread: see
+    :func:`_resync_safety_latch` for why a thread here loses stops.
     """
     while True:
         try:
-            if await asyncio.to_thread(_resync_safety_latch):
+            if _resync_safety_latch():
                 logger.warning(
                     "safety hold reconciled from the latch file; see the audit row"
                 )

@@ -898,6 +898,58 @@ def test_a_deleted_latch_file_does_not_lift_the_stock_gateway_hold(_live_gateway
     assert fs.is_estopped is True
 
 
+def test_the_reconcile_reads_the_latch_on_the_event_loop_and_not_in_a_thread(
+    _live_gateway, tmp_path
+):
+    """A worker thread here loses stops, so pin that there is not one.
+
+    Every other mutator of the in-memory hold in this process is an ``async
+    def`` handler, so nothing can interleave with a reconcile that does not
+    await. Hand the reconcile to ``asyncio.to_thread`` and it can be
+    descheduled between reading the latch file and comparing the result with
+    ``self._estop``: a ``POST /api/stop`` that lands in that window looks, to
+    the resumed thread, exactly like an out-of-process CLEAR, so the stop is
+    reverted, /proc/status goes back to 'active' and a false clear_estop row is
+    audited. The file re-adopts it a cadence later, which means the robot is
+    unheld for up to one cadence immediately after somebody hit the stop.
+
+    The check: every latch read the SERVER does must find a running event loop
+    under it. A read from a worker thread would not. Reads from this test's own
+    thread are not the server and are excluded by ident.
+    """
+    import asyncio as _asyncio
+    import threading as _threading
+
+    _client, _api_mod, _fs = _live_gateway
+    from castor.safety import latch as _latch
+
+    mine = _threading.get_ident()
+    server_reads: list[bool] = []
+    real_load = _latch.load
+
+    def _watching_load(*args, **kwargs):
+        if _threading.get_ident() != mine:
+            try:
+                _asyncio.get_running_loop()
+                server_reads.append(True)
+            except RuntimeError:
+                server_reads.append(False)
+        return real_load(*args, **kwargs)
+
+    _latch.load = _watching_load
+    try:
+        _latch.record_pause(principal="craig", reason="thread check", home=tmp_path)
+        _hold_within_a_cycle(_client, True)
+    finally:
+        _latch.load = real_load
+
+    assert server_reads, "the server never read the latch file"
+    assert all(server_reads), (
+        "the reconcile read the latch file off the event loop, which is where a "
+        "stop arriving mid-reconcile gets reverted"
+    )
+
+
 def test_the_resync_helper_is_inert_without_a_filesystem(monkeypatch):
     """No fs, no latch, no crash: the loop must survive a gateway with no robot."""
     import castor.api as api_mod
