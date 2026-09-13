@@ -3007,8 +3007,8 @@ async def rcan_receive_message(request: Request):
             "iso_13482": bool(iso_cfg.get("iso_13482", False)),  # Personal care robots
             "iso_10218_2": bool(iso_cfg.get("iso_10218_2", False)),  # Industrial robots
             "iso_42001": bool(iso_cfg.get("iso_42001", True)),  # AI management systems
-            # The default is the SAME reader the fleet document and the
-            # conformance row use: the operator's flag AND a non-empty
+            # The default is the SAME reader the fleet document and
+            # `castor iso-check` use: the operator's flag AND a non-empty
             # allowlist. A robot with the flag on and no allowlist refuses
             # every authority request, so it discovers as false (OC-13).
             "eu_ai_act": bool(iso_cfg.get("eu_ai_act", _authority_handler_enabled(cfg))),

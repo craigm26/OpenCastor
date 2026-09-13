@@ -310,9 +310,9 @@ def _authority_handler_enabled(config: dict[str, Any] | None) -> bool:
 
     Since OC-13 the handler fails closed: with no allowlist under
     ``authority.trusted_authority_ids`` it refuses every requester. So the
-    fleet document reads both the operator's flag and the allowlist, the same
-    way ``castor iso-check`` and the ``rcan_v21.authority_handler`` conformance
-    row read them. An unconfigured robot publishes False.
+    fleet document reads both the operator's flag and the allowlist, through
+    the one reader in ``castor.authority``, the same one /discover and
+    ``castor iso-check`` ask. An unconfigured robot publishes False.
     """
     try:
         from castor.authority import authority_handler_enabled as _enabled

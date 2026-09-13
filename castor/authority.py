@@ -72,12 +72,18 @@ def trusted_authority_ids_from_config(config: Optional[dict]) -> set[str]:
 def authority_handler_enabled(config: Optional[dict]) -> bool:
     """True only when this robot can actually answer an AUTHORITY_ACCESS request.
 
-    THE ONE READER. The fleet document, the ``rcan_v21.authority_handler``
-    conformance row and the /discover handshake all answer the same question,
-    so they all ask it here: the operator's ``authority_handler_enabled`` flag
-    AND a non-empty allowlist. Since the handler fails closed, a robot with the
-    flag on and no allowlist refuses every requester, and saying otherwise
-    anywhere would be claiming a capability the runtime does not have.
+    THE ONE READER. Everything that PUBLISHES this as a capability asks here:
+    the cloud fleet document, the /discover handshake and `castor iso-check`.
+    The answer is the operator's ``authority_handler_enabled`` flag AND a
+    non-empty allowlist. Since the handler fails closed, a robot with the flag
+    on and no allowlist refuses every requester, and saying otherwise anywhere
+    would be claiming a capability the runtime does not have.
+
+    The ``rcan_v21.authority_handler`` conformance row deliberately does not
+    come through here. It is grading a robot rather than publishing a claim, so
+    it reads the allowlist and the registered handler separately to say WHICH
+    one is missing, and it never consults the operator flag: a flag cannot make
+    an unregistered handler answer anyone.
     """
     cfg = config if isinstance(config, dict) else {}
     if not bool(cfg.get("authority_handler_enabled", False)):
