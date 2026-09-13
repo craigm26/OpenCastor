@@ -1071,6 +1071,39 @@ def test_the_reconcile_reads_the_latch_on_the_event_loop_and_not_in_a_thread(
     )
 
 
+def test_a_reconcile_task_that_dies_says_so(caplog):
+    """A guard that died quietly is worse than one that never existed.
+
+    Nothing restarts it: a task that ended on a BaseException will end the same
+    way again. What this pins is that the silence is audible, because every
+    /api answer afterwards keeps reporting this process' hold correctly while
+    the process quietly stops hearing anything typed at a shell.
+    """
+    import logging
+
+    import castor.api as api_mod
+
+    class _Ended:
+        def cancelled(self):
+            return False
+
+        def exception(self):
+            return RuntimeError("the guard fell over")
+
+    with caplog.at_level(logging.CRITICAL, logger="OpenCastor.Gateway"):
+        api_mod._latch_task_ended(_Ended())
+    assert "RECONCILE TASK HAS STOPPED" in caplog.text
+    assert "the guard fell over" in caplog.text
+
+    class _Cancelled(_Ended):
+        def cancelled(self):
+            return True
+
+    caplog.clear()
+    api_mod._latch_task_ended(_Cancelled())
+    assert caplog.text == "", "shutdown is not a failure"
+
+
 def test_the_resync_helper_is_inert_without_a_filesystem(monkeypatch):
     """No fs, no latch, no crash: the loop must survive a gateway with no robot."""
     import castor.api as api_mod

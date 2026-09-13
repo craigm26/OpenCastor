@@ -167,11 +167,33 @@ async def _safety_latch_resync_loop() -> None:
         await asyncio.sleep(max(0.01, SAFETY_LATCH_RESYNC_S))
 
 
+def _latch_task_ended(task: "asyncio.Task") -> None:
+    """Say so, loudly, if the reconcile task stops for any reason but shutdown.
+
+    The loop swallows Exception on purpose, so the only things that can end it
+    are the cancellation at shutdown and a BaseException nobody plans for. A
+    guard that died quietly is worse than one that never existed: every /api
+    answer after it goes on reporting this process' hold, correctly, and this
+    process simply stops hearing about anything typed at a shell. This does not
+    restart it, because a task that died of a BaseException will die again; it
+    makes the silence audible.
+    """
+    if task.cancelled():
+        return
+    exc = task.exception()
+    logger.critical(
+        "THE SAFETY LATCH RECONCILE TASK HAS STOPPED (%s). `castor pause` and "
+        "`castor resume` will not reach this process until it is restarted.",
+        repr(exc) if exc is not None else "returned",
+    )
+
+
 @contextlib.asynccontextmanager
 async def lifespan(app: "FastAPI"):  # noqa: F821
     """FastAPI lifespan context manager (replaces deprecated @app.on_event)."""
     await on_startup()
     latch_task = asyncio.create_task(_safety_latch_resync_loop())
+    latch_task.add_done_callback(_latch_task_ended)
     try:
         yield
     finally:
