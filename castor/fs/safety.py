@@ -797,7 +797,50 @@ class SafetyLayer:
         detail = f"ESTOP activated — source={source}" + (f" — {reason}" if reason else "")
         self._audit_safety(principal, "/dev/motor", "estop", detail)
         logger.warning("EMERGENCY STOP [%s] activated by %s: %s", source, principal, reason)
+        # The stop has already happened. Filing is strictly after, and strictly
+        # best effort, so a log write can never stop a stop (OC-13).
+        self._file_incident(
+            category="estop",
+            description=detail,
+            principal=principal,
+            source=source,
+            reason=reason,
+            event_source="estop",
+        )
         return True
+
+    def _file_incident(
+        self,
+        *,
+        category: str,
+        description: str,
+        principal: str,
+        source: str,
+        reason: str,
+        event_source: str,
+    ) -> None:
+        """File a serious-incident record for a safety event. Never raises.
+
+        Called only AFTER the stop has been applied. Every failure is absorbed
+        here so that no incident-log problem can interfere with stopping.
+        """
+        try:
+            from castor.incidents import IncidentSeverity, file_incident
+
+            file_incident(
+                severity=IncidentSeverity.SERIOUS_HARM,
+                category=category,
+                description=description,
+                system_state={
+                    "principal": principal,
+                    "command_source": source,
+                    "reason": reason,
+                    "estop_active": bool(getattr(self, "_estop", False)),
+                },
+                source=event_source,
+            )
+        except Exception as exc:
+            logger.error("Could not file %s incident: %s", category, exc)
 
     def controlled_stop(
         self, principal: str = "root", source: str = "local", reason: str = ""
@@ -819,6 +862,14 @@ class SafetyLayer:
         detail = f"Controlled STOP — source={source}" + (f" — {reason}" if reason else "")
         self._audit_safety(principal, "/dev/motor", "controlled_stop", detail)
         logger.warning("CONTROLLED STOP [%s] by %s: %s", source, principal, reason)
+        self._file_incident(
+            category="controlled_stop",
+            description=detail,
+            principal=principal,
+            source=source,
+            reason=reason,
+            event_source="controlled_stop",
+        )
         return True
 
     def clear_estop(

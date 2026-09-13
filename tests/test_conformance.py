@@ -970,8 +970,12 @@ class TestCmdValidate:
         # Ensure v1.5 RRN check passes (needs metadata.rrn in canonical format)
         cfg.setdefault("metadata", {})["rrn"] = "RRN-000000000001"
         cfg.setdefault("metadata", {})["rrn_uri"] = "rrn://test/robot/testbot/001"
-        # v2.1: mark authority handler as enabled and set retention so L5 checks produce warns, not fails
+        # v2.1: register the authority handler (flag + allowlist + handler, since
+        # OC-13 the row needs a non-empty allowlist) and set retention so L5
+        # checks produce warns, not fails
         cfg["authority_handler_enabled"] = True
+        cfg["authority"] = {"trusted_authority_ids": ["eu.aiact.notified-body.001"]}
+        cfg["harness"] = {"message_handlers": {41: "castor.authority"}}
         cfg["audit_retention_days"] = 3650
         # Remove geofence and tiered_brain to force warns (not fails)
         cfg.pop("geofence", None)
@@ -1223,6 +1227,8 @@ class TestISOCheck:
             "eu_ai_act": True,
         }
         cfg["authority_handler_enabled"] = True
+        cfg["authority"] = {"trusted_authority_ids": ["eu.aiact.notified-body.001"]}
+        cfg["harness"] = {"message_handlers": {41: "castor.authority"}}
         cfg["audit_retention_days"] = 3650
         cfg["pq_signing_required"] = True
         cfg["hitl_gates"] = [{"scope": "destructive"}]
@@ -1334,31 +1340,24 @@ class TestAnnexIIIStrictMode:
         fw = next(r for r in results if r.check_id == "rcan_v21.firmware_manifest")
         assert fw.status == "fail"
 
-    def test_authority_warn_in_default_mode_when_module_available(self):
-        """When castor.authority exists but handler unregistered, default mode → warn."""
-        import sys
-        from unittest.mock import MagicMock, patch
+    def test_authority_fail_in_default_mode_when_no_allowlist(self):
+        """Since OC-13 this row fails in BOTH modes when no allowlist is configured.
 
-        mock_authority = MagicMock()
-        mock_authority.AuthorityRequestHandler = MagicMock()
-        with patch.dict(sys.modules, {"castor.authority": mock_authority}):
-            checker = ConformanceChecker(self.base_config)
-            results = checker.run_category("rcan_v21")
-            auth = next(r for r in results if r.check_id == "rcan_v21.authority_handler")
-            assert auth.status == "warn"
+        The shipped handler refuses every requester without an allowlist, so a
+        warn here would be claiming a capability the runtime declines to have.
+        """
+        checker = ConformanceChecker(self.base_config)
+        results = checker.run_category("rcan_v21")
+        auth = next(r for r in results if r.check_id == "rcan_v21.authority_handler")
+        assert auth.status == "fail"
+        assert "allowlist" in auth.detail
 
     def test_authority_fail_in_strict_mode_when_module_available(self):
-        """When castor.authority exists but handler unregistered, strict mode → fail."""
-        import sys
-        from unittest.mock import MagicMock, patch
-
-        mock_authority = MagicMock()
-        mock_authority.AuthorityRequestHandler = MagicMock()
-        with patch.dict(sys.modules, {"castor.authority": mock_authority}):
-            checker = ConformanceChecker(self.base_config, annex_iii_strict=True)
-            results = checker.run_category("rcan_v21")
-            auth = next(r for r in results if r.check_id == "rcan_v21.authority_handler")
-            assert auth.status == "fail"
+        """When castor.authority exists but no allowlist is configured, strict mode → fail."""
+        checker = ConformanceChecker(self.base_config, annex_iii_strict=True)
+        results = checker.run_category("rcan_v21")
+        auth = next(r for r in results if r.check_id == "rcan_v21.authority_handler")
+        assert auth.status == "fail"
 
     def test_strict_mode_does_not_affect_non_art16_checks(self):
         checker_default = ConformanceChecker(self.base_config)

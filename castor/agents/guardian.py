@@ -129,6 +129,20 @@ class GuardianAgent(BaseAgent):
         self._state.set("swarm.estop_active", True)
         self._state.set("swarm.estop_reason", reason)
         logger.critical("Guardian ESTOP triggered: %s", reason)
+        # Filed strictly after the stop is in effect, and strictly best effort:
+        # an incident-log failure must never interfere with stopping (OC-13).
+        try:
+            from castor.incidents import IncidentSeverity, file_incident
+
+            file_incident(
+                severity=IncidentSeverity.SERIOUS_HARM,
+                category="guardian_estop",
+                description=f"Guardian ESTOP triggered: {reason}",
+                system_state={"reason": reason, "estop_active": True},
+                source="guardian_veto",
+            )
+        except Exception as exc:
+            logger.error("Could not file guardian ESTOP incident: %s", exc)
 
     def clear_estop(self) -> None:
         """Clear emergency stop (requires manual operator override)."""

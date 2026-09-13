@@ -2048,34 +2048,60 @@ class ConformanceChecker:
         cid = "rcan_v21.authority_handler"
         # Check if the authority module is importable and configured
         try:
-            from castor.authority import AuthorityRequestHandler  # noqa: F401
+            from castor.authority import (  # noqa: F401
+                TRUSTED_AUTHORITY_CONFIG_KEY,
+                AuthorityRequestHandler,
+                trusted_authority_ids_from_config,
+            )
 
-            # Check if handler is registered in harness YAML (optional deeper check)
+            # Check if handler is registered in harness YAML
             harness = self._cfg.get("harness", {})
             handlers = harness.get("message_handlers", {})
             # type 41 may be registered as int or string
-            has_handler = (
-                41 in handlers
-                or "41" in handlers
-                or "AUTHORITY_ACCESS" in handlers
-                or self._cfg.get("authority_handler_enabled", False)
+            has_handler = 41 in handlers or "41" in handlers or "AUTHORITY_ACCESS" in handlers
+            # A config flag can no longer stand in for the thing itself. The
+            # handler fails closed on an empty allowlist, so a row that passes
+            # without one would be claiming a capability the runtime refuses.
+            trusted = trusted_authority_ids_from_config(self._cfg)
+            _fix = (
+                f"Register the authorities this robot will answer under "
+                f"{TRUSTED_AUTHORITY_CONFIG_KEY}, and register the handler in "
+                f"harness.message_handlers[41]. Self-asserted; conformance is not "
+                f"certification."
             )
+            if not trusted:
+                # Always a fail: strict mode does not gate this one, because
+                # the shipped runtime refuses every request in this state.
+                return ConformanceResult(
+                    check_id=cid,
+                    category="rcan_v21",
+                    status="fail",
+                    detail=(
+                        f"No authority allowlist configured ({TRUSTED_AUTHORITY_CONFIG_KEY} "
+                        f"is unset or empty) — the AUTHORITY_ACCESS (41) handler refuses "
+                        f"every requester"
+                    ),
+                    fix=_fix,
+                )
             if has_handler:
                 return ConformanceResult(
                     check_id=cid,
                     category="rcan_v21",
                     status="pass",
-                    detail="AUTHORITY_ACCESS (41) handler registered",
+                    detail=(
+                        f"AUTHORITY_ACCESS (41) handler registered with "
+                        f"{len(trusted)} allowlisted authority id(s)"
+                    ),
                 )
             return ConformanceResult(
                 check_id=cid,
                 category="rcan_v21",
-                status="fail" if self._annex_iii_strict else "warn",
-                detail="castor.authority module available but handler not explicitly registered",
-                fix=(
-                    "Add authority_handler_enabled: true to config, or register handler in "
-                    "harness.message_handlers[41]. Required for EU AI Act Art. 16(j)."
+                status="fail",
+                detail=(
+                    "Authority allowlist configured but the AUTHORITY_ACCESS (41) handler "
+                    "is not registered in harness.message_handlers"
                 ),
+                fix=_fix,
             )
         except ImportError:
             return ConformanceResult(

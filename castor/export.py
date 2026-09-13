@@ -54,7 +54,8 @@ def export_bundle(config_path: str, output_path: str = None, fmt: str = "zip") -
     }
 
     # Sanitize config -- remove any inline API keys
-    sanitized = _sanitize_config(config)
+    sanitized, withheld = _sanitize_config_with_record(config)
+    bundle_meta["withheld"] = withheld
 
     if fmt == "json":
         if not output_path:
@@ -114,11 +115,12 @@ def export_bundle_tgz(
         output_path = f"{robot_name}_{timestamp}.tar.gz"
 
     # Build sanitized config YAML bytes
-    sanitized = _sanitize_config(config)
+    sanitized, withheld = _sanitize_config_with_record(config)
     config_bytes = yaml.dump(sanitized, default_flow_style=False).encode()
 
     # Export episodes to JSONL bytes
     episodes_bytes = b""
+    episodes_note: dict = {"unavailable": False, "truncated": False, "limit": episodes_limit}
     try:
         mem_mod = importlib.import_module("castor.memory")
         db_path = os.getenv("CASTOR_MEMORY_DB", os.path.expanduser("~/.castor/memory.db"))
@@ -128,9 +130,19 @@ def export_bundle_tgz(
         for ep in recent:
             lines.append(json.dumps(ep, default=str))
         episodes_bytes = "\n".join(lines).encode()
+        episodes_note["returned"] = len(lines)
+        # A full page back from a limited query may well be a truncation.
+        episodes_note["truncated"] = len(lines) >= episodes_limit
     except Exception as exc:
         logger.debug("export_bundle_tgz: could not load episodes: %s", exc)
         episodes_bytes = b""
+        episodes_note = {
+            "unavailable": True,
+            "truncated": False,
+            "limit": episodes_limit,
+            "returned": 0,
+            "error": str(exc),
+        }
 
     # Collect env var names only (no values)
     castor_env_names = [k for k in os.environ if k.startswith(("CASTOR_", "OPENCASTOR_"))]
@@ -157,6 +169,10 @@ def export_bundle_tgz(
         "ai_model": config.get("agent", {}).get("model", "unknown"),
         "episodes_included": len(episodes_bytes.splitlines()),
         "checksums": checksums,
+        # Every field removed by sanitisation, named by path and class, so an
+        # empty value in config.rcan.yaml is never mistaken for an absent one.
+        "withheld": withheld,
+        "episodes_note": episodes_note,
     }
     manifest_bytes = json.dumps(manifest, indent=2).encode()
 
@@ -176,23 +192,45 @@ def export_bundle_tgz(
 
 
 def _sanitize_config(config: dict) -> dict:
-    """Remove secrets from a config dict (deep copy)."""
+    """Remove secrets from a config dict (deep copy). Back-compat wrapper."""
+    sanitized, _withheld = _sanitize_config_with_record(config)
+    return sanitized
+
+
+def _sanitize_config_with_record(config: dict) -> tuple[dict, list]:
+    """Remove secrets from a config dict and return what was removed.
+
+    Returns ``(sanitized_config, withheld)`` where ``withheld`` is a list of
+    ``{"path": ..., "class": ...}`` records naming every field whose value was
+    replaced. A redaction that leaves no record is indistinguishable from a
+    field that was never there, so every removal is named here by path.
+    """
     import copy
 
     sanitized = copy.deepcopy(config)
+    withheld: list[dict] = []
 
     # Remove API keys
     agent = sanitized.get("agent", {})
     if "api_key" in agent:
         agent["api_key"] = "<REDACTED>"
+        withheld.append({"path": "agent.api_key", "class": "api_key"})
 
     # Remove channel credentials
-    for ch in sanitized.get("channels", []):
+    for idx, ch in enumerate(sanitized.get("channels", [])):
         for key in list(ch.keys()):
-            if "token" in key.lower() or "secret" in key.lower() or "key" in key.lower():
+            lowered = key.lower()
+            if "token" in lowered or "secret" in lowered or "key" in lowered:
                 ch[key] = "<REDACTED>"
+                if "token" in lowered:
+                    cls = "token"
+                elif "secret" in lowered:
+                    cls = "secret"
+                else:
+                    cls = "key"
+                withheld.append({"path": f"channels[{idx}].{key}", "class": cls})
 
-    return sanitized
+    return sanitized, withheld
 
 
 def _find_preset_files(config_path: str) -> list:

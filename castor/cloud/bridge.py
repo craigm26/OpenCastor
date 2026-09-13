@@ -64,6 +64,19 @@ ESTOP_ACK_DEADLINE_S: float = 2.0
 SAFETY_REPLAY_WINDOW_S: int = 10
 
 
+def _describe_dispatch_failure(exc: BaseException) -> str:
+    """One short string naming why a dispatch did not come back 2xx.
+
+    An HTTP status when the robot answered with one, otherwise the exception
+    class. Used as the ``ack_qos_error`` on a stop that was not confirmed.
+    """
+    resp = getattr(exc, "response", None)
+    status = getattr(resp, "status_code", None)
+    if isinstance(status, int):
+        return f"http_{status}"
+    return type(exc).__name__
+
+
 def _try_import_replay() -> Any:
     """Attempt to import ReplayCache from rcan.replay; return stub if unavailable."""
     try:
@@ -290,6 +303,25 @@ def _detect_pick_place_intent(instruction: str) -> tuple[str, str] | None:
     if m:
         return m.group("target").strip(), m.group("destination").strip()
     return None
+
+
+def _authority_handler_enabled(config: dict[str, Any] | None) -> bool:
+    """True only when the robot can actually answer an AUTHORITY_ACCESS request.
+
+    Since OC-13 the handler fails closed: with no allowlist under
+    ``authority.trusted_authority_ids`` it refuses every requester. So the
+    fleet document reads both the operator's flag and the allowlist, the same
+    way ``castor iso-check`` and the ``rcan_v21.authority_handler`` conformance
+    row read them. An unconfigured robot publishes False.
+    """
+    cfg = config or {}
+    if not bool(cfg.get("authority_handler_enabled", False)):
+        return False
+    try:
+        from castor.authority import trusted_authority_ids_from_config
+    except Exception:  # pragma: no cover - castor.authority is always present
+        return False
+    return bool(trusted_authority_ids_from_config(cfg))
 
 
 class CastorBridge:
@@ -973,7 +1005,11 @@ class CastorBridge:
                 "multimodal_enabled": True,
                 "registry_tier": "community",
                 # RCAN v2.1/v2.2 fields
-                "authority_handler_enabled": True,
+                # The handler is only real when an allowlist is configured: the
+                # runtime refuses every requester without one, so publishing a
+                # literal True here would advertise a capability the robot does
+                # not have. Read both the flag and the allowlist (OC-13).
+                "authority_handler_enabled": _authority_handler_enabled(self._rcan_config),
                 "audit_retention_days": 3650,
                 # MCP server config — published for Flutter MCP screen
                 "mcp_clients": _format_mcp_clients(
@@ -1320,6 +1356,79 @@ class CastorBridge:
             headers["Authorization"] = f"Bearer {self.gateway_token}"
         return headers
 
+    # --- OC-M-01: ESTOP acknowledgement helpers ------------------------
+    # Three literal ack_qos values cross the wire to the clients, and the
+    # clients read them literally:
+    #   "queued"             the stop left the app, nothing has confirmed it
+    #   "acknowledged"       the robot's own stop route answered 2xx
+    #   "stop_not_confirmed" the stop was refused, errored, or timed out
+    # Anything else must read as still queued on the client side. Never
+    # write "acknowledged" from anywhere but a dispatch result.
+
+    def _estop_not_confirmed_fields(self, is_estop: bool, error: str) -> dict[str, Any]:
+        """Fields that mark an ESTOP as not confirmed, or {} for other commands.
+
+        Merged into the denial/failure entries so a stop that never reached
+        the robot is recorded as such instead of being left on "queued".
+        """
+        if not is_estop:
+            return {}
+        return {
+            "ack_qos": "stop_not_confirmed",
+            "ack_qos_at": datetime.now(timezone.utc).isoformat(),
+            "ack_qos_error": error,
+        }
+
+    def _write_estop_ack(
+        self,
+        cmd_ref: Any,
+        verdict: str,
+        *,
+        cmd_id: str,
+        sender_type: str,
+        is_cloud_relay: bool,
+        receipt: Any = None,
+        error: Optional[str] = None,
+        elapsed: Optional[float] = None,
+    ) -> None:
+        """Write the ESTOP acknowledgement derived from the dispatch result.
+
+        Best-effort: a Firestore write failure must never mask the stop.
+        """
+        entry: dict[str, Any] = {
+            "ack_qos": verdict,
+            "ack_qos_at": datetime.now(timezone.utc).isoformat(),
+            "sender_type": sender_type,
+        }
+        if is_cloud_relay:
+            entry["cloud_relay"] = True
+        if receipt is not None:
+            entry["stop_receipt"] = receipt
+        if error:
+            entry["ack_qos_error"] = error
+        if elapsed is not None:
+            entry["ack_qos_elapsed_s"] = round(elapsed, 3)
+        try:
+            cmd_ref.update(entry)
+        except Exception as exc:
+            log.warning(
+                "ESTOP ack write failed (verdict=%s, cmd_id=%s): %s", verdict, cmd_id, exc
+            )
+        if verdict == "acknowledged":
+            log.info(
+                "ESTOP acknowledged by the robot in %.3fs cmd_id=%s",
+                elapsed if elapsed is not None else -1.0,
+                cmd_id,
+            )
+        else:
+            log.warning(
+                "ESTOP %s (%s) after %.3fs cmd_id=%s",
+                verdict,
+                error or "no reason recorded",
+                elapsed if elapsed is not None else -1.0,
+                cmd_id,
+            )
+
     def _execute_command(self, cmd_id: str, doc: dict[str, Any]) -> None:
         """Execute a single command — runs in its own thread."""
         cmd_ref = self._commands_ref().document(cmd_id)
@@ -1367,36 +1476,53 @@ class CastorBridge:
                 cmd_ref.update(audit_entry)
                 return
 
-            # --- GAP-11: ESTOP QoS — ACK written immediately ----------------
+            # --- GAP-11 / OC-M-01: ESTOP QoS — queued marker, never an ACK --
+            # An acknowledgement is a dispatch result, never a datastore write.
+            # Before the stop leaves this process the only honest thing to say
+            # is that it is queued. `acknowledged` is written further down, and
+            # only from what the robot's own stop route answered; every other
+            # outcome writes `stop_not_confirmed`. The client reads the literal
+            # values: "acknowledged" -> confirmed, "stop_not_confirmed" -> not
+            # confirmed, anything else (including "queued") -> still queued.
             if is_estop:
-                estop_dispatch_start = time.monotonic()
+                queued_write_start = time.monotonic()
                 try:
-                    estop_ack_entry: dict[str, Any] = {
-                        "ack_qos": "acknowledged",
+                    estop_queued_entry: dict[str, Any] = {
+                        "ack_qos": "queued",
                         "ack_qos_at": datetime.now(timezone.utc).isoformat(),
                         "sender_type": sender_type,
                     }
                     if is_cloud_relay:
-                        estop_ack_entry["cloud_relay"] = True
-                    cmd_ref.update(estop_ack_entry)
-                    ack_elapsed = time.monotonic() - estop_dispatch_start
-                    if ack_elapsed > ESTOP_ACK_DEADLINE_S:
+                        estop_queued_entry["cloud_relay"] = True
+                    cmd_ref.update(estop_queued_entry)
+                    queued_elapsed = time.monotonic() - queued_write_start
+                    # ESTOP_ACK_DEADLINE_S survives as a latency warning on the
+                    # queued write. It certifies nothing and never upgrades an
+                    # ack_qos value.
+                    if queued_elapsed > ESTOP_ACK_DEADLINE_S:
                         log.warning(
-                            "ESTOP QoS ACK took %.2fs — exceeded %.1fs deadline! cmd_id=%s",
-                            ack_elapsed,
+                            "ESTOP QoS queued marker took %.2fs — exceeded %.1fs deadline! "
+                            "cmd_id=%s",
+                            queued_elapsed,
                             ESTOP_ACK_DEADLINE_S,
                             cmd_id,
                         )
                     else:
                         log.debug(
-                            "ESTOP QoS ACK written in %.3fs cmd_id=%s",
-                            ack_elapsed,
+                            "ESTOP QoS queued marker written in %.3fs cmd_id=%s",
+                            queued_elapsed,
                             cmd_id,
                         )
                 except Exception as ack_exc:
-                    log.warning("ESTOP QoS ACK write failed: %s (cmd_id=%s)", ack_exc, cmd_id)
+                    log.warning("ESTOP QoS queued write failed: %s (cmd_id=%s)", ack_exc, cmd_id)
 
-            # --- GAP-06: Offline mode check (after ESTOP is dispatched) -----
+            # --- GAP-06: Offline mode check ---------------------------------
+            # Ordering property (OC-M-01 S3): this gate must never stand
+            # between an ESTOP and the robot. _is_command_allowed_offline
+            # returns True for every ESTOP unconditionally (Protocol 66
+            # invariant, bridge.py:_is_command_allowed_offline), so a stop
+            # reaches the dispatch below whatever the connectivity state is.
+            # tests/test_cloud_bridge_estop.py pins that.
             if not self._is_command_allowed_offline(scope, instruction):
                 offline_audit: dict[str, Any] = {
                     "status": "denied",
@@ -1404,6 +1530,9 @@ class CastorBridge:
                     "sender_type": sender_type,
                     "completed_at": datetime.now(timezone.utc).isoformat(),
                 }
+                offline_audit.update(
+                    self._estop_not_confirmed_fields(is_estop, offline_audit["error"])
+                )
                 cmd_ref.update(offline_audit)
                 return
 
@@ -1415,6 +1544,7 @@ class CastorBridge:
                     "sender_type": sender_type,
                     "completed_at": datetime.now(timezone.utc).isoformat(),
                 }
+                fed_entry.update(self._estop_not_confirmed_fields(is_estop, fed_entry["error"]))
                 cmd_ref.update(fed_entry)
                 return
 
@@ -1426,6 +1556,7 @@ class CastorBridge:
                     "sender_type": sender_type,
                     "completed_at": datetime.now(timezone.utc).isoformat(),
                 }
+                loa_entry.update(self._estop_not_confirmed_fields(is_estop, loa_entry["error"]))
                 cmd_ref.update(loa_entry)
                 return
 
@@ -1459,6 +1590,9 @@ class CastorBridge:
                 }
                 if is_cloud_relay:
                     denied_entry["cloud_relay"] = True
+                denied_entry.update(
+                    self._estop_not_confirmed_fields(is_estop, denied_entry["error"])
+                )
                 cmd_ref.update(denied_entry)
                 return
 
@@ -1484,7 +1618,41 @@ class CastorBridge:
             media_chunks = self._handle_media_chunks(cmd_id, doc, scope)
 
             # --- Dispatch to local gateway -----------------------------------
-            result = self._dispatch_to_gateway(scope, instruction, doc, media_chunks=media_chunks)
+            estop_dispatch_start = time.monotonic()
+            try:
+                result = self._dispatch_to_gateway(
+                    scope, instruction, doc, media_chunks=media_chunks
+                )
+            except Exception as dispatch_exc:
+                # OC-M-01: a stop that never got a 2xx out of the robot is
+                # NOT acknowledged. Say so on the command doc before the
+                # generic failure handler below records the exception.
+                if is_estop:
+                    self._write_estop_ack(
+                        cmd_ref,
+                        "stop_not_confirmed",
+                        cmd_id=cmd_id,
+                        sender_type=sender_type,
+                        is_cloud_relay=is_cloud_relay,
+                        error=_describe_dispatch_failure(dispatch_exc),
+                        elapsed=time.monotonic() - estop_dispatch_start,
+                    )
+                raise
+
+            # --- OC-M-01: the ESTOP acknowledgement, from the dispatch -------
+            # _dispatch_to_gateway raises on any non-2xx from the robot's stop
+            # route, so reaching here means the robot answered 2xx and `result`
+            # is its own stop body — the receipt.
+            if is_estop:
+                self._write_estop_ack(
+                    cmd_ref,
+                    "acknowledged",
+                    cmd_id=cmd_id,
+                    sender_type=sender_type,
+                    is_cloud_relay=is_cloud_relay,
+                    receipt=result,
+                    elapsed=time.monotonic() - estop_dispatch_start,
+                )
 
             # --- Mission thread: write robot response back to Firestore ------
             if doc.get("context") == "mission_thread":
@@ -1526,14 +1694,26 @@ class CastorBridge:
         except Exception as exc:
             log.error("Command %s failed: %s", cmd_id, exc)
             try:
-                cmd_ref.update(
-                    {
-                        "status": "failed",
-                        "error": str(exc),
-                        "sender_type": doc.get("sender_type", "unknown"),
-                        "completed_at": datetime.now(timezone.utc).isoformat(),
-                    }
+                failed_entry: dict[str, Any] = {
+                    "status": "failed",
+                    "error": str(exc),
+                    "sender_type": doc.get("sender_type", "unknown"),
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                }
+                if doc.get("sender_type") == "cloud_function":
+                    failed_entry["cloud_relay"] = True
+                # OC-M-01: a failed ESTOP command is a stop nobody can claim
+                # reached the robot. Recomputed from the doc because the
+                # exception may predate the is_estop binding above.
+                failed_estop = doc.get("scope") == "safety" and "estop" in str(
+                    doc.get("instruction", "")
+                ).lower()
+                failed_entry.update(
+                    self._estop_not_confirmed_fields(
+                        failed_estop, _describe_dispatch_failure(exc)
+                    )
                 )
+                cmd_ref.update(failed_entry)
             except Exception:
                 pass
 
@@ -1883,19 +2063,32 @@ class CastorBridge:
 
         elif scope == "safety":
             if "estop" in instruction.lower():
-                with httpx.Client(timeout=5.0) as client:
+                # OC-M-01: the runtime serves POST /api/stop. The old
+                # /api/estop was not a route this gateway has ever defined,
+                # so every cloud stop 404'd while the command doc already
+                # said acknowledged. The transport timeout IS the ESTOP
+                # deadline: past it there is no receipt to report, and the
+                # caller writes stop_not_confirmed.
+                with httpx.Client(timeout=ESTOP_ACK_DEADLINE_S) as client:
                     resp = client.post(
-                        f"{self.gateway_url}/api/estop",
+                        f"{self.gateway_url}/api/stop",
                         json={"reason": doc.get("reason", "remote estop via castor bridge")},
                         headers=headers,
                     )
+                # A non-2xx is not a result to report as success: raise so the
+                # acknowledgement is written as stop_not_confirmed.
+                resp.raise_for_status()
             elif "resume" in instruction.lower():
+                # OC-M-01: /api/resume does not exist either; the runtime's
+                # resume is /api/runtime/resume (the same route this file
+                # already calls from the system-scope branch below).
                 with httpx.Client(timeout=5.0) as client:
                     resp = client.post(
-                        f"{self.gateway_url}/api/resume",
+                        f"{self.gateway_url}/api/runtime/resume",
                         json={"reason": "remote resume via castor bridge"},
                         headers=headers,
                     )
+                resp.raise_for_status()
             else:
                 with httpx.Client(timeout=10.0) as client:
                     resp = client.post(

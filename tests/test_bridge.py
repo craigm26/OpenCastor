@@ -249,6 +249,76 @@ class TestCastorBridgeUnit(unittest.TestCase):
         self.assertFalse(bridge._running)
 
 
+class TestAuthorityHandlerFleetField(unittest.TestCase):
+    """OC-13: the fleet document reads the real config, never a literal True."""
+
+    def _register_doc(self, extra_config: dict) -> dict:
+        """Run _register against a mocked Firestore ref and return what it wrote."""
+        from castor.cloud.bridge import CastorBridge
+
+        config = {
+            "rrn": "RRN-000000000001",
+            "name": "bob",
+            "owner": "rrn://craigm26",
+            "capabilities": [],
+            "metadata": {"ruri": "rcan://craigm26.bob-001"},
+        }
+        config.update(extra_config)
+        bridge = CastorBridge(config=config, firebase_project="test-project")
+        ref = MagicMock()
+        bridge._robot_ref = MagicMock(return_value=ref)
+        bridge._record_firestore_success = MagicMock()
+        bridge._register()
+        return ref.set.call_args[0][0]
+
+    def test_unconfigured_robot_publishes_false(self):
+        doc = self._register_doc({})
+        self.assertIs(doc["authority_handler_enabled"], False)
+
+    def test_flag_alone_is_not_enough(self):
+        doc = self._register_doc({"authority_handler_enabled": True})
+        self.assertIs(doc["authority_handler_enabled"], False)
+
+    def test_allowlist_alone_is_not_enough(self):
+        doc = self._register_doc(
+            {"authority": {"trusted_authority_ids": ["eu.aiact.notified-body.001"]}}
+        )
+        self.assertIs(doc["authority_handler_enabled"], False)
+
+    def test_flag_plus_allowlist_publishes_true(self):
+        doc = self._register_doc(
+            {
+                "authority_handler_enabled": True,
+                "authority": {"trusted_authority_ids": ["eu.aiact.notified-body.001"]},
+            }
+        )
+        self.assertIs(doc["authority_handler_enabled"], True)
+
+    def test_empty_allowlist_publishes_false(self):
+        doc = self._register_doc(
+            {"authority_handler_enabled": True, "authority": {"trusted_authority_ids": []}}
+        )
+        self.assertIs(doc["authority_handler_enabled"], False)
+
+    def test_helper_never_raises_on_a_missing_config(self):
+        from castor.cloud.bridge import _authority_handler_enabled
+
+        self.assertIs(_authority_handler_enabled(None), False)
+        self.assertIs(_authority_handler_enabled({}), False)
+        self.assertIs(
+            _authority_handler_enabled(
+                {"authority_handler_enabled": True, "authority": "not-a-dict"}
+            ),
+            False,
+        )
+        self.assertIs(
+            _authority_handler_enabled(
+                {"authority_handler_enabled": True, "trusted_authority_ids": 7}
+            ),
+            False,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Firestore models tests
 # ---------------------------------------------------------------------------

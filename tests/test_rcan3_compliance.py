@@ -137,5 +137,51 @@ async def test_submit_eu_register_requires_rmn(tmp_path):
             signer=signer,
             rrn="RRN-000000000001",
             rmn="craigm26/so-arm101/1-0-0",
+            # Since OC-13 there are no silent defaults: provider identity,
+            # Annex III basis and conformity status must all be stated.
+            extra={
+                "provider": {"name": "Test Provider", "contact": "ops@example.invalid"},
+                "annex_iii_basis": "article-6",
+                "conformity_status": "declared",
+            },
         )
     assert out["accepted"] is True
+
+
+@pytest.mark.asyncio
+async def test_submit_eu_register_refuses_empty_provider(tmp_path):
+    """OC-13: an eu-register submit with no provider identity is refused."""
+    from castor.rcan3.compliance import submit_eu_register
+
+    with pytest.raises(ValueError, match="provider"):
+        await submit_eu_register(
+            rrf=None,
+            signer=None,
+            rrn="RRN-000000000001",
+            rmn="craigm26/so-arm101/1-0-0",
+            extra={"annex_iii_basis": "article-6", "conformity_status": "declared"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_submit_eu_register_requires_explicit_annex_iii_basis(tmp_path):
+    """OC-13: annex_iii_basis and conformity_status no longer have defaults."""
+    from castor.rcan3.compliance import submit_eu_register
+
+    provider = {"name": "Test Provider", "contact": "ops@example.invalid"}
+    with pytest.raises(ValueError, match="annex_iii_basis"):
+        await submit_eu_register(
+            rrf=None,
+            signer=None,
+            rrn="RRN-000000000001",
+            rmn="craigm26/so-arm101/1-0-0",
+            extra={"provider": provider, "conformity_status": "declared"},
+        )
+    with pytest.raises(ValueError, match="conformity_status"):
+        await submit_eu_register(
+            rrf=None,
+            signer=None,
+            rrn="RRN-000000000001",
+            rmn="craigm26/so-arm101/1-0-0",
+            extra={"provider": provider, "annex_iii_basis": "article-6"},
+        )

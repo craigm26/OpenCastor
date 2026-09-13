@@ -271,3 +271,59 @@ def test_cli_export_episodes_flag():
         text=True,
     )
     assert "--episodes" in result.stdout
+
+
+def test_manifest_carries_withheld_naming_api_key_by_path(tmp_path):
+    """OC-13: a redaction that leaves no record is invisible; name every one."""
+    import json
+    import tarfile
+
+    import yaml
+
+    from castor.export import export_bundle_tgz
+
+    cfg = {
+        "metadata": {"robot_name": "withheld-bot"},
+        "agent": {"provider": "anthropic", "model": "m", "api_key": "sk-secret"},
+        "channels": [{"type": "telegram", "bot_token": "tok", "webhook_secret": "s"}],
+    }
+    cfg_path = tmp_path / "robot.rcan.yaml"
+    cfg_path.write_text(yaml.dump(cfg))
+    out = tmp_path / "bundle.tar.gz"
+
+    export_bundle_tgz(str(cfg_path), str(out))
+
+    with tarfile.open(out, "r:gz") as tf:
+        manifest = json.loads(tf.extractfile("manifest.json").read().decode())
+        sanitized = yaml.safe_load(tf.extractfile("config.rcan.yaml").read().decode())
+
+    paths = {w["path"] for w in manifest["withheld"]}
+    assert "agent.api_key" in paths
+    assert "channels[0].bot_token" in paths
+    assert "channels[0].webhook_secret" in paths
+    by_path = {w["path"]: w["class"] for w in manifest["withheld"]}
+    assert by_path["agent.api_key"] == "api_key"
+    assert by_path["channels[0].bot_token"] == "token"
+    # The values really are gone from the bundle.
+    assert sanitized["agent"]["api_key"] == "<REDACTED>"
+    # An empty episodes list carries a marker rather than standing alone.
+    assert "truncated" in manifest["episodes_note"]
+    assert "unavailable" in manifest["episodes_note"]
+
+
+def test_withheld_is_empty_list_when_nothing_was_removed(tmp_path):
+    import json
+    import tarfile
+
+    import yaml
+
+    from castor.export import export_bundle_tgz
+
+    cfg = {"metadata": {"robot_name": "clean-bot"}, "agent": {"provider": "anthropic"}}
+    cfg_path = tmp_path / "robot.rcan.yaml"
+    cfg_path.write_text(yaml.dump(cfg))
+    out = tmp_path / "bundle.tar.gz"
+    export_bundle_tgz(str(cfg_path), str(out))
+    with tarfile.open(out, "r:gz") as tf:
+        manifest = json.loads(tf.extractfile("manifest.json").read().decode())
+    assert manifest["withheld"] == []
