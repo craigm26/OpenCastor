@@ -435,9 +435,8 @@ def stroke_actions(
     index for the stroke it belongs to; on a mono reference the vectors are the
     three they have always been.
     """
-    return [
-        action for group in stroke_action_groups(spec, pen_down_z, max_xy, max_z) for action in group
-    ]
+    groups = stroke_action_groups(spec, pen_down_z, max_xy, max_z)
+    return [action for group in groups for action in group]
 
 
 def _stop(observation: Observation, dim: int = 3) -> ActionChunk:
@@ -452,11 +451,11 @@ def _stop(observation: Observation, dim: int = 3) -> ActionChunk:
 class TracePolicy(PolicyBase):
     """Oracle: replay the reference strokes, then declare done.
 
-    With ``strokes=True`` it plays each reference stroke back as one stroke —
-    one call, every target of that stroke, the stroke's id on every one of them
-    — so it is the ceiling of the stroke primitive as well as of the per-target
-    action. The targets themselves are identical either way, which is what
-    makes the two ceilings comparable.
+    With ``strokes=True`` it plays each reference stroke back as one stroke:
+    one call, every target of that stroke, the stroke's id on every one of
+    them. That makes it the ceiling of the stroke primitive as well as of the
+    per-target action. The targets themselves are identical either way, which
+    is what makes the two ceilings comparable.
     """
 
     def __init__(

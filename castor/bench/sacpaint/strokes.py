@@ -7,8 +7,8 @@ body always made, batched: a list of up to :data:`MAX_POINTS` points in sheet
 metres, drawn as one polyline.
 
 Nothing about the wire changes. A stroke is planned here into the very targets
-the body already knows how to send — travel height over the first point, down,
-each point in turn, up again after the last — and each of those targets is one
+the body already knows how to send (travel height over the first point, down,
+each point in turn, up again after the last), and each of those targets is one
 ordinary per-target motion: one gateway call with three millimetre coordinates,
 one receipt, the same tolerance and the same miss handling. The only things
 that batch are the policy's turn and the observation: the body looks at the
@@ -58,15 +58,16 @@ def parse_points(raw: Any, *, max_points: int = MAX_POINTS) -> list[tuple[float,
         arr = np.asarray(raw, dtype=np.float64)
     except (TypeError, ValueError) as exc:
         raise StrokeError(
-            "points must be a list of [x, y] pairs in sheet metres, like [[0.02, 0.30], [0.12, 0.30]]"
+            "points must be a list of [x, y] pairs in sheet metres, "
+            "like [[0.02, 0.30], [0.12, 0.30]]"
         ) from exc
+    if arr.size == 0:
+        raise StrokeError("a stroke needs at least one point")
     if arr.ndim != 2 or arr.shape[1] != 2:
         raise StrokeError(
             "points must be a list of [x, y] pairs in sheet metres (no z: the pen height is "
             f"implied by the stroke), got an array of shape {tuple(arr.shape)}"
         )
-    if arr.shape[0] == 0:
-        raise StrokeError("a stroke needs at least one point")
     if arr.shape[0] > max_points:
         raise StrokeError(
             f"a stroke carries at most {max_points} points, got {arr.shape[0]}; "

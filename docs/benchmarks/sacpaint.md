@@ -120,6 +120,72 @@ because the skeleton covers much of the canvas (measured 2026-09-09: 30, 60
 and 400 random lines score 0.33, 0.47 and 0.44 against the oracle's 0.995);
 the tower, dome and cupola dominate through their weights.
 
+## Strokes
+
+One policy call moves the pen to one target. A drawing therefore costs as many
+model calls as it has corners, and a run with a call budget spends the budget
+long before the sheet is full: one measured run of 81 model calls produced 154
+moves and a line score of 0.34 where the oracle trace of the same picture
+scores 0.95. The **stroke** primitive (`-E strokes=true`) lets one call lay
+many segments.
+
+A stroke is a list of up to 24 points in metres on the sheet. The pen travels
+above the first point, comes down, runs the polyline through every point, and
+lifts again after the last, so a stroke never carries a z. On a colour task it
+carries one `color`, the palette index the whole line is inked in.
+
+**Nothing about the wire changes.** The body plans the stroke into the very
+targets it already sent (travel, down, each point, up) and sends them one at
+a time: one gateway call per target, the same `arm.reach_point` or
+`arm.move_to` with three millimetre coordinates, one signed receipt per target,
+the same arrival tolerance and the same miss handling. The segments ink exactly
+as they did before. Scoring is untouched: `composite` is still the line
+fidelity number every earlier run can be compared with.
+
+What batches, beside the policy's turn, is the photograph. The body looks at
+the sheet once, at the end of the stroke, instead of once per corner, which is
+where most of the wall-clock of a long stroke used to go.
+
+**A stroke is checked before anything moves.** A point off the sheet, an empty
+list, a non-finite number or more than 24 points refuses the whole stroke and
+the arm stays exactly where it was, with the reason handed back for the policy
+to correct. A half-drawn stroke would leave the pen somewhere nobody asked for,
+and every later stroke would start from the wrong place.
+
+**On disk.** Every target is still its own step, so `logs/actions/<run>/*.jsonl`
+records the whole sequence target by target and a replay of a stroke run is a
+replay of the same motions. The `efficiency` term therefore still counts what
+the arm did, not how many calls the model spent. The stroke's id rides in each
+step's action metadata (`stroke`, `stroke_point`, `stroke_final`) and, in the
+virtual medium, on each retained receipt's `sacpaint_ink` note beside the
+colour. That note is sacpaint's own record and is never part of the signed
+envelope.
+
+**Opt-in, both ends.** The primitive is off by default and the prompt is
+byte-identical to every run before strokes existed without it. Turn it on with
+the body option, or from the phone by adding one key to `paint.json`:
+
+```bash
+# the oracle, playing every reference stroke back as one stroke
+castor bench sacpaint run --task sacpaint/photo-v1 --policy sacpaint_trace \
+    --embodiment sacpaint_plotter --no-rerun --no-prompt \
+    -- --epochs 1 -E strokes=true -P strokes=true
+```
+
+```json
+{"embodiment": "opencastor", "strokes": true, "max_llm_calls": 60, "media": ["virtual"]}
+```
+
+The oracle (`--policy sacpaint_trace -P strokes=true`) emits one reference
+stroke per call, out of the same targets the per-target oracle emits, so it is
+the ceiling of the new primitive and the old one at once. Measured in the mock
+world, both modes score identically:
+
+| Task | Per-target oracle | Stroke oracle |
+|---|---|---|
+| `sacpaint/photo-v1` (Sacramento) | composite 0.978 | composite 0.978 |
+| `sacpaint/starry-night` | composite 0.945, colour 0.929 | composite 0.945, colour 0.929 |
+
 ## Media
 
 Every score carries `medium`, what the marks were made of. Each medium is its
@@ -302,6 +368,7 @@ once (Bob's is at `/home/craigm26/bob/paint.json`):
             "tolerance_mm": "5", "strict_reach": "false", "timeout_s": "120"},
   "brain": {"subscription": "opus", "claude_bin": "/home/craigm26/.local/bin/claude"},
   "max_llm_calls": 60,
+  "strokes": true,
   "media": ["virtual"]
 }
 ```
@@ -310,9 +377,11 @@ once (Bob's is at `/home/craigm26/bob/paint.json`):
 the run at the phone's frames and tapped corners (Eval mode) automatically.
 `brain` is either `{"subscription": "<claude alias>"}` (the shim; scores carry
 `wire=claude-code-cli`) or `{"model": "anthropic/…"}` with a key in the
-console's environment. Two embodiment flags exist for this: `-E progress_path=`
-(a small JSON the console reads for `steps`/`misses`) and `-E canvas_post_url=`
-(the virtual canvas, posted as JPEG with the console token).
+console's environment. `strokes` turns on the stroke primitive for the run
+(see [Strokes](#strokes)); leave it out and the run is what it was. Two
+embodiment flags exist for the console itself: `-E progress_path=` (a small
+JSON the console reads for `steps`/`misses`) and `-E canvas_post_url=` (the
+virtual canvas, posted as JPEG with the console token).
 
 ## Real robots
 
@@ -644,6 +713,7 @@ and `-E corners_url="http://<robot>:8002/eval/corners?stream=overhead"`, with
 | `speed` | — | Passed through to `arm.move_to` when set; omitted entirely when not. |
 | `tolerance_mm` | `3.0` | Arrival tolerance, `move_args=reach_point` only. |
 | `strict_reach` | `true` | Halt when the arm reports `reached: false`. Set `false` to score runs whose targets were missed — the pen's position is then not what the transcript says it is. |
+| `strokes` | `false` | Offer the stroke primitive: one call, up to 24 points, drawn as the same per-target motions (see [Strokes](#strokes)). Off leaves the prompt byte-identical. |
 
 ### Geometry
 

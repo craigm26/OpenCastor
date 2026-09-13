@@ -9,6 +9,7 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+- sacpaint: one call can lay a whole stroke. The `stroke` primitive takes up to 24 points on the sheet (and one colour on a colour task) and draws the polyline through them as the very targets the body already sent: one gateway call per target, one receipt, the same tolerance and miss handling, the same inking, the same scoring. A point off the sheet refuses the whole stroke before anything moves. Every target is still its own step in `logs/actions/*.jsonl`, with the stroke's id in the step metadata, so replays and `efficiency` keep meaning. Opt-in through the body option `strokes` and the paint profile's `"strokes": true`; the packaged prompt is byte-identical without it, and the oracle (`-P strokes=true`) is the ceiling of the new primitive too.
 - sacpaint: a run that knows its model-call budget gets a planning paragraph in the prompt (lay the whole sheet out first, then detail). Opt-in through the body option llm_budget; the console sets it from the profile cap, and the packaged benchmark prompt is byte-identical without it.
 
 ### Added

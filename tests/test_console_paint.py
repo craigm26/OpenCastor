@@ -316,3 +316,21 @@ def test_the_run_tells_the_body_the_call_budget(tmp_path: Path) -> None:
     cfg.pop("max_llm_calls")
     cmd, _ = paint.build_command(job, cfg, console_url="http://127.0.0.1:8082", python="py")
     assert not any(c.startswith("llm_budget=") for c in cmd)
+
+
+def test_the_profile_turns_strokes_on_and_off(tmp_path: Path) -> None:
+    """One call may lay a whole stroke, but only when the operator's profile says so."""
+
+    def flags(cfg: dict) -> dict[str, str]:
+        job = paint._Job("j", "sacramento", "virtual", "sacpaint/photo-v1")
+        job.dir = tmp_path / "paint" / "j"
+        cmd, _ = paint.build_command(job, cfg, console_url="http://127.0.0.1:8082", python="py")
+        return {
+            a.split("=", 1)[0]: a.split("=", 1)[1]
+            for a in cmd[cmd.index("--") :]
+            if "=" in a and not a.startswith("images")
+        }
+
+    assert "strokes" not in flags(_profile(tmp_path))
+    assert flags(_profile(tmp_path, strokes=True))["strokes"] == "true"
+    assert "strokes" not in flags(_profile(tmp_path, strokes=False))

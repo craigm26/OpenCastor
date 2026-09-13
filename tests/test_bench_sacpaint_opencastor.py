@@ -1337,3 +1337,108 @@ def test_a_known_call_budget_puts_a_planning_paragraph_in_the_prompt(gateway, ca
     assert "about 80 model calls" in budgeted
     assert "whole sheet" in budgeted and "edge to edge" in budgeted
     assert budgeted.startswith(plain)
+
+
+# --- strokes: one call, many targets, the same wire --------------------------------
+
+
+def _stroke_points() -> list[tuple[float, float]]:
+    """Four points well inside whatever sheet the packaged reference declares."""
+    return [
+        (0.2 * CANVAS_W_M, 0.2 * CANVAS_H_M),
+        (0.8 * CANVAS_W_M, 0.2 * CANVAS_H_M),
+        (0.8 * CANVAS_W_M, 0.8 * CANVAS_H_M),
+        (0.2 * CANVAS_W_M, 0.8 * CANVAS_H_M),
+    ]
+
+
+def test_a_stroke_sends_one_gateway_call_per_target_in_the_envelope_it_always_sent(
+    gateway, camera, calibration
+):
+    """The primitive batches the policy's turn, not the wire."""
+    from castor.bench.sacpaint import strokes as stroke_lib
+
+    body = _embodiment(gateway, camera, calibration, strokes=True)
+    body.reset(SCENE)
+    gateway.calls.clear()
+    camera.hits.clear()
+    points = _stroke_points()
+
+    result = body.stroke(points)
+
+    moves = [c for c in gateway.calls if c["tool"] == "arm.move_to"]
+    # travel over the first point, down, each remaining point, up again after the last
+    assert len(moves) == len(points) + 2 == body.num_steps
+    assert [c["tool"] for c in gateway.calls] == ["arm.move_to"] * len(moves)
+    expected = [
+        expect_base_mm(t) for t in stroke_lib.plan(
+            points,
+            low=body.info.action_space.low,
+            high=body.info.action_space.high,
+            pen_down_z=body.pen_down_z,
+            travel_z=body.travel_z,
+        )
+    ]
+    for call, want in zip(moves, expected):
+        args = call["envelope"]["tool_args"]
+        assert set(args) == {"x_mm", "y_mm", "z_mm"}  # no new fields on the wire
+        assert args == pytest.approx(want)
+    # One photograph for the whole stroke, taken at the end.
+    assert len(camera.hits) == 1
+    assert result.observation.state["eef_pos"] == pytest.approx(
+        [points[-1][0], points[-1][1], body.travel_z]
+    )
+    # Every target is recorded under one stroke id, in order.
+    assert [e["stroke"] for e in body.stroke_log] == [1] * len(moves)
+    assert [e["stroke_point"] for e in body.stroke_log] == list(range(len(moves)))
+
+
+def test_a_stroke_off_the_sheet_is_refused_before_the_arm_moves(gateway, camera, calibration):
+    from castor.bench.sacpaint import strokes as stroke_lib
+
+    body = _embodiment(gateway, camera, calibration, strokes=True)
+    body.reset(SCENE)
+    gateway.calls.clear()
+    before = body._eef.copy()
+
+    with pytest.raises(stroke_lib.StrokeError, match="off the sheet"):
+        body.stroke([(0.05, 0.05), (CANVAS_W_M * 4.0, 0.05)])
+
+    assert gateway.calls == []  # nothing reached the gateway, so nothing moved
+    assert body.num_steps == 0
+    assert body.stroke_log == []
+    assert np.array_equal(body._eef, before)
+
+
+def test_the_stroke_paragraph_is_opt_in_and_the_ink_note_carries_the_stroke(
+    gateway, camera, calibration, tmp_path
+):
+    """Off by default: the packaged benchmark prompt stays byte-identical."""
+    from castor.bench.sacpaint import strokes as stroke_lib
+
+    plain = _embodiment(gateway, camera, calibration).info.docs
+    with_strokes = _embodiment(gateway, camera, calibration, strokes=True).info.docs
+    assert f"'{stroke_lib.TOOL_NAME}' tool" not in plain
+    assert str(stroke_lib.MAX_POINTS) not in plain
+    assert with_strokes.startswith(plain)
+    assert f"'{stroke_lib.TOOL_NAME}' tool" in with_strokes
+    # The -E string form coerces like every other boolean flag.
+    assert opencastor_embodiment(
+        gateway_url=gateway.url,
+        manifest_path=MANIFEST,
+        token=TOKEN,
+        calibration=calibration,
+        overhead_url=f"{camera.url}/overhead",
+        state_tool=None,
+        no_prompt="true",
+        strokes="true",
+    ).strokes is True
+
+    virtual = _embodiment(
+        gateway, camera, "easel", medium="virtual", overhead_url=None, strokes=True
+    )
+    virtual.reset(Scene(id="s", instruction="Draw."))
+    virtual.stroke([(0.02, 0.10), (0.10, 0.10)])
+    inked = [r["sacpaint_ink"] for r in virtual.receipts if "sacpaint_ink" in r]
+    assert inked and all(note["stroke"] == 1 for note in inked)
+    assert any(note["inked"] for note in inked)

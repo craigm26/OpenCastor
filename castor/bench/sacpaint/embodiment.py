@@ -45,9 +45,9 @@ envelope, because nothing the gateway attested to has a colour in it.
 **Strokes.** ``-E strokes=true`` adds the stroke primitive
 (:mod:`castor.bench.sacpaint.strokes`) beside the per-target action: one call
 carrying up to 24 points on the sheet, executed as the very targets this
-adapter already sends. Nothing reaches the wire differently — one gateway call
+adapter already sends. Nothing reaches the wire differently: one gateway call
 per target, three millimetre coordinates, one receipt, the same tolerance and
-the same miss handling — and nothing is scored differently. What batches is the
+the same miss handling. Nothing is scored differently either. What batches is the
 policy's turn and the photograph: the sheet is looked at once, at the end of
 the stroke, instead of once per corner. The option is off by default, and with
 it off the prompt is byte-identical to every run before strokes existed.
