@@ -1076,3 +1076,48 @@ def test_the_gamepad_page_can_send_the_estop_auth_header(_api_client):
     assert "not a hardware cut" in html
     for word in ("safety rated", "fail-safe", "verified"):
         assert word not in html.lower(), f"the page must not claim {word!r}"
+
+
+# ---------------------------------------------------------------------------
+# 12. The docs page, and the two words it must not use
+# ---------------------------------------------------------------------------
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def test_the_hold_doc_exists_and_says_what_the_hold_is():
+    """One page an operator can read before the robot is already stopped."""
+    doc = _repo_root() / "docs" / "safety" / "hold.md"
+    assert doc.exists(), "docs/safety/hold.md is the page every stop surface points at"
+    text = doc.read_text(encoding="utf-8")
+
+    # What it is, and what it is not.
+    assert "best-effort software hold" in text
+    assert "not a hardware cut" in text
+    assert "safety rated" in text
+
+    # The mechanics an operator actually needs.
+    assert "safety-latch.json" in text
+    assert "castor pause" in text and "castor resume" in text
+    assert "OPENCASTOR_ESTOP_AUTH" in text
+    assert "ensure_estop_auth" in text and "castor up" in text
+    assert "source=sensor" in text or "`sensor`" in text
+
+    # The disambiguation. These two are confused constantly and they are not
+    # the same lever: one pauses the perception loop, one is the latch.
+    assert "/api/runtime/resume" in text
+    assert "perception-action loop" in text
+
+    # House style.
+    assert "—" not in text, "no em-dashes"
+    assert "–" not in text, "no en-dashes either"
+    assert "verified" not in text.lower(), "software never renders anything verified"
+
+
+def test_the_hold_doc_is_linked_from_where_safety_docs_are_indexed():
+    root = _repo_root()
+    arch = (root / "docs" / "safety-architecture.md").read_text(encoding="utf-8")
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    assert "safety/hold.md" in arch, "the safety module map has to point at it"
+    assert "docs/safety/hold.md" in readme, "and so does the README's P66 section"
+

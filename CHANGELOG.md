@@ -453,6 +453,15 @@ A phone left on a bench must not still be able to lift a stop tomorrow.
 The page's copy now says what the hold is: a best-effort software hold, not a
 hardware cut.
 
+**New page: [`docs/safety/hold.md`](docs/safety/hold.md).** What the hold is (a
+best-effort software hold, not a hardware cut), where the latch file lives and
+why deleting it does not clear anything, `castor pause` and `castor resume`, the
+e-stop clear code and how `castor up` provisions it, why a sensor latch clears
+only at the robot, and one line saying that `POST /api/runtime/resume` pauses
+the perception-action loop and is not the e-stop latch. Linked from the safety
+module map in `docs/safety-architecture.md` and from the README's Protocol 66
+section.
+
 **A stop is acknowledged only once the robot has answered.** `castor bridge`
 wrote `ack_qos: "acknowledged"` onto the command document before it dispatched
 anything, under a comment that called it an immediate ACK. It was not an
