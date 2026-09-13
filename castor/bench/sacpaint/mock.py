@@ -14,10 +14,17 @@ serves a third stream, ``reference_color``, the picture reduced to the palette.
 A mono reference is exactly what it was: three dimensions, black ink, two
 streams. Colour is a property of the ink alone; no motion changes because of it.
 
+With ``strokes=True`` the plotter also accepts the **stroke** primitive
+(:mod:`castor.bench.sacpaint.strokes`): one call carrying up to 24 points,
+executed as the same per-target sequence the plotter always drew, inked the
+same way, with one observation at the end. The prompt is byte-identical to
+every run before strokes existed when the option is off.
+
 ``TracePolicy`` is the oracle: it plays the reference strokes back, in the
 commonest colour under each stroke when the reference has one. It is the
-ceiling of the scorers, not a contestant. ``IdlePolicy`` declares done at once
-and is the floor.
+ceiling of the scorers, not a contestant, and with ``strokes=True`` it plays
+them back as strokes, so it is the ceiling of the new primitive too.
+``IdlePolicy`` declares done at once and is the floor.
 """
 
 from __future__ import annotations
@@ -40,6 +47,7 @@ from inspect_robots.spaces import (
 from inspect_robots.types import Action, ActionChunk, Observation, StepResult
 
 from castor.bench.sacpaint import palette as pal
+from castor.bench.sacpaint import strokes as stroke_lib
 from castor.bench.sacpaint.reference import (
     DEFAULT_REFERENCE,
     ReferenceSpec,
@@ -80,7 +88,7 @@ def color_docs(spec: ReferenceSpec) -> str:
     )
 
 
-def _docs(spec: ReferenceSpec) -> str:
+def _docs(spec: ReferenceSpec, strokes: bool = False) -> str:
     w, h = spec.canvas_mm
     return (
         f"You hold a pen over a white {w:.0f} x {h:.0f} mm portrait sheet. Targets are metres "
@@ -91,7 +99,7 @@ def _docs(spec: ReferenceSpec) -> str:
         f"the sheet upright (image top = y {h / 1000:.2f}). The 'reference' camera shows the "
         "picture you must reproduce, framed exactly as the sheet is: its left, right, top and "
         "bottom edges are the sheet's edges." + color_docs(spec)
-    )
+    ) + (stroke_lib.docs_paragraph(colored=spec.has_color) if strokes else "")
 
 
 def action_space(spec: ReferenceSpec) -> Box:
@@ -163,6 +171,7 @@ class PlotterEmbodiment:
         pen_down_z: float = PEN_DOWN_Z,
         stroke_px: int | None = None,
         photo_mode: str | bool = False,
+        strokes: bool = False,
     ):
         self.spec = get_spec(reference)
         self.pen_down_z = pen_down_z
@@ -173,7 +182,12 @@ class PlotterEmbodiment:
         self.photo_mode = "markers" if photo_mode is True else (photo_mode or None)
         if self.photo_mode not in (None, "markers", "sheet"):
             raise ValueError(f"photo_mode must be False, 'markers', or 'sheet', got {photo_mode!r}")
+        self.strokes = bool(strokes)
         self.num_steps = 0
+        #: One entry per target a stroke sent, so a stroke is auditable target by target.
+        self.stroke_log: list[dict[str, Any]] = []
+        self._stroke_id = 0
+        self._last_observation: Observation | None = None
         self._space = action_space(self.spec)
         self._dim = self._space.dim
         self._low = np.asarray(self._space.low, dtype=np.float64)
@@ -192,7 +206,7 @@ class PlotterEmbodiment:
             is_simulated=True,
             capabilities=frozenset({SEEDABLE, RESETTABLE, RENDERABLE}),
             supported_target_kinds=frozenset({"reference_drawing"}),
-            docs=_docs(self.spec),
+            docs=_docs(self.spec, self.strokes),
         )
 
     def _blank(self) -> np.ndarray:
@@ -220,11 +234,26 @@ class PlotterEmbodiment:
         self.color = pal.DEFAULT_INDEX
         self._instruction = scene.instruction
         self.num_steps = 0
+        self.stroke_log = []
+        self._stroke_id = 0
+        self._last_observation = None
         return self._observe()
 
     def step(self, action: Action) -> StepResult:
-        """Move the pen in a straight line to the target, marking if down at both ends."""
-        target = self._fit(action.data)
+        """Move the pen in a straight line to the target, marking if down at both ends.
+
+        A target that a stroke is still in the middle of gets the stroke's
+        standing view back rather than a fresh one: a stroke is looked at once,
+        at its end. Every target is still its own step, so the action log and
+        the efficiency term count exactly what the arm did.
+        """
+        self._apply(self._fit(action.data))
+        if self.strokes and stroke_lib.is_open(action.meta) and self._last_observation is not None:
+            return StepResult(observation=self._last_observation, terminated=False)
+        return StepResult(observation=self._observe(), terminated=False)
+
+    def _apply(self, target: np.ndarray) -> None:
+        """One per-target motion: mark if the pen was down at both ends, then count it."""
         if self._dim == 4:
             self.color = pal.index_of(target[3])
         if self._eef[2] <= self.pen_down_z and target[2] <= self.pen_down_z:
@@ -234,6 +263,38 @@ class PlotterEmbodiment:
             cv2.line(self._canvas, p0, p1, pal.rgb_of(self.color), self.stroke_px)
         self._eef = target
         self.num_steps += 1
+
+    def stroke(
+        self,
+        points: Any,
+        color: str | int | float | None = None,
+        *,
+        stroke_id: int | None = None,
+    ) -> StepResult:
+        """Draw one polyline through ``points``, then look at the sheet once.
+
+        The stroke is planned and checked first: a point off the sheet raises
+        :class:`castor.bench.sacpaint.strokes.StrokeError` with the pen exactly
+        where it was. What is executed afterwards is the ordinary per-target
+        sequence, so nothing about how a segment is inked changes.
+        """
+        targets = stroke_lib.plan(
+            points,
+            low=self._low,
+            high=self._high,
+            pen_down_z=self.pen_down_z,
+            travel_z=PEN_UP_Z,
+            color=color if self._dim == 4 else None,
+        )
+        self._stroke_id = self._stroke_id + 1 if stroke_id is None else int(stroke_id)
+        for index, target in enumerate(targets):
+            self._apply(self._fit(target))
+            self.stroke_log.append(
+                {
+                    **stroke_lib.meta_for(self._stroke_id, index, len(targets)),
+                    "target": [float(v) for v in target],
+                }
+            )
         return StepResult(observation=self._observe(), terminated=False)
 
     def observe_parked(self) -> Observation:
@@ -267,16 +328,30 @@ class PlotterEmbodiment:
             images[REFERENCE_COLOR_CAM] = self._reference_color.copy()
             extra["palette"] = list(pal.NAMES)
             extra["color"] = pal.name_of(self.color)
-        return Observation(
+        observation = Observation(
             images=images,
             state={"eef_pos": self._eef.copy()},
             instruction=self._instruction,
             extra=extra,
         )
+        self._last_observation = observation
+        return observation
+
+
+def _flag(value: Any) -> Any:
+    """Coerce a ``-E``/``-P`` string into a bool; anything else is passed through."""
+    if not isinstance(value, str):
+        return value
+    text = value.strip().lower()
+    if text not in ("true", "false", "1", "0", "yes", "no"):
+        raise ValueError(f"strokes must be true or false, got {value!r}")
+    return text in ("true", "1", "yes")
 
 
 def plotter_embodiment(**kwargs: Any) -> PlotterEmbodiment:
     """Registry factory for ``--embodiment sacpaint_plotter`` (``-E reference=NAME -E photo_mode=sheet``)."""
+    if "strokes" in kwargs:
+        kwargs["strokes"] = _flag(kwargs["strokes"])
     return PlotterEmbodiment(**kwargs)
 
 
@@ -323,6 +398,34 @@ def stroke_color(spec: ReferenceSpec, stroke: list[tuple[float, float]]) -> int:
     return int(np.bincount(seen, minlength=len(pal.NAMES)).argmax())
 
 
+def stroke_action_groups(
+    spec: ReferenceSpec, pen_down_z: float = 0.0, max_xy: float = 0.014, max_z: float = 0.0024
+) -> list[list[np.ndarray]]:
+    """The same pen-up / pen-down targets as :func:`stroke_actions`, one list per reference stroke.
+
+    Grouping is the only difference: concatenating the groups gives back
+    exactly the flat list, target for target, so an oracle that draws stroke by
+    stroke draws the same picture as one that draws target by target.
+    """
+    colored = spec.has_color
+    out: list[list[np.ndarray]] = []
+    here = np.array([0.0, 0.0, PEN_UP_Z])
+    for group in spec.strokes.values():
+        for stroke in group:
+            pts = [np.array([x / 1000.0, y / 1000.0]) for x, y in stroke]
+            targets = [np.array([*pts[0], PEN_UP_Z]), np.array([*pts[0], pen_down_z])]
+            targets += [np.array([*p, pen_down_z]) for p in pts[1:]]
+            targets.append(np.array([*pts[-1], PEN_UP_Z]))
+            color = float(stroke_color(spec, stroke)) if colored else None
+            one: list[np.ndarray] = []
+            for t in targets:
+                for step in _split(here, t, max_xy, max_z):
+                    one.append(step if color is None else np.append(step, color))
+                here = t
+            out.append(one)
+    return out
+
+
 def stroke_actions(
     spec: ReferenceSpec, pen_down_z: float = 0.0, max_xy: float = 0.014, max_z: float = 0.0024
 ) -> list[np.ndarray]:
@@ -332,21 +435,9 @@ def stroke_actions(
     index for the stroke it belongs to; on a mono reference the vectors are the
     three they have always been.
     """
-    colored = spec.has_color
-    out: list[np.ndarray] = []
-    here = np.array([0.0, 0.0, PEN_UP_Z])
-    for group in spec.strokes.values():
-        for stroke in group:
-            pts = [np.array([x / 1000.0, y / 1000.0]) for x, y in stroke]
-            targets = [np.array([*pts[0], PEN_UP_Z]), np.array([*pts[0], pen_down_z])]
-            targets += [np.array([*p, pen_down_z]) for p in pts[1:]]
-            targets.append(np.array([*pts[-1], PEN_UP_Z]))
-            color = float(stroke_color(spec, stroke)) if colored else None
-            for t in targets:
-                for step in _split(here, t, max_xy, max_z):
-                    out.append(step if color is None else np.append(step, color))
-                here = t
-    return out
+    return [
+        action for group in stroke_action_groups(spec, pen_down_z, max_xy, max_z) for action in group
+    ]
 
 
 def _stop(observation: Observation, dim: int = 3) -> ActionChunk:
@@ -359,11 +450,21 @@ def _stop(observation: Observation, dim: int = 3) -> ActionChunk:
 
 
 class TracePolicy(PolicyBase):
-    """Oracle: replay the reference strokes, then declare done."""
+    """Oracle: replay the reference strokes, then declare done.
 
-    def __init__(self, *, reference: str = DEFAULT_REFERENCE, chunk_size: int = 8):
+    With ``strokes=True`` it plays each reference stroke back as one stroke —
+    one call, every target of that stroke, the stroke's id on every one of them
+    — so it is the ceiling of the stroke primitive as well as of the per-target
+    action. The targets themselves are identical either way, which is what
+    makes the two ceilings comparable.
+    """
+
+    def __init__(
+        self, *, reference: str = DEFAULT_REFERENCE, chunk_size: int = 8, strokes: bool = False
+    ):
         self.spec = get_spec(reference)
         self.chunk_size = chunk_size
+        self.strokes = bool(strokes)
         self.info = PolicyInfo(
             name="sacpaint_trace",
             action_space=action_space(self.spec),
@@ -371,16 +472,25 @@ class TracePolicy(PolicyBase):
         )
         self.config = PolicyConfig(action_horizon=chunk_size)
         self._queue: list[np.ndarray] = []
+        self._groups: list[list[np.ndarray]] = []
+        self._stroke_id = 0
 
     def reset(self, scene: Scene) -> None:
         """Rebuild the stroke queue for a fresh trial, from the scene's own reference when it names one."""
         name = self.spec.name
         if scene.target is not None and scene.target.spec.get("reference"):
             name = str(scene.target.spec["reference"])
+        if self.strokes:
+            self._groups = stroke_action_groups(get_spec(name))
+            self._stroke_id = 0
+            self._queue = []
+            return
         self._queue = stroke_actions(get_spec(name))
 
     def act(self, observation: Observation) -> ActionChunk:
         """Emit the next chunk of pen targets; the last chunk carries the stop request."""
+        if self.strokes:
+            return self._act_stroke(observation)
         if not self._queue:
             return _stop(observation, self.info.action_space.dim)
         batch, self._queue = self._queue[: self.chunk_size], self._queue[self.chunk_size :]
@@ -388,6 +498,25 @@ class TracePolicy(PolicyBase):
         if not self._queue:
             last = actions[-1]
             actions[-1] = Action(data=last.data, meta={"request_stop": True, "stop_reason": "done"})
+        return ActionChunk(actions=actions, control_hz=10.0)
+
+    def _act_stroke(self, observation: Observation) -> ActionChunk:
+        """One whole reference stroke per call, every target tagged with the stroke's id."""
+        if not self._groups:
+            return _stop(observation, self.info.action_space.dim)
+        batch, self._groups = self._groups[0], self._groups[1:]
+        self._stroke_id += 1
+        total = len(batch)
+        actions = [
+            Action(data=a, meta=stroke_lib.meta_for(self._stroke_id, i, total))
+            for i, a in enumerate(batch)
+        ]
+        if not self._groups:
+            last = actions[-1]
+            actions[-1] = Action(
+                data=last.data,
+                meta={**last.meta, "request_stop": True, "stop_reason": "done"},
+            )
         return ActionChunk(actions=actions, control_hz=10.0)
 
 
@@ -409,7 +538,9 @@ class IdlePolicy(PolicyBase):
 
 
 def trace_policy(**kwargs: Any) -> TracePolicy:
-    """Registry factory for ``--policy sacpaint_trace``."""
+    """Registry factory for ``--policy sacpaint_trace`` (``-P strokes=true`` for the stroke oracle)."""
+    if "strokes" in kwargs:
+        kwargs["strokes"] = _flag(kwargs["strokes"])
     return TracePolicy(**kwargs)
 
 

@@ -18,8 +18,15 @@ operator writes ``<ROBOT_HOME>/paint.json`` once, on the robot::
                 "tolerance_mm": "5", "strict_reach": "false", "timeout_s": "120"},
       "brain": {"subscription": "opus"},        # or {"model": "anthropic/claude-..."} with a key in the env
       "max_llm_calls": 60,
+      "strokes": true,                          # one call may lay a whole stroke, not one target
       "media": ["virtual"]                      # what this rig can do today
     }
+
+``"strokes": true`` turns on the body's stroke primitive: the policy sends a
+list of points and the body draws the polyline through them, as the same
+per-target motions and the same gateway calls it always made. It is off unless
+the profile asks for it, and with it off the prompt and the run are what they
+were before strokes existed.
 
 The phone chooses the picture (the packaged photograph of Sacramento, or one it
 uploads) and, among the media the robot offers, which one. ``GET
@@ -162,6 +169,10 @@ def build_command(
             cmd += ["--claude-bin", str(brain["claude_bin"])]
     elif brain.get("model"):
         cmd += ["--model", str(brain["model"])]
+    if config.get("strokes"):
+        # One call, many segments: the body plans the polyline into the targets it
+        # already sends. The wire, the receipts and the scoring are unchanged.
+        flags["strokes"] = "true"
     max_calls = config.get("max_llm_calls")
     if max_calls:
         cmd += ["--max-llm-calls", str(int(max_calls))]

@@ -41,6 +41,16 @@ carries the same three millimetre coordinates it carried before. The colour is
 recorded in the observation, in the progress file the console reads, and beside
 each retained receipt under ``sacpaint_ink``; it is never added to the signed
 envelope, because nothing the gateway attested to has a colour in it.
+
+**Strokes.** ``-E strokes=true`` adds the stroke primitive
+(:mod:`castor.bench.sacpaint.strokes`) beside the per-target action: one call
+carrying up to 24 points on the sheet, executed as the very targets this
+adapter already sends. Nothing reaches the wire differently — one gateway call
+per target, three millimetre coordinates, one receipt, the same tolerance and
+the same miss handling — and nothing is scored differently. What batches is the
+policy's turn and the photograph: the sheet is looked at once, at the end of
+the stroke, instead of once per corner. The option is off by default, and with
+it off the prompt is byte-identical to every run before strokes existed.
 """
 
 from __future__ import annotations
@@ -73,6 +83,7 @@ from inspect_robots.types import Action, Observation, StepResult
 
 from castor.bench.sacpaint import calibration as calib
 from castor.bench.sacpaint import palette as pal
+from castor.bench.sacpaint import strokes as stroke_lib
 from castor.bench.sacpaint.cameras import (
     FrameSource,
     HttpCornerSource,
@@ -408,6 +419,7 @@ class OpenCastorEmbodiment:
         tolerance_mm: float = 3.0,
         strict_reach: bool = True,
         llm_budget: int | None = None,
+        strokes: bool = False,
         # geometry
         calibration: str | None = None,
         reference: str | None = None,
@@ -545,8 +557,14 @@ class OpenCastorEmbodiment:
         self._trial: tuple[str, int] | None = None
         self._move_receipt: int | None = None
 
+        self.strokes = bool(strokes)
         self.num_steps = 0
         self.misses = 0
+        #: One entry per target a stroke sent, so a stroke is auditable target by target.
+        self.stroke_log: list[dict[str, Any]] = []
+        self._stroke_id = 0
+        self._stroke: int | None = None
+        self._last_observation: Observation | None = None
         self._instruction: str | None = None
         self._eef = np.array([0.0, 0.0, self.travel_z])
         self._commanded = np.array([0.0, 0.0, self.travel_z])
@@ -558,6 +576,8 @@ class OpenCastorEmbodiment:
         self.llm_budget = int(llm_budget) if llm_budget else None
         if self.llm_budget:
             docs += _plan_docs(self.llm_budget)
+        if self.strokes:
+            docs += stroke_lib.docs_paragraph(colored=self.colored)
         self.info = EmbodimentInfo(
             name="opencastor" if self.medium == MEDIUM_PEN else f"opencastor-{self.medium}",
             action_space=action_space(self.canvas_mm, self.colored),
@@ -679,6 +699,10 @@ class OpenCastorEmbodiment:
         self._instruction = scene.instruction
         self.num_steps = 0
         self._corners = None
+        self.stroke_log = []
+        self._stroke_id = 0
+        self._stroke = None
+        self._last_observation = None
         self.color = pal.DEFAULT_INDEX
         if self._ink is not None:
             self._ink.clear()
@@ -695,13 +719,61 @@ class OpenCastorEmbodiment:
         return np.clip(arr, self.info.action_space.low, self.info.action_space.high)
 
     def step(self, action: Action) -> StepResult:
-        """Move the pen to one absolute canvas-frame target and look at the result."""
-        target = self._fit(action.data)
+        """Move the pen to one absolute canvas-frame target and look at the result.
+
+        A target a stroke is still in the middle of gets the stroke's standing
+        view back instead of a fresh photograph: a stroke is looked at once, at
+        its end. The motion itself is unchanged, and every target is still its
+        own step, so the action log and the efficiency term count what the arm
+        actually did.
+        """
+        self._stroke = action.meta.get(stroke_lib.STROKE_KEY) if action.meta else None
+        self._apply(self._fit(action.data))
+        if self.strokes and stroke_lib.is_open(action.meta) and self._last_observation is not None:
+            return StepResult(observation=self._last_observation, terminated=False)
+        return StepResult(observation=self._observe(), terminated=False)
+
+    def _apply(self, target: np.ndarray) -> None:
+        """One per-target motion: the colour in force, the gateway call, the step count."""
         if self.colored:
             # Read before the motion, so the segment this step inks is this step's colour.
             self.color = pal.index_of(target[3])
         self._move_to(target[:3])
         self.num_steps += 1
+
+    def stroke(
+        self,
+        points: Any,
+        color: str | int | float | None = None,
+        *,
+        stroke_id: int | None = None,
+    ) -> StepResult:
+        """Draw one polyline through ``points``, then take one photograph.
+
+        The stroke is planned and checked before anything moves: a point off
+        the sheet raises
+        :class:`castor.bench.sacpaint.strokes.StrokeError` with the arm exactly
+        where it was. What runs afterwards is the ordinary per-target path, so
+        the gateway sees the calls it always saw.
+        """
+        targets = stroke_lib.plan(
+            points,
+            low=self.info.action_space.low,
+            high=self.info.action_space.high,
+            pen_down_z=self.pen_down_z,
+            travel_z=self.travel_z,
+            color=color if self.colored else None,
+        )
+        self._stroke_id = self._stroke_id + 1 if stroke_id is None else int(stroke_id)
+        self._stroke = self._stroke_id
+        for index, target in enumerate(targets):
+            self._apply(self._fit(target))
+            self.stroke_log.append(
+                {
+                    **stroke_lib.meta_for(self._stroke_id, index, len(targets)),
+                    "target": [float(v) for v in target],
+                }
+            )
         return StepResult(observation=self._observe(), terminated=False)
 
     def observe_parked(self) -> Observation:
@@ -813,13 +885,16 @@ class OpenCastorEmbodiment:
         index = self._move_receipt
         if self._ink is None or index is None or index >= len(self.client.receipts):
             return
-        self.client.receipts[index]["sacpaint_ink"] = {
+        note: dict[str, Any] = {
             "medium": self.medium,
             "inked": bool(inked),
             "color": pal.name_of(self.color),
             "rgb": list(pal.rgb_of(self.color)),
             "note": "virtual ink, recorded by sacpaint; not part of the signed envelope",
         }
+        if self._stroke is not None:
+            note["stroke"] = int(self._stroke)
+        self.client.receipts[index]["sacpaint_ink"] = note
 
     def _move_payload(self, base_mm: np.ndarray) -> dict[str, Any]:
         """Build the cartesian tool's arguments in whichever spelling the gateway speaks."""
@@ -900,11 +975,13 @@ class OpenCastorEmbodiment:
                 images["scene"] = (
                     self.overhead.fetch()
                 )  # a real camera, if one is watching, for the record
-            return Observation(
-                images=images,
-                state={"eef_pos": self._state()},
-                instruction=self._instruction,
-                extra=extra,
+            return self._remember(
+                Observation(
+                    images=images,
+                    state={"eef_pos": self._state()},
+                    instruction=self._instruction,
+                    extra=extra,
+                )
             )
         assert self.overhead is not None
         images = {OVERHEAD: self.overhead.fetch(), REFERENCE_CAM: self.reference_camera.fetch()}
@@ -917,12 +994,19 @@ class OpenCastorEmbodiment:
         if corners is not None:
             extra[CORNERS_KEY] = [[float(x), float(y)] for x, y in corners]
         # CANONICAL_FLAG is deliberately absent: this is a photograph of a sheet.
-        return Observation(
-            images=images,
-            state={"eef_pos": self._state()},
-            instruction=self._instruction,
-            extra=extra,
+        return self._remember(
+            Observation(
+                images=images,
+                state={"eef_pos": self._state()},
+                instruction=self._instruction,
+                extra=extra,
+            )
         )
+
+    def _remember(self, observation: Observation) -> Observation:
+        """Keep the latest view, so a stroke's middle targets need no second photograph."""
+        self._last_observation = observation
+        return observation
 
     def _state(self) -> np.ndarray:
         """``eef_pos``: the measured tip, plus the palette index in force on a colour task."""
@@ -997,7 +1081,7 @@ def opencastor_embodiment(**kwargs: Any) -> OpenCastorEmbodiment:
     return OpenCastorEmbodiment(**_coerce(kwargs))
 
 
-_BOOL_FLAGS = ("no_prompt", "strict_reach")
+_BOOL_FLAGS = ("no_prompt", "strict_reach", "strokes")
 _INT_FLAGS = ("llm_budget",)
 _FLOAT_FLAGS = (
     "timeout_s",
