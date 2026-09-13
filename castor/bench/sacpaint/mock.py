@@ -204,7 +204,10 @@ class PlotterEmbodiment:
             observation_space=observation_space(self.spec),
             control_hz=10.0,
             is_simulated=True,
-            capabilities=frozenset({SEEDABLE, RESETTABLE, RENDERABLE}),
+            capabilities=frozenset({SEEDABLE, RESETTABLE, RENDERABLE})
+            # How a policy learns the primitive is on offer, and at which pen
+            # heights a stroke must be planned. It lands in the eval log too.
+            | ({stroke_lib.capability(self.pen_down_z, PEN_UP_Z)} if self.strokes else frozenset()),
             supported_target_kinds=frozenset({"reference_drawing"}),
             docs=_docs(self.spec, self.strokes),
         )
