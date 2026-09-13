@@ -386,3 +386,64 @@ def test_sacpaint_record_carries_reference_and_ink_sha(tmp_path):
     details = _load_benchmark_record(str(p))["details"]
     assert details["reference_sha256"] == "a" * 64
     assert details["ink_sha256"] == "b" * 64
+
+
+# ---------------------------------------------------------------------------
+# legacy rows keep their own clock
+# ---------------------------------------------------------------------------
+
+
+def test_legacy_rows_read_back_without_being_re_dated(tmp_path):
+    """OC-13 verifier: old rows relabel, they do not get a shorter deadline.
+
+    `life_health` and `other` both read as `serious_harm` now, but the old code
+    always wrote `reporting_deadline_days` and `days_to_deadline` prefers the
+    figure the record carries. A three-month `other` row keeps its three
+    months; it is not silently re-dated to fifteen days.
+    """
+    path = tmp_path / "incidents.jsonl"
+    discovered = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    path.write_text(
+        "\n".join(
+            json.dumps(row)
+            for row in (
+                {
+                    "id": "legacy-other",
+                    "timestamp": discovered,
+                    "severity": "other",
+                    "category": "config",
+                    "description": "old row",
+                    "system_state": {},
+                    "reported": False,
+                    "reporting_deadline_days": 90,
+                },
+                {
+                    "id": "legacy-life-health",
+                    "timestamp": discovered,
+                    "severity": "life_health",
+                    "category": "estop",
+                    "description": "old row",
+                    "system_state": {},
+                    "reported": False,
+                    "reporting_deadline_days": 15,
+                },
+            )
+        )
+        + "\n"
+    )
+
+    by_id = {i["id"]: i for i in IncidentLog(path).list_incidents()}
+    assert len(by_id) == 2
+    # Both legacy names now read as the general serious-harm category.
+    assert by_id["legacy-other"]["severity"] == "serious_harm"
+    assert by_id["legacy-life-health"]["severity"] == "serious_harm"
+    # A legacy row with no discovered_at falls back to its timestamp and says so.
+    assert by_id["legacy-other"]["discovered_at"] == discovered
+    assert by_id["legacy-other"]["unknown_discovery"] is True
+    # The 90-day row keeps 90 days: 30 days in, it has about 60 left and is not
+    # overdue. Relabelling must not shorten a clock that was already running.
+    remaining = days_to_deadline(by_id["legacy-other"])
+    assert 59 < remaining < 61
+    assert is_overdue(by_id["legacy-other"]) is False
+    # The 15-day row is 30 days past its own deadline.
+    assert is_overdue(by_id["legacy-life-health"]) is True
