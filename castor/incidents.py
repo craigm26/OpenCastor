@@ -14,6 +14,13 @@ Two different clocks are involved and the module keeps them apart:
   article cited once, in the report's post_market_monitoring_note. That is a
   standing obligation to run a monitoring system, not a deadline.
 
+The active log is bounded. When it passes ``CASTOR_INCIDENT_LOG_MAX_BYTES``
+(default a few MB) it rolls to ``incidents.<date>.jsonl`` and the new file
+opens with a carry-over line whose ``prev_sha256`` is the rotated file's last
+line, so the hash chain crosses the boundary. Every reader here, and so both
+``castor incidents list`` and the submitter, reads rotated files before the
+active one.
+
 The day figures below are this project's own summary of the commonly cited
 windows. They are a crosswalk, not statutory text, and no statutory text is
 quoted anywhere in this module. Nothing here is "verified" by software: a
@@ -51,6 +58,39 @@ INCIDENT_LOG_ENV = "CASTOR_INCIDENT_LOG"
 DEFAULT_INCIDENT_LOG_PATH = Path(
     os.environ.get(INCIDENT_LOG_ENV) or (Path.home() / ".opencastor" / "incidents.jsonl")
 )
+
+#: Rotation bound, read from the same place the module already reads its log
+#: location: the environment. A robot that stops often files often, so the
+#: active file is capped and rolled to ``incidents.<date>.jsonl`` rather than
+#: growing without bound on a device with a small card. The default is a
+#: generated default in the sense that matters here: nothing has to be written
+#: anywhere for the bound to apply, and an operator who wants a different one
+#: sets CASTOR_INCIDENT_LOG_MAX_BYTES next to CASTOR_INCIDENT_LOG.
+INCIDENT_LOG_MAX_BYTES_ENV = "CASTOR_INCIDENT_LOG_MAX_BYTES"
+DEFAULT_INCIDENT_LOG_MAX_BYTES = 4 * 1024 * 1024
+
+#: The first line of every file written by a rotation. It carries the rotated
+#: file's last-line hash as its ``prev_sha256``, so the chain crosses the
+#: rotation and a reader can follow it from the oldest rotated file to the
+#: active one.
+ROTATION_RECORD_TYPE = "log_rotation"
+
+
+def _configured_max_bytes() -> int:
+    """Rotation bound in bytes. A bad value falls back to the default."""
+    raw = os.environ.get(INCIDENT_LOG_MAX_BYTES_ENV)
+    if raw is None:
+        return DEFAULT_INCIDENT_LOG_MAX_BYTES
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError):
+        logger.warning(
+            "%s=%r is not a byte count; using the default bound", INCIDENT_LOG_MAX_BYTES_ENV, raw
+        )
+        return DEFAULT_INCIDENT_LOG_MAX_BYTES
+    if value <= 0:
+        return DEFAULT_INCIDENT_LOG_MAX_BYTES
+    return value
 
 # OpenCastor crosswalk of the serious-incident reporting windows. Every clock
 # runs from discovery (``discovered_at``), never from the event timestamp.
@@ -147,30 +187,140 @@ class IncidentLog:
     those lines back onto the incident records.
     """
 
-    def __init__(self, path: Path | str | None = None) -> None:
+    def __init__(self, path: Path | str | None = None, max_bytes: int | None = None) -> None:
         self._path = Path(path) if path else DEFAULT_INCIDENT_LOG_PATH
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._max_bytes = int(max_bytes) if max_bytes else _configured_max_bytes()
+        # Cached tail of the chain, so an append does not re-read the whole
+        # file. ``_cached_size`` is the size the cache was taken at: when the
+        # file's size no longer matches, somebody else appended and the cache
+        # is thrown away rather than used to fork the chain.
+        self._cached_hash: str | None = None
+        self._cached_size: int | None = None
 
     # -- writing ---------------------------------------------------------
 
+    def _size(self) -> int | None:
+        try:
+            return self._path.stat().st_size
+        except OSError:
+            return None
+
+    def _read_last_line(self) -> str:
+        """The last non-empty raw line of the active file, reading from the tail."""
+        try:
+            size = self._path.stat().st_size
+        except OSError:
+            return ""
+        if size == 0:
+            return ""
+        window = 65536
+        with open(self._path, "rb") as f:
+            while True:
+                start = max(0, size - window)
+                f.seek(start)
+                chunk = f.read(size - start)
+                lines = [ln for ln in chunk.split(b"\n") if ln.strip()]
+                if lines and (start == 0 or len(lines) > 1):
+                    return lines[-1].decode("utf-8", "replace").strip()
+                if start == 0:
+                    return ""
+                window *= 4
+
     def _last_line_hash(self) -> str:
-        """sha256 of the last raw line, or the empty-chain marker."""
-        if not self._path.exists():
-            return ""
-        last = ""
-        with open(self._path) as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    last = line
-        if not last:
-            return ""
-        return hashlib.sha256(last.encode()).hexdigest()
+        """sha256 of the last raw line, or the empty-chain marker.
+
+        Cached in memory after the first read and kept current across appends.
+        The cache is only trusted while the file is exactly the size it was
+        when the cache was taken; a second writer changes the size, which sends
+        this back to the file's tail rather than chaining onto a stale hash.
+        """
+        size = self._size()
+        if self._cached_hash is not None and self._cached_size == size:
+            return self._cached_hash
+        last = self._read_last_line()
+        digest = hashlib.sha256(last.encode()).hexdigest() if last else ""
+        self._cached_hash = digest
+        self._cached_size = size
+        return digest
+
+    # -- rotation --------------------------------------------------------
+
+    def _rotated_path(self) -> Path:
+        """Name for the file the active log is about to become."""
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        stem = self._path.name[: -len(self._path.suffix)] if self._path.suffix else self._path.name
+        suffix = self._path.suffix or ".jsonl"
+        candidate = self._path.with_name(f"{stem}.{stamp}{suffix}")
+        n = 1
+        while candidate.exists():
+            candidate = self._path.with_name(f"{stem}.{stamp}_{n}{suffix}")
+            n += 1
+        return candidate
+
+    def rotated_paths(self) -> list[Path]:
+        """Every rotated file for this log, oldest first."""
+        stem = self._path.name[: -len(self._path.suffix)] if self._path.suffix else self._path.name
+        suffix = self._path.suffix or ".jsonl"
+        found = [
+            p
+            for p in self._path.parent.glob(f"{stem}.*{suffix}")
+            if p != self._path and p.is_file()
+        ]
+
+        def _key(p: Path) -> tuple[float, str]:
+            try:
+                return (p.stat().st_mtime, p.name)
+            except OSError:
+                return (0.0, p.name)
+
+        return sorted(found, key=_key)
+
+    def _rotate_if_needed(self) -> None:
+        """Roll the active file when it has passed the bound. Never raises."""
+        size = self._size()
+        if size is None or size < self._max_bytes:
+            return
+        carried = self._last_line_hash()
+        target = self._rotated_path()
+        try:
+            os.replace(self._path, target)
+        except OSError as exc:  # a rotation failure must not lose the record
+            logger.error("Could not rotate the incident log: %s", exc)
+            return
+        self._cached_hash = None
+        self._cached_size = None
+        # The new file opens with a carry-over line whose prev_sha256 is the
+        # rotated file's last line, so the chain crosses the rotation.
+        carry = {
+            "id": str(uuid.uuid4()),
+            "record_type": ROTATION_RECORD_TYPE,
+            "schema": INCIDENT_SCHEMA_VERSION,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "rotated_to": target.name,
+            "rotated_bytes": size,
+            "note": (
+                "The incident log passed its size bound and was rotated. "
+                "prev_sha256 is the last line of the rotated file, so the hash "
+                "chain continues across this boundary."
+            ),
+        }
+        carry["prev_sha256"] = carried
+        carry_line = json.dumps(carry, default=str)
+        with open(self._path, "a") as f:
+            f.write(carry_line + "\n")
+        self._cached_hash = hashlib.sha256(carry_line.encode()).hexdigest()
+        self._cached_size = self._size()
+        logger.info("Incident log rotated to %s (%d bytes)", target.name, size)
 
     def _append(self, entry: dict[str, Any]) -> None:
+        self._rotate_if_needed()
         entry["prev_sha256"] = self._last_line_hash()
+        line = json.dumps(entry, default=str)
         with open(self._path, "a") as f:
-            f.write(json.dumps(entry, default=str) + "\n")
+            f.write(line + "\n")
+        self._cached_hash = hashlib.sha256(line.encode()).hexdigest()
+        self._cached_size = self._size()
 
     def record(
         self,
@@ -259,19 +409,34 @@ class IncidentLog:
 
     # -- reading ---------------------------------------------------------
 
-    def list_raw(self) -> list[dict[str, Any]]:
-        """Return every line in the log, incidents and submissions alike."""
-        if not self._path.exists():
-            return []
+    @staticmethod
+    def _read_rows(path: Path) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
-        with open(self._path) as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    try:
-                        rows.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        pass
+        try:
+            with open(path) as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            rows.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            pass
+        except OSError:
+            return []
+        return rows
+
+    def list_raw(self) -> list[dict[str, Any]]:
+        """Every line of the log, oldest first, ACROSS rotations.
+
+        Rotated files are read before the active one, so `castor incidents
+        list` and the submitter both see an incident that was filed before the
+        log rolled.
+        """
+        rows: list[dict[str, Any]] = []
+        for rotated in self.rotated_paths():
+            rows.extend(self._read_rows(rotated))
+        if self._path.exists():
+            rows.extend(self._read_rows(self._path))
         return rows
 
     def list_incidents(self) -> list[dict[str, Any]]:
@@ -282,6 +447,9 @@ class IncidentLog:
         for row in rows:
             if row.get("record_type") == "report_submission":
                 submissions.append(row)
+            elif row.get("record_type") == ROTATION_RECORD_TYPE:
+                # Chain bookkeeping, not an incident.
+                continue
             else:
                 # Legacy lines have no record_type; they are incidents.
                 inc = dict(row)
