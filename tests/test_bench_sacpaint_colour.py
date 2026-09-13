@@ -347,3 +347,33 @@ def test_the_oracle_reads_its_colour_off_the_colour_reference(refs: Path) -> Non
     assert stroke_color(refmod.get_spec("oracle"), [(0.0, 0.0), (1.0, 1.0)]) in range(
         len(pal.NAMES)
     )
+
+
+def test_the_agent_tool_surface_gains_colour_and_nothing_else(refs: Path) -> None:
+    """The framework builds the move tool from the action space; colour must fit through it."""
+    tools = pytest.importorskip("inspect_robots_agent._tools")
+    _new(refs, "toolcolour", color=True)
+    _new(refs, "toolmono", color=False)
+
+    def surface(name: str) -> tuple[list[str], dict]:
+        emb = PlotterEmbodiment(reference=name)
+        built = tools.build_toolset(
+            emb.info.action_space,
+            emb.info.observation_space,
+            emb.info.control_hz,
+            1.0,
+            images="on_demand",
+        )
+        schemas = built.schemas()
+        return [s["function"]["name"] for s in schemas], built
+
+    colour_names, colour_built = surface("toolcolour")
+    mono_names, mono_built = surface("toolmono")
+    assert colour_names == mono_names  # same tools, no new ones
+    assert colour_built.state_labels() == ("eef_pos", ("x", "y", "z", "color"))
+    assert mono_built.state_labels() == ("eef_pos", ("x", "y", "z"))
+    described = {
+        s["function"]["name"]: s["function"]["parameters"] for s in colour_built.schemas()
+    }
+    move = next(k for k in described if k.startswith("move"))
+    assert "color" in described[move]["properties"]["targets"]["description"]

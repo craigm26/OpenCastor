@@ -56,6 +56,8 @@ PEN_DOWN_Z = 0.002
 PEN_UP_Z = 0.005
 Z_MAX = 0.05
 _LABELS = ("x", "y", "z")
+#: Unit string for a colour task's state field: three metres and one palette index.
+STATE_UNIT_COLOR = "m for x, y, z; palette index for color"
 
 
 def color_docs(spec: ReferenceSpec) -> str:
@@ -133,7 +135,10 @@ def observation_space(spec: ReferenceSpec) -> ObservationSpace:
 
     A colour reference declares one more camera, ``reference_color``: the same
     picture reduced to the palette, offered exactly the way the line reference
-    is offered (a stream the policy can ask for on demand).
+    is offered (a stream the policy can ask for on demand). Its ``eef_pos``
+    carries a fourth number too, the palette index in force, because an
+    absolute-target policy locates itself against a state field the same width
+    as its action.
     """
     w, h = spec.canonical_size()
     rw, rh = spec.reference_size()
@@ -142,7 +147,9 @@ def observation_space(spec: ReferenceSpec) -> ObservationSpace:
         cameras.append(CameraSpec(REFERENCE_COLOR_CAM, h, w, 3))
     return ObservationSpace(
         cameras=tuple(cameras),
-        state=StateSpec((StateField("eef_pos", (3,), "m"),)),
+        state=StateSpec((StateField("eef_pos", (4,), STATE_UNIT_COLOR),))
+        if spec.has_color
+        else StateSpec((StateField("eef_pos", (3,), "m"),)),
     )
 
 
@@ -262,7 +269,7 @@ class PlotterEmbodiment:
             extra["color"] = pal.name_of(self.color)
         return Observation(
             images=images,
-            state={"eef_pos": self._eef[:3].copy()},
+            state={"eef_pos": self._eef.copy()},
             instruction=self._instruction,
             extra=extra,
         )
@@ -343,8 +350,8 @@ def stroke_actions(
 
 
 def _stop(observation: Observation, dim: int = 3) -> ActionChunk:
-    hold = np.asarray(observation.state["eef_pos"], dtype=np.float64).reshape(-1)[:3]
-    if dim == 4:  # holding position in black: stopping paints nothing either way
+    hold = np.asarray(observation.state["eef_pos"], dtype=np.float64).reshape(-1)[:dim]
+    if hold.size < dim:  # a body that reports only x, y, z on a colour task
         hold = np.append(hold, float(pal.DEFAULT_INDEX))
     return ActionChunk(
         actions=[Action(data=hold, meta={"request_stop": True, "stop_reason": "done"})]

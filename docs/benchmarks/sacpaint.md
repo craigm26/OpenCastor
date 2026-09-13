@@ -179,9 +179,20 @@ would have been without `--color`.
 **The task.** A colour reference's action space has a fourth dimension,
 `color`, and its observation space a third camera, `reference_color` (the
 picture reduced to the palette, offered on demand exactly the way the line
-reference is). A mono reference has neither: three dimensions, two cameras, the
-same prompt as always. A three-number action sent to a colour task still means
-black, so a policy that knows nothing about colour runs unchanged.
+reference is). Its `eef_pos` carries a fourth number too, the palette index in
+force, because an absolute-target policy locates itself against a state field
+the same width as its action. The agent's tool surface is otherwise identical:
+the same `move_to`, with `color` as one more dimension name. A mono reference
+has none of it: three dimensions, two cameras, the same prompt as always. A
+three-number action sent to a colour task still means black, so a policy that
+knows nothing about colour runs unchanged.
+
+```bash
+# the oracle on the colour task, in the mock world: composite 0.945, color_fidelity 0.929
+castor bench sacpaint run --task sacpaint/starry-night --policy sacpaint_trace \
+    --embodiment sacpaint_plotter --no-rerun --no-prompt \
+    -- --epochs 1 -E reference=starry-night -P reference=starry-night
+```
 
 **Scoring: two numbers, never one.** `composite` stays exactly what it was, and
 it is still line fidelity: landmarks, structure, discipline, efficiency.

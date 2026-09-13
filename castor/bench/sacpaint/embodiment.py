@@ -117,6 +117,8 @@ PEN_DOWN_Z = 0.002
 PEN_UP_Z = 0.005
 Z_MAX = 0.05
 _LABELS = ("x", "y", "z")
+#: Unit string for a colour task's state field: three metres and one palette index.
+STATE_UNIT_COLOR = "m for x, y, z; palette index for color"
 
 #: Defaults chosen from the rig as it stands: Bob's gateway on 8080, his console
 #: on 8002. Both are overridable, and ``pair_payload`` fills them in one flag.
@@ -253,6 +255,9 @@ def observation_space(
 
     The overhead spec is the *camera's* size; ``reference_color`` is the colour
     target on the canonical canvas, offered the same way the line reference is.
+    A colour task's ``eef_pos`` carries a fourth number, the palette index in
+    force, because an absolute-target policy locates itself against a state
+    field the same width as its action.
     """
     ref_w, ref_h = canonical_wh
     over_w, over_h = overhead_wh
@@ -264,7 +269,9 @@ def observation_space(
         cameras.append(CameraSpec(REFERENCE_COLOR_CAM, color_wh[1], color_wh[0], 3))
     return ObservationSpace(
         cameras=tuple(cameras),
-        state=StateSpec((StateField("eef_pos", (3,), "m"),)),
+        state=StateSpec((StateField("eef_pos", (4,), STATE_UNIT_COLOR),))
+        if color_wh is not None
+        else StateSpec((StateField("eef_pos", (3,), "m"),)),
     )
 
 
@@ -870,7 +877,7 @@ class OpenCastorEmbodiment:
                 )  # a real camera, if one is watching, for the record
             return Observation(
                 images=images,
-                state={"eef_pos": self._eef.copy()},
+                state={"eef_pos": self._state()},
                 instruction=self._instruction,
                 extra=extra,
             )
@@ -887,10 +894,16 @@ class OpenCastorEmbodiment:
         # CANONICAL_FLAG is deliberately absent: this is a photograph of a sheet.
         return Observation(
             images=images,
-            state={"eef_pos": self._eef.copy()},
+            state={"eef_pos": self._state()},
             instruction=self._instruction,
             extra=extra,
         )
+
+    def _state(self) -> np.ndarray:
+        """``eef_pos``: the measured tip, plus the palette index in force on a colour task."""
+        if not self.colored:
+            return self._eef.copy()
+        return np.append(self._eef.copy(), float(self.color))
 
     def _canvas_corners(self) -> tuple[tuple[float, float], ...] | None:
         """The tapped corners, fetched once per trial and then reused."""
