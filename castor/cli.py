@@ -2922,12 +2922,10 @@ def cmd_iso_check(args) -> None:
     iso_cfg = cfg.get("iso_conformance", {})
     # The authority handler is only real when an allowlist is configured; the
     # runtime refuses every requester without one, so the flag alone no longer
-    # counts here (OC-13).
-    from castor.authority import trusted_authority_ids_from_config as _trusted_ids_from_cfg
+    # counts here (OC-13). Same reader as the fleet document and /discover.
+    from castor.authority import authority_handler_enabled as _authority_handler_enabled
 
-    authority_handler = bool(cfg.get("authority_handler_enabled", False)) and bool(
-        _trusted_ids_from_cfg(cfg)
-    )
+    authority_handler = _authority_handler_enabled(cfg)
     audit_days = cfg.get("audit_retention_days", 0)
     rcan_version = cfg.get("rcan_version", "?")
     pq_required = cfg.get("pq_signing_required", False)
