@@ -332,6 +332,29 @@ class TestOrderingProperty:
         assert client_kwargs, calls
         assert client_kwargs[0].get("timeout") == ESTOP_ACK_DEADLINE_S
 
+    def test_estop_that_times_out_is_not_confirmed(self) -> None:
+        """A stop that ran past the deadline is stop_not_confirmed, never an ack.
+
+        The deadline is the transport timeout, so blowing it surfaces as an
+        httpx timeout out of the dispatch. Pinned separately from the
+        connection-refused case because the timeout is the one the deadline
+        constant governs, and it is the outcome most likely to be quietly
+        reinterpreted as success later.
+        """
+        import httpx
+
+        bridge = _make_bridge()
+        cmd_ref, _ = _run_command(
+            bridge, _estop_doc(), raises=httpx.ReadTimeout("the robot did not answer in time")
+        )
+        acks = _ack_values(cmd_ref)
+
+        assert "acknowledged" not in acks, f"a timed-out stop was acknowledged: {acks}"
+        assert acks[0] == "queued", acks
+        assert acks[-1] == "stop_not_confirmed", acks
+        not_confirmed = [u for u in _updates(cmd_ref) if u.get("ack_qos") == "stop_not_confirmed"]
+        assert not_confirmed[0]["ack_qos_error"] == "ReadTimeout"
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. The fleet path — a cloud-relayed stop gets exactly the same treatment

@@ -107,7 +107,7 @@ against a runtime that serves `POST /api/runtime/resume`.
 The bridge now writes `ack_qos: "queued"` before dispatch, and the
 acknowledgement comes only from the dispatch result: `"acknowledged"` with the
 robot's own stop body under `stop_receipt` on a 2xx, `"stop_not_confirmed"` with
-the HTTP status or the exception class under `ack_qos_error` on anything else —
+the HTTP status or the exception class under `ack_qos_error` on anything else,
 including a stop that was refused before it ever left the bridge, and a stop
 that missed the deadline. `ESTOP_ACK_DEADLINE_S` is now the transport timeout on
 the stop itself plus a latency warning on the queued write; it certifies
