@@ -843,6 +843,11 @@ def _live_gateway(monkeypatch, tmp_path):
 
     monkeypatch.setattr(api_mod, "on_startup", _no_startup)
     monkeypatch.setattr(api_mod, "on_shutdown", _no_shutdown)
+    # Several older test modules swap the app's lifespan for a no-op and never
+    # put it back, so in a whole-suite run the real lifespan (which is exactly
+    # what this fixture exists to exercise) can already be gone. Pin it here,
+    # for this fixture's scope only.
+    monkeypatch.setattr(api_mod.app.router, "lifespan_context", api_mod.lifespan)
 
     with TestClient(api_mod.app, raise_server_exceptions=False) as client:
         yield client, api_mod, fs

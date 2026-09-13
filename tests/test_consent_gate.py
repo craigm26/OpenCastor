@@ -141,7 +141,9 @@ def _make_client_and_reset(monkeypatch):
     async def _noop_lifespan(app):
         yield
 
-    app.router.lifespan_context = _noop_lifespan
+    # Scoped to the test: a permanent swap left every later test that needs
+    # the real lifespan (the safety-latch reconcile task) running without it.
+    monkeypatch.setattr(app.router, "lifespan_context", _noop_lifespan)
     return TestClient(
         app,
         raise_server_exceptions=False,
