@@ -299,6 +299,7 @@ def stroke_color(spec: ReferenceSpec, stroke: list[tuple[float, float]]) -> int:
     indices = pal.quantize(spec.color_reference_image(canonical=False))
     h, w = indices.shape
     mm_w, mm_h = spec.canvas_mm
+    pad = 3  # a stroke belongs to the area it outlines, not to the pixel under it
     seen: list[int] = []
     for i, (x, y) in enumerate(stroke):
         points = [(x, y)]
@@ -308,7 +309,10 @@ def stroke_color(spec: ReferenceSpec, stroke: list[tuple[float, float]]) -> int:
         for sx, sy in points:
             col = min(max(int(sx / mm_w * w), 0), w - 1)
             row = min(max(int((1.0 - sy / mm_h) * h), 0), h - 1)
-            seen.append(int(indices[row, col]))
+            window = indices[
+                max(row - pad, 0) : row + pad + 1, max(col - pad, 0) : col + pad + 1
+            ]
+            seen.extend(window.reshape(-1).tolist())
     if not seen:
         return pal.DEFAULT_INDEX
     return int(np.bincount(seen, minlength=len(pal.NAMES)).argmax())

@@ -164,7 +164,10 @@ def color_reference(
     w_mm, h_mm = canvas_mm
     w_px, h_px = max(1, round(w_mm * px_per_mm)), max(1, round(h_mm * px_per_mm))
     small = cv2.resize(photo_rgb, (w_px, h_px), interpolation=cv2.INTER_AREA)
-    indices = quantize(small)
+    # A 3x3 median first: the colour target is a statement about regions of the
+    # picture, and without it a JPEG's fringe along a hard edge quantises to a
+    # colour that is in neither region.
+    indices = quantize(cv2.medianBlur(small, 3))
     cols, rows = grid
     regions: list[dict[str, Any]] = []
     total = float(indices.size)
