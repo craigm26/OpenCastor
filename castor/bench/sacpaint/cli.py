@@ -92,6 +92,12 @@ def cmd_score(args: argparse.Namespace) -> int:
     print(f"composite   {result['composite_photo']:.3f}   (image-only: no efficiency term)")
     for k, v in result["parts"].items():
         print(f"  {k:18s} {v:.3f}")
+    if "color_fidelity" in result:
+        cf = result["color_fidelity"]
+        print(
+            f"colour      {cf['value']:.3f}   (accuracy {cf.get('accuracy', 0):.3f}, "
+            f"coverage {cf.get('coverage', 0):.3f}; scored apart from the composite)"
+        )
     print("landmarks")
     for name, lm in result["landmark_geometry"]["landmarks"].items():
         print(f"  {name:14s} presence {lm['presence']:.2f}  position {lm['position']:.2f}")
@@ -120,6 +126,10 @@ def cmd_new(args: argparse.Namespace) -> int:
         None,
         "",
     )  # the base's photograph is its own; pass --photo for yours
+    # The base's colour target belongs to the base's photograph too.
+    spec.color, spec.color_palette, spec.color_regions = None, None, []
+    if getattr(args, "color", False) and not args.photo:
+        raise SystemExit("--color needs --photo: the colour target is quantised from the photograph")
     if args.photo:
         src = Path(args.photo).expanduser()
         if not src.is_file():
@@ -151,6 +161,14 @@ def cmd_new(args: argparse.Namespace) -> int:
     spec.description = (
         args.description or f"Copy of {base.name}; edit the strokes to make it yours."
     )
+    if getattr(args, "color", False):
+        # The skeleton above is untouched: a colour task keeps the same line rubric
+        # and the same composite, and gains a colour target beside it.
+        from castor.bench.sacpaint.reference import build_color_reference
+
+        image, filename = build_color_reference(spec, _load_rgb(str(spec.photo_path())))
+        _save_rgb(dest.parent / filename, image)
+        spec.color = filename
     spec.save(dest)
     refmod.refresh()
     _save_rgb(dest.with_suffix("").with_suffix(".png"), spec.render())
@@ -159,6 +177,15 @@ def cmd_new(args: argparse.Namespace) -> int:
     if spec.photo:
         print(f"photo   {spec.photo_path()} (what the model sees; sha256 {spec.sha256()[:12]}...)")
         print("trace the photo's landmarks as strokes: that skeleton is what the scorers read.")
+    if spec.color:
+        from castor.bench.sacpaint import palette as pal
+
+        print(
+            f"colour  {spec.color_path()} ({pal.PALETTE_VERSION}, {len(spec.color_regions)} "
+            f"regions; sha256 {spec.color_sha256()[:12]}...)"
+        )
+        print(f"palette {pal.describe()}")
+        print("colour is scored separately from the line composite, never folded into it.")
     print("edit the strokes (mm, origin bottom-left, y up) and landmarks, then:")
     print(f"  sacpaint preview {name}")
     print(
@@ -178,6 +205,11 @@ def cmd_preview(args: argparse.Namespace) -> int:
     )
     if spec.photo:
         print(f"photo {spec.photo_path()}  (the model sees this; the PNG below is the scoring ink)")
+    if spec.color:
+        print(
+            f"colour {spec.color_path()}  ({spec.color_palette}, "
+            f"{len(spec.color_regions)} regions, sha256 {spec.color_sha256()[:12]}...)"
+        )
     print(f"wrote {out}")
     return 0
 
@@ -188,7 +220,8 @@ def cmd_list(args: argparse.Namespace) -> int:
     for name in refmod.available():
         spec = get_spec(name)
         print(
-            f"{task_name_for(name):26s} {spec.kind:5s} {spec.canvas_mm[0]:.0f}x{spec.canvas_mm[1]:.0f} mm  {spec.description}"
+            f"{task_name_for(name):26s} {spec.kind:5s} {'colour' if spec.has_color else 'mono':6s} "
+            f"{spec.canvas_mm[0]:.0f}x{spec.canvas_mm[1]:.0f} mm  {spec.description}"
         )
     return 0
 
@@ -628,6 +661,17 @@ def main(argv: list[str] | None = None) -> int:
         "--auto-trace",
         action="store_true",
         help="with --photo: trace the photo's edges into the scoring skeleton instead of copying the base's strokes",
+    )
+    n.add_argument(
+        "--color",
+        "--colour",
+        dest="color",
+        action="store_true",
+        help=(
+            "with --photo: also store a colour target (the photo quantised to the pen palette, "
+            "plus region colours). The skeleton and the composite are unchanged; colour is "
+            "scored separately"
+        ),
     )
     n.add_argument("--force", action="store_true")
     n.set_defaults(fn=cmd_new)

@@ -105,6 +105,12 @@ class ReferenceSpec:
     #: File name of the photograph the model sees, relative to ``base_dir``; None = the strokes.
     photo: str | None = None
     photo_credit: str = ""
+    #: File name of the downscaled, palette-quantised colour reference; None = a mono task.
+    color: str | None = None
+    #: Identity of the palette ``color`` was quantised to.
+    color_palette: str | None = None
+    #: Coarse grid of colour targets over the colour reference (see ``palette.color_reference``).
+    color_regions: list[dict[str, Any]] = field(default_factory=list)
     #: Where ``photo`` resolves from (the spec file's directory). Not serialised.
     base_dir: str | None = field(default=None, repr=False, compare=False)
 
@@ -114,6 +120,51 @@ class ReferenceSpec:
     def kind(self) -> str:
         """``"photo"`` when the model sees a photograph, ``"line"`` when it sees the strokes."""
         return "photo" if self.photo else "line"
+
+    @property
+    def has_color(self) -> bool:
+        """True when this reference carries a colour target beside its stroke skeleton."""
+        return bool(self.color)
+
+    def color_path(self) -> Path | None:
+        """Resolved path of the stored colour reference, or None for a mono reference."""
+        if not self.color:
+            return None
+        path = Path(self.color).expanduser()
+        if not path.is_absolute():
+            path = Path(self.base_dir or user_reference_dir()) / path
+        return path
+
+    def color_bytes(self) -> bytes:
+        """The colour reference PNG's bytes, exactly as stored."""
+        path = self.color_path()
+        if path is None:
+            raise ValueError(f"reference {self.name!r} has no colour reference")
+        return path.read_bytes()
+
+    def color_reference_image(self, *, canonical: bool = True) -> np.ndarray:
+        """The colour target as RGB uint8, at the canonical canvas size by default.
+
+        Upscaling is nearest-neighbour so the stored image's palette colours
+        survive exactly; an interpolated edge would invent colours the palette
+        does not contain.
+        """
+        arr = cv2.imdecode(np.frombuffer(self.color_bytes(), dtype=np.uint8), cv2.IMREAD_COLOR)
+        if arr is None:
+            raise ValueError(f"cannot decode colour reference {self.color_path()}")
+        rgb = cv2.cvtColor(arr, cv2.COLOR_BGR2RGB)
+        if not canonical:
+            return rgb
+        w, h = self.canonical_size()
+        if rgb.shape[:2] != (h, w):
+            rgb = cv2.resize(rgb, (w, h), interpolation=cv2.INTER_NEAREST)
+        return rgb
+
+    def color_sha256(self) -> str:
+        """SHA-256 of the stored colour reference PNG, or "" when there is none."""
+        if not self.color:
+            return ""
+        return hashlib.sha256(self.color_bytes()).hexdigest()
 
     def photo_path(self) -> Path | None:
         """Resolved path of the photograph, or None for a line reference."""
@@ -676,6 +727,40 @@ def reference_image(name: str = DEFAULT_REFERENCE) -> np.ndarray:
 def reference_kind(name: str = DEFAULT_REFERENCE) -> str:
     """``"photo"`` or ``"line"``: what kind of image the model is shown."""
     return get_spec(name).kind
+
+
+def has_color(name: str = DEFAULT_REFERENCE) -> bool:
+    """True when this reference is a colour task (a colour target beside the skeleton)."""
+    return get_spec(name).has_color
+
+
+def color_reference(name: str = DEFAULT_REFERENCE) -> np.ndarray:
+    """The colour target on the canonical canvas: what the ``reference_color`` camera shows."""
+    spec = get_spec(name)
+    key = f"color:{spec.name}"
+    if key not in _image_cache:
+        _image_cache[key] = spec.color_reference_image()
+    return _image_cache[key].copy()
+
+
+def color_sha256(name: str = DEFAULT_REFERENCE) -> str:
+    """SHA-256 of the stored colour reference PNG, or "" for a mono reference."""
+    return get_spec(name).color_sha256()
+
+
+def build_color_reference(spec: ReferenceSpec, photo_rgb: np.ndarray) -> tuple[np.ndarray, str]:
+    """Quantise a photograph to the palette for ``spec``'s canvas and record its regions on the spec.
+
+    Returns the downscaled colour reference (RGB uint8) and the file name it
+    should be saved under. Nothing is written here: ``sacpaint new`` owns the
+    directory.
+    """
+    from castor.bench.sacpaint import palette as pal
+
+    image, regions = pal.color_reference(photo_rgb, tuple(spec.canvas_mm))
+    spec.color_regions = regions
+    spec.color_palette = pal.PALETTE_VERSION
+    return image, f"{spec.name}{pal.COLOR_SUFFIX}"
 
 
 def reference_sha256(name: str = DEFAULT_REFERENCE) -> str:

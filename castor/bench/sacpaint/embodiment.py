@@ -32,6 +32,15 @@ where the arm *measured* its tip after each pen-down move. That frame is a
 canonical canvas (nothing to rectify), and every score it produces is labelled
 ``medium=virtual``: its own leaderboard category, never ranked against paper. Pair it with
 ``-E calibration=easel``, an upright sheet the arm can reach.
+
+**Colour.** When the reference carries a colour target, the action gains a
+fourth number, the palette index the virtual ink is drawn in, and a third
+camera, ``reference_color``, serves the picture reduced to that palette. The arm
+is not involved: it holds no pen, it changes no colour, and every gateway call
+carries the same three millimetre coordinates it carried before. The colour is
+recorded in the observation, in the progress file the console reads, and beside
+each retained receipt under ``sacpaint_ink``; it is never added to the signed
+envelope, because nothing the gateway attested to has a colour in it.
 """
 
 from __future__ import annotations
@@ -63,6 +72,7 @@ from inspect_robots.spaces import (
 from inspect_robots.types import Action, Observation, StepResult
 
 from castor.bench.sacpaint import calibration as calib
+from castor.bench.sacpaint import palette as pal
 from castor.bench.sacpaint.cameras import (
     FrameSource,
     HttpCornerSource,
@@ -85,12 +95,17 @@ logger = logging.getLogger(__name__)
 
 OVERHEAD = "overhead"
 REFERENCE_CAM = "reference"
+#: Served only on a colour task: the picture reduced to the pen palette.
+REFERENCE_COLOR_CAM = "reference_color"
 #: The scorer's preferred rectification input: four normalised TL TR BR BL corners.
 CORNERS_KEY = "canvas_corners"
 #: Set only by the virtual medium. A photograph is not a canonical canvas; telemetry ink is.
 CANONICAL_FLAG = "canonical_canvas"
 #: ``observation.extra["medium"]``: ``pen`` (paper, the real thing) or ``virtual`` (telemetry ink).
 MEDIUM_KEY = "medium"
+#: ``observation.extra`` keys a colour task adds: the palette, and the colour last commanded.
+PALETTE_KEY = "palette"
+COLOR_KEY = "color"
 MEDIUM_PEN = "pen"
 MEDIUM_VIRTUAL = "virtual"
 MEDIA = (MEDIUM_PEN, MEDIUM_VIRTUAL)
@@ -165,6 +180,23 @@ def _reference_size(name: str) -> tuple[int, int]:
     return _canonical_size(name)
 
 
+def _has_color(name: str) -> bool:
+    """True when the named reference carries a colour target beside its skeleton."""
+    from castor.bench.sacpaint import reference as ref
+
+    get_spec = getattr(ref, "get_spec", None)
+    if not callable(get_spec):  # pragma: no cover - a sacpaint build older than colour
+        return False
+    return bool(getattr(get_spec(name), "has_color", False))
+
+
+def _color_reference_image(name: str) -> np.ndarray:
+    """The colour target on the canonical canvas, for the ``reference_color`` stream."""
+    from castor.bench.sacpaint import reference as ref
+
+    return ref.color_reference(name)
+
+
 def _canonical_size(name: str) -> tuple[int, int]:
     """The canonical canvas image size (width, height) in pixels."""
     from castor.bench.sacpaint import reference as ref
@@ -175,33 +207,63 @@ def _canonical_size(name: str) -> tuple[int, int]:
     return tuple(int(v) for v in ref.canonical_size())  # type: ignore[return-value]
 
 
-def action_space(canvas_mm: tuple[float, float]) -> Box:
-    """The canvas-frame Cartesian action box — the same contract the mock declares."""
+def action_space(canvas_mm: tuple[float, float], colored: bool = False) -> Box:
+    """The canvas-frame Cartesian action box — the same contract the mock declares.
+
+    A colour task adds a fourth dimension, ``color``, the palette index the ink
+    is drawn in. The arm does not see it: the gateway call is the same three
+    millimetre coordinates it always was, and nothing about the motion changes.
+    A mono task's box is exactly the three dimensions it has always been.
+    """
     width, height = canvas_mm
+    if not colored:
+        return Box(
+            shape=(3,),
+            low=np.array([0.0, 0.0, 0.0]),
+            high=np.array([width / 1000.0, height / 1000.0, Z_MAX]),
+            semantics=ActionSemantics(
+                control_mode="eef_abs_pose",
+                frame="base",
+                dim_labels=_LABELS,
+                max_step=(0.02, 0.02, Z_MAX),
+            ),
+        )
+    top = float(len(pal.NAMES) - 1)
     return Box(
-        shape=(3,),
-        low=np.array([0.0, 0.0, 0.0]),
-        high=np.array([width / 1000.0, height / 1000.0, Z_MAX]),
+        shape=(4,),
+        low=np.array([0.0, 0.0, 0.0, 0.0]),
+        high=np.array([width / 1000.0, height / 1000.0, Z_MAX, top]),
         semantics=ActionSemantics(
             control_mode="eef_abs_pose",
             frame="base",
-            dim_labels=_LABELS,
-            max_step=(0.02, 0.02, Z_MAX),
+            dim_labels=(*_LABELS, pal.COLOR_DIM_LABEL),
+            # The whole palette in one step: a delta limit on a colour index
+            # would make most of the palette unreachable.
+            max_step=(0.02, 0.02, Z_MAX, top),
         ),
     )
 
 
 def observation_space(
-    canonical_wh: tuple[int, int], overhead_wh: tuple[int, int]
+    canonical_wh: tuple[int, int],
+    overhead_wh: tuple[int, int],
+    color_wh: tuple[int, int] | None = None,
 ) -> ObservationSpace:
-    """Two cameras plus the pen position. The overhead spec is the *camera's* size."""
+    """Two cameras plus the pen position, and a third on a colour task.
+
+    The overhead spec is the *camera's* size; ``reference_color`` is the colour
+    target on the canonical canvas, offered the same way the line reference is.
+    """
     ref_w, ref_h = canonical_wh
     over_w, over_h = overhead_wh
+    cameras = [
+        CameraSpec(OVERHEAD, over_h, over_w, 3),
+        CameraSpec(REFERENCE_CAM, ref_h, ref_w, 3),
+    ]
+    if color_wh is not None:
+        cameras.append(CameraSpec(REFERENCE_COLOR_CAM, color_wh[1], color_wh[0], 3))
     return ObservationSpace(
-        cameras=(
-            CameraSpec(OVERHEAD, over_h, over_w, 3),
-            CameraSpec(REFERENCE_CAM, ref_h, ref_w, 3),
-        ),
+        cameras=tuple(cameras),
         state=StateSpec((StateField("eef_pos", (3,), "m"),)),
     )
 
@@ -236,8 +298,32 @@ def _virtual_docs(canvas_mm: tuple[float, float]) -> str:
     )
 
 
+def _color_docs() -> str:
+    """The palette paragraph a colour task appends. The arm is not mentioned, on purpose.
+
+    Nothing about the motion changes with the colour: the arm holds no pen, no
+    cartridge is swapped, and the gateway call carries the same three
+    coordinates it always carried. The colour is a property of the virtual ink
+    and of nothing else.
+    """
+    return (
+        " This is a colour task. Every target carries a fourth number, 'color', the palette index "
+        "the stroke is inked in: " + pal.describe() + ". It is rounded to the nearest index and "
+        "defaults to 0 (black). It changes nothing about how the arm moves - the arm holds no pen "
+        "and swaps no colour - it only says what colour the ink is drawn in. Choose a colour per "
+        f"stroke. The '{REFERENCE_COLOR_CAM}' camera shows the picture reduced to exactly these "
+        "colours, framed like the sheet, so you can read off which colour belongs where; the "
+        "'reference' camera still shows the original picture. Line accuracy and colour are scored "
+        "separately, so drawing the right shapes in the wrong colours still scores the shapes."
+    )
+
+
 class VirtualInk:
-    """A canonical canvas inked from measured tip positions: the ``virtual`` medium's sheet."""
+    """A canonical canvas inked from measured tip positions: the ``virtual`` medium's sheet.
+
+    The colour a segment is drawn in comes from the policy's action; it is a
+    property of this canvas and of nothing on the robot.
+    """
 
     def __init__(
         self, canonical_wh: tuple[int, int], canvas_mm: tuple[float, float], stroke_px: int = 3
@@ -260,9 +346,12 @@ class VirtualInk:
         row = round(self._h - float(canvas_m[1]) * self._px_per_m)
         return min(max(col, 0), self._w - 1), min(max(row, 0), self._h - 1)
 
-    def segment(self, a_m: np.ndarray, b_m: np.ndarray) -> None:
+    def segment(
+        self, a_m: np.ndarray, b_m: np.ndarray, color: str | int | float | None = None
+    ) -> None:
         """Ink the straight segment between two measured tip positions (canvas metres)."""
-        cv2.line(self._canvas, self._px(a_m), self._px(b_m), (0, 0, 0), self._stroke_px)
+        # The canvas is stored RGB, so the palette's RGB triple is the right order here.
+        cv2.line(self._canvas, self._px(a_m), self._px(b_m), pal.rgb_of(color), self._stroke_px)
         self.segments += 1
 
     def image(self) -> np.ndarray:
@@ -337,6 +426,7 @@ class OpenCastorEmbodiment:
         self.canvas_mm = _canvas_mm(self.reference_name)
         self._canonical_wh = _canonical_size(self.reference_name)
         self._reference_wh = _reference_size(self.reference_name)
+        self.colored = _has_color(self.reference_name)
 
         if medium not in MEDIA:
             raise ConfigError(f"-E medium must be one of {MEDIA}, got {medium!r}")
@@ -403,6 +493,13 @@ class OpenCastorEmbodiment:
         self.reference_camera = reference_source or StaticFrameSource(
             _reference_image(self.reference_name), name=REFERENCE_CAM
         )
+        self.color_reference_camera: FrameSource | None = (
+            StaticFrameSource(
+                _color_reference_image(self.reference_name), name=REFERENCE_COLOR_CAM
+            )
+            if self.colored
+            else None
+        )
         self._corner_source = self._resolve_corners(
             corner_source, canvas_corners, corners_url, cam_token, camera_timeout_s
         )
@@ -428,16 +525,24 @@ class OpenCastorEmbodiment:
         self._instruction: str | None = None
         self._eef = np.array([0.0, 0.0, self.travel_z])
         self._commanded = np.array([0.0, 0.0, self.travel_z])
+        self.color = pal.DEFAULT_INDEX
 
+        docs = _docs(self.canvas_mm) if self._ink is None else _virtual_docs(self.canvas_mm)
+        if self.colored:
+            docs += _color_docs()
         self.info = EmbodimentInfo(
             name="opencastor" if self.medium == MEDIUM_PEN else f"opencastor-{self.medium}",
-            action_space=action_space(self.canvas_mm),
-            observation_space=observation_space(self._reference_wh, self._overhead_wh()),
+            action_space=action_space(self.canvas_mm, self.colored),
+            observation_space=observation_space(
+                self._reference_wh,
+                self._overhead_wh(),
+                self._canonical_wh if self.colored else None,
+            ),
             control_hz=None,
             is_simulated=False,
             capabilities=frozenset({SELF_PACED}),
             supported_target_kinds=frozenset({"reference_drawing"}),
-            docs=_docs(self.canvas_mm) if self._ink is None else _virtual_docs(self.canvas_mm),
+            docs=docs,
         )
 
     # -- construction helpers ---------------------------------------------
@@ -546,18 +651,28 @@ class OpenCastorEmbodiment:
         self._instruction = scene.instruction
         self.num_steps = 0
         self._corners = None
+        self.color = pal.DEFAULT_INDEX
         if self._ink is not None:
             self._ink.clear()
         return self._observe()
 
+    def _fit(self, data: Any) -> np.ndarray:
+        """Accept a 3- or 4-vector, so a mono policy still drives a colour task in black."""
+        arr = np.asarray(data, dtype=np.float64).reshape(-1)
+        dim = self.info.action_space.dim
+        if arr.size == 3 and dim == 4:
+            arr = np.append(arr, float(pal.DEFAULT_INDEX))
+        if arr.size != dim:
+            raise EmbodimentFault(f"action must have {dim} values, got {arr.size}")
+        return np.clip(arr, self.info.action_space.low, self.info.action_space.high)
+
     def step(self, action: Action) -> StepResult:
         """Move the pen to one absolute canvas-frame target and look at the result."""
-        target = np.clip(
-            np.asarray(action.data, dtype=np.float64).reshape(3),
-            self.info.action_space.low,
-            self.info.action_space.high,
-        )
-        self._move_to(target)
+        target = self._fit(action.data)
+        if self.colored:
+            # Read before the motion, so the segment this step inks is this step's colour.
+            self.color = pal.index_of(target[3])
+        self._move_to(target[:3])
         self.num_steps += 1
         return StepResult(observation=self._observe(), terminated=False)
 
@@ -653,7 +768,26 @@ class OpenCastorEmbodiment:
         down_before = float(self._commanded[2]) <= self.pen_down_z
         down_now = float(canvas_target_m[2]) <= self.pen_down_z
         if down_before and down_now:
-            self._ink.segment(previous, self._eef)
+            self._ink.segment(previous, self._eef, self.color)
+        self._note_ink_on_receipt(down_before and down_now)
+
+    def _note_ink_on_receipt(self, inked: bool) -> None:
+        """Record what the virtual ink did on the retained receipt for the call just made.
+
+        This annotates the local record only. The signed envelope the gateway
+        attested to is untouched: it never carried a colour, because the arm was
+        never asked for one. The annotation sits under its own key so a reader
+        cannot mistake it for something the gateway verified.
+        """
+        if self._ink is None or not self.client.receipts:
+            return
+        self.client.receipts[-1]["sacpaint_ink"] = {
+            "medium": self.medium,
+            "inked": bool(inked),
+            "color": pal.name_of(self.color),
+            "rgb": list(pal.rgb_of(self.color)),
+            "note": "virtual ink, recorded by sacpaint; not part of the signed envelope",
+        }
 
     def _move_payload(self, base_mm: np.ndarray) -> dict[str, Any]:
         """Build the cartesian tool's arguments in whichever spelling the gateway speaks."""
@@ -692,6 +826,9 @@ class OpenCastorEmbodiment:
                     "elapsed_s": round(time.time() - self._started_at, 1),
                     "updated_at": time.time(),
                 }
+                if self.colored:
+                    payload["color"] = pal.name_of(self.color)
+                    payload["palette"] = list(pal.NAMES)
                 tmp = self._progress_path.with_suffix(".tmp")
                 tmp.write_text(json.dumps(payload))
                 tmp.replace(self._progress_path)
@@ -718,8 +855,13 @@ class OpenCastorEmbodiment:
     def _observe(self) -> Observation:
         """One fresh overhead photograph (or the virtual ink), the reference, the pen position, the corners."""
         extra: dict[str, Any] = {MEDIUM_KEY: self.medium, "misses": self.misses}
+        if self.colored:
+            extra[PALETTE_KEY] = list(pal.NAMES)
+            extra[COLOR_KEY] = pal.name_of(self.color)
         if self._ink is not None:
             images = {OVERHEAD: self._ink.image(), REFERENCE_CAM: self.reference_camera.fetch()}
+            if self.color_reference_camera is not None:
+                images[REFERENCE_COLOR_CAM] = self.color_reference_camera.fetch()
             self._report(images[OVERHEAD])
             extra[CANONICAL_FLAG] = True  # telemetry ink is already the canonical canvas
             if self.overhead is not None:
@@ -734,6 +876,8 @@ class OpenCastorEmbodiment:
             )
         assert self.overhead is not None
         images = {OVERHEAD: self.overhead.fetch(), REFERENCE_CAM: self.reference_camera.fetch()}
+        if self.color_reference_camera is not None:
+            images[REFERENCE_COLOR_CAM] = self.color_reference_camera.fetch()
         self._report(
             None
         )  # a real camera's frames are already on the console; only the count is new

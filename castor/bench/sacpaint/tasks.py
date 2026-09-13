@@ -27,6 +27,7 @@ from castor.bench.sacpaint.reference import (
     reference_sha256,
 )
 from castor.bench.sacpaint.scorers import (
+    color_fidelity,
     composite,
     discipline,
     efficiency,
@@ -61,6 +62,18 @@ def make_task(
     spec = get_spec(reference)
     sha = reference_sha256(spec.name)
     ink = ink_sha256(spec.name)
+    # Colour is one more scorer beside the composite, never a term inside it, so a
+    # colour run's composite is still the same line-fidelity number as every run
+    # before colour existed.
+    scorers = [
+        composite(max_steps),
+        landmark_geometry(),
+        structure(),
+        discipline(),
+        efficiency(max_steps),
+    ]
+    if spec.has_color:
+        scorers.append(color_fidelity())
     return Task(
         name=task_name_for(spec.name),
         scenes=[
@@ -75,18 +88,20 @@ def make_task(
                         "sha256": sha,
                         "ink_sha256": ink,
                         "rubric": spec.rubric(),
+                        **(
+                            {
+                                "color_palette": spec.color_palette,
+                                "color_sha256": spec.color_sha256(),
+                            }
+                            if spec.has_color
+                            else {}
+                        ),
                     },
                 ),
                 metadata={"description": spec.description, "photo_credit": spec.photo_credit},
             )
         ],
-        scorer=[
-            composite(max_steps),
-            landmark_geometry(),
-            structure(),
-            discipline(),
-            efficiency(max_steps),
-        ],
+        scorer=scorers,
         max_steps=max_steps,
         epochs=epochs,
         metadata={
@@ -96,6 +111,9 @@ def make_task(
             "prompt_fixed": spec.instruction is None,
             "reference_sha256": sha,
             "ink_sha256": ink,
+            "color": spec.has_color,
+            "color_palette": spec.color_palette,
+            "color_sha256": spec.color_sha256(),
             "track": "closed_loop",
         },
     )
