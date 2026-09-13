@@ -2917,6 +2917,94 @@ class TestIncidentsCli:
         assert "Art. 72" not in json.dumps(report["serious_incident_reporting"])
 
 
+class TestIncidentsVerifyCli:
+    """`castor incidents verify` - the chain check, driven in process.
+
+    Exit codes mirror `castor audit --verify`: 2 when there is no log, 1 on a
+    break, 0 when the links check out.
+    """
+
+    @staticmethod
+    def _log_with(tmp_path, count=3):
+        from castor.incidents import IncidentLog, IncidentSeverity
+
+        path = tmp_path / "incidents.jsonl"
+        log = IncidentLog(path)
+        for i in range(count):
+            log.record(IncidentSeverity.SERIOUS_HARM, "estop", f"stop {i}", {})
+        return path
+
+    @staticmethod
+    def _run(path, as_json=False):
+        from castor.cli import cmd_incidents
+
+        args = argparse.Namespace(
+            incidents_cmd="verify", log=str(path), json=as_json
+        )
+        with pytest.raises(SystemExit) as exc:
+            cmd_incidents(args)
+        return exc.value.code
+
+    def test_no_log_exits_2_and_says_where_it_looked(self, tmp_path, capsys):
+        path = tmp_path / "gone" / "incidents.jsonl"
+        assert self._run(path) == 2
+        out = capsys.readouterr().out
+        assert "No incident log found at" in out
+        assert str(path) in out
+
+    def test_a_clean_log_exits_0_with_a_line_per_file(self, tmp_path, capsys):
+        path = self._log_with(tmp_path, 3)
+        assert self._run(path) == 0
+        out = capsys.readouterr().out
+        assert "Chain links check out" in out
+        assert "incidents.jsonl: 3 record(s)" in out
+        assert "A link check is not an outside party's verification." in out
+        assert "verified" not in out.replace(
+            "A link check is not an outside party's verification.", ""
+        )
+
+    def test_a_break_exits_1_and_names_the_file_and_the_line(self, tmp_path, capsys):
+        import json as _json
+
+        path = self._log_with(tmp_path, 3)
+        lines = [x for x in path.read_text().splitlines() if x.strip()]
+        row = _json.loads(lines[0])
+        row["description"] = "rewritten after the fact"
+        lines[0] = _json.dumps(row)
+        path.write_text("\n".join(lines) + "\n")
+
+        assert self._run(path) == 1
+        out = capsys.readouterr().out
+        assert "Chain broken in incidents.jsonl at line 2" in out
+        assert str(path) in out
+
+    def test_json_prints_the_check_and_keeps_the_exit_code(self, tmp_path, capsys):
+        import json as _json
+
+        path = self._log_with(tmp_path, 2)
+        assert self._run(path, as_json=True) == 0
+        data = _json.loads(capsys.readouterr().out)
+        assert data["state"] == "ok"
+        assert data["records"] == 2
+        assert data["break"] is None
+        assert data["files"][0]["path"] == str(path)
+
+    def test_the_log_path_survives_either_argument_order(self, tmp_path, monkeypatch):
+        """--log on the parent and --log on the subcommand both reach the check."""
+        from castor import cli
+
+        path = tmp_path / "gone" / "incidents.jsonl"
+        for argv in (
+            ["castor", "incidents", "--log", str(path), "verify"],
+            ["castor", "incidents", "verify", "--log", str(path)],
+        ):
+            monkeypatch.setattr(sys, "argv", argv)
+            with pytest.raises(SystemExit) as exc:
+                cli.main()
+            # 2 is "no log here", which is only reachable if the path arrived.
+            assert exc.value.code == 2
+
+
 class TestIfuCli:
     def test_generate_help_exits_0(self):
         import subprocess

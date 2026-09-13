@@ -73,6 +73,7 @@ Tracking: craigm26/OpenCastor#859
 | Local safety wins (structural protocol invariant) | `castor validate --category safety --json` → `safety.local_safety_wins: pass` |
 | Protocol 66 safety rules conformant | `castor validate --category safety --json` → `safety.p66_conformance: pass` |
 | Audit chain links check out (a local record, not an outside party's check) | `castor audit --verify` → exit 0; exit 2 when there is no log, exit 1 on a break |
+| Incident log links check out across rotations (a local record, not an outside party's check) | `castor incidents verify` → exit 0; exit 2 when there is no log, exit 1 on a break naming the file and line |
 | Message signing active ([RCAN protocol](https://rcan.dev/compatibility)) | `castor validate --category rcan_signing --json` → `rcan_signing.message_signing: pass` |
 | L2 conformance (all safety-critical checks) | `castor validate --strict` → exit code 0 |
 

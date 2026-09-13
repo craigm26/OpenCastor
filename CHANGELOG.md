@@ -9,6 +9,25 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+### Added
+
+**`castor incidents verify` walks the incident log's hash chain.** The log has
+been hash-chained and, since the size bound landed, chained across rotations,
+but nothing read the chain back. The new subcommand does, rotated files in
+write order and then the active one, and answers the way `castor audit
+--verify` does: exit 2 when there is no log at all (a missing record is never
+a clean one), exit 1 on a break naming the file, the line number and what
+broke, exit 0 when every link holds, with one line per file and its record
+count. `--json` prints the same check; `--log PATH` works before or after the
+subcommand. A `log_rotation` line is the one place a hash points outside its
+own file, and anything that can append can write one, so it counts as a
+carry-over only when `rotated_to` names a file that is there whose last line
+hashes to the carry-over's `prev_sha256`. The head of the chain carries an
+empty `prev_sha256`, which is what the writer has always written. The library
+entry point is `IncidentLog.verify_chain()` / `verify_incident_chain(path)`. A
+clean result says the links check out and that a link check is not an outside
+party's verification; the process that writes these lines can rewrite them all.
+
 ### Security
 
 **The fleet proxy no longer lends this robot's credential to a peer it found

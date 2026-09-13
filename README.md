@@ -207,6 +207,7 @@ docker run -it \
 | `castor status` | Provider and channel readiness summary |
 | `castor improve` | Run Sisyphus self-improvement on recent episodes |
 | `castor audit --verify` | Verify audit chain integrity |
+| `castor incidents verify` | Walk the incident log's hash chain across rotations (0 links hold, 1 break, 2 no log) |
 | `castor approvals` | Review and approve pending high-risk commands |
 | `castor deploy` | Push config to a remote robot over SSH |
 | `castor fleet` | Discover and monitor all robots on the local network |
