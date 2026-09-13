@@ -9,6 +9,8 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+- sacpaint: a run that knows its model-call budget gets a planning paragraph in the prompt (lay the whole sheet out first, then detail). Opt-in through the body option llm_budget; the console sets it from the profile cap, and the packaged benchmark prompt is byte-identical without it.
+
 ### Added
 
 **Sacramento PaintBench paints in colour, and scores it separately.** A

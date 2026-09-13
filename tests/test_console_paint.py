@@ -303,3 +303,16 @@ def test_a_colour_upload_asks_the_bench_for_a_colour_reference(
     assert "--color" not in calls[0]
     assert client.post("/eval/picture?name=vivid&color=1", content=b"\xff\xd8x").json()["color"]
     assert calls[1][-1] == "--color" and "--auto-trace" in calls[1]
+
+
+def test_the_run_tells_the_body_the_call_budget(tmp_path: Path) -> None:
+    """A capped profile hands the cap to the body as -E llm_budget, so the prompt can plan."""
+    cfg = _profile(tmp_path)
+    cfg["max_llm_calls"] = 100
+    job = paint._Job("j", "starry-night", "virtual", paint._task_for_picture("starry-night"))
+    job.dir = tmp_path / "paint" / "j"
+    cmd, _ = paint.build_command(job, cfg, console_url="http://127.0.0.1:8082", python="py")
+    assert "llm_budget=100" in cmd and "--max-llm-calls" in cmd
+    cfg.pop("max_llm_calls")
+    cmd, _ = paint.build_command(job, cfg, console_url="http://127.0.0.1:8082", python="py")
+    assert not any(c.startswith("llm_budget=") for c in cmd)

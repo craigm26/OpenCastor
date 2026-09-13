@@ -1324,3 +1324,16 @@ def test_the_progress_file_a_console_reads_carries_the_colour(
     body.step(Action(data=np.array([0.02, 0.10, 0.002, float(pal.index_of("gold"))])))
     payload = json.loads(progress.read_text())
     assert payload["color"] == "gold" and payload["palette"] == list(pal.NAMES)
+
+
+# --- the planning hint ------------------------------------------------------------
+
+
+def test_a_known_call_budget_puts_a_planning_paragraph_in_the_prompt(gateway, camera, calibration):
+    """Opt-in only: the packaged benchmark prompt stays byte-identical without it."""
+    plain = _embodiment(gateway, camera, calibration).info.docs
+    budgeted = _embodiment(gateway, camera, calibration, llm_budget="80").info.docs
+    assert "model calls" not in plain
+    assert "about 80 model calls" in budgeted
+    assert "whole sheet" in budgeted and "edge to edge" in budgeted
+    assert budgeted.startswith(plain)

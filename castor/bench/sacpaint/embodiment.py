@@ -325,6 +325,22 @@ def _color_docs() -> str:
     )
 
 
+def _plan_docs(budget: int) -> str:
+    """The planning paragraph a run with a known call budget appends.
+
+    Off by default so the packaged benchmark prompt is byte-identical to every
+    run before it; the console turns it on when the operator's profile caps the
+    model calls, because a policy that knows its budget lays the whole sheet
+    out before it spends the budget on detail.
+    """
+    return (
+        f" You have about {int(budget)} model calls for this drawing, and each call may issue "
+        "many targets, so batch strokes. Plan the whole sheet before you draw: place the largest "
+        "shapes across the entire canvas first, edge to edge, then return for detail with "
+        "whatever calls remain. Do not stop while a region of the sheet is still empty."
+    )
+
+
 class VirtualInk:
     """A canonical canvas inked from measured tip positions: the ``virtual`` medium's sheet.
 
@@ -391,6 +407,7 @@ class OpenCastorEmbodiment:
         speed: float | None = None,
         tolerance_mm: float = 3.0,
         strict_reach: bool = True,
+        llm_budget: int | None = None,
         # geometry
         calibration: str | None = None,
         reference: str | None = None,
@@ -538,6 +555,9 @@ class OpenCastorEmbodiment:
         docs = _docs(self.canvas_mm) if self._ink is None else _virtual_docs(self.canvas_mm)
         if self.colored:
             docs += _color_docs()
+        self.llm_budget = int(llm_budget) if llm_budget else None
+        if self.llm_budget:
+            docs += _plan_docs(self.llm_budget)
         self.info = EmbodimentInfo(
             name="opencastor" if self.medium == MEDIUM_PEN else f"opencastor-{self.medium}",
             action_space=action_space(self.canvas_mm, self.colored),
@@ -978,6 +998,7 @@ def opencastor_embodiment(**kwargs: Any) -> OpenCastorEmbodiment:
 
 
 _BOOL_FLAGS = ("no_prompt", "strict_reach")
+_INT_FLAGS = ("llm_budget",)
 _FLOAT_FLAGS = (
     "timeout_s",
     "speed",
@@ -1010,4 +1031,8 @@ def _coerce(kwargs: Mapping[str, Any]) -> dict[str, Any]:
                 out[key] = float(value)
             except ValueError as exc:
                 raise ConfigError(f"-E {key} must be a number, got {value!r}") from exc
+    for key in _INT_FLAGS:
+        value = out.get(key)
+        if isinstance(value, str) and value.strip():
+            out[key] = int(float(value))
     return out

@@ -165,6 +165,8 @@ def build_command(
     max_calls = config.get("max_llm_calls")
     if max_calls:
         cmd += ["--max-llm-calls", str(int(max_calls))]
+        # The body tells the policy its budget so it plans the whole sheet first.
+        flags["llm_budget"] = str(int(max_calls))
     cmd += ["--", "--epochs", "1", "-P", f"images={config.get('images', 'on_demand')}"]
     for key, value in flags.items():
         cmd += ["-E", f"{key}={value}"]
