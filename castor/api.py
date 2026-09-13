@@ -979,7 +979,34 @@ async def emergency_stop():
     if state.driver:
         state.driver.stop()
     if state.fs:
+        # The safety layer files the incident itself, after the stop.
         state.fs.estop(principal="api", source="api", reason="POST /api/stop")
+    else:
+        # No safety layer attached: the driver stop above is the whole stop, so
+        # the incident has to be filed here or it is never filed at all. It is
+        # STRICTLY AFTER the stop and fully absorbed, because a log write must
+        # never be able to keep a robot from stopping (OC-13).
+        try:
+            from castor.incidents import IncidentSeverity, file_incident
+
+            file_incident(
+                severity=IncidentSeverity.SERIOUS_HARM,
+                category="estop",
+                description=(
+                    "ESTOP activated — source=api — POST /api/stop "
+                    "(no safety layer attached; driver stopped directly)"
+                ),
+                system_state={
+                    "principal": "api",
+                    "command_source": "api",
+                    "reason": "POST /api/stop",
+                    "safety_layer": False,
+                    "driver_stopped": bool(state.driver),
+                },
+                source="estop",
+            )
+        except Exception as exc:  # noqa: BLE001 - never in the path of a stop
+            logger.error("Could not file incident for POST /api/stop: %s", exc)
     return {"status": "stopped"}
 
 

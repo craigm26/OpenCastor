@@ -565,3 +565,76 @@ def test_both_entry_points_share_one_helper():
     src = inspect.getsource(cli_mod._cmd_compliance_submit)
     assert "_file_incident_report(" in src
     assert "submit_incident_report(" not in src
+
+
+# ---------------------------------------------------------------------------
+# POST /api/stop files an incident even with no safety layer attached
+# ---------------------------------------------------------------------------
+
+
+def _stop_client(monkeypatch, driver):
+    from starlette.testclient import TestClient
+
+    from castor import api as api_mod
+
+    api_mod.state.fs = None
+    api_mod.state.driver = driver
+    monkeypatch.setattr(api_mod, "API_TOKEN", None, raising=False)
+    return TestClient(api_mod.app, raise_server_exceptions=False), api_mod
+
+
+def test_api_stop_without_a_safety_layer_still_files_an_incident(tmp_path, monkeypatch):
+    log_path = tmp_path / "incidents.jsonl"
+    monkeypatch.setattr("castor.incidents.DEFAULT_INCIDENT_LOG_PATH", log_path)
+
+    class _Driver:
+        def __init__(self):
+            self.stopped = False
+
+        def stop(self):
+            self.stopped = True
+
+    driver = _Driver()
+    client, api_mod = _stop_client(monkeypatch, driver)
+    try:
+        resp = client.post("/api/stop")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "stopped"
+        assert driver.stopped is True
+
+        entries = IncidentLog(log_path).list_incidents()
+        assert len(entries) == 1
+        inc = entries[0]
+        assert inc["category"] == "estop"
+        assert inc["source"] == "estop"
+        assert inc["severity"] == IncidentSeverity.SERIOUS_HARM.value
+        assert inc["system_state"]["safety_layer"] is False
+        assert inc["reported"] is False
+    finally:
+        api_mod.state.driver = None
+
+
+def test_api_stop_files_strictly_after_the_stop_and_absorbs_a_write_failure(
+    tmp_path, monkeypatch
+):
+    """The stop happens first, and a failed write cannot break the endpoint."""
+    order: list[str] = []
+
+    class _Driver:
+        def stop(self):
+            order.append("stop")
+
+    def _boom(**kwargs):
+        order.append("file")
+        raise RuntimeError("incident log is unwritable")
+
+    monkeypatch.setattr("castor.incidents.file_incident", _boom)
+
+    client, api_mod = _stop_client(monkeypatch, _Driver())
+    try:
+        resp = client.post("/api/stop")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "stopped"
+        assert order == ["stop", "file"]
+    finally:
+        api_mod.state.driver = None
