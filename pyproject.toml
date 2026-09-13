@@ -204,6 +204,7 @@ sacpaint_plotter = "castor.bench.sacpaint.mock:plotter_embodiment"
 opencastor = "castor.bench.sacpaint.embodiment:opencastor_embodiment"
 
 [project.entry-points."inspect_robots.policies"]
+agent_strokes = "castor.bench.sacpaint.stroke_policy:agent_strokes_policy"
 sacpaint_trace = "castor.bench.sacpaint.mock:trace_policy"
 sacpaint_idle = "castor.bench.sacpaint.mock:idle_policy"
 
