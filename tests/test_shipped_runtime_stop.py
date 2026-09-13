@@ -922,6 +922,59 @@ def test_a_deleted_latch_file_does_not_lift_the_stock_gateway_hold(_live_gateway
     assert fs.is_estopped is True
 
 
+def test_a_stop_that_arrives_mid_reconcile_is_not_reverted(tmp_path, monkeypatch):
+    """The one thing a reconcile on a timer must never do.
+
+    The hold is changed from more than one thread: an API handler, the sensor
+    monitor's thread when three critical readings latch, and the reconcile
+    itself. The reconcile reads the latch file and then compares it with the
+    in-memory flag. A stop set between those two steps makes the comparison
+    read "the file says nothing is engaged, memory says it is", which is the
+    signature of an out-of-process CLEAR, and the stop is thrown away with no
+    auth code and without the sensor rule ever being consulted.
+
+    The window is widened here to make it deterministic. What closes it is
+    _hold_lock: the stop waits for the reconcile to finish rather than landing
+    inside it.
+    """
+    import threading
+
+    monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
+    from castor.safety import latch as latch_mod
+
+    fs = CastorFS()
+    fs.boot({})
+    # A cleared latch file, which is what any robot that has ever been stopped
+    # has on disk. A missing file is refused earlier and would not reach this.
+    latch_mod.record_clear(tmp_path)
+
+    real_load = latch_mod.load
+    reading = threading.Event()
+
+    def _slow_load(*args, **kwargs):
+        state = real_load(*args, **kwargs)
+        reading.set()
+        time.sleep(0.3)  # the reconcile is descheduled here
+        return state
+
+    monkeypatch.setattr(latch_mod, "load", _slow_load)
+    worker = threading.Thread(target=fs.safety.resync_from_latch)
+    worker.start()
+    try:
+        assert reading.wait(5), "the reconcile never read the latch file"
+        # The stop a person just asked for, arriving inside that window.
+        assert fs.estop(principal="root", source="api", reason="POST /api/stop") is True
+    finally:
+        worker.join(10)
+    monkeypatch.setattr(latch_mod, "load", real_load)
+
+    assert fs.is_estopped is True, "the reconcile reverted a stop that had just been set"
+    assert fs.estop_source == "api"
+    assert latch_mod.load(tmp_path).estop_engaged is True
+    assert fs.read("/proc/status", principal="root") == "estop"
+    assert fs.write("/dev/motor", {"type": "move", "linear": 0.3}, principal="api") is False
+
+
 @pytest.mark.parametrize(
     "garbage",
     ["", "   \n", "{", "not json at all", "[]", '{"something": "else"}'],
