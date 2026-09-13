@@ -436,6 +436,23 @@ who ran it.
 same order `castor/fs/safety.py` reads it at clear time, so the CLI and the API
 never enforce different secrets.
 
+**The bundled `/gamepad` page can clear a hold again.** Once
+`POST /api/estop/clear` started demanding `X-Estop-Auth`, the page's fetch
+helper still took only a path and a body, so it could not set the header and
+the page's clear could not succeed on any robot `castor up` had provisioned. It
+answered 403 every time and rendered `d.detail`, a key the gateway does not
+send, so whoever was holding the phone saw the word "error".
+
+The page now has a small code field and a clear button in the top bar, sends
+the code as `X-Estop-Auth`, and renders the server's own refusal, which already
+distinguishes a wrong code from a wrong bearer from a stop a sensor set that has
+to be cleared at the robot. The code lives in the field for as long as the page
+is open and nowhere else: not `localStorage`, not `sessionStorage`, not the URL.
+A phone left on a bench must not still be able to lift a stop tomorrow.
+
+The page's copy now says what the hold is: a best-effort software hold, not a
+hardware cut.
+
 **A stop is acknowledged only once the robot has answered.** `castor bridge`
 wrote `ack_qos: "acknowledged"` onto the command document before it dispatched
 anything, under a comment that called it an immediate ACK. It was not an

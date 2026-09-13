@@ -7453,6 +7453,14 @@ html,body{{height:100%;background:#0d1117;color:#e6edf3;font-family:monospace;ov
   padding:9px 18px;font-size:0.9rem;font-family:monospace;font-weight:bold;
   cursor:pointer;touch-action:manipulation;}}
 #estop-btn:active{{opacity:0.75;}}
+#clear-row{{display:flex;align-items:center;gap:6px;}}
+#estop-code{{width:118px;background:#0d1117;color:#e6edf3;border:1px solid #30363d;
+  border-radius:8px;padding:8px 9px;font-family:monospace;font-size:0.8rem;}}
+#estop-code::placeholder{{color:#484f58;}}
+#clear-btn{{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:8px;
+  padding:9px 14px;font-size:0.8rem;font-family:monospace;
+  cursor:pointer;touch-action:manipulation;}}
+#clear-btn:active{{opacity:0.75;}}
 #dpad-wrap{{flex:1;display:flex;align-items:center;justify-content:center;padding:16px;}}
 #dpad{{display:grid;grid-template-columns:repeat(3,var(--btn));
   grid-template-rows:repeat(3,var(--btn));gap:var(--gap);}}
@@ -7484,6 +7492,12 @@ input[type=range]{{width:110px;accent-color:#58a6ff;}}
   <span id="robot-lbl">🤖 {_robot}</span>
   <span id="dir-ind">⬜</span>
   <button id="estop-btn">⏹ E-STOP</button>
+  <span id="clear-row">
+    <input id="estop-code" type="password" autocomplete="off" autocapitalize="off"
+      autocorrect="off" spellcheck="false" placeholder="e-stop code"
+      aria-label="E-stop clear code, sent as the X-Estop-Auth header">
+    <button id="clear-btn" title="Clear the hold. Needs the e-stop code.">clear hold</button>
+  </span>
 </div>
 <div id="dpad-wrap">
   <div id="dpad">
@@ -7517,7 +7531,7 @@ input[type=range]{{width:110px;accent-color:#58a6ff;}}
 </div>
 <div id="statusbar">
   <span id="fb">Ready</span>
-  <span id="hint">hold=move · release=stop · Start=ESTOP · Sel=clear</span>
+  <span id="hint">hold=move · release=stop · Start=ESTOP · Sel=clear · software hold only</span>
 </div>
 <script>
 (function(){{
@@ -7530,14 +7544,45 @@ input[type=range]{{width:110px;accent-color:#58a6ff;}}
     const el = document.getElementById("fb");
     el.textContent = msg; el.style.color = c || "#8b949e";
   }}
-  function api(path, body) {{
+  // `extra` carries X-Estop-Auth. Without it this helper could not send the
+  // e-stop clear code at all, so the page's own clear could never succeed on
+  // any robot `castor up` had provisioned: every attempt came back 403 and the
+  // page had no way to say anything useful about why.
+  function api(path, body, extra) {{
+    const h = Object.assign({{}}, body !== undefined ? jsonH : authH, extra || {{}});
     return fetch(GW + path, {{
-      method: "POST", headers: body !== undefined ? jsonH : authH,
+      method: "POST", headers: h,
       body: body !== undefined ? JSON.stringify(body) : undefined
     }}).then(r => {{
-      if (!r.ok) r.json().then(d => fb(d.detail || "error", "#f85149")).catch(() => {{}});
+      // THE SERVER'S OWN WORDS. The gateway answers {{error: ...}}; older
+      // handlers answer {{detail: ...}}. A refusal that renders as "error"
+      // tells the person holding the phone nothing, and the server already
+      // says whether the code was wrong, whether the bearer was, or whether a
+      // sensor set this stop and it has to be cleared at the robot.
+      if (!r.ok) r.json().then(d => fb(d.error || d.detail || ("HTTP " + r.status),
+                                       "#f85149")).catch(() => {{}});
       return r;
     }}).catch(e => fb("" + e, "#f85149"));
+  }}
+
+  // IN MEMORY, FOR AS LONG AS THIS PAGE IS OPEN, AND NOWHERE ELSE. Not
+  // localStorage, not sessionStorage, not the URL: this is the second factor
+  // in front of lifting a stop, and a phone left on a bench must not still be
+  // able to clear one tomorrow. Reloading the page asks again.
+  function estopCode() {{
+    const el = document.getElementById("estop-code");
+    return el && el.value ? el.value.trim() : "";
+  }}
+
+  function clearHold() {{
+    const code = estopCode();
+    const headers = code ? {{"X-Estop-Auth": code}} : {{}};
+    if (!code) fb("No code entered; the server will almost certainly refuse", "#d29922");
+    api("/api/estop/clear", undefined, headers).then(r => {{
+      if (r && r.ok) fb("Hold cleared. Best-effort software hold, not a hardware cut.",
+                        "#3fb950");
+      // A refusal has already been rendered by api() in the server's own words.
+    }});
   }}
 
   let moveIv = null, activeBtn = null;
@@ -7578,7 +7623,14 @@ input[type=range]{{width:110px;accent-color:#58a6ff;}}
 
   document.getElementById("estop-btn").addEventListener("click", () => {{
     stopMove();
-    api("/api/stop").then(() => fb("E-STOP active — clearing it needs the owner token", "#da3633"));
+    api("/api/stop").then(() => fb(
+      "Hold active (best-effort software hold, not a hardware cut). "
+      + "Clearing it needs the owner token and the e-stop code.", "#da3633"));
+  }});
+
+  document.getElementById("clear-btn").addEventListener("click", clearHold);
+  document.getElementById("estop-code").addEventListener("keydown", e => {{
+    if (e.key === "Enter") clearHold();
   }});
 
   let gpIdx = null, gpRaf = null, prev = {{}}, lastT = 0, lastMoving = false;
@@ -7621,15 +7673,9 @@ input[type=range]{{width:110px;accent-color:#58a6ff;}}
       api("/api/action", {{type:"move", linear:0, angular:0}});
     if (justPressed(gp,9)) {{
       api("/api/stop");
-      fb("E-STOP (gamepad Start)", "#da3633");
+      fb("Hold active (gamepad Start). Best-effort software hold.", "#da3633");
     }}
-    if (justPressed(gp,8))
-      api("/api/estop/clear").then(r => fb(
-        r && r.ok ? "Stop cleared (gamepad Sel)"
-                  : "Clearing a stop needs the owner token AND the e-stop code "
-                  + "`castor up` printed. Send it as X-Estop-Auth, or run "
-                  + "`castor resume --clear-estop` at the robot",
-        r && r.ok ? "#3fb950" : "#da3633"));
+    if (justPressed(gp,8)) clearHold();
   }}
 
   window.addEventListener("gamepadconnected", e => {{

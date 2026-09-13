@@ -1043,3 +1043,36 @@ def test_no_auth_code_is_in_the_resume_help(capsys, monkeypatch):
     text = capsys.readouterr().out
     assert "--no-auth-code" in text
     assert "unauthenticated" in text.lower()
+
+
+# ---------------------------------------------------------------------------
+# 11. The bundled /gamepad page can send the e-stop code
+# ---------------------------------------------------------------------------
+# WHAT WAS STILL WRONG. Once POST /api/estop/clear started demanding
+# X-Estop-Auth, the page's one-argument fetch helper had no way to set a
+# header, so the gamepad's clear could not succeed on any robot `castor up`
+# had provisioned. It answered 403 every time and rendered `d.detail`, which
+# the gateway does not send, so the person holding the phone saw "error".
+def test_the_gamepad_page_can_send_the_estop_auth_header(_api_client):
+    """The page is tested at the level it is served: the HTML it returns."""
+    client, _api_mod = _api_client
+    html = client.get("/gamepad").text
+
+    assert 'id="estop-code"' in html, "there must be a field to type the code into"
+    assert 'id="clear-btn"' in html, "and a clear button beside it"
+    assert "X-Estop-Auth" in html, "the header the server reads has to be sent"
+    assert "/api/estop/clear" in html
+
+    # The field is never persisted: a phone on a bench must not still be able
+    # to lift a stop tomorrow.
+    assert "localStorage." not in html, "the code must not outlive the page"
+    assert "sessionStorage." not in html
+
+    # The server's own refusal is what gets shown, not the word "error".
+    assert "d.error || d.detail" in html
+
+    # Honest copy, and no claim that any of this is a hardware cut.
+    assert "best-effort software hold" in html
+    assert "not a hardware cut" in html
+    for word in ("safety rated", "fail-safe", "verified"):
+        assert word not in html.lower(), f"the page must not claim {word!r}"
