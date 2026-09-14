@@ -16,7 +16,9 @@ operator writes ``<ROBOT_HOME>/paint.json`` once, on the robot::
                 "medium": "virtual", "calibration": "easel",
                 "move_tool": "arm.reach_point", "move_args": "reach_point",
                 "tolerance_mm": "5", "strict_reach": "false", "timeout_s": "120"},
-      "brain": {"subscription": "opus"},        # or {"model": "anthropic/claude-..."} with a key in the env
+      "brain": {"subscription": "opus"},        # or {"model": "anthropic/claude-..."} with a key in the env,
+                                                # or {"local": {"model": "qwen3.5:4b"}} for a model served
+                                                # on this host by Ollama (base_url defaults to its /v1)
       "max_llm_calls": 60,
       "strokes": true,                          # one call may lay a whole stroke, not one target
       "media": ["virtual"]                      # what this rig can do today
@@ -73,6 +75,8 @@ CANVAS_STREAM = "canvas"
 #: one that goes with ``"strokes": true``.
 POLICY_AGENT = "agent"
 POLICY_STROKES = "agent_strokes"
+#: Where a locally served model answers the OpenAI-compatible wire by default (Ollama).
+LOCAL_BASE_URL = "http://127.0.0.1:11434/v1"
 
 
 def paint_config_path() -> Path:
@@ -171,12 +175,26 @@ def build_command(
         str(job.dir / "logs"),
     ]
     brain = dict(config.get("brain") or {})
+    extra_params: list[str] = []
     if brain.get("subscription"):
         cmd += ["--subscription", "--model", str(brain["subscription"])]
         if brain.get("claude_bin"):
             cmd += ["--claude-bin", str(brain["claude_bin"])]
     elif brain.get("model"):
         cmd += ["--model", str(brain["model"])]
+    elif brain.get("local"):
+        # A model served on this host over the OpenAI-compatible wire (Ollama
+        # serves /v1 on 11434). No key, no subscription, no network: the run
+        # points the policy at the endpoint the way the shim path does.
+        local = brain["local"]
+        if isinstance(local, str):
+            local = {"model": local}
+        model = str(local.get("model") or "")
+        if not model:
+            raise ValueError('brain.local needs a "model" name')
+        base_url = str(local.get("base_url") or LOCAL_BASE_URL)
+        cmd += ["--model", model]
+        extra_params = [f"base_url={base_url}", "api_key_env=SACPAINT_LOCAL_KEY"]
     if config.get("strokes"):
         # One call, many segments: the body plans the polyline into the targets it
         # already sends. The wire, the receipts and the scoring are unchanged.
@@ -190,10 +208,15 @@ def build_command(
         # The body tells the policy its budget so it plans the whole sheet first.
         flags["llm_budget"] = str(int(max_calls))
     cmd += ["--", "--epochs", "1", "-P", f"images={config.get('images', 'on_demand')}"]
+    for param in extra_params:
+        cmd += ["-P", param]
     for key, value in flags.items():
         cmd += ["-E", f"{key}={value}"]
     env = dict(os.environ)
     env["SACPAINT_ARTIFACTS"] = str(job.dir / "artifacts")
+    if extra_params:
+        # The wire wants a key header; a local server ignores its value.
+        env.setdefault("SACPAINT_LOCAL_KEY", "local")
     return cmd, env
 
 
@@ -405,6 +428,8 @@ def paint_config() -> dict[str, Any]:
             if (config.get("brain") or {}).get("subscription")
             else "api"
             if (config.get("brain") or {}).get("model")
+            else "local"
+            if (config.get("brain") or {}).get("local")
             else None
         ),
         "config_path": str(paint_config_path()),

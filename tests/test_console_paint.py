@@ -350,3 +350,22 @@ def test_the_profile_that_asks_for_strokes_gets_the_policy_that_can_send_them(
     assert policy(_profile(tmp_path)) == paint.POLICY_AGENT == "agent"
     assert policy(_profile(tmp_path, strokes=True)) == paint.POLICY_STROKES == "agent_strokes"
     assert policy(_profile(tmp_path, strokes=False)) == paint.POLICY_AGENT
+
+
+def test_a_local_brain_points_the_run_at_the_host_endpoint(tmp_path: Path) -> None:
+    """brain.local runs the same policy against a model served on this host, no key, no network."""
+    cfg = _profile(tmp_path)
+    cfg["brain"] = {"local": {"model": "qwen3.5:4b"}}
+    job = paint._Job("j", "starry-night", "virtual", paint._task_for_picture("starry-night"))
+    job.dir = tmp_path / "paint" / "j"
+    cmd, env = paint.build_command(job, cfg, console_url="http://127.0.0.1:8082", python="py")
+    assert "--model" in cmd and cmd[cmd.index("--model") + 1] == "qwen3.5:4b"
+    assert "--subscription" not in cmd
+    assert f"base_url={paint.LOCAL_BASE_URL}" in cmd and "api_key_env=SACPAINT_LOCAL_KEY" in cmd
+    assert env.get("SACPAINT_LOCAL_KEY")
+    cfg["brain"] = {"local": "gemma4:e4b-it-qat"}
+    cmd, _ = paint.build_command(job, cfg, console_url="http://127.0.0.1:8082", python="py")
+    assert cmd[cmd.index("--model") + 1] == "gemma4:e4b-it-qat"
+    cfg["brain"] = {"subscription": "opus"}
+    cmd, _ = paint.build_command(job, cfg, console_url="http://127.0.0.1:8082", python="py")
+    assert not any(c.startswith("base_url=") for c in cmd)
