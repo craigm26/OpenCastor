@@ -591,7 +591,14 @@ class OpenCastorEmbodiment:
             ),
             control_hz=None,
             is_simulated=False,
-            capabilities=frozenset({SELF_PACED}),
+            capabilities=frozenset({SELF_PACED})
+            # How a policy learns the primitive is on offer, and at which pen
+            # heights a stroke must be planned. It lands in the eval log too.
+            | (
+                {stroke_lib.capability(self.pen_down_z, self.travel_z)}
+                if self.strokes
+                else frozenset()
+            ),
             supported_target_kinds=frozenset({"reference_drawing"}),
             docs=docs,
         )

@@ -47,6 +47,24 @@ STROKE_KEY = "stroke"
 POINT_KEY = "stroke_point"
 FINAL_KEY = "stroke_final"
 
+#: Canvas-frame pen heights in metres, as ``docs/benchmarks/sacpaint.md``
+#: states the contract: the pen marks at or below ``PEN_DOWN_Z`` and travels at
+#: or above ``TRAVEL_Z``. A body that overrides them says so in the capability
+#: it advertises (:func:`capability`), which is what a policy should read;
+#: these are the fallback for a body that advertises nothing.
+PEN_DOWN_Z = 0.002
+TRAVEL_Z = 0.005
+
+#: How a body tells a policy it offers the primitive, and at what pen heights.
+#: A plain ``EmbodimentInfo`` has nowhere else to carry this: ``capabilities``
+#: is a free-form set of strings and lands in the eval log, so the run record
+#: says which pen geometry the strokes in it were planned against.
+CAPABILITY_PREFIX = "sacpaint_strokes"
+
+#: The sentence :func:`docs_paragraph` writes, so a body that advertises no
+#: capability (an older or third-party one) is still recognisable from its prompt.
+_DOCS_MARKER = f"The '{TOOL_NAME}' tool takes 'points'"
+
 
 class StrokeError(ValueError):
     """A stroke the body refuses. Always raised before anything moves."""
@@ -144,6 +162,47 @@ def is_open(meta: Any) -> bool:
     return not bool(meta.get(FINAL_KEY))
 
 
+def capability(pen_down_z: float = PEN_DOWN_Z, travel_z: float = TRAVEL_Z) -> str:
+    """The capability string a body advertises when it offers the primitive.
+
+    It carries the two pen heights because a policy that plans a stroke must
+    plan it at the heights *this* body marks and travels at, not at the ones
+    the benchmark documents by default.
+    """
+    return f"{CAPABILITY_PREFIX}:z={float(pen_down_z):g}/{float(travel_z):g}"
+
+
+def offered_by(info: Any) -> bool:
+    """True when an embodiment offers the stroke primitive.
+
+    The capability is the handshake. The prompt paragraph is accepted as well,
+    so a body that writes the docs but predates the capability is not refused.
+    """
+    for entry in getattr(info, "capabilities", None) or ():
+        if isinstance(entry, str) and entry.split(":", 1)[0] == CAPABILITY_PREFIX:
+            return True
+    docs = getattr(info, "docs", None)
+    return isinstance(docs, str) and _DOCS_MARKER in docs
+
+
+def geometry_of(info: Any) -> tuple[float, float] | None:
+    """The ``(pen_down_z, travel_z)`` a body advertised, or ``None`` if it advertised none."""
+    for entry in getattr(info, "capabilities", None) or ():
+        if not isinstance(entry, str):
+            continue
+        head, separator, payload = entry.partition(":")
+        if head != CAPABILITY_PREFIX or not separator or not payload.startswith("z="):
+            continue
+        down, slash, travel = payload[2:].partition("/")
+        if not slash:
+            continue
+        try:
+            return float(down), float(travel)
+        except ValueError:  # pragma: no cover - a malformed payload is no payload
+            return None
+    return None
+
+
 def docs_paragraph(max_points: int = MAX_POINTS, colored: bool = False) -> str:
     """The prompt paragraph that explains the primitive and asks for long strokes."""
     text = (
@@ -211,9 +270,13 @@ def tool_schema(
         "function": {
             "name": TOOL_NAME,
             "description": (
-                "Draw one polyline through the given points. Each point is a real arm motion, "
-                "so prefer long strokes. A point off the sheet refuses the whole stroke and "
-                "nothing moves."
+                f"Draw one polyline through up to {max_points} points in one call: the pen "
+                "travels above the first point, comes down, runs the whole line, and lifts "
+                "again after the last. Prefer long strokes that cross the picture to many "
+                f"short ones: a stroke of {max_points} points costs one call and "
+                f"{max_points} separate targets cost {max_points}. You see the sheet once, "
+                "at the end of the stroke. Each point is a real arm motion. A point off the "
+                "sheet refuses the whole stroke and nothing moves."
             ),
             "parameters": {
                 "type": "object",
