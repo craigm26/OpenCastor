@@ -254,6 +254,23 @@ def test_a_colour_stroke_inks_the_whole_line_in_one_palette_colour() -> None:
     assert body.color == gold
 
 
+def test_a_colour_stroke_that_names_no_colour_is_black_and_does_not_crash() -> None:
+    """Run five on the arm died on the second call with 'operands could not be
+    broadcast together with shapes (3,) (4,) (4,)': a stroke with no 'color' was
+    planned three wide on a four-wide box. It is black now, like a bare move."""
+    body = PlotterEmbodiment(reference=COLOR_REFERENCE, strokes=True)
+    policy = _policy(body)
+    policy._client = FakeLLM(
+        _call(stroke_lib.TOOL_NAME, points=[list(p) for p in STROKE_A], note="no colour named"),
+        _call("done", summary="drawn", hindsight="none"),
+    )
+    _drive(policy, body)
+
+    for (x0, y0), (x1, y1) in zip(STROKE_A, STROKE_A[1:]):
+        assert _pixel(body, (x0 + x1) / 2, (y0 + y1) / 2) == pal.rgb_of("black")
+    assert body.color == pal.index_of("black")
+
+
 # --- refusal -------------------------------------------------------------------
 
 

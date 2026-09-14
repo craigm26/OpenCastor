@@ -198,7 +198,12 @@ class StrokeToolset:
                 high=self._high,
                 pen_down_z=self._pen_down_z,
                 travel_z=self._travel_z,
-                color=arguments.get("color") if self._colored else None,
+                # On a colour task the plan must be four wide or the box clip
+                # cannot broadcast; a stroke that names no colour is black, the
+                # same default a bare per-target move gets.
+                color=(arguments.get("color") if arguments.get("color") is not None else 0)
+                if self._colored
+                else None,
                 max_points=self._max_points,
             )
         except stroke_lib.StrokeError as exc:
