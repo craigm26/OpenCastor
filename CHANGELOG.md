@@ -40,6 +40,47 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
   actuation path, it cannot delay a dispatch and it cannot stop one. Nothing at
   the receiving end can refuse an action.
 
+- **A fresh robot now grows a trace file where it previously grew none.** The
+  generated gateway unit names `ROBOT_MD_ATTESTATION_EXPORT_FILE` whether or not
+  anything ships it, so `castor up` on a new robot produces
+  `<home>/attestation-export.ndjsonl` plus a sibling `.head` file (and a
+  `.offset` file once a shipper runs). That is the intended change: the trace
+  has to exist before it can leave. Say it out loud because it is a new file in
+  a robot home that was previously clean.
+
+  **It appends and it is never rotated, so it grows without bound.** Two lines
+  per invoke since robot-md-gateway 0.5.0a8, roughly a kilobyte each. Bob's
+  export reached 4437 lines and 4.1 MB from one robot with no shipper at all.
+  Rotation is deliberately absent and a rotated export READS AS TAMPERING, which
+  is the correct reading: the shipper's offset would land past the end of the
+  shorter file and it stops with a named report rather than re-delivering,
+  because from the outside a rotation and somebody cutting the file are the same
+  event.
+
+  Robots whose units were written by hand are unaffected, because `castor up`
+  did not write those units. The matching caution: `castor up` writes every unit
+  it renders into `~/.config/systemd/user/` UNCONDITIONALLY, so running it on a
+  robot with hand-edited units overwrites them. That has always been true; it is
+  worth re-reading here because this release adds a unit and an Environment line
+  to what would be overwritten.
+
+- **What leaves the box is outcomes, not intents.** PlatAtlas ingest reads the
+  outcome half of a record, and an intent line does not have one, so an intent
+  would be stored over there marked as a failed signature check when no
+  signature failed. The shipper skips `record_kind: "intent"` lines and logs how
+  many, and the generated `shipper.env` carries the commented
+  `#PLATATLAS_SHIP_INTENTS=1` switch and the paragraph explaining what it is
+  waiting for. The honest cost: the local export keeps both halves and is the
+  file a walk reads, but until the rail's ingest reads `record_kind`, the off-box
+  copy does not hold the record that a dispatch was attempted. Requires
+  robot-md-gateway 0.5.0a8 or later.
+
+- **`shipper.env` gets its mode before its content.** It was written and then
+  chmod'ed, which left the PlatAtlas ingest key world-readable for the length of
+  the write. A credential that was world-readable for a millisecond was
+  world-readable. The file is created 0600 and chmod'ed 0600 before anything is
+  written into it.
+
 - **The envelope-signature gate flip is deliberately LAST and is not in this
   release.** `ROBOT_MD_REQUIRE_ENVELOPE_SIGNATURE` stays unset, and
   `castor/bench/sacpaint/gateway.py`'s `build_envelope` still attaches no

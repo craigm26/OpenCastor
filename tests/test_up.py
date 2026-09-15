@@ -745,3 +745,30 @@ def test_an_explicit_base_url_is_written_not_commented():
     body = shipper_env(p)
     assert "PLATATLAS_BASE_URL=https://platatlas.com/opencastor" in body
     assert "#PLATATLAS_BASE_URL=" not in body
+
+
+def test_the_gateway_unit_names_its_export_file_with_no_shipper_at_all():
+    """A FRESH robot now gets an NDJSON trace file where it previously got
+    none: the gateway unit names ROBOT_MD_ATTESTATION_EXPORT_FILE whether or not
+    anything ships it. That is the intended change, it is in the CHANGELOG, and
+    it is what makes the trace a thing that exists before it is a thing that
+    leaves. It appends and is never rotated, so it grows."""
+    p = plan()
+    assert not p.ships_traces
+    units = unit_files(p, python="/venv/bin/python",
+                       gateway_bin="/venv/bin/robot-md-gateway")
+    assert "testbot-shipper.service" not in units
+    assert ("Environment=ROBOT_MD_ATTESTATION_EXPORT_FILE="
+            "/home/pi/testbot/attestation-export.ndjsonl") in units[
+                "testbot-gateway.service"]
+
+
+def test_the_shipper_env_says_intents_stay_on_the_box():
+    """The one thing an operator reading this file would otherwise have to
+    discover from a row count: the remote copy is outcomes only."""
+    body = shipper_env(plan(platatlas_ingest_key="sk_live_x",
+                            platatlas_org_slug="opencastor"))
+    assert "#PLATATLAS_SHIP_INTENTS=1" in body
+    assert "OUTCOMES, NOT INTENTS" in body
+    # Commented out, so the default really is the default.
+    assert "\nPLATATLAS_SHIP_INTENTS=" not in body

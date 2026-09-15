@@ -759,6 +759,18 @@ def shipper_env(plan: UpPlan) -> str:
         "# file, so a poll costs a stat and a read of whatever is new; it is not",
         "# a re-read of an ever-growing file.",
         "PLATATLAS_POLL_SECONDS=5",
+        "#",
+        "# WHAT LEAVES THE BOX IS OUTCOMES, NOT INTENTS. Since",
+        "# robot-md-gateway 0.5.0a8 the gateway writes two lines per invoke: an",
+        "# intent before the dispatch and an outcome after it. PlatAtlas ingest",
+        "# reads the outcome half of a record, which an intent line does not",
+        "# have, so an intent would be stored marked as a failed signature",
+        "# check when no signature failed. The shipper skips those lines and",
+        "# logs how many. The LOCAL export keeps both halves and is the file",
+        "# `verify_receipt.py --walk` reads; until the ingest learns to read",
+        "# record_kind, the off-box copy does not hold the record that a",
+        "# dispatch was attempted. Set this to 1 once it does.",
+        "#PLATATLAS_SHIP_INTENTS=1",
     ]
     return "\n".join(lines) + "\n"
 
@@ -1281,8 +1293,14 @@ def run_up(
     (home / DISCOVERY_ENV).write_text(discovery_env(plan))
     if plan.ships_traces:
         shipper_file = home / SHIPPER_ENV
-        shipper_file.write_text(shipper_env(plan))
+        # Mode BEFORE content. `write_text` then `chmod` leaves the ingest key
+        # readable by everyone for as long as the write takes, and a credential
+        # that was world-readable for a millisecond was world-readable. `touch`
+        # applies the mode only when it creates the file, so chmod runs too, for
+        # the rerun case where the file is already there with the wrong mode.
+        shipper_file.touch(mode=0o600, exist_ok=True)
         shipper_file.chmod(0o600)
+        shipper_file.write_text(shipper_env(plan))
         _say(f"trace shipping: on, to {plan.platatlas_org_slug} (key 0600)", started)
     else:
         _say(
