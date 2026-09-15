@@ -533,6 +533,35 @@ def test_owner_and_leasee_are_the_current_names_not_the_old_ones():
     assert not hasattr(RCANRole, "OPERATOR")
 
 
+def test_the_pacing_ladder_is_monotonic():
+    """A senior role is never paced below a junior one.
+
+    LEASEE was raised to the runtime's own 20 Hz motor ceiling so the
+    operator's joystick is not refused mid-drive; without moving OWNER with it
+    the brain, which supervises that operator, would have been capped below
+    them.
+    """
+    ordered = sorted(RCANRole, key=int)
+    limits = [ROLE_RATE_LIMITS[r] for r in ordered]
+    assert limits == sorted(limits), dict(zip([r.name for r in ordered], limits))
+    assert all(v > 0 for v in limits)
+
+
+def test_leasee_clears_the_console_joystick_cadence():
+    """The operator's own tools must fit inside the operator's own budget.
+
+    The built-in console and the gamepad page post /api/action every 80 ms
+    while a stick is held. That is 12.5 Hz, 750 a minute, and each request now
+    costs exactly one slot because the clamp read-back is read raw.
+    """
+    held_joystick_per_min = 60 / 0.080
+    assert ROLE_RATE_LIMITS[RCANRole.LEASEE] > held_joystick_per_min
+    # And the cap does not bind before the runtime's own motor gate does.
+    from castor.fs.safety import DEFAULT_LIMITS
+
+    assert ROLE_RATE_LIMITS[RCANRole.LEASEE] >= DEFAULT_LIMITS["motor_rate_hz"] * 60
+
+
 def test_the_429_body_carries_a_machine_readable_code(arm_client, monkeypatch):
     """A client can branch on the refusal without parsing a Python repr.
 

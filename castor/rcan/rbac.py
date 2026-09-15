@@ -146,6 +146,32 @@ _LEGACY_ROLE_MAP: dict[str, RCANRole] = {
 #: (see :data:`_DEPRECATED_ROLE_NAMES`) and reach this table only through
 #: :func:`resolve_role_name`, which logs the translation.
 #:
+#: LEASEE IS THE OPERATOR'S OWN BUDGET, and it is sized against the cadence
+#: the operator's own tools actually send. Every HTTP caller writes as the
+#: filesystem principal ``api``, which is LEASEE, and the built-in console and
+#: the gamepad page both post ``/api/action`` every 80 ms while a stick is
+#: held: 12.5 Hz, 750 requests a minute. At 500 that refused the operator
+#: mid-drive after about forty seconds of continuous driving, and with the
+#: clamp read-back also counting (fixed alongside this) after about twenty.
+#: A 429 mid-teleop does stop the robot, by refusing to move it, which is
+#: arguably the safe direction, but it is not what the operator asked for and
+#: it is a foreseeable outage rather than a runaway being caught.
+#:
+#: 1200 is the runtime's OWN declared motor ceiling, ``motor_rate_hz: 20.0`` in
+#: ``castor/fs/safety.py``, expressed per minute. Choosing it means the coarse
+#: per-role cap never binds before the purpose-built motor gate does, which is
+#: the gate that should decide motor cadence; the role cap goes back to being
+#: what it is for, a ceiling on a runaway. A held joystick at 750 a minute now
+#: sits comfortably under it, and anything faster than the robot's own motor
+#: ceiling is still refused.
+#:
+#: THE LADDER STAYS MONOTONIC, which is why OWNER moves with LEASEE. A senior
+#: role paced below a junior one is incoherent, and it would have been the
+#: brain (OWNER, the in-process control loop) capped below the operator it
+#: supervises. OWNER is twice the motor ceiling because the brain both writes
+#: /dev/motor and reads the clamped value back on every tick, so two slots a
+#: command is its real cost at the runtime's own top motor rate.
+#:
 #: NO ROLE IS UNLIMITED ANY MORE. CREATOR used to be 0, which
 #: ``check_role_rate_limit`` read as "admit everything and do not even count".
 #: A cap that one role skips entirely is not a cap, and CREATOR is exactly the
@@ -156,8 +182,8 @@ _LEGACY_ROLE_MAP: dict[str, RCANRole] = {
 ROLE_RATE_LIMITS: dict[RCANRole, int] = {
     RCANRole.GUEST: 10,
     RCANRole.USER: 100,
-    RCANRole.LEASEE: 500,
-    RCANRole.OWNER: 1000,
+    RCANRole.LEASEE: 1200,
+    RCANRole.OWNER: 2400,
     RCANRole.CREATOR: 6000,
 }
 

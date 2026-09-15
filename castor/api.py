@@ -1081,8 +1081,14 @@ async def direct_action(action: ActionRequest, request: Request):
                 status_code=422,
                 detail=f"Action rejected by safety layer: {reason}",
             )
-        # Use the safety-clamped action
-        clamped = state.fs.read("/dev/motor", principal="api")
+        # Use the safety-clamped action. READ RAW: this is the gateway reading
+        # back the value it just wrote, inside the same request, not a caller
+        # asking the robot a second question. Through the paced read() it cost
+        # a SECOND slot, so one held joystick at 12.5 Hz debited 1500 a minute
+        # against a 500 budget and spent it in twenty seconds. The write above
+        # already crossed every permission, bounds and pacing check and is
+        # already in /var/log/actions; the read-back adds nothing but a count.
+        clamped = state.fs.ns.read("/dev/motor")
         if clamped:
             action_dict = clamped
 
