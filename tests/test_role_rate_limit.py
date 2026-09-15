@@ -594,3 +594,31 @@ def test_a_string_detail_is_unchanged(arm_client):
     body = resp.json()
     assert body["code"] == "HTTP_404"
     assert "detail" not in body
+
+
+def test_an_over_budget_read_says_429_not_404(arm_client, monkeypatch):
+    """A paced read that the cap refused must not read as a missing path.
+
+    SafetyLayer.read and .ls answer None both when the cap refuses and when the
+    path is absent, so an over-budget caller was told "Path not found" and sent
+    to check its own request. Same mistake POST /api/action made with 422.
+    """
+    client, sl, _driver = arm_client
+    monkeypatch.setitem(ROLE_RATE_LIMITS, RCANRole.LEASEE, 1)
+    assert sl.check_role_rate_limit("api") is True
+    assert sl.check_role_rate_limit("api") is False
+
+    resp = client.get("/api/fs/ls", params={"path": "/"})
+    assert resp.status_code == 429, resp.text
+    assert resp.json()["code"] == "rate_limited"
+
+    resp = client.post("/api/fs/read", json={"path": "/proc/status"})
+    assert resp.status_code == 429, resp.text
+    assert resp.json()["reason"] == "role_rate_limited"
+
+
+def test_a_genuinely_missing_path_still_404s(arm_client):
+    """The 429 only fires when the cap actually refused."""
+    client, _sl, _driver = arm_client
+    resp = client.post("/api/fs/read", json={"path": "/proc/no-such-node"})
+    assert resp.status_code == 404, resp.text

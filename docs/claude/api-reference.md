@@ -65,7 +65,9 @@ released joystick sends. A caller that has spent its budget, and a runtime
 whose RBAC module is misconfigured, can both still halt the robot.
 
 A refusal answers `{"code": "rate_limited", "reason": ..., "detail": {...}}`
-with status 429.
+with status 429. That includes a refused READ: `POST /api/fs/read` and
+`GET /api/fs/ls` used to answer 404 when the cap refused, because the paced
+read returns the same `None` for "refused" and for "not there".
 
 Error responses use `{"error": "...", "code": "HTTP_NNN", "status": NNN}` (not `{"detail": "..."}`).
 

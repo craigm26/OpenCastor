@@ -2807,6 +2807,25 @@ class FSWriteRequest(BaseModel):
     data: Any = None
 
 
+def _raise_if_paced_out(path: str) -> None:
+    """Turn a pacing refusal on a READ into a 429 instead of a 404.
+
+    A paced read (SafetyLayer.read / ls / stat) answers None when the cap
+    refuses, exactly as it does when the path is missing, so an over-budget
+    caller got "Path not found" or "Not a directory". That is the same mistake
+    POST /api/action made by answering 422: it sends the caller to check its
+    own request when the answer is "wait". Only raises when the cap actually
+    refused; a genuinely missing path still 404s.
+    """
+    if state.fs is None:
+        return
+    reason = getattr(state.fs, "last_rate_limit_reason", None)
+    # Must be a real string: a test double answers any attribute with a truthy
+    # object, and a safety layer that predates this attribute answers None.
+    if isinstance(reason, str) and reason:
+        raise _rate_limit_http_error(reason, "api", f"read {path}")
+
+
 @app.post("/api/fs/read", dependencies=[Depends(verify_token)])
 async def fs_read(req: FSReadRequest):
     """Read a virtual filesystem path."""
@@ -2814,8 +2833,10 @@ async def fs_read(req: FSReadRequest):
         raise HTTPException(status_code=503, detail="Filesystem not initialized")
     safe_path = _validate_vfs_path(req.path)
     data = state.fs.read(safe_path, principal="api")
-    if data is None and not state.fs.exists(safe_path):
-        raise HTTPException(status_code=404, detail=f"Path not found: {safe_path}")
+    if data is None:
+        _raise_if_paced_out(safe_path)
+        if not state.fs.exists(safe_path):
+            raise HTTPException(status_code=404, detail=f"Path not found: {safe_path}")
     return {"path": safe_path, "data": data}
 
 
@@ -2838,6 +2859,7 @@ async def fs_ls(path: str = "/"):
         raise HTTPException(status_code=503, detail="Filesystem not initialized")
     children = state.fs.ls(path, principal="api")
     if children is None:
+        _raise_if_paced_out(path)
         raise HTTPException(status_code=404, detail=f"Not a directory: {path}")
     return {"path": path, "children": children}
 

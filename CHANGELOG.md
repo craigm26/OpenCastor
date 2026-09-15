@@ -124,7 +124,12 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
   A pacing refusal answers 429, not the 422 `POST /api/action` used to give it.
   422 sends a caller to look at its own payload; a rate limit is about cadence
-  and waiting fixes it. Every refusal is also a row in `/var/log/safety`.
+  and waiting fixes it. The same correction applies to a refused READ:
+  `POST /api/fs/read` and `GET /api/fs/ls` answered 404, because the paced read
+  returns the same `None` for "the cap refused" and for "the path is not
+  there". Every refusal is also a row in `/var/log/safety`, and the 429 body
+  carries `code: rate_limited` and the named `reason` as fields rather than
+  inside a stringified dict.
 
   Enforcement is in the runtime, which is the only layer that reads these
   roles. Nothing here is a hardware guarantee and nothing here is safety rated.
