@@ -22,6 +22,7 @@ from castor.up import (
     policy_names_real_wheels,
     real_wheels_question,
     render,
+    shipper_env,
     sign_manifest,
     unit_files,
 )
@@ -662,3 +663,85 @@ def test_no_gap_carries_an_imperative_to_an_ai():
     g = Gap(id="x", kind="unclaimed-peripheral", evidence="e",
             suggestion="declare a capability in ROBOT.md (operator-signed)")
     assert "operator" in g.suggestion
+
+
+# ---------------------------------------------------------------------------
+# OC-10: the shipper unit. Off-box copy of the signed action trace.
+# ---------------------------------------------------------------------------
+
+
+def test_no_ingest_key_means_no_shipper_unit():
+    """THE DEFAULT, and the one that has to stay silent. A robot that was never
+    told where to send its trace gets no unit at all, not a unit that fails
+    every ten seconds trying to reach nowhere."""
+    units = unit_files(plan(), python="/venv/bin/python",
+                       gateway_bin="/venv/bin/robot-md-gateway")
+    assert "testbot-shipper.service" not in units
+    assert not plan().ships_traces
+
+
+def test_a_key_with_no_org_still_renders_no_unit():
+    """A key with no organisation has nowhere to go. Rendering the unit anyway
+    would put a red `failed` line in `systemctl --user status` for a feature the
+    operator never finished configuring."""
+    p = plan(platatlas_ingest_key="sk_live_x")
+    assert not p.ships_traces
+    units = unit_files(p, python="/venv/bin/python",
+                       gateway_bin="/venv/bin/robot-md-gateway")
+    assert "testbot-shipper.service" not in units
+
+
+def test_an_ingest_key_renders_a_shipper_beside_the_gateway():
+    p = plan(platatlas_ingest_key="sk_live_x", platatlas_org_slug="opencastor")
+    assert p.ships_traces
+    units = unit_files(p, python="/venv/bin/python",
+                       gateway_bin="/venv/bin/robot-md-gateway")
+
+    unit = units["testbot-shipper.service"]
+    # Starts after the gateway, because there is nothing to tail until the
+    # gateway has written something.
+    assert "After=network-online.target testbot-gateway.service" in unit
+    # The credential is in the env FILE, never on the ExecStart line: a key on a
+    # command line ends up in `ps` and in shell history.
+    assert "EnvironmentFile=/home/pi/testbot/shipper.env" in unit
+    assert "sk_live_x" not in unit
+    # Same export file the gateway unit writes, named in both places.
+    assert ("Environment=ROBOT_MD_ATTESTATION_EXPORT_FILE="
+            "/home/pi/testbot/attestation-export.ndjsonl") in unit
+    assert ("Environment=ROBOT_MD_ATTESTATION_EXPORT_FILE="
+            "/home/pi/testbot/attestation-export.ndjsonl") in units[
+                "testbot-gateway.service"]
+    # The shipper binary is the gateway distribution's, not whatever `python`
+    # happens to be: `python` runs the runtime and need not be able to import
+    # robot_md_gateway at all.
+    assert "ExecStart=/venv/bin/platatlas-shipper" in unit
+    # Exit 3 is the tamper report. Restarting on it every ten seconds would bury
+    # the one journal line that says bytes already shipped are gone.
+    assert "RestartPreventExitStatus=3" in unit
+    assert "[Install]\nWantedBy=default.target" in unit
+    # Same template style as every other unit here.
+    assert unit.startswith("[Unit]\nDescription=")
+    assert "/home/pi/testbot" in unit
+    assert "craigm26" not in unit
+
+
+def test_the_shipper_env_holds_the_credential_and_says_so():
+    p = plan(platatlas_ingest_key="sk_live_x", platatlas_org_slug="opencastor")
+    body = shipper_env(p)
+    assert "PLATATLAS_INGEST_KEY=sk_live_x" in body
+    assert "PLATATLAS_ORG_SLUG=opencastor" in body
+    # It is the ONE generated env file that carries a secret, so it has to be
+    # the one that warns about it rather than reading like the others.
+    assert "THIS FILE HOLDS A CREDENTIAL" in body
+    assert "0600" in body
+    # No base url configured -> the shipper derives it; the file says so rather
+    # than pinning a host nobody chose.
+    assert "#PLATATLAS_BASE_URL=" in body
+
+
+def test_an_explicit_base_url_is_written_not_commented():
+    p = plan(platatlas_ingest_key="sk_live_x", platatlas_org_slug="opencastor",
+             platatlas_base_url="https://platatlas.com/opencastor")
+    body = shipper_env(p)
+    assert "PLATATLAS_BASE_URL=https://platatlas.com/opencastor" in body
+    assert "#PLATATLAS_BASE_URL=" not in body

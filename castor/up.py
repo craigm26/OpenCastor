@@ -38,6 +38,7 @@ import base64
 import hashlib
 import json
 import logging
+import os
 import secrets
 import shutil
 import socket
@@ -129,6 +130,18 @@ DISCOVERY_ENV = "discovery.env"
 #: before the console existed would never have received a token at all.
 CONSOLE_ENV = "console.env"
 
+#: The gateway's durable trace. One NDJSON line per invoke, signed, with a seq
+#: and a chain_prev since robot-md-gateway 0.5.0a8, and a sibling .head file.
+#: On the box it is a record nobody else holds; the shipper below is what turns
+#: it into a copy the robot's owner cannot quietly edit.
+ATTESTATION_EXPORT = "attestation-export.ndjsonl"
+
+#: Where the shipper unit reads its settings, WHEN THERE IS A SHIPPER. Its own
+#: file because it is the only generated file here that holds a credential: the
+#: PlatAtlas ingest key goes in it, and it is written 0600. No key configured
+#: means no file and no unit, which is the default and stays the default.
+SHIPPER_ENV = "shipper.env"
+
 
 @dataclass
 class UpPlan:
@@ -144,6 +157,30 @@ class UpPlan:
     #: Whether the generated gateway policy names the PCA9685 or the simulator.
     #: False is the default everywhere; only an explicit answer sets it True.
     real_wheels: bool = False
+
+    # -- off-box trace shipping (OC-10) -------------------------------------
+    #: The PlatAtlas ingest credential, read from the environment at plan time.
+    #: EMPTY IS THE DEFAULT AND IT MEANS NO SHIPPER UNIT AT ALL. A robot that
+    #: was never told where to send its trace does not get a service that fails
+    #: every five seconds trying; it gets nothing, and the trace stays on the
+    #: box where it already was.
+    platatlas_ingest_key: str = ""
+    #: Which organisation the trace belongs to. Required alongside the key.
+    platatlas_org_slug: str = ""
+    #: Override for the ingest host. Empty uses <org>.platatlas.com, which is
+    #: what the shipper derives on its own.
+    platatlas_base_url: str = ""
+
+    @property
+    def ships_traces(self) -> bool:
+        """Whether a shipper unit is rendered for this robot.
+
+        BOTH the key and the org are required. A key with no org has nowhere to
+        go, and rendering a unit that exits on its first poll would be worse
+        than rendering none: `systemctl --user status` would show a failed
+        service for a feature the operator never asked for.
+        """
+        return bool(self.platatlas_ingest_key and self.platatlas_org_slug)
 
     # -- microduck only ----------------------------------------------------
     #: The duck's address, as typed. ``None`` means the duck is THIS machine
@@ -466,6 +503,7 @@ After=network-online.target
 EnvironmentFile={home}/gateway-attestation.env
 EnvironmentFile={home}/gateway-policy.env
 Environment=ROBOT_MANIFEST={home}/ROBOT.md
+Environment=ROBOT_MD_ATTESTATION_EXPORT_FILE={home}/{ATTESTATION_EXPORT}
 Environment=OPENCASTOR_OPS_RRF_URL=http://127.0.0.1:{RRF_STUB_PORT}
 ExecStart={gateway_bin} serve --host 0.0.0.0 --port {plan.gateway_port} --bearers {home}/bearers.yaml --robot-md {home}/ROBOT.md
 Restart=on-failure
@@ -586,6 +624,50 @@ RestartPreventExitStatus=2
 [Install]
 WantedBy=default.target
 """
+    if plan.ships_traces:
+        # THE ONLY CONDITIONAL UNIT THAT DEPENDS ON A CREDENTIAL, and it is
+        # absent by default on purpose. Without an ingest key there is nowhere
+        # to send anything, and a unit that restarts every two seconds saying
+        # so is worse than no unit: it is a red line in `systemctl --user
+        # status` for a feature nobody asked for.
+        #
+        # What it does: tails the gateway's NDJSON trace and POSTs each line to
+        # PlatAtlas ingest. It is a sidecar. It is NOT on the actuation path,
+        # it cannot delay a dispatch, and it cannot stop one. Off-box evidence,
+        # nothing more.
+        #
+        # EnvironmentFile with NO leading dash, like every other unit here: the
+        # file holds the credential, and a shipper started without it would run
+        # and deliver nothing while reporting active (running).
+        #
+        # RestartPreventExitStatus=3 is the tamper report. The shipper exits 3
+        # when its saved offset is past the end of the export file, which means
+        # bytes it already delivered are gone from the local copy. That is not
+        # fixed by trying again in ten seconds, and looping on it buries the one
+        # line in the journal that says what happened. The operator compares the
+        # off-box copy with the local file and then decides.
+        # The shipper binary sits beside the gateway binary, because it is the
+        # same distribution. Deriving it from gateway_bin rather than from
+        # `python` is the difference between a unit that starts and one that
+        # cannot import robot_md_gateway: `python` here is whatever runs the
+        # runtime, and it is not guaranteed to be the environment the gateway
+        # was installed into.
+        shipper_bin = str(Path(gateway_bin).with_name("platatlas-shipper"))
+        units[f"{name}-shipper.service"] = f"""[Unit]
+Description=Off-box copy of {name}'s signed action trace, shipped to PlatAtlas ingest
+After=network-online.target {name}-gateway.service
+
+[Service]
+EnvironmentFile={home}/{SHIPPER_ENV}
+Environment=ROBOT_MD_ATTESTATION_EXPORT_FILE={home}/{ATTESTATION_EXPORT}
+ExecStart={shipper_bin}
+Restart=on-failure
+RestartSec=10
+RestartPreventExitStatus=3
+
+[Install]
+WantedBy=default.target
+"""
     units[f"{name}-rrf-stub.service"] = f"""[Unit]
 Description=RRF key resolver stub for {name} (loopback kid lookup)
 
@@ -630,6 +712,55 @@ def discovery_env(plan: UpPlan) -> str:
         "# address changing. Set it only if your stop lives somewhere else.\n"
         "#ROBOT_ESTOP_URL=\n"
     )
+
+
+def shipper_env(plan: UpPlan) -> str:
+    """The settings the shipper unit runs on, as an EnvironmentFile.
+
+    THE ONLY GENERATED FILE HERE THAT HOLDS A CREDENTIAL, and the caller writes
+    it 0600. The ingest key has to be in the process environment because that is
+    what `robot_md_gateway.shipper` reads, and there is no file-path spelling to
+    point at instead. So this file is the exception to the rule the other env
+    files state in their own headers, and it says so at the top rather than
+    letting somebody tar up a robot home for a bug report and find out later.
+
+    WHAT THE KEY CAN DO AT THE OTHER END matters more than what it can do here.
+    It writes traces. PlatAtlas's DELETE /api/traces/:id refuses attested traces
+    as of 2026-09-12 (PA-03), which is the thing that had to be true before the
+    robot's only off-box copy went somewhere this same credential class could
+    remove it. Without that, shipping here would not create an independent hold;
+    it would move the copy next to the delete button.
+    """
+    lines = [
+        "# Off-box shipping for this robot's signed action trace, written by",
+        "# `castor up` and regenerated on every run.",
+        "#",
+        "# THIS FILE HOLDS A CREDENTIAL, unlike every other env file `up`",
+        "# writes. It is 0600. Do not include it in a bug report tarball, and",
+        "# rotate the key in PlatAtlas if you already did.",
+        "#",
+        "# The key writes traces. It does not delete them: PlatAtlas refuses to",
+        "# delete an attested trace, which is what makes the copy over there an",
+        "# independent one rather than a second place the same hand can edit.",
+        f"PLATATLAS_INGEST_KEY={plan.platatlas_ingest_key}",
+        f"PLATATLAS_ORG_SLUG={plan.platatlas_org_slug}",
+    ]
+    if plan.platatlas_base_url:
+        lines.append(f"PLATATLAS_BASE_URL={plan.platatlas_base_url}")
+    else:
+        lines += [
+            "#",
+            "# Unset: the shipper derives https://<org>.platatlas.com on its own.",
+            "#PLATATLAS_BASE_URL=",
+        ]
+    lines += [
+        "#",
+        "# How often to look for new lines. This is a tail of an append-only",
+        "# file, so a poll costs a stat and a read of whatever is new; it is not",
+        "# a re-read of an ever-growing file.",
+        "PLATATLAS_POLL_SECONDS=5",
+    ]
+    return "\n".join(lines) + "\n"
 
 
 def duckbridge_env(plan: UpPlan) -> str:
@@ -1105,6 +1236,12 @@ def run_up(
         duck_host=host,
         duck_user=user,
         bridge_token_file=str(Path(BRIDGE_TOKEN_FILE).expanduser()),
+        # From the environment, never from a flag and never from a prompt: this
+        # is a credential, and a credential on a command line ends up in shell
+        # history and in `ps`. Absent is the default and means no shipper.
+        platatlas_ingest_key=os.environ.get("PLATATLAS_INGEST_KEY", "").strip(),
+        platatlas_org_slug=os.environ.get("PLATATLAS_ORG_SLUG", "").strip(),
+        platatlas_base_url=os.environ.get("PLATATLAS_BASE_URL", "").strip(),
     )
 
     # -- home dir ------------------------------------------------------------
@@ -1142,6 +1279,17 @@ def run_up(
         print("\n  " + WHEELS_OFF_THE_GROUND + "\n")
     (home / "runtime.py").write_text(render("runtime.py.tmpl", plan))
     (home / DISCOVERY_ENV).write_text(discovery_env(plan))
+    if plan.ships_traces:
+        shipper_file = home / SHIPPER_ENV
+        shipper_file.write_text(shipper_env(plan))
+        shipper_file.chmod(0o600)
+        _say(f"trace shipping: on, to {plan.platatlas_org_slug} (key 0600)", started)
+    else:
+        _say(
+            "trace shipping: off (no PLATATLAS_INGEST_KEY/PLATATLAS_ORG_SLUG in "
+            "the environment); the signed trace stays on this box",
+            started,
+        )
     if plan.is_duck:
         from castor.microduck_bridge import mint_token
 

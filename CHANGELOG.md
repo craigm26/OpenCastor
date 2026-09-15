@@ -9,6 +9,48 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+- **`castor up` can ship the gateway's signed trace off the box (OC-10).** The
+  generated gateway unit now names its durable trace explicitly
+  (`ROBOT_MD_ATTESTATION_EXPORT_FILE=<home>/attestation-export.ndjsonl`), and
+  when, and only when, `PLATATLAS_INGEST_KEY` and `PLATATLAS_ORG_SLUG` are in
+  the environment at `castor up` time, `unit_files()` renders a
+  `<name>-shipper.service` beside the gateway unit. No key means no unit and no
+  file, which is the default and stays the default: a robot that was never told
+  where to send its trace does not get a service that fails every ten seconds
+  trying to reach nowhere.
+
+  Both values come from the environment, never from a flag and never from a
+  prompt. A credential on a command line ends up in shell history and in `ps`.
+  The key lands in a generated `shipper.env` written 0600, which is the one env
+  file `up` writes that holds a secret and the one that says so in its own
+  header.
+
+  The unit lists `RestartPreventExitStatus=3`, the shipper's tamper report. It
+  exits 3 when its saved offset is past the end of the export file, which means
+  bytes already delivered are gone from the local copy. That is not fixed by
+  trying again in ten seconds, and looping on it buries the one journal line
+  that says what happened. Requires robot-md-gateway 0.5.0a8 or later.
+
+  Why now and not earlier: PlatAtlas `DELETE /api/traces/:id` refuses attested
+  traces as of 2026-09-12 (PA-03). Until that closed, shipping the robot's only
+  off-box copy there would have handed the same credential class the power to
+  remove it, and the off-box copy would not have been an independent hold.
+
+  This is evidence, not enforcement. The shipper is a sidecar, it is not on the
+  actuation path, it cannot delay a dispatch and it cannot stop one. Nothing at
+  the receiving end can refuse an action.
+
+- **The envelope-signature gate flip is deliberately LAST and is not in this
+  release.** `ROBOT_MD_REQUIRE_ENVELOPE_SIGNATURE` stays unset, and
+  `castor/bench/sacpaint/gateway.py`'s `build_envelope` still attaches no
+  `envelope_signature`. Turning the gate on before the Python client signs
+  returns 403 to `castor bench`, the console and the paint rail while the iOS
+  app keeps working, because the app already signs. The order is: generate a
+  caller identity in `castor up` and publish its kid to the RRF stub beside the
+  manifest and attestation kids, make `build_envelope` sign the invoke, and only
+  then render `ROBOT_MD_REQUIRE_ENVELOPE_SIGNATURE=1` into the generated policy.
+  Nobody flip the flag early.
+
 - sacpaint: one call can lay a whole stroke. The `stroke` primitive takes up to 24 points on the sheet (and one colour on a colour task) and draws the polyline through them as the very targets the body already sent: one gateway call per target, one receipt, the same tolerance and miss handling, the same inking, the same scoring. A point off the sheet refuses the whole stroke before anything moves. Every target is still its own step in `logs/actions/*.jsonl`, with the stroke's id in the step metadata, so replays and `efficiency` keep meaning. Opt-in through the body option `strokes` and the paint profile's `"strokes": true`; the packaged prompt is byte-identical without it, and the oracle (`-P strokes=true`) is the ceiling of the new primitive too.
 - sacpaint: `--policy agent_strokes` is how a model actually sends a stroke. The tool list a model sees is built by the agent plugin from the embodiment's action box, so the body's `stroke` primitive was unreachable from `--policy agent`: `-E strokes=true` on its own drew the same picture one target per call. `agent_strokes` is the same agent with the same LLM wiring (base_url, api_key_env, model, images, max_llm_calls, the subscription shim) and `stroke` added to its toolset beside `move_to`, `done`, `give_up` and `take_pic`. A stroke is planned into the targets the body already sends and each one is executed through the plugin's own move tool, so the waypoints, bounds and speed limit are unchanged and one gateway call per target with three millimetre coordinates is still what leaves the robot; only the last step of a stroke asks for a fresh photograph. A body started without `-E strokes=true` is refused at bind, naming the flag, instead of degrading silently, and a body that offers the primitive now advertises it (and its pen heights) as the capability `sacpaint_strokes:z=<down>/<travel>`. The console picks the policy to match: `"strokes": true` in `paint.json` now starts `agent_strokes`.
 - sacpaint: a run that knows its model-call budget gets a planning paragraph in the prompt (lay the whole sheet out first, then detail). Opt-in through the body option llm_budget; the console sets it from the profile cap, and the packaged benchmark prompt is byte-identical without it.
