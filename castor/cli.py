@@ -5601,9 +5601,16 @@ def cmd_incidents(args) -> None:
         if getattr(args, "platatlas", False) and not getattr(args, "submit", False):
             raise SystemExit(_submit_incident_report_platatlas(args, log))
         if getattr(args, "submit", False):
+            # SNAPSHOT FIRST. The registry filing stamps the log on success, and
+            # unreported_incidents() re-reads it, so the PlatAtlas leg would otherwise
+            # find nothing pending and file nothing while returning 1 - which is what
+            # `--submit --platatlas` did before this line existed. Both destinations
+            # file the same incidents; the list is taken once, here.
+            both = getattr(args, "platatlas", False)
+            pending_before = log.unreported_incidents() if both else None
             rc = _submit_incident_report(args, log)
-            if rc == 0 and getattr(args, "platatlas", False):
-                rc = _submit_incident_report_platatlas(args, log)
+            if rc == 0 and both:
+                rc = _submit_incident_report_platatlas(args, log, pending=pending_before)
             raise SystemExit(rc)
         report = generate_report(log)
         output = getattr(args, "output", None)
@@ -5730,7 +5737,7 @@ def _submit_incident_report(args, log) -> int:
     )
 
 
-def _submit_incident_report_platatlas(args, log) -> int:
+def _submit_incident_report_platatlas(args, log, pending=None) -> int:
     """`castor incidents report --submit --platatlas` - file to a PlatAtlas org (PA-18).
 
     Builds one signed ``incident-report/1`` per unfiled incident, in the shape the rail
@@ -5761,7 +5768,14 @@ def _submit_incident_report_platatlas(args, log) -> int:
     )
 
     label = "castor incidents report --platatlas"
-    pending = log.unreported_incidents()
+    # PENDING IS PASSED IN when the caller already had the list, because the registry
+    # filing that may have run first STAMPS the log: --submit calls log.mark_reported(),
+    # and log.unreported_incidents() re-reads the file from disk, so asking again here
+    # after a successful --submit returns nothing and the PlatAtlas leg silently files
+    # nothing while reporting failure. The two destinations file the same incidents, so
+    # the list is taken once, before either of them runs.
+    if pending is None:
+        pending = log.unreported_incidents()
     if not pending:
         sys.stderr.write(f"{label}: no unfiled incidents in the log; nothing to submit\n")
         return 1
