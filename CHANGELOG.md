@@ -81,6 +81,14 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
   world-readable. The file is created 0600 and chmod'ed 0600 before anything is
   written into it.
 
+- **No off-box copy exists yet, and installing this release does not create
+  one.** No `platatlas-shipper` has ever run on these machines; Bob's export
+  holds 4437 signed records and not one has left the box it was written on. The
+  unit is rendered only when `PLATATLAS_INGEST_KEY` and `PLATATLAS_ORG_SLUG` are
+  in the environment of a `castor up` run, and `castor up` is not something a
+  merge performs. Until somebody does that deliberately, the only durable record
+  of what these robots did is a file on the machine whose agent did it.
+
 - **The envelope-signature gate flip is deliberately LAST and is not in this
   release.** `ROBOT_MD_REQUIRE_ENVELOPE_SIGNATURE` stays unset, and
   `castor/bench/sacpaint/gateway.py`'s `build_envelope` still attaches no
