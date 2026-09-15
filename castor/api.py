@@ -2752,6 +2752,12 @@ async def replay_episode(episode_id: str):
     try:
         _execute_action(action)
         return {"replayed": True, "episode_id": episode_id, "action": action}
+    except HTTPException:
+        # A pacing refusal is already an HTTPException carrying its 429 and its
+        # named reason. Wrapping it in a 500 would tell the caller the runtime
+        # broke when in fact the runtime refused, and would bury the reason in
+        # a message string. Let it through as it is.
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Replay failed: {exc}") from exc
 
@@ -6941,15 +6947,32 @@ async def on_startup():
                     thought = state.brain.think(image_bytes, msg.payload.get("instruction", ""))
                     return {"raw_text": thought.raw_text, "action": thought.action}
 
-                def _teleop_handler(msg, p):
-                    if state.driver:
-                        _execute_action(msg.payload)
+                def _rcan_dispatch(payload) -> dict:
+                    """Execute an RCAN-planned action, absorbing a pacing refusal.
+
+                    An RCAN handler is not an HTTP request: nothing downstream
+                    turns an HTTPException into a response, so a 429 raised here
+                    would surface as a dead router rather than as a refused
+                    command. Same shape as _dispatch_channel_action. The refusal
+                    is already a row in /var/log/safety, and the caller is told
+                    plainly that its command was not accepted.
+                    """
+                    if not state.driver:
+                        return {"accepted": True}
+                    try:
+                        _execute_action(payload)
+                    except HTTPException as exc:
+                        if exc.status_code != 429:
+                            raise
+                        logger.warning("RCAN action refused by the pacing cap: %s", exc.detail)
+                        return {"accepted": False, "deny": "rate_limited", "detail": exc.detail}
                     return {"accepted": True}
 
+                def _teleop_handler(msg, p):
+                    return _rcan_dispatch(msg.payload)
+
                 def _nav_handler(msg, p):
-                    if state.driver:
-                        _execute_action(msg.payload)
-                    return {"accepted": True}
+                    return _rcan_dispatch(msg.payload)
 
                 def _vision_handler(msg, p):
                     cam = state.fs.ns.read("/dev/camera") if state.fs else None
@@ -9393,6 +9416,8 @@ async def replay_trajectory(
         raise HTTPException(status_code=503, detail="Driver not initialized")
 
     executed = 0
+    refused = 0
+    last_refusal: Any = None
     import asyncio as _asyncio
 
     prev_ts = None
@@ -9406,6 +9431,21 @@ async def replay_trajectory(
             try:
                 _execute_action(action)
                 executed += 1
+            except HTTPException as exc:
+                if exc.status_code != 429:
+                    raise
+                # A PACING REFUSAL IS COUNTED, NOT SWALLOWED. This loop already
+                # absorbed every exception with a log line, so a replay that the
+                # cap refused from its second step onward still answered
+                # "replayed": true and an executed count nobody could read as a
+                # partial run. The refusals are now in the body.
+                refused += 1
+                last_refusal = exc.detail
+                logger.warning(
+                    "trajectory replay: episode %s refused by the pacing cap: %s",
+                    ep["id"],
+                    exc.detail,
+                )
             except Exception as exc:
                 logger.warning("trajectory replay: episode %s failed: %s", ep["id"], exc)
         prev_ts = ep["ts"]
@@ -9414,6 +9454,8 @@ async def replay_trajectory(
         "replayed": True,
         "episode_count": len(episodes),
         "executed": executed,
+        "refused": refused,
+        "refusal": last_refusal,
         "duration_s": round(end_ts - start_ts, 3),
         "speed_factor": speed_factor,
     }
