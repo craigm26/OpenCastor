@@ -622,3 +622,119 @@ def test_a_genuinely_missing_path_still_404s(arm_client):
     client, _sl, _driver = arm_client
     resp = client.post("/api/fs/read", json={"path": "/proc/no-such-node"})
     assert resp.status_code == 404, resp.text
+
+
+def test_the_real_ls_route_answers_429_past_the_cap(arm_client):
+    """Drive GET /api/fs/ls past the real cap on the real route.
+
+    Bob answered 1200 x 200 then 50 x 404 "Not a directory: /proc" on exactly
+    this request, so the route is exercised end to end here rather than through
+    a monkeypatched limit.
+    """
+    client, sl, _driver = arm_client
+    limit = ROLE_RATE_LIMITS[RCANRole.LEASEE]
+    codes: dict[int, int] = {}
+    for _ in range(limit + 20):
+        code = client.get("/api/fs/ls", params={"path": "/proc"}).status_code
+        codes[code] = codes.get(code, 0) + 1
+    assert codes.get(200) == limit, codes
+    assert codes.get(429) == 20, codes
+    assert 404 not in codes, codes
+
+    resp = client.get("/api/fs/ls", params={"path": "/proc"})
+    assert resp.status_code == 429, resp.text
+    body = resp.json()
+    assert body["code"] == "rate_limited"
+    assert body["reason"] == "role_rate_limited"
+    assert sl.rate_limit_refusal("api") == "role_rate_limited"
+    assert client.get("/api/fs/estop").json()["rate_limit_reason"] is not None
+
+
+def test_a_version_skew_is_loud_instead_of_silently_404ing(arm_client, caplog):
+    """THE LIVE BUG, reproduced. Old fs/safety.py behind a new api.py.
+
+    On Bob the merge and the restart landed in the same second, so uvicorn
+    imported the new castor/api.py and the new castor/rcan/rbac.py but the OLD
+    castor/fs/safety.py. Every observation followed from that one fact: the cap
+    enforced at the new 1200 because rbac is imported lazily, the over-budget
+    read answered 404 because the handler could not tell a refusal from a
+    missing path, and /api/fs/estop reported rate_limit_reason null because the
+    old layer has no such attribute. The handler asked with getattr and did
+    nothing when the answer was missing, so a two millisecond deployment race
+    presented as a logic bug.
+
+    It is still a 404 here, because a gateway that cannot ask the cap genuinely
+    cannot know. What changed is that it says so, once, naming the cause.
+    """
+    import castor.api as api_mod
+
+    client, sl, _driver = arm_client
+    limit = ROLE_RATE_LIMITS[RCANRole.LEASEE]
+    for _ in range(limit + 1):
+        sl.check_role_rate_limit("api")
+
+    # An old SafetyLayer: refuses, but exposes neither of the new names.
+    class _OldLayer:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def __getattr__(self, name):
+            if name in ("rate_limit_refusal", "last_rate_limit_reason"):
+                raise AttributeError(name)
+            return getattr(self._inner, name)
+
+    api_mod.state.fs = _OldLayer(sl)
+    api_mod._REPORTED_SAFETY_SKEW.clear()
+    with caplog.at_level("ERROR"):
+        resp = client.get("/api/fs/ls", params={"path": "/proc"})
+    assert resp.status_code == 404, resp.text
+    assert any("VERSION SKEW" in r.message for r in caplog.records), caplog.text
+    assert any("restart this unit again" in r.getMessage() for r in caplog.records)
+
+    # One line per name per process, not one per request.
+    caplog.clear()
+    with caplog.at_level("ERROR"):
+        client.get("/api/fs/ls", params={"path": "/proc"})
+    assert not [r for r in caplog.records if "VERSION SKEW" in r.message]
+
+
+def test_the_startup_check_names_a_missing_capability(monkeypatch):
+    """A mixed-module process says so at boot, in the journal."""
+    import castor.api as api_mod
+    from castor.fs.safety import SafetyLayer
+
+    api_mod._REPORTED_SAFETY_SKEW.clear()
+    assert api_mod._check_safety_layer_coherence() == []
+
+    monkeypatch.delattr(SafetyLayer, "rate_limit_refusal")
+    api_mod._REPORTED_SAFETY_SKEW.clear()
+    assert api_mod._check_safety_layer_coherence() == ["rate_limit_refusal"]
+
+
+def test_the_refusal_rows_are_readable_once_the_window_rolls(arm_client):
+    """The exact read that shows the role_rate_limited row.
+
+    The rows are written by _audit_safety through the RAW namespace append, so
+    they are never themselves paced. Reading them back IS paced, which is why
+    POST /api/fs/read answered {"data": null} while the caller was still over
+    budget: the read was refused and the node exists, so it was neither a 404
+    nor an error.
+    """
+    client, sl, _driver = arm_client
+    limit = ROLE_RATE_LIMITS[RCANRole.LEASEE]
+    for _ in range(limit + 2):
+        sl.ls("/proc", principal="api")
+
+    rows = sl.ns.read("/var/log/safety") or []
+    assert any(r.get("event") == "role_rate_limited" for r in rows), rows[-5:]
+
+    # Over budget the read is refused, and says so instead of answering null.
+    assert client.post("/api/fs/read", json={"path": "/var/log/safety"}).status_code == 429
+
+    # Window rolled: the same read now returns the rows.
+    sl._role_request_timestamps["api"] = []
+    resp = client.post("/api/fs/read", json={"path": "/var/log/safety"})
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert isinstance(data, list) and data, resp.text
+    assert any(r.get("event") == "role_rate_limited" for r in data)

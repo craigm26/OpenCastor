@@ -2807,6 +2807,53 @@ class FSWriteRequest(BaseModel):
     data: Any = None
 
 
+#: Names already reported by :func:`_warn_safety_layer_skew`, so a skew is one
+#: line per missing name per process rather than one per request.
+_REPORTED_SAFETY_SKEW: set[str] = set()
+
+
+def _warn_safety_layer_skew(missing: str) -> None:
+    """Say out loud that castor.fs.safety is older than this module expects."""
+    if missing in _REPORTED_SAFETY_SKEW:
+        return
+    _REPORTED_SAFETY_SKEW.add(missing)
+    logger.error(
+        "VERSION SKEW: the loaded castor.fs.safety has no %s, which this gateway "
+        "needs to tell a pacing refusal from a missing path. A refused read will "
+        "answer 404 instead of 429 until this is fixed. The usual cause is a "
+        "restart in the same second as a checkout, so the process holds a mix of "
+        "old and new modules: restart this unit again. Loaded from %s.",
+        missing,
+        getattr(_safety_module(), "__file__", "unknown"),
+    )
+
+
+def _safety_module():
+    try:
+        import castor.fs.safety as _m
+
+        return _m
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _check_safety_layer_coherence() -> list[str]:
+    """Report the names this module needs from castor.fs.safety and lacks.
+
+    Called at startup so a mixed-module process says so at boot, in the
+    journal, instead of being discovered later as a wrong status code.
+    """
+    from castor.fs.safety import SafetyLayer
+
+    # Methods only. last_rate_limit_reason is set in __init__, so it is an
+    # instance attribute and never answers hasattr() on the class.
+    required = ("rate_limit_refusal", "check_role_rate_limit", "check_session_timeout")
+    missing = [n for n in required if not hasattr(SafetyLayer, n)]
+    for name in missing:
+        _warn_safety_layer_skew(name)
+    return missing
+
+
 def _raise_if_paced_out(path: str) -> None:
     """Turn a pacing refusal on a READ into a 429 instead of a 404.
 
@@ -2819,9 +2866,30 @@ def _raise_if_paced_out(path: str) -> None:
     """
     if state.fs is None:
         return
-    reason = getattr(state.fs, "last_rate_limit_reason", None)
-    # Must be a real string: a test double answers any attribute with a truthy
-    # object, and a safety layer that predates this attribute answers None.
+    # ASK THE CAP, do not read the slot. last_rate_limit_reason is shared by
+    # every request on this gateway and the next successful check from any
+    # caller clears it, so reading it here lost the race against the robot's
+    # own app and console and the refusal came back as a 404. rate_limit_refusal
+    # recomputes the answer from the window and consumes nothing.
+    ask = getattr(state.fs, "rate_limit_refusal", None)
+    if not callable(ask):
+        # A SAFETY LAYER THAT CANNOT BE ASKED IS A VERSION SKEW, NOT A PASS.
+        # This is how the first live run of OC-M-05 went wrong: the merge and
+        # the restart landed in the same second, so the process loaded the new
+        # castor/api.py against the old castor/fs/safety.py. getattr returned
+        # None, this function quietly did nothing, and an over-budget read came
+        # back 404 "Not a directory" with rate_limit_reason null. Silence is
+        # what made a two millisecond deployment race look like a logic bug for
+        # twenty minutes. It is now a log line that names the cause.
+        _warn_safety_layer_skew("rate_limit_refusal")
+        return
+    reason = ask("api")
+    if not isinstance(reason, str) or not reason:
+        # The session check is the one refusal the window cannot see. Its
+        # named breakage still lives in the slot; a real expiry is not a
+        # pacing refusal and is left to answer as it always has.
+        slot = getattr(state.fs, "last_rate_limit_reason", None)
+        reason = slot if slot == "session_check_unavailable" else None
     if isinstance(reason, str) and reason:
         raise _rate_limit_http_error(reason, "api", f"read {path}")
 
@@ -6390,7 +6458,9 @@ def _rate_limit_http_error(reason: str, principal: str, action_type: str) -> HTT
             "window_s": RATE_LIMIT_WINDOW_S,
             "action": action_type,
             "hint": (
-                "A matching row is in /var/log/safety (GET /api/fs/read?path=/var/log/safety). "
+                "A matching row is in /var/log/safety: POST /api/fs/read with "
+                "{\"path\": \"/var/log/safety\"} (that read is itself paced, so "
+                "wait out the window first). "
                 "reason=rate_limit_unavailable means the cap could not run and refused; "
                 "reason=role_rate_limited means this principal asked for too much. "
                 "POST /api/stop is never rate limited."
@@ -6890,6 +6960,13 @@ def _wire_notify_dispatch() -> None:
 # Lifecycle events
 # ---------------------------------------------------------------------------
 async def on_startup():
+    # SAY AT BOOT IF THIS PROCESS HOLDS A MIX OF MODULE VERSIONS. Fully
+    # absorbed: a skew check must never be the reason a robot fails to start.
+    try:
+        _check_safety_layer_coherence()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Safety-layer coherence check skipped: %s", exc)
+
     # Always initialize thought history ring buffer (no config needed)
     state.thought_history = collections.deque(maxlen=50)
 

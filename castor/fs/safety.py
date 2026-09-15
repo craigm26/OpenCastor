@@ -430,6 +430,40 @@ class SafetyLayer:
             return "session_check_unavailable"
         return "session_expired"
 
+    def rate_limit_refusal(self, principal: str) -> Optional[str]:
+        """Is *principal* over its cap RIGHT NOW? Does NOT consume a slot.
+
+        ASK, DO NOT REMEMBER. :attr:`last_rate_limit_reason` is one slot on an
+        object shared by every request this gateway serves, and it is cleared
+        by the next successful check from ANY caller. A handler that called a
+        paced accessor, got ``None`` back, and then read that slot to find out
+        why was racing every other request on the box: on a live robot with the
+        app, the console and a kiosk attached, an unrelated successful call
+        lands between the two lines and the refusal silently reads as "no
+        reason", which is how an over-budget read came back 404 "Not a
+        directory" and a log read came back ``{"data": null}`` on a robot where
+        the cap was demonstrably refusing at exactly its limit. A single
+        threaded test client cannot reproduce that; a real server does it
+        constantly.
+
+        This recomputes the answer from the window under the lock, so it is
+        true at the moment it is asked and belongs to no other request.
+        """
+        try:
+            from castor.rcan.rbac import RATE_LIMIT_WINDOW_S, RCANPrincipal
+
+            limit = RCANPrincipal.from_legacy(principal).rate_limit
+            if limit <= 0:
+                return "rate_limit_unavailable"
+            now = time.time()
+            with self._lock:
+                stamps = self._role_request_timestamps.get(principal, [])
+                live = sum(1 for t in stamps if now - t < RATE_LIMIT_WINDOW_S)
+            return "role_rate_limited" if live >= limit else None
+        except Exception as exc:  # noqa: BLE001 - a broken cap is a refusal
+            logger.warning("rate_limit_refusal could not run for %s: %r", principal, exc)
+            return "rate_limit_unavailable"
+
     def _refuse_rate_limit(self, principal: str, reason: str, detail: str) -> None:
         """Record a pacing refusal so it is a row, not only a status code.
 

@@ -69,6 +69,19 @@ with status 429. That includes a refused READ: `POST /api/fs/read` and
 `GET /api/fs/ls` used to answer 404 when the cap refused, because the paced
 read returns the same `None` for "refused" and for "not there".
 
+To read the refusal rows back:
+
+```
+curl -sS -X POST -H "Authorization: Bearer $OPENCASTOR_API_TOKEN" \
+     -H 'Content-Type: application/json' \
+     -d '{"path":"/var/log/safety"}' http://<robot>:8001/api/fs/read
+```
+
+That read is itself paced, so while you are still over budget it answers 429.
+Wait out the 60 second window before asking. The rows themselves are written
+through the raw namespace and are never paced, so nothing is lost while the
+cap is refusing.
+
 Error responses use `{"error": "...", "code": "HTTP_NNN", "status": NNN}` (not `{"detail": "..."}`).
 
 ---
