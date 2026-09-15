@@ -9,6 +9,49 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+- **`castor incidents report --platatlas` files a signed `incident-report/1` to a
+  PlatAtlas org (PA-18).** The incident log had the FORMAT and its own hash chain
+  (`castor/incidents.py`, `castor incidents verify`) and no way to file anything
+  anywhere except the registry. The receiving side had no incident entity at all:
+  `grep -i incident` over the worker's `src/` and `migrations/` hit one NIST control
+  statement. This adds the one missing piece, which is a shared object.
+
+  `castor/platatlas_incident.py` builds an `incident-report/1` from each unfiled
+  incident, signs it with THE ROBOT'S OWN attestation key (the same key and kid
+  `castor pair` / `castor up` already write), and POSTs the lot as RCAN NDJSON to
+  `POST https://<org>.platatlas.com/api/traces?source=rcan` with
+  `Authorization: Bearer $PLATATLAS_INGEST_KEY`. The record carries `incident_id`,
+  `discovered_at`, `occurred_at`, `severity` from the published three-category taxonomy,
+  `affected_rrn` / `affected_rmn` / `affected_actor_ids`, a capped `summary`,
+  `evidence_refs[]`, `reporter`, `disposition` and `notified[]`.
+
+  *Byte-identical, and enforced rather than hoped for.* The module carries a Python
+  implementation of the one canonicalisation both sides sign over
+  (`packages/rcan/src/canonical.ts` in rail) plus a validator that REFUSES the three
+  values where the two implementations could disagree: a float, a non-ASCII object key,
+  and a string containing a surrogate. A signature that verifies on one side and fails
+  on the other is worse than a filing that did not go out. Every cap is applied BEFORE
+  signing, so the bytes that are signed are the bytes the far side stores.
+  `tests/fixtures/platatlas-incident-report-1.ndjson` is a signed fixture built from a
+  fixed test seed; the same file is committed on the rail side, where a test ingests it
+  through the real ingest route and verifies it. Either side drifting turns one of the
+  two tests red.
+
+  *Nothing existing changed.* `--submit` on its own still files to the registry exactly
+  as before. `--platatlas` is a second destination; pass both and both run, registry
+  first. With no `PLATATLAS_ORG_SLUG` / `PLATATLAS_INGEST_KEY` the command PRINTS the
+  signed objects and says where to send them, and stamps nothing in the local log,
+  because nothing was filed. The local log is stamped only on a filing that succeeded.
+
+  *What this is not.* Filing a report is filing a report. The signature establishes that
+  the holder of this robot's key signed exactly these bytes; every field inside them is
+  the operator's own account. `reporter` is a named human field and nothing on either
+  side checks that the named person exists or wrote it. The deadline the receiving side
+  renders is a countdown from the filer's own `discovered_at` using this project's
+  crosswalk of the commonly cited reporting windows: not statutory text, not a legal
+  determination. PlatAtlas holds the record. It stops nothing, refuses nothing, and has
+  no path back to this robot.
+
 - **The per-role pacing cap fails closed, has no unlimited role, and now sees
   the arm (OC-M-05).** Three separate holes in the one pacing cap that actually
   runs on a shipped robot.

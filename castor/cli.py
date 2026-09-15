@@ -5595,8 +5595,16 @@ def cmd_incidents(args) -> None:
         raise SystemExit(_verify_incident_chain(log, as_json=getattr(args, "json", False)))
 
     elif incidents_cmd == "report":
+        # PA-18: --platatlas alone is the PlatAtlas filing and does not touch the
+        # registry path. --submit alone is the registry path, unchanged. Both together
+        # run the registry filing first and then the PlatAtlas one.
+        if getattr(args, "platatlas", False) and not getattr(args, "submit", False):
+            raise SystemExit(_submit_incident_report_platatlas(args, log))
         if getattr(args, "submit", False):
-            raise SystemExit(_submit_incident_report(args, log))
+            rc = _submit_incident_report(args, log)
+            if rc == 0 and getattr(args, "platatlas", False):
+                rc = _submit_incident_report_platatlas(args, log)
+            raise SystemExit(rc)
         report = generate_report(log)
         output = getattr(args, "output", None)
         if output:
@@ -5720,6 +5728,110 @@ def _submit_incident_report(args, log) -> int:
         manifest=getattr(args, "manifest", None) or "ROBOT.md",
         label="castor incidents report --submit",
     )
+
+
+def _submit_incident_report_platatlas(args, log) -> int:
+    """`castor incidents report --submit --platatlas` - file to a PlatAtlas org (PA-18).
+
+    Builds one signed ``incident-report/1`` per unfiled incident, in the shape the rail
+    side parses byte for byte (``castor/platatlas_incident.py`` carries the shared
+    canonicalisation and the validator that keeps the two implementations from being
+    able to disagree), and POSTs them as RCAN NDJSON to the org's trace ingest.
+
+    WITH NO CREDENTIALS it prints the signed objects and says where to send them, rather
+    than doing nothing or inventing a destination. That is the useful answer for an
+    operator who has a robot and no PlatAtlas org: the record exists, it is signed, and
+    it can be filed by hand.
+
+    THE LOCAL LOG IS STAMPED ONLY ON A FILING THAT SUCCEEDED, the same rule the registry
+    path follows. A print-only run stamps nothing: nothing was filed.
+
+    PlatAtlas holds the record. It stops nothing, refuses nothing, and has no path back
+    to this robot.
+    """
+    import sys
+    from datetime import datetime, timezone
+
+    from castor.platatlas_incident import (
+        PlatAtlasIncidentError,
+        build_signed_lines,
+        ingest_url,
+        platatlas_env,
+        submit_incident_ndjson,
+    )
+
+    label = "castor incidents report --platatlas"
+    pending = log.unreported_incidents()
+    if not pending:
+        sys.stderr.write(f"{label}: no unfiled incidents in the log; nothing to submit\n")
+        return 1
+
+    manifest = getattr(args, "manifest", None) or "ROBOT.md"
+    rrn = ""
+    rmn = ""
+    try:
+        from castor.rcan3.reader import read_robot_md
+
+        m = read_robot_md(manifest)
+        rrn = getattr(m, "rrn", "") or ""
+        rmn = getattr(m, "rmn", "") or ""
+    except Exception as exc:
+        # A manifest that will not read is not fatal here. The record identifies the
+        # robot by rrn when there is one and is honestly blank when there is not; a
+        # blank affected_rrn is a missing field, and inventing one would be worse.
+        sys.stderr.write(f"{label}: could not read {manifest} ({exc}); filing with no rrn\n")
+
+    org_slug, ingest_key = platatlas_env()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    try:
+        objects, body = build_signed_lines(
+            pending,
+            rrn=rrn,
+            ts=now_iso,
+            rmn=rmn,
+            reporter=getattr(args, "reporter", "") or "",
+            disposition=getattr(args, "disposition", "") or "",
+            notified=getattr(args, "notified", None) or [],
+        )
+    except PlatAtlasIncidentError as exc:
+        sys.stderr.write(f"{label}: could not build the filing: {exc}\n")
+        return 1
+
+    if not org_slug or not ingest_key:
+        import json as _json
+
+        for obj in objects:
+            print(_json.dumps(obj, indent=2, sort_keys=True))
+        missing = " and ".join(
+            n for n, v in (("PLATATLAS_ORG_SLUG", org_slug), ("PLATATLAS_INGEST_KEY", ingest_key)) if not v
+        )
+        sys.stderr.write(
+            f"{label}: {missing} not set, so nothing was sent and nothing was stamped "
+            f"as reported. The {len(objects)} signed object(s) above are the filing. To "
+            f"send them, POST one JSON object per line as {{\"event\": <object>}} to "
+            f"https://<your-org>.platatlas.com/api/traces?source=rcan with "
+            f"Authorization: Bearer <your ingest key> and "
+            f"Content-Type: application/x-ndjson.\n"
+        )
+        return 1
+
+    try:
+        receipt = submit_incident_ndjson(body, org_slug, ingest_key)
+    except PlatAtlasIncidentError as exc:
+        sys.stderr.write(f"{label}: submission failed: {exc}\n")
+        return 1
+
+    submission_id = log.mark_reported(
+        [i["id"] for i in pending],
+        receipt={"destination": ingest_url(org_slug), "response": receipt},
+    )
+    print(f"Filed {len(pending)} incident(s) to {org_slug}; submission record {submission_id}")
+    print(
+        "PlatAtlas now holds these records. It renders a deadline countdown from each "
+        "record's own discovered_at; it verifies nothing about what the record says, "
+        "and it stops nothing."
+    )
+    return 0
 
 
 def cmd_ifu(args) -> None:
@@ -9247,6 +9359,40 @@ def main() -> None:
     )
     p_incidents_report.add_argument(
         "--manifest", default="ROBOT.md", help="ROBOT.md path for --submit (default: ROBOT.md)"
+    )
+    # PA-18. A SECOND destination, never a replacement for the first. --submit on its own
+    # files to the registry exactly as it always has; --platatlas files the same
+    # incidents, as signed incident-report/1 records, to a PlatAtlas org's trace ingest.
+    # Pass both and both filings run, registry first, and a PlatAtlas failure is reported
+    # without unstamping a registry filing that succeeded.
+    p_incidents_report.add_argument(
+        "--platatlas",
+        action="store_true",
+        help=(
+            "File the log's unfiled incidents to a PlatAtlas org as signed "
+            "incident-report/1 records (POST /api/traces). Needs PLATATLAS_ORG_SLUG and "
+            "PLATATLAS_INGEST_KEY; with neither, prints the signed objects and says "
+            "where to send them"
+        ),
+    )
+    p_incidents_report.add_argument(
+        "--reporter",
+        default="",
+        help=(
+            "Name of the human filing this report. DECLARED, and checked by nobody: "
+            "it is carried inside the signed bytes and no side verifies that the named "
+            "person exists or filed it"
+        ),
+    )
+    p_incidents_report.add_argument(
+        "--disposition", default="", help="Short disposition string carried in the report"
+    )
+    p_incidents_report.add_argument(
+        "--notified",
+        action="append",
+        default=None,
+        metavar="PARTY",
+        help="A party notified about this incident (repeatable). Declared, not verified",
     )
 
     # ── ifu ────────────────────────────────────────────────────────────────────────
