@@ -312,18 +312,45 @@ class SafetyLayer:
 
     @staticmethod
     def _is_stop_write(path: str, data: Any) -> bool:
-        """True when *data* is a motor STOP command.
+        """True when *data* is a motor command that HALTS the wheels.
 
-        Narrow on purpose: a dict on ``/dev/motor`` whose ``type`` is exactly
-        ``stop``. It is the one shape the gateway sends for a stop, and keeping
-        it narrow is what stops "exempt from the cap" from spreading into
-        ordinary motion.
+        Two shapes on ``/dev/motor``, and no others:
+
+        1. ``{"type": "stop"}``, which is what ``POST /api/stop`` and an
+           explicit stop action send.
+        2. ``{"type": "move", "linear": 0, "angular": 0}``, a move whose every
+           commanded velocity is zero.
+
+        THE SECOND SHAPE IS THE ONE THE OPERATOR ACTUALLY SENDS. The built-in
+        console and the gamepad page do not post a ``stop`` when a joystick is
+        released: ``stopMove()`` in ``castor/api.py`` posts
+        ``{type:"move", linear:0, angular:0}``, and the phone's teleop does the
+        same. Exempting only ``type: stop`` would have meant that an operator
+        who held the stick long enough to spend the budget got a 429 on the
+        release tick, the command that brings the wheels to zero, while the
+        last accepted non-zero velocity kept standing. There is no teleop
+        deadman inside this gateway to catch that; ``castor/watchdog.py``
+        watches the BRAIN, not the last teleop tick. So the halt is exempt in
+        both of its spellings.
+
+        Still narrow, and narrow in the direction that matters: a zero-velocity
+        move commands no motion, so nothing is gained by using it to evade the
+        cap, and a command carrying any non-zero velocity is paced as before.
         """
-        return (
-            path.startswith("/dev/motor")
-            and isinstance(data, dict)
-            and data.get("type") == "stop"
-        )
+        if not path.startswith("/dev/motor") or not isinstance(data, dict):
+            return False
+        if data.get("type") == "stop":
+            return True
+        if data.get("type") != "move":
+            return False
+        for field in ("linear", "angular"):
+            try:
+                if float(data.get(field) or 0.0) != 0.0:
+                    return False
+            except (TypeError, ValueError):
+                # A velocity this layer cannot even read is not a halt.
+                return False
+        return True
 
     def check_role_rate_limit(self, principal: str) -> bool:
         """Enforce the per-role pacing cap (requests per minute).
@@ -607,9 +634,11 @@ class SafetyLayer:
 
         # A STOP ALWAYS GOES THROUGH.
         #
-        # Every other write is paced. A stop command is not: neither the pacing
-        # cap nor the session check stands between a caller and halting this
-        # robot, and neither one can refuse a stop by breaking. The e-stop and
+        # Every other write is paced. A halt is not: neither the pacing cap nor
+        # the session check stands between a caller and bringing this robot to
+        # zero, and neither one can refuse a halt by breaking. Both spellings
+        # of a halt count, ``{"type": "stop"}`` and a zero-velocity ``move``,
+        # because the second is the one a released joystick sends. The e-stop and
         # pause checks at the top of this method still apply, because a robot
         # that is already held does not need a second stop to reach the motor.
         # Tested in tests/test_role_rate_limit.py::test_stop_is_never_rate_limited.

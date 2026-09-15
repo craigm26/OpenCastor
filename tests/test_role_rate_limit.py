@@ -401,3 +401,65 @@ def test_stop_action_never_reaches_the_arm_gate(arm_client, monkeypatch):
 
     api_mod._execute_action({"type": "stop"})
     assert driver.stops == 1
+
+
+def test_a_released_joystick_is_not_refused():
+    """The halt the console actually sends is a ZERO MOVE, not type=stop.
+
+    ``stopMove()`` in castor/api.py's gamepad page posts
+    ``{type:"move", linear:0, angular:0}``. If the cap paced that, an operator
+    who held the stick past the budget would get a refusal on the one tick that
+    brings the wheels to zero, and the last accepted velocity would keep
+    standing: this gateway has no teleop deadman to catch it.
+    """
+    sl = _safety()
+    limit = ROLE_RATE_LIMITS[RCANRole.LEASEE]
+    for _ in range(limit):
+        assert sl.check_role_rate_limit("api") is True
+    assert sl.check_role_rate_limit("api") is False
+
+    # The release tick, in every spelling the console and the phone send.
+    assert sl.write("/dev/motor", {"type": "move", "linear": 0, "angular": 0}, principal="api")
+    assert sl.write("/dev/motor", {"type": "move", "linear": 0.0, "angular": -0.0}, principal="api")
+    assert sl.write("/dev/motor", {"type": "move"}, principal="api")
+    # And motion is still paced.
+    moving = {"type": "move", "linear": 0.2, "angular": 0}
+    turning = {"type": "move", "linear": 0, "angular": 0.2}
+    assert sl.write("/dev/motor", moving, principal="api") is False
+    assert sl.write("/dev/motor", turning, principal="api") is False
+
+
+def test_a_released_joystick_is_not_refused_when_the_cap_cannot_run(monkeypatch):
+    """A broken RBAC module must not be able to leave a wheel spinning."""
+    sl = _safety()
+
+    def _boom(cls, legacy_name):
+        raise RuntimeError("rbac is misconfigured")
+
+    monkeypatch.setattr(RCANPrincipal, "from_legacy", classmethod(_boom))
+    assert sl.write("/dev/motor", {"type": "move", "linear": 0, "angular": 0}, principal="api")
+    assert sl.write("/dev/motor", {"type": "move", "linear": 0.2}, principal="api") is False
+
+
+def test_clearing_a_stop_is_not_paced(arm_client, monkeypatch):
+    """Clearing a stop answers while the caller is over its budget.
+
+    A clear is privileged (admin role plus the e-stop code) and rare, so it is
+    not metered: pacing it could only ever strand a stopped robot that nothing
+    on the network could lift. Stated as a test rather than left as an accident
+    of where the call sites happen to be. Over budget the endpoint answers on
+    its own merits -- 401/403 on a runtime with no auth configured, 200 with
+    the admin bearer and the code -- and never 429.
+    """
+    client, sl, _driver = arm_client
+    assert client.post("/api/stop").status_code == 200
+    assert sl.is_estopped is True
+
+    monkeypatch.setitem(ROLE_RATE_LIMITS, RCANRole.LEASEE, 1)
+    assert sl.check_role_rate_limit("api") is True
+    assert sl.check_role_rate_limit("api") is False
+
+    assert client.post("/api/estop/clear").status_code != 429
+    # And the layer underneath it does not consult the cap at all.
+    assert sl.clear_estop(principal="root", source="local") is True
+    assert sl.is_estopped is False
