@@ -412,6 +412,24 @@ class SafetyLayer:
             self._refuse_rate_limit(principal, "rate_limit_unavailable", repr(exc))
             return False
 
+    def _pacing_reason(self) -> str:
+        """The named reason the last pacing refusal gave, for an audit row.
+
+        ``role_rate_limited`` is a caller asking for too much;
+        ``rate_limit_unavailable`` is the cap itself being unable to run. The
+        two were filed under the same name everywhere except write(), so the
+        one refusal an operator most needs to tell apart was indistinguishable
+        in /var/log/safety on a read, an ls, a stat, an append or a mkdir.
+        """
+        reason = self.last_rate_limit_reason or "role_rate_limited"
+        return reason if reason != "session_check_unavailable" else "role_rate_limited"
+
+    def _session_reason(self) -> str:
+        """``session_expired`` for a real expiry, or the named breakage."""
+        if self.last_rate_limit_reason == "session_check_unavailable":
+            return "session_check_unavailable"
+        return "session_expired"
+
     def _refuse_rate_limit(self, principal: str, reason: str, detail: str) -> None:
         """Record a pacing refusal so it is a row, not only a status code.
 
@@ -582,10 +600,10 @@ class SafetyLayer:
             logger.warning("READ denied: %s is locked out", principal)
             return None
         if not self.check_role_rate_limit(principal):
-            self._audit_safety(principal, path, "role_rate_limited", "rate limit exceeded")
+            self._audit_safety(principal, path, self._pacing_reason(), "refused by the pacing cap")
             return None
         if not self.check_session_timeout(principal):
-            self._audit_safety(principal, path, "session_expired", "session timed out")
+            self._audit_safety(principal, path, self._session_reason(), "session check refused")
             return None
         if not self.perms.check_access(principal, path, "r"):
             self._audit_access(principal, path, "r", False)
@@ -651,10 +669,23 @@ class SafetyLayer:
                 )
                 return False
             if not self.check_session_timeout(principal):
-                self._audit_safety(principal, path, "session_expired", "session timed out")
-                self._last_write_denial = (
-                    f"Session expired for principal '{principal}'. Re-authenticate to reset."
-                )
+                # NAME THE ONE THAT ACTUALLY REFUSED. This said session_expired
+                # whatever happened, so a session store that threw was filed as
+                # a timed-out session: the operator reads "re-authenticate",
+                # re-authenticates, and is refused again, with nothing in
+                # /var/log/safety to say the check itself was broken.
+                reason = self._session_reason()
+                self._audit_safety(principal, path, reason, "session check refused")
+                if reason == "session_check_unavailable":
+                    self._last_write_denial = (
+                        f"Session check could not run for principal '{principal}'; "
+                        "the write was refused rather than admitted (reason: "
+                        "session_check_unavailable)."
+                    )
+                else:
+                    self._last_write_denial = (
+                        f"Session expired for principal '{principal}'. Re-authenticate to reset."
+                    )
                 return False
 
         if not self.perms.check_access(principal, path, "w"):
@@ -798,10 +829,10 @@ class SafetyLayer:
         if self._is_locked_out(principal):
             return False
         if not self.check_role_rate_limit(principal):
-            self._audit_safety(principal, path, "role_rate_limited", "rate limit exceeded")
+            self._audit_safety(principal, path, self._pacing_reason(), "refused by the pacing cap")
             return False
         if not self.check_session_timeout(principal):
-            self._audit_safety(principal, path, "session_expired", "session timed out")
+            self._audit_safety(principal, path, self._session_reason(), "session check refused")
             return False
         if not self.perms.check_access(principal, path, "w"):
             self._audit_access(principal, path, "w", False)
@@ -815,10 +846,10 @@ class SafetyLayer:
         if self._is_locked_out(principal):
             return None
         if not self.check_role_rate_limit(principal):
-            self._audit_safety(principal, path, "role_rate_limited", "rate limit exceeded")
+            self._audit_safety(principal, path, self._pacing_reason(), "refused by the pacing cap")
             return None
         if not self.check_session_timeout(principal):
-            self._audit_safety(principal, path, "session_expired", "session timed out")
+            self._audit_safety(principal, path, self._session_reason(), "session check refused")
             return None
         if not self.perms.check_access(principal, path, "r"):
             return None
@@ -829,10 +860,10 @@ class SafetyLayer:
         if self._is_locked_out(principal):
             return None
         if not self.check_role_rate_limit(principal):
-            self._audit_safety(principal, path, "role_rate_limited", "rate limit exceeded")
+            self._audit_safety(principal, path, self._pacing_reason(), "refused by the pacing cap")
             return None
         if not self.check_session_timeout(principal):
-            self._audit_safety(principal, path, "session_expired", "session timed out")
+            self._audit_safety(principal, path, self._session_reason(), "session check refused")
             return None
         if not self.perms.check_access(principal, path, "r"):
             return None
@@ -843,10 +874,10 @@ class SafetyLayer:
         if self._is_locked_out(principal):
             return False
         if not self.check_role_rate_limit(principal):
-            self._audit_safety(principal, path, "role_rate_limited", "rate limit exceeded")
+            self._audit_safety(principal, path, self._pacing_reason(), "refused by the pacing cap")
             return False
         if not self.check_session_timeout(principal):
-            self._audit_safety(principal, path, "session_expired", "session timed out")
+            self._audit_safety(principal, path, self._session_reason(), "session check refused")
             return False
         parent = "/".join(path.rstrip("/").split("/")[:-1]) or "/"
         if not self.perms.check_access(principal, parent, "w"):

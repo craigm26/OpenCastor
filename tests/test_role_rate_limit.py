@@ -463,3 +463,42 @@ def test_clearing_a_stop_is_not_paced(arm_client, monkeypatch):
     # And the layer underneath it does not consult the cap at all.
     assert sl.clear_estop(principal="root", source="local") is True
     assert sl.is_estopped is False
+
+
+def test_a_broken_session_check_is_not_filed_as_an_expired_session(monkeypatch):
+    """A session store that throws must not be audited as a timed-out session.
+
+    write() named every session refusal ``session_expired``, whatever caused
+    it, so a broken check told the operator to re-authenticate and then refused
+    again with nothing in /var/log/safety to say the check itself was the
+    problem.
+    """
+    sl = _safety()
+
+    class _BrokenStore(dict):
+        def get(self, *_a, **_kw):
+            raise RuntimeError("session store is unreachable")
+
+    # Broken INSIDE check_session_timeout, so its own fail-closed branch runs.
+    sl._session_starts = _BrokenStore()
+    assert sl.write("/dev/motor", {"type": "move", "linear": 0.2}, principal="api") is False
+    assert sl.last_rate_limit_reason == "session_check_unavailable"
+    assert "session_check_unavailable" in sl.last_write_denial
+
+    rows = sl.ns.read("/var/log/safety") or []
+    reasons = [r.get("reason") or r.get("action") or str(r) for r in rows]
+    assert any("session_check_unavailable" in str(r) for r in reasons), rows
+    assert not any(str(r) == "session_expired" for r in reasons), rows
+
+
+def test_a_broken_cap_is_named_on_a_read_too(monkeypatch):
+    """read/ls/stat/append/mkdir file the named reason, not a generic one."""
+    sl = _safety()
+
+    def _boom(cls, legacy_name):
+        raise RuntimeError("rbac is misconfigured")
+
+    monkeypatch.setattr(RCANPrincipal, "from_legacy", classmethod(_boom))
+    assert sl.read("/proc/status", principal="api") is None
+    rows = sl.ns.read("/var/log/safety") or []
+    assert any("rate_limit_unavailable" in str(r) for r in rows), rows
