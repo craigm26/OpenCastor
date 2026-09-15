@@ -38,14 +38,18 @@ counted per safety-layer principal over a rolling 60 second window:
 |-----------|-----------------|------------------|
 | GUEST     | 10              | `driver`         |
 | USER      | 100             | `channel`        |
-| LEASEE    | 500             | `api`            |
-| OWNER     | 1000            | `brain`          |
+| LEASEE    | 1200            | `api`            |
+| OWNER     | 2400            | `brain`          |
 | CREATOR   | 6000            | `root`           |
 
 Every HTTP caller writes as the principal `api` today, whichever bearer it
-presents, so both the admin bearer and the runtime bearer are paced at 500 per
-minute. The console's normal cadence and the phone's telemetry poll are well
-under that. The cap covers the arm as well as the wheels as of OC-M-05:
+presents, so the admin bearer and the runtime bearer share one budget of 1200
+per minute. That number is the runtime's own `motor_rate_hz` (20 Hz) expressed
+per minute, chosen so this coarse cap never refuses before the purpose-built
+motor gate does. The heaviest normal caller is a held joystick on the built-in
+console or `/gamepad`, which posts `/api/action` every 80 ms: 750 a minute, one
+slot each. `GET /api/status` (the `/face` kiosk, every 500 ms) reads raw and
+costs nothing. The cap covers the arm as well as the wheels as of OC-M-05:
 `grip` and `arm_pose` are counted wherever they are dispatched from.
 
 **The cap fails closed.** If it cannot run, it refuses. A refusal is a 429 and
@@ -53,10 +57,15 @@ a row in `/var/log/safety`, and both carry a named reason: `role_rate_limited`
 means this principal asked for too much, `rate_limit_unavailable` means the cap
 itself could not run. Read the reason before assuming a caller is too fast.
 
-**A stop is never paced.** `POST /api/stop` and `GET /api/fs/estop` do not
-touch the cap, and a `/dev/motor` write whose type is `stop` skips it. A caller
-that has spent its budget, and a runtime whose RBAC module is misconfigured,
-can both still halt the robot.
+**A stop is never paced.** `POST /api/stop` (the endpoint the phone's stop
+button posts to), `POST /api/estop/clear` and `GET /api/fs/estop` do not touch
+the cap, and a `/dev/motor` write that halts skips it in both spellings,
+`{"type": "stop"}` and a `move` whose velocities are all zero, which is what a
+released joystick sends. A caller that has spent its budget, and a runtime
+whose RBAC module is misconfigured, can both still halt the robot.
+
+A refusal answers `{"code": "rate_limited", "reason": ..., "detail": {...}}`
+with status 429.
 
 Error responses use `{"error": "...", "code": "HTTP_NNN", "status": NNN}` (not `{"detail": "..."}`).
 

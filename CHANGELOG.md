@@ -31,13 +31,46 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
   CREATOR is now 6000 per minute, which is 100/s, five times the 20 Hz motor
   ceiling in `castor/fs/safety.py`, so no legitimate loop on this runtime can
   reach it. The full table, per principal per 60 s: GUEST 10, USER 100,
-  LEASEE 500, OWNER 1000, CREATOR 6000. The same table is now published in the
+  LEASEE 1200, OWNER 2400, CREATOR 6000. The same table is now published in the
   HTTP vocabulary as well, `API_ROLE_RATE_LIMITS` (viewer 10, operator 100,
-  admin 1000), derived from the RCAN table rather than restated beside it so
+  admin 2400), derived from the RCAN table rather than restated beside it so
   the two cannot drift. `RCANPrincipal.from_legacy` stays as the compatibility
   shim between the v1 principal names and the roles this module publishes, and
   it now logs each translation once per process, so the drift is in the journal
   instead of inferred from a table.
+
+  *The names, in the right direction.* `OWNER` and `LEASEE` are the CURRENT
+  role names and `ADMIN` and `OPERATOR` are the DEPRECATED ones, not the other
+  way round: commit f414b90, "breaking: rename ADMIN to OWNER, OPERATOR to
+  LEASEE for RCAN spec conformance", made that change and
+  `_DEPRECATED_ROLE_NAMES` has said so since. The rate-limit table is keyed on
+  the current names. The separate lower-case `admin`/`operator`/`viewer`
+  vocabulary in `castor/api.py` is a third, unrelated set of names for the HTTP
+  tier gate; `rate_limit_for_role_name` now distinguishes them by case, because
+  `OPERATOR` (LEASEE, 1200) and `operator` (the HTTP role, 100) are different
+  numbers and a case-insensitive lookup was answering the HTTP one for both.
+
+  *And the operator's own budget is sized against the operator's own tools.*
+  Every HTTP caller writes as the filesystem principal `api`, which is LEASEE,
+  so the admin bearer and the runtime bearer share one budget. The built-in
+  console and `/gamepad` post `/api/action` every 80 ms while a stick is held,
+  which is 12.5 Hz and 750 requests a minute; `POST /api/action` was also
+  debiting twice, once for the `/dev/motor` write and again for the clamp
+  read-back, so a held joystick spent a 500 budget in about twenty seconds. The
+  read-back now reads raw, because it is the gateway reading back what it just
+  wrote inside the same request rather than a caller asking a second question,
+  and one HTTP request is one slot. LEASEE is 1200, the runtime's own declared
+  motor ceiling expressed per minute, so the coarse per-role cap never binds
+  before the purpose-built 20 Hz motor gate does. A 429 in the middle of
+  teleoperation stops the robot by refusing to move it, which is arguably the
+  safe direction, but it is a foreseeable outage rather than a runaway being
+  caught, and it is not what the operator asked for. OWNER moves to 2400 to
+  keep the ladder monotonic, since the brain costs two slots a tick and must
+  not be paced below the operator it supervises. The `/face` kiosk polls
+  `GET /api/status` every 500 ms and costs nothing here, because that handler
+  reads `/proc/safety` raw. The iOS app reaches this runtime only for `/health`
+  on connect and `POST /api/stop` on the button; its driving and its telemetry
+  go to the robot-md gateway, not here.
 
   *The arm was invisible to it.* A wheel command goes through
   `state.fs.write("/dev/motor", ...)` and has always been paced there. `grip`
@@ -54,16 +87,40 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
   `_ARM_DISPATCH_ENTRY_POINTS`, so the next endpoint added inherits the gate
   rather than forgetting it.
 
-  **A stop always goes through.** That is the counterweight to failing closed,
-  and it is exempt on purpose in four places: `POST /api/stop` does not call
-  the cap and neither does `SafetyLayer.estop()`; `SafetyLayer.write()` skips
-  both the cap and the session check for a `/dev/motor` write whose type is
-  `stop`; `_execute_action` never checks a `stop` action, because
-  `_STOP_ACTION_TYPES` is not `_ARM_ACTION_TYPES`; and `GET /api/fs/estop` now
-  reads `/proc/status` raw rather than through the paced read, which used to
-  report `unknown` when a caller was over its budget, a rate limit quietly
-  hiding the safety state. A caller with a spent budget, and a runtime whose
-  RBAC module is misconfigured, can both still halt the robot.
+  **A stop always goes through.** That is the counterweight to failing closed.
+  Every exemption, named:
+
+  - `POST /api/stop` does not call the cap. This is the endpoint the phone
+    posts to: the pairing payload's `estop_url` is `http://<ip>:8001/api/stop`,
+    so the phone's stop button and this handler are the same thing.
+  - `SafetyLayer.estop()` writes `/proc/status` through the raw namespace, so
+    nothing on that path can be paced. The sensor monitor's automatic stop and
+    the generated rc_car runtime's local latch both go through it.
+  - `SafetyLayer.write()` skips both the cap and the session check for a
+    `/dev/motor` write that HALTS, in both of its spellings: `{"type": "stop"}`
+    and a `move` whose every commanded velocity is zero. The second is the one
+    a released joystick actually sends, from the console, from `/gamepad`, and
+    from the phone.
+  - `_execute_action` never checks a `stop` action; `_STOP_ACTION_TYPES` is not
+    `_ARM_ACTION_TYPES`.
+  - `GET /api/fs/estop` reads `/proc/status` raw rather than through the paced
+    read, which used to report `unknown` when a caller was over its budget, a
+    rate limit quietly hiding the hold state.
+  - `POST /api/estop/clear` does not touch the cap either. A clear is
+    privileged and rare, it already needs the admin role and the e-stop code,
+    and pacing it could only ever strand a stopped robot. Over budget it
+    answers on its own merits and never 429.
+  - The generated rc_car runtime's `_stop_at_actuator` posts to the robot-md
+    gateway's `/v1/invoke`, not to this runtime, so this cap is not in that
+    path at all.
+
+  A caller with a spent budget, and a runtime whose RBAC module is
+  misconfigured, can both still halt this robot.
+
+  The refusal is a row in `/var/log/safety`, and deliberately NOT a record in
+  the incident log: `castor/incidents.py` files serious-incident categories
+  with statutory reporting windows, and a pacing refusal is neither harm nor
+  an estop.
 
   A pacing refusal answers 429, not the 422 `POST /api/action` used to give it.
   422 sends a caller to look at its own payload; a rate limit is about cadence
