@@ -1067,6 +1067,15 @@ async def direct_action(action: ActionRequest, request: Request):
     if state.fs:
         ok = state.fs.write("/dev/motor", action_dict, principal="api")
         if not ok:
+            # A PACING REFUSAL IS A 429, NOT A 422. 422 says "this action is
+            # malformed or out of bounds", which sends the caller looking at
+            # its own payload; a rate limit is about cadence and the caller can
+            # succeed by waiting. The named reason rides along so a lockout
+            # caused by a broken cap (rate_limit_unavailable) is not mistaken
+            # for one caused by a fast caller (role_rate_limited).
+            rl_reason = getattr(state.fs, "last_rate_limit_reason", None)
+            if rl_reason:
+                raise _rate_limit_http_error(rl_reason, "api", action_dict.get("type", ""))
             reason = state.fs.last_write_denial or "Unknown safety layer rejection."
             raise HTTPException(
                 status_code=422,
@@ -1083,7 +1092,16 @@ async def direct_action(action: ActionRequest, request: Request):
 
 @app.post("/api/stop", dependencies=[Depends(verify_token)])
 async def emergency_stop():
-    """Emergency stop -- immediately halt all motors."""
+    """Emergency stop -- immediately halt all motors.
+
+    NEVER RATE LIMITED. This handler does not call the per-role pacing cap,
+    and neither does ``SafetyLayer.estop()`` below it. The cap fails closed as
+    of OC-M-05, which is the right default for every other command and would be
+    exactly the wrong one here: a caller who has spent its budget, or a runtime
+    whose RBAC module is misconfigured, must still be able to halt the robot.
+    ``GET /api/fs/estop`` reads the hold state raw for the same reason.
+    Tested in tests/test_role_rate_limit.py::test_stop_is_never_rate_limited.
+    """
     if state.driver:
         state.driver.stop()
     if state.fs:
@@ -1246,8 +1264,14 @@ async def get_estop_status():
             "held": bool(estopped or paused),
             "hold_detail": getattr(state.fs, "pause_detail", "") or "",
             "source": getattr(state.fs, "estop_source", ""),
-            "proc_status": state.fs.read("/proc/status", principal="api") or "unknown",
+            # Read RAW, not through the paced read(): whether this robot is
+            # stopped is part of the stop path, and a caller that has spent its
+            # per-role budget must still be able to find out. The paced read
+            # returns None when the cap refuses, which showed up here as
+            # "unknown" -- a rate limit quietly hiding the safety state.
+            "proc_status": state.fs.ns.read("/proc/status") or "unknown",
             "last_denial": state.fs.last_write_denial,
+            "rate_limit_reason": getattr(state.fs, "last_rate_limit_reason", None),
             "latch": latch,
             "hold_kind": "best_effort_software_hold",
             "resync_interval_s": SAFETY_LATCH_RESYNC_S,
@@ -6217,17 +6241,155 @@ def _print_gateway_qr(host: str, port: str):
         pass
 
 
-def _execute_action(action):
-    """Translate an action dict (or list of actions) into driver commands."""
+#: Action types that reach the ARM driver (``set_joint_positions``).
+#:
+#: The wheel path has crossed the per-role pacing cap for as long as the cap
+#: has existed, because a wheel command goes through
+#: ``state.fs.write("/dev/motor", ...)`` and SafetyLayer.write() checks it. The
+#: arm path did not: ``grip`` and ``arm_pose`` reach the servos through
+#: :func:`_execute_action` without touching the filesystem layer at all, so the
+#: cap could not see a single arm command. These two names are the whole arm
+#: surface of this runtime; ``set_joint_positions`` is called nowhere else.
+_ARM_ACTION_TYPES = frozenset({"arm_pose", "grip"})
+
+#: Action types the pacing cap must never meter, count, or refuse.
+#:
+#: A STOP ALWAYS GOES THROUGH. Not "usually", not "unless the caller is over
+#: the cap", and specifically not "unless the cap itself is broken" -- the cap
+#: now fails closed, and a fail-closed cap in front of a stop would be a robot
+#: that cannot be halted by the person watching it move. ``POST /api/stop`` and
+#: ``GET /api/fs/estop`` do not touch the cap either; SafetyLayer.write() skips
+#: it for a stop command. Tested in tests/test_role_rate_limit.py.
+_STOP_ACTION_TYPES = frozenset({"stop"})
+
+#: EVERY ENTRY POINT THAT CAN DISPATCH AN ARM COMMAND, and therefore every one
+#: that now crosses the cap. Listed here so the sweep is auditable in one read
+#: rather than reconstructed by grepping for ``_execute_action``:
+#:
+#:   POST /api/command                     brain-planned action, arm included
+#:   POST /api/command/stream              same, streamed
+#:   POST /api/action                      direct action (also crosses fs.write)
+#:   POST /api/arm/pick_place              the vision-guided pick and place loop
+#:   POST /cap/teleop                      RCAN capability teleop
+#:   POST /api/memory/replay/{episode_id}  replays a recorded action
+#:   POST /api/memory/trajectory           replays a recorded trajectory
+#:   POST /webhooks/slack                  channel-dispatched action
+#:   RCAN teleop handler                   rcan_router "teleop"
+#:   RCAN nav handler                      rcan_router "nav"
+#:   _handle_channel_message               any chat channel, as principal "channel"
+#:
+#: The gate is inside :func:`_execute_action` rather than repeated at eleven
+#: call sites on purpose: one chokepoint cannot be half-applied, and the next
+#: endpoint somebody adds inherits it instead of forgetting it.
+_ARM_DISPATCH_ENTRY_POINTS = (
+    "POST /api/command",
+    "POST /api/command/stream",
+    "POST /api/action",
+    "POST /api/arm/pick_place",
+    "POST /cap/teleop",
+    "POST /api/memory/replay/{episode_id}",
+    "POST /api/memory/trajectory",
+    "POST /webhooks/slack",
+    "rcan_router:teleop",
+    "rcan_router:nav",
+    "_handle_channel_message",
+)
+
+
+def _check_arm_rate_limit(action_type: str, principal: str) -> None:
+    """Make an arm command cross the same cap a wheel command crosses.
+
+    Raises 429 with the NAMED refusal reason. ``role_rate_limited`` is a real
+    overage: the caller asked for more than its role's requests per minute.
+    ``rate_limit_unavailable`` means the cap could not run and refused rather
+    than admitting, which after this change is the only way a correctly paced
+    caller gets refused, so naming it is what makes that lockout diagnosable in
+    one read instead of a mystery.
+
+    Never called for a stop: see :data:`_STOP_ACTION_TYPES`.
+    """
+    fs = state.fs
+    if fs is None:
+        # No safety layer attached at all. There is no cap to cross and no
+        # audit to write; the driver-level checks are the whole story. Saying
+        # this out loud because silently returning True is what the old
+        # graceful fallback did, and the difference is that this is a robot
+        # with no safety layer, not a broken cap on a robot that has one.
+        return
+    if fs.check_role_rate_limit(principal):
+        return
+    reason = getattr(fs, "last_rate_limit_reason", None) or "role_rate_limited"
+    raise _rate_limit_http_error(reason, principal, action_type)
+
+
+def _rate_limit_http_error(reason: str, principal: str, action_type: str) -> HTTPException:
+    """Build the 429 a pacing refusal answers with.
+
+    Shared by the arm gate and by ``POST /api/action``, so a refusal looks the
+    same whichever layer noticed it.
+    """
+    limit = 0
+    role_name = "unknown"
+    try:
+        from castor.rcan.rbac import RCANPrincipal
+
+        p = RCANPrincipal.from_legacy(principal)
+        limit = p.rate_limit
+        role_name = p.role.name
+    except Exception:  # noqa: BLE001 - a broken RBAC module is the reason we are here
+        pass
+    return HTTPException(
+        status_code=429,
+        detail={
+            "deny": "rate_limited",
+            "reason": reason,
+            "principal": principal,
+            "role": role_name,
+            "limit_per_min": limit,
+            "window_s": 60,
+            "action": action_type,
+            "hint": (
+                "A matching row is in /var/log/safety (GET /api/fs/read?path=/var/log/safety). "
+                "reason=rate_limit_unavailable means the cap could not run and refused; "
+                "reason=role_rate_limited means this principal asked for too much. "
+                "POST /api/stop is never rate limited."
+            ),
+        },
+    )
+
+
+def _execute_action(action, principal: str = "api"):
+    """Translate an action dict (or list of actions) into driver commands.
+
+    Args:
+        action:    An action dict, or a list of them executed in order.
+        principal: The safety-layer principal the command is paced as. ``api``
+            for anything arriving over HTTP, which is what every gateway
+            endpoint uses for its ``/dev/motor`` writes today; ``channel`` for
+            a chat channel, matching the write that path already makes.
+    """
     # Support action sequences: list of action dicts
     if isinstance(action, list):
         for step in action:
             if isinstance(step, dict):
-                _execute_action(step)
+                _execute_action(step, principal=principal)
                 # Brief pause between sequential arm moves for servo settling
                 time.sleep(0.5)
         return
     action_type = action.get("type", "")
+
+    # THE ARM CROSSES THE CAP HERE, before the action is signed and before a
+    # CommitmentRecord is sealed for it, so a refused command leaves a refusal
+    # in /var/log/safety and not a commitment to a motion that never happened.
+    # A stop is never checked: _STOP_ACTION_TYPES is not in _ARM_ACTION_TYPES,
+    # and nothing below this line can refuse one.
+    if action_type in _STOP_ACTION_TYPES:
+        # A STOP IS NEVER METERED. Written as its own branch rather than left
+        # implied by the absence of "stop" from _ARM_ACTION_TYPES, so that
+        # adding a type to the arm set can never put a stop behind the cap.
+        pass
+    elif action_type in _ARM_ACTION_TYPES:
+        _check_arm_rate_limit(action_type, principal)
 
     _action_t0 = time.perf_counter()
 
@@ -6397,6 +6559,23 @@ _CHANNEL_SURFACE: dict[str, str] = {
 }
 
 
+def _dispatch_channel_action(action) -> None:
+    """Execute a channel-planned action, absorbing a pacing refusal.
+
+    A chat channel is not an HTTP request: nothing downstream turns a 429 into
+    a response, and an exception here would surface as a dead channel adapter
+    rather than as a refused command. The refusal is already a row in
+    /var/log/safety by the time this sees it, so this logs and returns; the
+    robot simply does not move.
+    """
+    try:
+        _execute_action(action, principal="channel")
+    except HTTPException as exc:
+        if exc.status_code != 429:
+            raise
+        logger.warning("Channel action refused by the pacing cap: %s", exc.detail)
+
+
 def _handle_channel_message(channel_name: str, chat_id: str, text: str) -> str:
     """Callback invoked by channels when a message arrives."""
     if state.brain is None:
@@ -6480,9 +6659,9 @@ def _handle_channel_message(channel_name: str, chat_id: str, text: str) -> str:
             # Use the clamped action from the safety layer
             clamped_action = state.fs.read("/dev/motor", principal="channel")
             if clamped_action:
-                _execute_action(clamped_action)
+                _dispatch_channel_action(clamped_action)
         else:
-            _execute_action(thought.action)
+            _dispatch_channel_action(thought.action)
 
     # Record in memory and context
     if state.fs:

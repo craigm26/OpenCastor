@@ -148,7 +148,11 @@ class TestRCANPrincipal:
     def test_rate_limit(self):
         assert RCANPrincipal(name="g", role=RCANRole.GUEST).rate_limit == 10
         assert RCANPrincipal(name="u", role=RCANRole.USER).rate_limit == 100
-        assert RCANPrincipal(name="c", role=RCANRole.CREATOR).rate_limit == 0
+        # CREATOR was 0, and check_role_rate_limit read 0 as "admit without
+        # counting". It is finite as of OC-M-05: root maps to CREATOR, so an
+        # unlimited CREATOR meant the cap could not see a runaway loop.
+        # tests/test_role_rate_limit.py owns the reasoning; this pins the value.
+        assert RCANPrincipal(name="c", role=RCANRole.CREATOR).rate_limit == 6000
 
     def test_session_timeout(self):
         assert RCANPrincipal(name="g", role=RCANRole.GUEST).session_timeout == 300

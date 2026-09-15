@@ -9,6 +9,71 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+- **The per-role pacing cap fails closed, has no unlimited role, and now sees
+  the arm (OC-M-05).** Three separate holes in the one pacing cap that actually
+  runs on a shipped robot.
+
+  *It failed open.* `SafetyLayer.check_role_rate_limit` ended in
+  `except Exception: return True  # Graceful fallback`, so any failure inside
+  the handler, an import error in the RBAC module or a renamed role or a table
+  that no longer matched, admitted the request. It now returns False and writes
+  a named reason, `rate_limit_unavailable`, to `/var/log/safety` through the
+  same `_audit_safety` every other refusal uses. The gateway copies that reason
+  into the HTTP body, so a lockout is one read away from being diagnosed
+  instead of a mystery: `role_rate_limited` is a caller asking for too much,
+  `rate_limit_unavailable` is the cap itself being broken. The session check in
+  the same file, which had the identical fallback, fails closed the same way
+  and names itself `session_check_unavailable`.
+
+  *No role is unlimited.* `ROLE_RATE_LIMITS[CREATOR]` was 0, which the handler
+  read as "return True before counting anything". `root` maps to CREATOR, so
+  the role a runaway loop runs as was the one role the cap could not see.
+  CREATOR is now 6000 per minute, which is 100/s, five times the 20 Hz motor
+  ceiling in `castor/fs/safety.py`, so no legitimate loop on this runtime can
+  reach it. The full table, per principal per 60 s: GUEST 10, USER 100,
+  LEASEE 500, OWNER 1000, CREATOR 6000. The same table is now published in the
+  HTTP vocabulary as well, `API_ROLE_RATE_LIMITS` (viewer 10, operator 100,
+  admin 1000), derived from the RCAN table rather than restated beside it so
+  the two cannot drift. `RCANPrincipal.from_legacy` stays as the compatibility
+  shim between the v1 principal names and the roles this module publishes, and
+  it now logs each translation once per process, so the drift is in the journal
+  instead of inferred from a table.
+
+  *The arm was invisible to it.* A wheel command goes through
+  `state.fs.write("/dev/motor", ...)` and has always been paced there. `grip`
+  and `arm_pose` reach the servos through `castor.api._execute_action` without
+  touching the filesystem layer, so no arm command was ever counted. The check
+  now sits in `_execute_action`, before the action is signed and before a
+  CommitmentRecord is sealed for it, which covers every entry point that can
+  dispatch an arm command. Named, because a sweep nobody can audit is not a
+  sweep: `POST /api/command`, `POST /api/command/stream`, `POST /api/action`,
+  `POST /api/arm/pick_place`, `POST /cap/teleop`,
+  `POST /api/memory/replay/{episode_id}`, `POST /api/memory/trajectory`,
+  `POST /webhooks/slack`, the RCAN router's `teleop` and `nav` handlers, and
+  `_handle_channel_message`. The list is also in the module as
+  `_ARM_DISPATCH_ENTRY_POINTS`, so the next endpoint added inherits the gate
+  rather than forgetting it.
+
+  **A stop always goes through.** That is the counterweight to failing closed,
+  and it is exempt on purpose in four places: `POST /api/stop` does not call
+  the cap and neither does `SafetyLayer.estop()`; `SafetyLayer.write()` skips
+  both the cap and the session check for a `/dev/motor` write whose type is
+  `stop`; `_execute_action` never checks a `stop` action, because
+  `_STOP_ACTION_TYPES` is not `_ARM_ACTION_TYPES`; and `GET /api/fs/estop` now
+  reads `/proc/status` raw rather than through the paced read, which used to
+  report `unknown` when a caller was over its budget, a rate limit quietly
+  hiding the safety state. A caller with a spent budget, and a runtime whose
+  RBAC module is misconfigured, can both still halt the robot.
+
+  A pacing refusal answers 429, not the 422 `POST /api/action` used to give it.
+  422 sends a caller to look at its own payload; a rate limit is about cadence
+  and waiting fixes it. Every refusal is also a row in `/var/log/safety`.
+
+  Enforcement is in the runtime, which is the only layer that reads these
+  roles. Nothing here is a hardware guarantee and nothing here is safety rated.
+  `castor up` is unchanged, there is no new file for an operator to edit, and
+  no setup step was added.
+
 - **`castor up` can ship the gateway's signed trace off the box (OC-10).** The
   generated gateway unit now names its durable trace explicitly
   (`ROBOT_MD_ATTESTATION_EXPORT_FILE=<home>/attestation-export.ndjsonl`), and

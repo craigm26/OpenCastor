@@ -164,6 +164,14 @@ class SafetyLayer:
         # Last write denial reason (set on every return False in write())
         self._last_write_denial: str = ""
 
+        #: Named reason for the most recent pacing refusal, or None when the
+        #: last check passed. ``role_rate_limited`` is a real overage;
+        #: ``rate_limit_unavailable`` means the cap itself could not run and
+        #: refused rather than admitting; ``session_check_unavailable`` is the
+        #: same for the session check. The gateway copies this into the 429
+        #: body so a lockout is diagnosable without reading the journal first.
+        self.last_rate_limit_reason: Optional[str] = None
+
         # Safety telemetry. enable_persistence() had no caller anywhere in the
         # runtime, so the rolling history it writes never existed and an
         # operator asking "what was the safety state an hour ago" had nothing
@@ -302,37 +310,95 @@ class SafetyLayer:
             trim = len(data) - self.limits["audit_ring_size"]
             self.ns.write(path, data[trim:])
 
-    def check_role_rate_limit(self, principal: str) -> bool:
-        """Enforce per-role RCAN rate limiting (requests per minute).
+    @staticmethod
+    def _is_stop_write(path: str, data: Any) -> bool:
+        """True when *data* is a motor STOP command.
 
-        Returns True if the request is within the rate limit.
+        Narrow on purpose: a dict on ``/dev/motor`` whose ``type`` is exactly
+        ``stop``. It is the one shape the gateway sends for a stop, and keeping
+        it narrow is what stops "exempt from the cap" from spreading into
+        ordinary motion.
+        """
+        return (
+            path.startswith("/dev/motor")
+            and isinstance(data, dict)
+            and data.get("type") == "stop"
+        )
+
+    def check_role_rate_limit(self, principal: str) -> bool:
+        """Enforce the per-role pacing cap (requests per minute).
+
+        Returns True if the request is within the cap.
+
+        THIS FAILS CLOSED. It used to end in ``except Exception: return True``,
+        so any failure inside this handler -- an import error in the RBAC
+        module, a renamed role, a broken table -- admitted the request. A cap
+        that admits everything the moment it breaks is not a cap, it is a
+        comment. The cost of the flip is that a misconfigured RBAC module now
+        refuses live callers, so the refusal carries a NAMED REASON,
+        ``rate_limit_unavailable``, both in the audit row written here and in
+        the HTTP body the gateway builds from
+        :attr:`last_rate_limit_reason`. One read of ``/var/log/safety`` or of
+        the 429 body says whether a lockout is a real overage or a broken cap.
+
+        A STOP NEVER REACHES THIS FUNCTION. ``estop()`` does not call it,
+        ``POST /api/stop`` does not call it, and :meth:`write` skips it for a
+        stop command. That is deliberate and tested: a stop must go through
+        even when the cap itself is broken.
         """
         try:
-            from castor.rcan.rbac import RCANPrincipal
+            from castor.rcan.rbac import RATE_LIMIT_WINDOW_S, RCANPrincipal
 
             p = RCANPrincipal.from_legacy(principal)
             limit = p.rate_limit
-            if limit == 0:  # unlimited
-                return True
+            # No role is unlimited any more (rbac.ROLE_RATE_LIMITS). A 0 here
+            # would mean a role was added without a limit, which is the drift
+            # this item exists to close, so treat it as unavailable rather than
+            # as permission.
+            if limit <= 0:
+                self._refuse_rate_limit(
+                    principal,
+                    "rate_limit_unavailable",
+                    f"role {p.role.name} has no finite limit ({limit!r})",
+                )
+                return False
 
             now = time.time()
-            window = 60.0  # 1-minute window
+            window = RATE_LIMIT_WINDOW_S
             with self._lock:
                 timestamps = self._role_request_timestamps.get(principal, [])
                 timestamps = [t for t in timestamps if now - t < window]
                 if len(timestamps) >= limit:
+                    self.last_rate_limit_reason = "role_rate_limited"
                     self._audit_safety(
                         principal,
                         "/",
                         "role_rate_limited",
-                        f"Exceeded {limit} req/min for role {p.role.name}",
+                        f"Exceeded {limit} req/{int(window)}s for role {p.role.name}",
                     )
                     return False
                 timestamps.append(now)
                 self._role_request_timestamps[principal] = timestamps
+            self.last_rate_limit_reason = None
             return True
-        except Exception:
-            return True  # Graceful fallback
+        except Exception as exc:  # noqa: BLE001 - the whole point is to catch everything
+            self._refuse_rate_limit(principal, "rate_limit_unavailable", repr(exc))
+            return False
+
+    def _refuse_rate_limit(self, principal: str, reason: str, detail: str) -> None:
+        """Record a pacing refusal so it is a row, not only a status code.
+
+        Absorbs its own failures: this runs on the path that is already broken,
+        and a failed audit write must not turn a refusal into a traceback.
+        """
+        self.last_rate_limit_reason = reason
+        logger.warning(
+            "RATE LIMIT REFUSED %s: reason=%s detail=%s", principal, reason, detail
+        )
+        try:
+            self._audit_safety(principal, "/", reason, detail)
+        except Exception as audit_exc:  # noqa: BLE001 - never raise from a refusal
+            logger.error("Could not audit rate-limit refusal for %s: %s", principal, audit_exc)
 
     def check_session_timeout(self, principal: str) -> bool:
         """Check if a principal's session has expired (Safety Invariant 5).
@@ -369,8 +435,22 @@ class SafetyLayer:
                         pass
                     return False
             return True
-        except Exception:
-            return True  # Graceful fallback
+        except Exception as exc:  # noqa: BLE001 - fail closed, same rule as the cap
+            # Same flip as check_role_rate_limit, same named reason discipline:
+            # a session check that cannot run refuses and says why, instead of
+            # waving the request through. ``session_check_unavailable`` in
+            # /var/log/safety separates a broken check from a real expiry.
+            self.last_rate_limit_reason = "session_check_unavailable"
+            logger.warning(
+                "SESSION CHECK REFUSED %s: reason=session_check_unavailable detail=%r",
+                principal,
+                exc,
+            )
+            try:
+                self._audit_safety(principal, "/", "session_check_unavailable", repr(exc))
+            except Exception as audit_exc:  # noqa: BLE001 - never raise from a refusal
+                logger.error("Could not audit session refusal for %s: %s", principal, audit_exc)
+            return False
 
     def reset_session(self, principal: str):
         """Reset the session timer for a principal (e.g. after re-auth).
@@ -525,16 +605,28 @@ class SafetyLayer:
             )
             return False
 
-        if not self.check_role_rate_limit(principal):
-            self._audit_safety(principal, path, "role_rate_limited", "rate limit exceeded")
-            self._last_write_denial = f"Rate limit exceeded for principal '{principal}'."
-            return False
-        if not self.check_session_timeout(principal):
-            self._audit_safety(principal, path, "session_expired", "session timed out")
-            self._last_write_denial = (
-                f"Session expired for principal '{principal}'. Re-authenticate to reset."
-            )
-            return False
+        # A STOP ALWAYS GOES THROUGH.
+        #
+        # Every other write is paced. A stop command is not: neither the pacing
+        # cap nor the session check stands between a caller and halting this
+        # robot, and neither one can refuse a stop by breaking. The e-stop and
+        # pause checks at the top of this method still apply, because a robot
+        # that is already held does not need a second stop to reach the motor.
+        # Tested in tests/test_role_rate_limit.py::test_stop_is_never_rate_limited.
+        if not self._is_stop_write(path, data):
+            if not self.check_role_rate_limit(principal):
+                reason = self.last_rate_limit_reason or "role_rate_limited"
+                self._audit_safety(principal, path, reason, "write refused by the pacing cap")
+                self._last_write_denial = (
+                    f"Rate limit refused write for principal '{principal}' (reason: {reason})."
+                )
+                return False
+            if not self.check_session_timeout(principal):
+                self._audit_safety(principal, path, "session_expired", "session timed out")
+                self._last_write_denial = (
+                    f"Session expired for principal '{principal}'. Re-authenticate to reset."
+                )
+                return False
 
         if not self.perms.check_access(principal, path, "w"):
             self._audit_access(principal, path, "w", False)

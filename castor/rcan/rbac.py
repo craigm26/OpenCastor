@@ -137,14 +137,80 @@ _LEGACY_ROLE_MAP: dict[str, RCANRole] = {
     "driver": RCANRole.GUEST,
 }
 
-# Rate limits per role (requests per minute) per RCAN spec
+#: Requests per :data:`RATE_LIMIT_WINDOW_S` allowed per role.
+#:
+#: KEYED BY THE ROLE NAMES THIS MODULE PUBLISHES TODAY. Every key is an
+#: :class:`RCANRole` member, so a key that goes stale stops resolving here
+#: rather than quietly falling back to a default. ``ADMIN`` and ``OPERATOR``
+#: are not keys: they are the deprecated spellings of ``OWNER`` and ``LEASEE``
+#: (see :data:`_DEPRECATED_ROLE_NAMES`) and reach this table only through
+#: :func:`resolve_role_name`, which logs the translation.
+#:
+#: NO ROLE IS UNLIMITED ANY MORE. CREATOR used to be 0, which
+#: ``check_role_rate_limit`` read as "admit everything and do not even count".
+#: A cap that one role skips entirely is not a cap, and CREATOR is exactly the
+#: role a runaway loop runs as, because ``root`` maps to it. 6000/min is 100/s,
+#: which is five times the 20 Hz motor ceiling in ``castor/fs/safety.py``, so
+#: no legitimate control loop on this runtime can reach it; a loop that does
+#: reach it is the runaway the cap exists for.
 ROLE_RATE_LIMITS: dict[RCANRole, int] = {
     RCANRole.GUEST: 10,
     RCANRole.USER: 100,
     RCANRole.LEASEE: 500,
     RCANRole.OWNER: 1000,
-    RCANRole.CREATOR: 0,  # 0 = unlimited
+    RCANRole.CREATOR: 6000,
 }
+
+#: The window every limit in :data:`ROLE_RATE_LIMITS` is counted over, seconds.
+RATE_LIMIT_WINDOW_S: float = 60.0
+
+#: THE SAME TABLE IN THE VOCABULARY THE HTTP API PUBLISHES.
+#:
+#: ``castor/api.py`` and ``docs/claude/api-reference.md`` speak three role
+#: names, ``admin(3) > operator(2) > viewer(1)``, and map the five RCAN tiers
+#: onto them: CREATOR/OWNER are ``admin``, LEASEE/USER are ``operator``, GUEST
+#: is ``viewer``. A caller who only ever sees the HTTP vocabulary could not
+#: previously find out what it is paced at. This derives the answer from
+#: :data:`ROLE_RATE_LIMITS` instead of restating it, so the two vocabularies
+#: cannot drift apart: the API role is paced at the LOWEST limit of the RCAN
+#: tiers that map onto it, which is the limit a caller is actually guaranteed.
+_API_ROLE_TO_RCAN_ROLES: dict[str, tuple[RCANRole, ...]] = {
+    "admin": (RCANRole.CREATOR, RCANRole.OWNER),
+    "operator": (RCANRole.LEASEE, RCANRole.USER),
+    "viewer": (RCANRole.GUEST,),
+}
+
+#: WHAT THIS TABLE IS AND IS NOT. It is what a caller reading the HTTP
+#: vocabulary is entitled to be told. It is NOT a second enforcement point.
+#: The runtime paces by the FILESYSTEM PRINCIPAL, and ``castor/api.py`` uses
+#: the principal ``api`` for every HTTP caller regardless of role, so on a
+#: robot today both the admin bearer and the runtime bearer are paced at
+#: LEASEE's limit. Splitting the principal by role is a separate change and is
+#: not claimed here.
+API_ROLE_RATE_LIMITS: dict[str, int] = {
+    api_role: min(ROLE_RATE_LIMITS[r] for r in rcan_roles)
+    for api_role, rcan_roles in _API_ROLE_TO_RCAN_ROLES.items()
+}
+
+#: Legacy principal names already translated once this process, so the shim
+#: below says its piece once per name instead of once per request.
+_LEGACY_TRANSLATIONS_LOGGED: set[str] = set()
+
+
+def rate_limit_for_role_name(name: str) -> int:
+    """Return the per-window limit for *name* in either published vocabulary.
+
+    Accepts an RCAN tier (``CREATOR`` … ``GUEST``, and the deprecated ``ADMIN``
+    and ``OPERATOR`` spellings, which log), or an HTTP API role (``admin``,
+    ``operator``, ``viewer``). Raises :class:`KeyError` for a name neither
+    vocabulary knows, because a silently defaulted limit is how a cap stops
+    being a cap.
+    """
+    lowered = name.lower()
+    if lowered in API_ROLE_RATE_LIMITS:
+        return API_ROLE_RATE_LIMITS[lowered]
+    resolved = resolve_role_name(name)
+    return ROLE_RATE_LIMITS[RCANRole[resolved]]
 
 # Session timeout per role (seconds, 0 = no timeout)
 ROLE_SESSION_TIMEOUT: dict[RCANRole, int] = {
@@ -181,8 +247,33 @@ class RCANPrincipal:
         """Map a legacy OpenCastor principal name to an RCANPrincipal.
 
         Legacy names: ``root``, ``brain``, ``api``, ``channel``, ``driver``.
+
+        THIS IS A COMPATIBILITY SHIM, and it says so out loud. The names it
+        accepts are the v1 principal vocabulary; the roles it returns are the
+        vocabulary this module publishes today. Every distinct translation is
+        logged once per process, so the drift between the two is visible in the
+        journal rather than inferred from a table. A name in neither vocabulary
+        lands on GUEST, which is the safe end, and warns.
         """
-        role = _LEGACY_ROLE_MAP.get(legacy_name, RCANRole.GUEST)
+        role = _LEGACY_ROLE_MAP.get(legacy_name)
+        if role is None:
+            if legacy_name not in _LEGACY_TRANSLATIONS_LOGGED:
+                _LEGACY_TRANSLATIONS_LOGGED.add(legacy_name)
+                logger.warning(
+                    "from_legacy: unknown legacy principal %r, treating it as GUEST "
+                    "(%d req/min). Name it in _LEGACY_ROLE_MAP if it is a real principal.",
+                    legacy_name,
+                    ROLE_RATE_LIMITS[RCANRole.GUEST],
+                )
+            role = RCANRole.GUEST
+        elif legacy_name not in _LEGACY_TRANSLATIONS_LOGGED:
+            _LEGACY_TRANSLATIONS_LOGGED.add(legacy_name)
+            logger.info(
+                "from_legacy: translating v1 principal %r to role %s (%d req/min)",
+                legacy_name,
+                role.name,
+                ROLE_RATE_LIMITS[role],
+            )
         return cls(name=legacy_name, role=role)
 
     def has_scope(self, scope: Scope) -> bool:

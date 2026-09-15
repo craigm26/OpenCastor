@@ -29,6 +29,35 @@ can be presented. Routes gated at `admin` include `POST /api/hitl/authorize`,
 `/auth/rotate-key`, `/api/config/{reload,rollback}` and `/api/harness*`.
 Re-run `castor up` to mint a new admin token.
 
+## Pacing (per-role request cap)
+
+Every command except a stop crosses a per-role cap in `castor/fs/safety.py`,
+counted per safety-layer principal over a rolling 60 second window:
+
+| RCAN role | requests / 60 s | legacy principal |
+|-----------|-----------------|------------------|
+| GUEST     | 10              | `driver`         |
+| USER      | 100             | `channel`        |
+| LEASEE    | 500             | `api`            |
+| OWNER     | 1000            | `brain`          |
+| CREATOR   | 6000            | `root`           |
+
+Every HTTP caller writes as the principal `api` today, whichever bearer it
+presents, so both the admin bearer and the runtime bearer are paced at 500 per
+minute. The console's normal cadence and the phone's telemetry poll are well
+under that. The cap covers the arm as well as the wheels as of OC-M-05:
+`grip` and `arm_pose` are counted wherever they are dispatched from.
+
+**The cap fails closed.** If it cannot run, it refuses. A refusal is a 429 and
+a row in `/var/log/safety`, and both carry a named reason: `role_rate_limited`
+means this principal asked for too much, `rate_limit_unavailable` means the cap
+itself could not run. Read the reason before assuming a caller is too fast.
+
+**A stop is never paced.** `POST /api/stop` and `GET /api/fs/estop` do not
+touch the cap, and a `/dev/motor` write whose type is `stop` skips it. A caller
+that has spent its budget, and a runtime whose RBAC module is misconfigured,
+can both still halt the robot.
+
 Error responses use `{"error": "...", "code": "HTTP_NNN", "status": NNN}` (not `{"detail": "..."}`).
 
 ---
