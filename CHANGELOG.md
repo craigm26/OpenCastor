@@ -27,21 +27,32 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
   *Byte-identical, and enforced rather than hoped for.* The module carries a Python
   implementation of the one canonicalisation both sides sign over
-  (`packages/rcan/src/canonical.ts` in rail) plus a validator that REFUSES the three
+  (`packages/rcan/src/canonical.ts` in rail) plus a validator that REFUSES the four
   values where the two implementations could disagree: a float, a non-ASCII object key,
-  and a string containing a surrogate. A signature that verifies on one side and fails
-  on the other is worse than a filing that did not go out. Every cap is applied BEFORE
-  signing, so the bytes that are signed are the bytes the far side stores.
-  `tests/fixtures/platatlas-incident-report-1.ndjson` is a signed fixture built from a
-  fixed test seed; the same file is committed on the rail side, where a test ingests it
-  through the real ingest route and verifies it. Either side drifting turns one of the
-  two tests red.
+  a string containing a surrogate, and an integer outside the JS safe range (the far
+  side's `JSON.parse` loses 2**53 + 1 and re-serialises 10**21 as `1e+21` before its
+  canonicaliser is reached). A signature that verifies on one side and fails on the
+  other is worse than a filing that did not go out. Every cap is applied BEFORE signing
+  and counts in the far side's own units (UTF-16 code units, not code points), so the
+  bytes that are signed are the bytes the far side stores and a capped summary can never
+  end in half a surrogate pair. `tests/fixtures/platatlas-incident-report-1.ndjson` is a
+  signed fixture built from a fixed test seed; the same file is committed on the rail
+  side, on branch `fix/PA-18-stop-and-incident-records`, where a test ingests it through
+  the real ingest route and verifies it. Either side drifting turns one of the two tests
+  red. That rail branch is not merged yet, so until it is, a filing sent to a deployed
+  PlatAtlas org is stored as an attestation with no incident section to render it.
 
   *Nothing existing changed.* `--submit` on its own still files to the registry exactly
   as before. `--platatlas` is a second destination; pass both and both run, registry
   first. With no `PLATATLAS_ORG_SLUG` / `PLATATLAS_INGEST_KEY` the command PRINTS the
   signed objects and says where to send them, and stamps nothing in the local log,
-  because nothing was filed. The local log is stamped only on a filing that succeeded.
+  because nothing was filed. The local log is stamped only on a filing that succeeded,
+  and the stamp is an append: `castor incidents verify` still passes over a log that
+  carries one, which is tested. The key and its kid are read together from the process
+  environment or from the `gateway-attestation.env` that `castor up` or `castor pair`
+  wrote; this command never guesses a key path, because a filing signed under a kid
+  that resolves at no registry is stored on the far side as unresolvable and cannot be
+  checked by anybody.
 
   *What this is not.* Filing a report is filing a report. The signature establishes that
   the holder of this robot's key signed exactly these bytes; every field inside them is
