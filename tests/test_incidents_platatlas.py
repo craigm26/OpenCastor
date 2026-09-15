@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -122,19 +123,75 @@ def test_canonical_json_matches_the_js_rules():
 
 
 def test_canonical_json_refuses_what_the_two_sides_would_disagree_about():
-    """The three divergence cases are REFUSED, not approximated.
+    """The four divergence cases are REFUSED, not approximated.
 
     A signature that verifies on one side and fails on the other is worse than a filing
-    that did not go out, so each of these raises with the reason named.
+    that did not go out, so each of these raises with the reason named. The matching
+    half of each pair is pinned on the rail side, in
+    apps/platatlas-worker/test/pa18-canonical-conformance.test.ts, which shows what the
+    JS implementation does with the same value; neither file proves the pair alone.
     """
+    # 1. floats: String(1.5) and repr(1.5) agree here and diverge on precision, and a
+    #    float 1.0 becomes the integer 1 over there.
     with pytest.raises(PlatAtlasIncidentError, match="float"):
         canonical_json_string({"n": 1.5})
+    with pytest.raises(PlatAtlasIncidentError, match="float"):
+        canonical_json_string({"n": 1.0})
+    with pytest.raises(PlatAtlasIncidentError, match="float"):
+        canonical_json_string({"n": -0.0})
+    # 2. non-ASCII object keys: sorted() is by code point here and by UTF-16 code unit
+    #    there, and the two orders differ as soon as a key holds an astral character.
     with pytest.raises(PlatAtlasIncidentError, match="non-ASCII object key"):
         canonical_json_string({"clé": "x"})
+    with pytest.raises(PlatAtlasIncidentError, match="non-ASCII object key"):
+        canonical_json_string({"\U0001F600": "x"})
+    # 3. lone surrogates: escaped by JSON.stringify, not encodable as UTF-8 here.
     with pytest.raises(PlatAtlasIncidentError, match="surrogate"):
         canonical_json_string({"s": "\ud800"})
+    # 4. integers outside the JS safe range. JSON.parse over there loses 2**53 + 1
+    #    before the canonicaliser is reached, and 10**21 comes back as 1e+21, so the
+    #    bytes recomputed there are not the bytes signed here.
+    with pytest.raises(PlatAtlasIncidentError, match="safe range"):
+        canonical_json_string({"n": 2**53})
+    with pytest.raises(PlatAtlasIncidentError, match="safe range"):
+        canonical_json_string({"n": -(2**53)})
+    with pytest.raises(PlatAtlasIncidentError, match="safe range"):
+        canonical_json_string({"n": 10**21})
+    # MAX_SAFE_INTEGER itself is exact on both sides and is accepted.
+    assert canonical_json_string({"n": 2**53 - 1}) == '{"n":9007199254740991}'
     # A bool is NOT an int here, even though Python says isinstance(True, int).
     assert canonical_json_string({"b": True}) == '{"b":true}'
+    # And non-ASCII string VALUES are fine on both sides: raw UTF-8, no escaping. An
+    # operator with an accent in their name must be able to file.
+    assert canonical_json_string({"reporter": "Opérateur 田 🚜"}) == '{"reporter":"Opérateur 田 🚜"}'
+
+
+def test_a_cap_counts_in_the_units_the_far_side_counts_in():
+    """The caps are applied here so the signed bytes ARE the stored bytes, and that only
+    holds if both sides cut at the same place.
+
+    Python slices by code point; JavaScript's String.prototype.slice counts UTF-16 code
+    units, and an emoji is one code point and two units. A 2000-emoji summary used to
+    pass this cap untouched and be cut in half over there, so the stored summary was not
+    the summary anybody signed, and an odd boundary left a lone high surrogate in it.
+    """
+    from castor.platatlas_incident import _cap
+
+    # An emoji is two units, so five units is one ASCII character and two emoji, and the
+    # third emoji is dropped WHOLE rather than split into half a surrogate pair.
+    assert _cap("a" + "\U0001F600" * 5, 5) == "a\U0001F600\U0001F600"
+    assert _cap("a" + "\U0001F600" * 5, 6) == "a\U0001F600\U0001F600"
+    assert _cap("hello", 3) == "hel"
+    assert _cap("hello", 99) == "hello"
+    # And a filing built from an all-astral description is within the far side's cap.
+    body = build_incident_report(
+        {"id": "i1", "discovered_at": "2026-09-14T00:00:00+00:00", "severity": "serious_harm",
+         "description": "\U0001F600" * (SUMMARY_MAX)},
+        rrn=FIXTURE_RRN, kid=FIXTURE_KID, ts=FIXTURE_TS,
+    )
+    summary = body["incident"]["summary"]
+    utf16_units = sum(2 if ord(c) > 0xFFFF else 1 for c in summary)
+    assert utf16_units <= SUMMARY_MAX
 
 
 # ── 2. the record ───────────────────────────────────────────────────────────
@@ -308,8 +365,22 @@ def test_the_cross_repo_fixture_regenerates_byte_for_byte(tmp_path):
         disposition="bench halted; arm parked; cause under review",
         notified=["site safety lead", "platform operator"],
     )
-    FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
+    # THE FIXTURE IS NEVER WRITTEN BY THIS TEST. It used to be: a missing file was
+    # regenerated and the assertion below then compared the bytes to themselves. That
+    # makes the one test whose whole job is to catch cross-repo drift unable to fail -
+    # delete the fixture and it heals itself and passes green, while the rail side goes
+    # red alone and looks like the side that broke. Regeneration is deliberate and
+    # explicit, and it is the operator's job to copy the result into both repos.
     if not FIXTURE_NDJSON.exists():
+        if os.environ.get("CASTOR_WRITE_PLATATLAS_FIXTURE") != "1":
+            raise AssertionError(
+                f"{FIXTURE_NDJSON} is missing. This fixture is the cross-repo drift "
+                "detector and is not regenerated silently. To recreate it deliberately, "
+                "run this test once with CASTOR_WRITE_PLATATLAS_FIXTURE=1, then copy "
+                "BOTH files into rail at "
+                "apps/platatlas-worker/test/fixtures/ in the same change."
+            )
+        FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
         FIXTURE_NDJSON.write_text(body)
         FIXTURE_PUBKEY.write_bytes(_fixture_public_pem())
 
@@ -343,3 +414,221 @@ def test_the_cross_repo_fixture_regenerates_byte_for_byte(tmp_path):
         base64.b64decode(event["envelope_signature"]["sig"]),
         canonical_json_string(event, exclude="envelope_signature").encode(),
     )
+
+
+# ── 6. the posting path's refusals ──────────────────────────────────────────
+# Three failure modes that are not "the server said no": each of them would either send
+# the ingest key somewhere this module never chose, or let a filing that did not happen
+# be stamped into the local log as one that did.
+
+
+class _RedirectingResponse(_FakeResponse):
+    """What a real urlopen gives back after FOLLOWING a 302: a 200 from somewhere else,
+    with no body, because urllib downgraded the POST to a GET on the way."""
+
+
+def test_a_redirect_is_refused_rather_than_followed():
+    """urllib's default redirect handler carries the Authorization header to the new
+    host and, on 301/302/303, rewrites the POST to a GET and drops the body. So a
+    redirect would send the ingest key to a host nobody chose, file nothing, and return
+    a 200 that the caller would stamp into the local log as a successful filing. All
+    three are worse than a failed filing, so the opener refuses 3xx outright.
+    """
+    import urllib.error
+    import urllib.request
+
+    from castor.platatlas_incident import _NoRedirects
+
+    handler = _NoRedirects()
+    with pytest.raises(urllib.error.HTTPError) as caught:
+        handler.redirect_request(
+            urllib.request.Request("https://acme.platatlas.com/api/traces?source=rcan"),
+            None, 302, "Found", {}, "https://elsewhere.example/collect",
+        )
+    assert "refusing to follow a redirect" in str(caught.value)
+    assert "elsewhere.example" in str(caught.value)
+
+
+def test_an_org_slug_that_could_move_the_host_is_refused_before_the_key_is_attached():
+    """The ingest URL is where the bearer token goes, and org_slug came from the robot's
+    env. A slug holding a slash moves the HOST: 'evil.com/' would make the URL
+    https://evil.com/.platatlas.com/... and send the key there. One regex closes it.
+    """
+    for bad in ("evil.com/", "acme/../x", "a b", "ACME", "", "x" * 70, "acme?"):
+        with pytest.raises(PlatAtlasIncidentError, match="is not an org slug"):
+            ingest_url(bad)
+    assert ingest_url("acme-1") == "https://acme-1.platatlas.com/api/traces?source=rcan"
+
+
+def test_a_response_with_no_readable_status_is_an_operator_line_not_a_traceback():
+    """This function's contract is that the caller prints a sentence. int(None) is not a
+    sentence."""
+
+    class _NoStatus(_FakeResponse):
+        def __init__(self):
+            super().__init__(status=None, body=b"")
+
+        def getcode(self):
+            return None
+
+    with pytest.raises(PlatAtlasIncidentError, match="no readable status code"):
+        submit_incident_ndjson("x\n", "acme", "sk_live_x", opener=_FakeOpener(_NoStatus()))
+
+
+# ── 7. the CLI: what gets printed, what gets posted, what gets stamped ──────
+# The whole command was untested. These four cover the three states an operator can be
+# in (no credentials, credentials, both destinations) and the one thing a submission
+# must never do, which is disturb the local hash chain.
+
+
+def _log_with_one_incident(tmp_path):
+    from castor.incidents import IncidentLog, IncidentSeverity
+
+    log = IncidentLog(tmp_path / "incidents.jsonl")
+    log.record(IncidentSeverity.SERIOUS_HARM, "collision", "arm contacted the bench frame", {})
+    return log
+
+
+def _args(tmp_path, **over):
+    import argparse
+
+    base = dict(
+        manifest=str(tmp_path / "ROBOT.md"), reporter="Operator on shift",
+        disposition="bench halted", notified=["site safety lead"],
+        submit=False, platatlas=True,
+    )
+    base.update(over)
+    return argparse.Namespace(**base)
+
+
+def test_with_no_credentials_it_prints_the_filing_posts_nothing_and_stamps_nothing(
+    tmp_path, monkeypatch, capsys,
+):
+    from castor import cli
+    from castor import platatlas_incident as pi
+
+    monkeypatch.delenv("PLATATLAS_ORG_SLUG", raising=False)
+    monkeypatch.delenv("PLATATLAS_INGEST_KEY", raising=False)
+    monkeypatch.setenv("ROBOT_MD_ATTESTATION_KEY_FILE", str(_fixture_key_file(tmp_path)))
+    monkeypatch.setenv("ROBOT_MD_ATTESTATION_KID", FIXTURE_KID)
+
+    posted = []
+    monkeypatch.setattr(pi, "submit_incident_ndjson", lambda *a, **k: posted.append(a))
+
+    log = _log_with_one_incident(tmp_path)
+    rc = cli._submit_incident_report_platatlas(_args(tmp_path), log)
+
+    out = capsys.readouterr()
+    assert posted == [], "nothing is sent without credentials"
+    assert rc == 1
+    # The signed object IS printed: an operator with a robot and no PlatAtlas org can
+    # still file by hand, and the record exists either way.
+    printed = json.loads(out.out)
+    assert printed["action_class"] == INCIDENT_ACTION_CLASS
+    assert printed["envelope_signature"]["kid"] == FIXTURE_KID
+    assert "PLATATLAS_ORG_SLUG and PLATATLAS_INGEST_KEY not set" in out.err
+    assert "nothing was stamped" in out.err
+    # THE KEY IS NEVER ECHOED, and here there is not one; the next test is the one that
+    # matters for that.
+    assert log.unreported_incidents(), "a print-only run stamps nothing: nothing was filed"
+
+
+def test_with_credentials_it_posts_exactly_one_line_and_never_echoes_the_key(
+    tmp_path, monkeypatch, capsys,
+):
+    from castor import cli
+    from castor import platatlas_incident as pi
+
+    SECRET = "sk_live_do_not_print_me"
+    monkeypatch.setenv("PLATATLAS_ORG_SLUG", "acme")
+    monkeypatch.setenv("PLATATLAS_INGEST_KEY", SECRET)
+    monkeypatch.setenv("ROBOT_MD_ATTESTATION_KEY_FILE", str(_fixture_key_file(tmp_path)))
+    monkeypatch.setenv("ROBOT_MD_ATTESTATION_KID", FIXTURE_KID)
+
+    seen = {}
+
+    def _fake_submit(body, org_slug, ingest_key, **kw):
+        seen.update(body=body, org_slug=org_slug, ingest_key=ingest_key)
+        return {"id": "trace-123", "status": "accepted"}
+
+    monkeypatch.setattr(pi, "submit_incident_ndjson", _fake_submit)
+
+    log = _log_with_one_incident(tmp_path)
+    rc = cli._submit_incident_report_platatlas(_args(tmp_path), log)
+    out = capsys.readouterr()
+
+    assert rc == 0
+    assert seen["org_slug"] == "acme"
+    assert seen["ingest_key"] == SECRET
+    # EXACTLY ONE NDJSON LINE, terminated, one filing.
+    assert seen["body"].endswith("\n")
+    assert len([ln for ln in seen["body"].split("\n") if ln.strip()]) == 1
+    assert json.loads(seen["body"].strip())["event"]["action_class"] == INCIDENT_ACTION_CLASS
+    # THE KEY IS NEVER ECHOED, on either stream or into the log.
+    assert SECRET not in out.out and SECRET not in out.err
+    assert SECRET not in (tmp_path / "incidents.jsonl").read_text()
+    # And the operator is told what was filed, where, and what the far side does NOT do.
+    assert "Filed 1 incident(s) to acme" in out.out
+    assert "it stops nothing" in out.out
+    assert not log.unreported_incidents(), "a filing that succeeded IS stamped"
+
+
+def test_the_local_chain_still_verifies_over_a_platatlas_submission_stamp(
+    tmp_path, monkeypatch,
+):
+    """The stamp is an APPEND, never an edit, so `castor incidents verify` must still
+    pass over a log that carries one. If a submission could disturb the chain, filing to
+    PlatAtlas would cost the robot the only integrity property its own log has.
+    """
+    from castor import cli
+    from castor import platatlas_incident as pi
+
+    monkeypatch.setenv("PLATATLAS_ORG_SLUG", "acme")
+    monkeypatch.setenv("PLATATLAS_INGEST_KEY", "sk_live_x")
+    monkeypatch.setenv("ROBOT_MD_ATTESTATION_KEY_FILE", str(_fixture_key_file(tmp_path)))
+    monkeypatch.setenv("ROBOT_MD_ATTESTATION_KID", FIXTURE_KID)
+    monkeypatch.setattr(pi, "submit_incident_ndjson", lambda *a, **k: {"id": "t1"})
+
+    log = _log_with_one_incident(tmp_path)
+    assert log.verify_chain().state == "ok", "the chain holds before the filing"
+
+    assert cli._submit_incident_report_platatlas(_args(tmp_path), log) == 0
+
+    after = log.verify_chain()
+    assert after.state == "ok", f"a submission stamp broke the local chain: {after}"
+    # And the stamp is a NEW line: the incident record itself was not rewritten.
+    lines = [json.loads(ln) for ln in (tmp_path / "incidents.jsonl").read_text().splitlines() if ln.strip()]
+    kinds = [ln.get("record_type") for ln in lines]
+    assert "incident" in kinds and "report_submission" in kinds
+
+
+def test_submit_and_platatlas_together_file_to_both(tmp_path, monkeypatch):
+    """The bug this guards. --submit stamps the log on success and unreported_incidents()
+    re-reads it from disk, so the PlatAtlas leg found nothing pending, posted NOTHING,
+    and returned 1 over a registry filing that had worked. Both destinations file the
+    same incidents, so the pending list is taken once, before either of them runs.
+    """
+    from castor import cli
+    from castor import platatlas_incident as pi
+
+    monkeypatch.setenv("PLATATLAS_ORG_SLUG", "acme")
+    monkeypatch.setenv("PLATATLAS_INGEST_KEY", "sk_live_x")
+    monkeypatch.setenv("ROBOT_MD_ATTESTATION_KEY_FILE", str(_fixture_key_file(tmp_path)))
+    monkeypatch.setenv("ROBOT_MD_ATTESTATION_KID", FIXTURE_KID)
+
+    posted = []
+    monkeypatch.setattr(pi, "submit_incident_ndjson", lambda body, *a, **k: posted.append(body) or {"id": "t1"})
+
+    log = _log_with_one_incident(tmp_path)
+    pending_before = log.unreported_incidents()
+    assert len(pending_before) == 1
+
+    # Stand in for the registry leg: it stamps the log exactly as _submit_incident_report
+    # does on success, which is what used to empty the list out from under this call.
+    log.mark_reported([i["id"] for i in pending_before], receipt={"destination": "registry"})
+    assert log.unreported_incidents() == [], "the registry filing stamped the log"
+
+    rc = cli._submit_incident_report_platatlas(_args(tmp_path, submit=True), log, pending=pending_before)
+    assert rc == 0, "the PlatAtlas leg must not report failure over a registry filing that worked"
+    assert len(posted) == 1, "and it must actually post the filing"
+    assert log.verify_chain().state == "ok"
