@@ -54,14 +54,29 @@ def register_error_handlers(app) -> None:
     @app.exception_handler(HTTPException)
     async def _http_error_handler(request: Request, exc: HTTPException):
         detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={
-                "error": detail,
-                "code": f"HTTP_{exc.status_code}",
-                "status": exc.status_code,
-            },
-        )
+        body = {
+            "error": detail,
+            "code": f"HTTP_{exc.status_code}",
+            "status": exc.status_code,
+        }
+        if isinstance(exc.detail, dict):
+            # A DICT DETAIL SURVIVES AS A DICT. This handler stringified it,
+            # so a caller that wanted one field back had to parse a Python
+            # repr out of a JSON string: the pacing refusal's reason,
+            # role_rate_limited against rate_limit_unavailable, was readable
+            # by a person and not by a client. The stringified `error` stays
+            # exactly as it was, so nothing that reads it breaks; the machine
+            # readable copy is added beside it, and a detail that names its
+            # own `code` supplies it (the pacing refusal says
+            # `rate_limited`).
+            body["detail"] = exc.detail
+            own_code = exc.detail.get("code")
+            if isinstance(own_code, str) and own_code:
+                body["code"] = own_code
+            reason = exc.detail.get("reason")
+            if isinstance(reason, str) and reason:
+                body["reason"] = reason
+        return JSONResponse(status_code=exc.status_code, content=body)
 
     @app.exception_handler(Exception)
     async def _unhandled_error_handler(request: Request, exc: Exception):

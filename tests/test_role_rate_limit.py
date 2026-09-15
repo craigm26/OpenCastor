@@ -531,3 +531,37 @@ def test_owner_and_leasee_are_the_current_names_not_the_old_ones():
     assert rbac._DEPRECATED_ROLE_NAMES == {"ADMIN": "OWNER", "OPERATOR": "LEASEE"}
     assert not hasattr(RCANRole, "ADMIN")
     assert not hasattr(RCANRole, "OPERATOR")
+
+
+def test_the_429_body_carries_a_machine_readable_code(arm_client, monkeypatch):
+    """A client can branch on the refusal without parsing a Python repr.
+
+    The global handler stringified a dict detail into `error`, so the named
+    reason, the whole point of the fail-closed flip, was readable by a person
+    and not by a client.
+    """
+    client, sl, _driver = arm_client
+    monkeypatch.setitem(ROLE_RATE_LIMITS, RCANRole.LEASEE, 1)
+    assert sl.check_role_rate_limit("api") is True
+    assert sl.check_role_rate_limit("api") is False
+
+    resp = client.post("/cap/teleop", json={"type": "grip", "state": "open"})
+    assert resp.status_code == 429, resp.text
+    body = resp.json()
+    assert body["code"] == "rate_limited"
+    assert body["reason"] == "role_rate_limited"
+    assert body["status"] == 429
+    assert body["detail"]["principal"] == "api"
+    assert body["detail"]["window_s"] == rbac.RATE_LIMIT_WINDOW_S
+    # The stringified form other callers already read is unchanged.
+    assert "rate_limited" in body["error"]
+
+
+def test_a_string_detail_is_unchanged(arm_client):
+    """Only a dict detail gains the new fields; every other error is as it was."""
+    client, _sl, _driver = arm_client
+    resp = client.post("/api/memory/replay/does-not-exist")
+    assert resp.status_code == 404
+    body = resp.json()
+    assert body["code"] == "HTTP_404"
+    assert "detail" not in body

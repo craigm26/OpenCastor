@@ -6344,15 +6344,22 @@ def _rate_limit_http_error(reason: str, principal: str, action_type: str) -> HTT
         role_name = p.role.name
     except Exception:  # noqa: BLE001 - a broken RBAC module is the reason we are here
         pass
+    from castor.rcan.rbac import RATE_LIMIT_WINDOW_S
+
     return HTTPException(
         status_code=429,
         detail={
+            # `code` is what the global handler lifts to the top level of the
+            # body, so a client can branch on "rate_limited" without parsing a
+            # stringified dict out of `error`. `deny` stays for the callers
+            # that already read it.
+            "code": "rate_limited",
             "deny": "rate_limited",
             "reason": reason,
             "principal": principal,
             "role": role_name,
             "limit_per_min": limit,
-            "window_s": 60,
+            "window_s": RATE_LIMIT_WINDOW_S,
             "action": action_type,
             "hint": (
                 "A matching row is in /var/log/safety (GET /api/fs/read?path=/var/log/safety). "
