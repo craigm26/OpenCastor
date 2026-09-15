@@ -27,8 +27,10 @@ best-effort software hold, and no test in this file makes it safety rated.
 from __future__ import annotations
 
 import contextlib
+import time
 
 import pytest
+from fastapi import HTTPException
 from starlette.testclient import TestClient
 
 from castor.fs.namespace import Namespace
@@ -650,21 +652,16 @@ def test_the_real_ls_route_answers_429_past_the_cap(arm_client):
     assert client.get("/api/fs/estop").json()["rate_limit_reason"] is not None
 
 
-def test_a_version_skew_is_loud_instead_of_silently_404ing(arm_client, caplog):
-    """THE LIVE BUG, reproduced. Old fs/safety.py behind a new api.py.
+def test_a_facade_that_cannot_answer_is_loud_instead_of_silently_404ing(arm_client, caplog):
+    """THE LIVE BUG. A state.fs that cannot be asked must not read as "allowed".
 
-    On Bob the merge and the restart landed in the same second, so uvicorn
-    imported the new castor/api.py and the new castor/rcan/rbac.py but the OLD
-    castor/fs/safety.py. Every observation followed from that one fact: the cap
-    enforced at the new 1200 because rbac is imported lazily, the over-budget
-    read answered 404 because the handler could not tell a refusal from a
-    missing path, and /api/fs/estop reported rate_limit_reason null because the
-    old layer has no such attribute. The handler asked with getattr and did
-    nothing when the answer was missing, so a two millisecond deployment race
-    presented as a logic bug.
-
-    It is still a 404 here, because a gateway that cannot ask the cap genuinely
-    cannot know. What changed is that it says so, once, naming the cause.
+    state.fs is a CastorFS facade that delegates to SafetyLayer by hand. The
+    three names OC-M-05 added were never added to it, so the gateway's getattr
+    returned None, _raise_if_paced_out quietly did nothing, and an over-budget
+    read answered 404 with rate_limit_reason null while the cap was refusing at
+    exactly its limit. It is still a 404 here, because a gateway that cannot
+    ask the cap genuinely cannot know. What changed is that it says so, once,
+    naming the object and the file to fix.
     """
     import castor.api as api_mod
 
@@ -673,42 +670,54 @@ def test_a_version_skew_is_loud_instead_of_silently_404ing(arm_client, caplog):
     for _ in range(limit + 1):
         sl.check_role_rate_limit("api")
 
-    # An old SafetyLayer: refuses, but exposes neither of the new names.
-    class _OldLayer:
+    class _StaleFacade:
+        """A facade that delegates the old names and not the new ones."""
+
         def __init__(self, inner):
             self._inner = inner
 
         def __getattr__(self, name):
-            if name in ("rate_limit_refusal", "last_rate_limit_reason"):
+            if name in api_mod._SAFETY_SURFACE_REQUIRED:
                 raise AttributeError(name)
             return getattr(self._inner, name)
 
-    api_mod.state.fs = _OldLayer(sl)
+    api_mod.state.fs = _StaleFacade(sl)
     api_mod._REPORTED_SAFETY_SKEW.clear()
     with caplog.at_level("ERROR"):
         resp = client.get("/api/fs/ls", params={"path": "/proc"})
     assert resp.status_code == 404, resp.text
-    assert any("VERSION SKEW" in r.message for r in caplog.records), caplog.text
-    assert any("restart this unit again" in r.getMessage() for r in caplog.records)
+    assert any("SAFETY SURFACE GAP" in r.message for r in caplog.records), caplog.text
+    assert any("castor/fs/__init__.py" in r.getMessage() for r in caplog.records)
 
     # One line per name per process, not one per request.
     caplog.clear()
     with caplog.at_level("ERROR"):
         client.get("/api/fs/ls", params={"path": "/proc"})
-    assert not [r for r in caplog.records if "VERSION SKEW" in r.message]
+    assert not [r for r in caplog.records if "SAFETY SURFACE GAP" in r.message]
 
 
-def test_the_startup_check_names_a_missing_capability(monkeypatch):
-    """A mixed-module process says so at boot, in the journal."""
+def test_the_startup_check_reads_the_live_object_not_the_class():
+    """Checking SafetyLayer would have called the broken runtime healthy.
+
+    That is precisely why the gap survived two deploys: every name was on
+    SafetyLayer, so a class-level check reported nothing wrong, while the
+    object the gateway actually holds exposed none of them.
+    """
     import castor.api as api_mod
+    from castor.fs import CastorFS
     from castor.fs.safety import SafetyLayer
 
     api_mod._REPORTED_SAFETY_SKEW.clear()
-    assert api_mod._check_safety_layer_coherence() == []
+    assert api_mod._check_safety_layer_coherence(CastorFS()) == []
 
-    monkeypatch.delattr(SafetyLayer, "rate_limit_refusal")
+    class _OnlyTheOldSurface:
+        read = SafetyLayer.read
+        write = SafetyLayer.write
+        ls = SafetyLayer.ls
+
     api_mod._REPORTED_SAFETY_SKEW.clear()
-    assert api_mod._check_safety_layer_coherence() == ["rate_limit_refusal"]
+    missing = api_mod._check_safety_layer_coherence(_OnlyTheOldSurface())
+    assert missing == list(api_mod._SAFETY_SURFACE_REQUIRED), missing
 
 
 def test_the_refusal_rows_are_readable_once_the_window_rolls(arm_client):
@@ -738,3 +747,140 @@ def test_the_refusal_rows_are_readable_once_the_window_rolls(arm_client):
     data = resp.json()["data"]
     assert isinstance(data, list) and data, resp.text
     assert any(r.get("event") == "role_rate_limited" for r in data)
+
+
+# =====================================================================
+# 7. The real object graph, through the real bearer path
+#
+# Every fixture above assigns a bare SafetyLayer to state.fs. THE GATEWAY
+# NEVER HOLDS ONE. castor/api.py builds a CastorFS, which delegates to
+# SafetyLayer by hand, one name at a time. That gap is what broke OC-M-05
+# twice on Bob: the cap enforced correctly at exactly 1200, because it is
+# reached through the delegated ls(), while every question the gateway asked
+# ABOUT the cap missed the facade and answered empty. These tests hold the
+# object the gateway actually holds and present the header the phone actually
+# sends.
+# =====================================================================
+
+
+@pytest.fixture()
+def real_client(monkeypatch):
+    """A TestClient over a real CastorFS, authenticated by a real bearer."""
+    import castor.api as api_mod
+    from castor.fs import CastorFS
+
+    token = "test-runtime-bearer-0123456789"
+    monkeypatch.setenv("OPENCASTOR_API_TOKEN", token)
+    monkeypatch.delenv("OPENCASTOR_USERS", raising=False)
+    monkeypatch.delenv("OPENCASTOR_JWT_SECRET", raising=False)
+    monkeypatch.setattr(api_mod, "API_TOKEN", token, raising=False)
+
+    fs = CastorFS()
+    monkeypatch.setattr(api_mod.state, "fs", fs)
+
+    app = api_mod.app
+    original_startup = app.router.on_startup[:]
+    original_shutdown = app.router.on_shutdown[:]
+    app.router.on_startup.clear()
+    app.router.on_shutdown.clear()
+    original_lifespan = app.router.lifespan_context
+
+    @contextlib.asynccontextmanager
+    async def _noop_lifespan(_app):
+        yield
+
+    app.router.lifespan_context = _noop_lifespan
+    try:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            client.headers.update({"Authorization": f"Bearer {token}"})
+            yield client, fs
+    finally:
+        app.router.on_startup[:] = original_startup
+        app.router.on_shutdown[:] = original_shutdown
+        app.router.lifespan_context = original_lifespan
+
+
+def test_the_facade_exposes_everything_the_gateway_asks_it_for():
+    """CastorFS must answer every name castor/api.py asks state.fs for.
+
+    This is the regression guard for the actual bug. All four names existed on
+    SafetyLayer and none on CastorFS, so a check against the class said the
+    runtime was healthy while the gateway could reach none of them.
+    """
+    import castor.api as api_mod
+    from castor.fs import CastorFS
+
+    fs = CastorFS()
+    assert api_mod._check_safety_layer_coherence(fs) == []
+    for name in api_mod._SAFETY_SURFACE_REQUIRED:
+        assert hasattr(fs, name), name
+    # And the delegation is live, not just present.
+    assert fs.rate_limit_refusal("api") is None
+    assert fs.check_role_rate_limit("api") is True
+    assert fs.last_rate_limit_reason is None
+
+
+def test_a_bearer_request_is_paced_and_refused_with_429(real_client):
+    """THE LIVE CASE. Real CastorFS, real bearer header, past the real cap.
+
+    Bob answered 1200 x 200 then 404 "Not a directory: /proc" to exactly this
+    request, with rate_limit_reason null, because state.fs is a CastorFS and
+    the gateway's questions missed it.
+    """
+    client, fs = real_client
+    limit = ROLE_RATE_LIMITS[RCANRole.LEASEE]
+
+    seen: list[int] = []
+    for _ in range(limit + 15):
+        seen.append(client.get("/api/fs/ls", params={"path": "/proc"}).status_code)
+    assert seen.count(200) == limit, (seen.count(200), seen.count(404), seen.count(429))
+    assert seen.count(429) == 15
+    assert 404 not in seen
+
+    resp = client.get("/api/fs/ls", params={"path": "/proc"})
+    assert resp.status_code == 429, resp.text
+    body = resp.json()
+    assert body["code"] == "rate_limited"
+    assert body["reason"] == "role_rate_limited"
+
+    # The field the operator reads on the robot is populated, not null.
+    est = client.get("/api/fs/estop")
+    assert est.status_code == 200
+    assert est.json()["rate_limit_reason"] == "role_rate_limited"
+
+
+def test_the_same_bearer_reads_the_audit_row_once_the_window_rolls(real_client):
+    """The exact live check: the refusal row, read back by the same bearer."""
+    client, fs = real_client
+    limit = ROLE_RATE_LIMITS[RCANRole.LEASEE]
+    for _ in range(limit + 3):
+        client.get("/api/fs/ls", params={"path": "/proc"})
+
+    # Still over budget: the log read is itself paced and says so.
+    assert client.post("/api/fs/read", json={"path": "/var/log/safety"}).status_code == 429
+
+    fs.safety._role_request_timestamps["api"] = []
+    resp = client.post("/api/fs/read", json={"path": "/var/log/safety"})
+    assert resp.status_code == 200, resp.text
+    rows = resp.json()["data"]
+    assert isinstance(rows, list) and rows
+    assert any(r.get("event") == "role_rate_limited" and r.get("who") == "api" for r in rows)
+
+
+def test_the_arm_gate_does_not_explode_on_the_real_facade(real_client):
+    """_check_arm_rate_limit calls fs.check_role_rate_limit directly.
+
+    CastorFS had no such method, so on a real robot every arm command raised
+    AttributeError, which the gateway turns into a 500. Bob's arm is unplugged,
+    so nobody had seen it.
+    """
+    import castor.api as api_mod
+
+    _client, fs = real_client
+    assert api_mod._check_arm_rate_limit("grip", "api") is None
+
+    fs.safety._role_request_timestamps["api"] = [time.time()] * ROLE_RATE_LIMITS[RCANRole.LEASEE]
+    with pytest.raises(HTTPException) as exc:
+        api_mod._check_arm_rate_limit("grip", "api")
+    assert exc.value.status_code == 429
+    assert exc.value.detail["reason"] == "role_rate_limited"

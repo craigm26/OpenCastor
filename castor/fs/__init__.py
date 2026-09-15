@@ -293,6 +293,43 @@ class CastorFS:
         return self.safety.last_write_denial
 
     # ------------------------------------------------------------------
+    # Pacing cap
+    # ------------------------------------------------------------------
+    # THIS FACADE DELEGATES BY HAND, ONE NAME AT A TIME, and anything the
+    # safety layer grows that is not listed here is invisible to every caller
+    # that holds a CastorFS. The gateway holds a CastorFS: ``state.fs`` is
+    # built by ``CastorFS(...)`` in castor/api.py, never a bare SafetyLayer.
+    # OC-M-05 added three names to SafetyLayer and forgot this file, so on a
+    # real robot the cap kept working (it is reached through the delegated
+    # read/write/ls above) while every question the gateway asked ABOUT the cap
+    # missed: an over-budget read answered 404 instead of 429, GET
+    # /api/fs/estop reported rate_limit_reason null, POST /api/action fell back
+    # to its old 422, and the arm gate raised AttributeError, which is a 500 on
+    # every arm command. The tests did not catch it because they assigned a
+    # bare SafetyLayer to state.fs and so never crossed this class.
+
+    @property
+    def last_rate_limit_reason(self) -> Optional[str]:
+        """Named reason for the most recent pacing refusal, or None."""
+        return self.safety.last_rate_limit_reason
+
+    @last_rate_limit_reason.setter
+    def last_rate_limit_reason(self, value: Optional[str]) -> None:
+        self.safety.last_rate_limit_reason = value
+
+    def rate_limit_refusal(self, principal: str) -> Optional[str]:
+        """Is *principal* over its cap right now? Consumes no slot."""
+        return self.safety.rate_limit_refusal(principal)
+
+    def check_role_rate_limit(self, principal: str) -> bool:
+        """Cross the per-role pacing cap. Consumes a slot."""
+        return self.safety.check_role_rate_limit(principal)
+
+    def check_session_timeout(self, principal: str) -> bool:
+        """Check the principal's session against its role timeout."""
+        return self.safety.check_session_timeout(principal)
+
+    # ------------------------------------------------------------------
     # Pipeline builder
     # ------------------------------------------------------------------
     def pipeline(self, name: str, principal: str = "brain") -> Pipeline:

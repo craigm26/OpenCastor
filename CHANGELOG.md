@@ -133,18 +133,26 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
   for them after the window has rolled; the rows are written through the raw
   namespace and are never lost while the cap is refusing.
 
-  The gateway asks the safety layer whether a caller is over budget
-  (`SafetyLayer.rate_limit_refusal`, which consumes no slot) rather than
-  reading `last_rate_limit_reason` after the fact, because that attribute is
-  one slot on an object every request shares. And if the loaded
-  `castor.fs.safety` does not answer that question, the gateway now says so
-  at startup and on first use instead of silently treating "cannot ask" as
-  "not refused". That silence is what made the first live run of this change
-  hard to read: the merge and the restart landed in the same second, the
-  process came up holding the new `castor/api.py` and the old
-  `castor/fs/safety.py`, and an over-budget read answered 404 with
-  `rate_limit_reason: null` while the cap was demonstrably refusing at its
-  new limit.
+  **`CastorFS` delegates to `SafetyLayer` by hand, and that is where this
+  change first went wrong on a robot.** `state.fs` is never a bare
+  `SafetyLayer`; `castor/api.py` builds a `CastorFS`, a facade that forwards
+  one named method at a time. Everything OC-M-05 added to the safety layer,
+  `check_role_rate_limit`, `check_session_timeout`, `rate_limit_refusal` and
+  `last_rate_limit_reason`, was missing from that list. The cap itself kept
+  working, because it is reached through the forwarded `read`, `write` and
+  `ls`, but every question the gateway asked ABOUT the cap missed: an
+  over-budget read answered 404 "Not a directory" instead of 429,
+  `GET /api/fs/estop` reported `rate_limit_reason: null`, `POST /api/action`
+  fell back to its old 422, and the arm gate raised `AttributeError`, which
+  the gateway turns into a 500 on every arm command. The four names are now
+  forwarded, and the gateway checks the object it actually holds at startup
+  and names `castor/fs/__init__.py` when something is missing, rather than
+  treating "cannot ask" as "not refused".
+
+  The gateway asks whether a caller is over budget
+  (`rate_limit_refusal`, which consumes no slot) rather than reading
+  `last_rate_limit_reason` after the fact, because that attribute is one slot
+  on an object every request shares.
 
   Enforcement is in the runtime, which is the only layer that reads these
   roles. Nothing here is a hardware guarantee and nothing here is safety rated.

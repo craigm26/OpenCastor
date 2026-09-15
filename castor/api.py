@@ -2807,22 +2807,24 @@ class FSWriteRequest(BaseModel):
     data: Any = None
 
 
-#: Names already reported by :func:`_warn_safety_layer_skew`, so a skew is one
+#: Names already reported by :func:`_warn_safety_layer_skew`, so a gap is one
 #: line per missing name per process rather than one per request.
 _REPORTED_SAFETY_SKEW: set[str] = set()
 
 
 def _warn_safety_layer_skew(missing: str) -> None:
-    """Say out loud that castor.fs.safety is older than this module expects."""
+    """Say out loud that state.fs cannot answer something this module needs."""
     if missing in _REPORTED_SAFETY_SKEW:
         return
     _REPORTED_SAFETY_SKEW.add(missing)
     logger.error(
-        "VERSION SKEW: the loaded castor.fs.safety has no %s, which this gateway "
-        "needs to tell a pacing refusal from a missing path. A refused read will "
-        "answer 404 instead of 429 until this is fixed. The usual cause is a "
-        "restart in the same second as a checkout, so the process holds a mix of "
-        "old and new modules: restart this unit again. Loaded from %s.",
+        "SAFETY SURFACE GAP: state.fs (%s) does not expose %s, which this gateway "
+        "needs to tell a pacing refusal from a missing path. Until this is fixed a "
+        "refused read answers 404 instead of 429, GET /api/fs/estop reports "
+        "rate_limit_reason null, and the arm gate cannot run. CastorFS delegates to "
+        "SafetyLayer by hand, so a name added to castor/fs/safety.py has to be added "
+        "to castor/fs/__init__.py too. Safety layer loaded from %s.",
+        type(state.fs).__name__ if state.fs is not None else "unset",
         missing,
         getattr(_safety_module(), "__file__", "unknown"),
     )
@@ -2837,18 +2839,38 @@ def _safety_module():
         return None
 
 
-def _check_safety_layer_coherence() -> list[str]:
-    """Report the names this module needs from castor.fs.safety and lacks.
+#: What this module asks ``state.fs`` for, beyond plain read/write/ls.
+#:
+#: CHECKED AGAINST THE LIVE OBJECT, NOT AGAINST SafetyLayer. state.fs is a
+#: CastorFS facade that delegates to SafetyLayer BY HAND, one name at a time,
+#: so a name can exist on SafetyLayer and still be missing from everything the
+#: gateway can reach. That is exactly what happened with OC-M-05: all three of
+#: these were on SafetyLayer and none were on CastorFS, so the cap enforced
+#: correctly while every question about it came back empty, and the arm gate
+#: raised AttributeError. Checking the class would have said everything was
+#: fine.
+_SAFETY_SURFACE_REQUIRED = (
+    "rate_limit_refusal",
+    "check_role_rate_limit",
+    "check_session_timeout",
+    "last_rate_limit_reason",
+)
 
-    Called at startup so a mixed-module process says so at boot, in the
-    journal, instead of being discovered later as a wrong status code.
+
+def _check_safety_layer_coherence(fs=None) -> list[str]:
+    """Report what this module needs from ``state.fs`` and cannot reach.
+
+    Called at startup so a facade that has fallen behind the safety layer says
+    so at boot rather than being discovered later as a wrong status code. Falls
+    back to a throwaway CastorFS when no filesystem is attached yet, so the
+    check is still meaningful before boot wiring completes.
     """
-    from castor.fs.safety import SafetyLayer
+    target = fs if fs is not None else state.fs
+    if target is None:
+        from castor.fs import CastorFS
 
-    # Methods only. last_rate_limit_reason is set in __init__, so it is an
-    # instance attribute and never answers hasattr() on the class.
-    required = ("rate_limit_refusal", "check_role_rate_limit", "check_session_timeout")
-    missing = [n for n in required if not hasattr(SafetyLayer, n)]
+        target = CastorFS()
+    missing = [n for n in _SAFETY_SURFACE_REQUIRED if not hasattr(target, n)]
     for name in missing:
         _warn_safety_layer_skew(name)
     return missing
@@ -2873,14 +2895,14 @@ def _raise_if_paced_out(path: str) -> None:
     # recomputes the answer from the window and consumes nothing.
     ask = getattr(state.fs, "rate_limit_refusal", None)
     if not callable(ask):
-        # A SAFETY LAYER THAT CANNOT BE ASKED IS A VERSION SKEW, NOT A PASS.
-        # This is how the first live run of OC-M-05 went wrong: the merge and
-        # the restart landed in the same second, so the process loaded the new
-        # castor/api.py against the old castor/fs/safety.py. getattr returned
-        # None, this function quietly did nothing, and an over-budget read came
-        # back 404 "Not a directory" with rate_limit_reason null. Silence is
-        # what made a two millisecond deployment race look like a logic bug for
-        # twenty minutes. It is now a log line that names the cause.
+        # A SAFETY LAYER THAT CANNOT BE ASKED IS A GAP, NOT A PASS.
+        # This is how the first two live runs of OC-M-05 went wrong. state.fs
+        # is a CastorFS facade that delegates to SafetyLayer by hand, and the
+        # three names this change added were never added to it, so getattr
+        # returned None, this function quietly did nothing, and an over-budget
+        # read came back 404 "Not a directory" with rate_limit_reason null
+        # while the cap was demonstrably refusing at exactly its limit. The
+        # silence is what made a one line omission look like a logic bug.
         _warn_safety_layer_skew("rate_limit_refusal")
         return
     reason = ask("api")
