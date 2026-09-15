@@ -205,10 +205,17 @@ def rate_limit_for_role_name(name: str) -> int:
     ``operator``, ``viewer``). Raises :class:`KeyError` for a name neither
     vocabulary knows, because a silently defaulted limit is how a cap stops
     being a cap.
+
+    CASE IS THE DISAMBIGUATOR, and it has to be, because two of these names
+    collide. The HTTP vocabulary is lower case (``operator``); the RCAN
+    vocabulary is upper case, and ``OPERATOR`` is the deprecated spelling of
+    ``LEASEE``. They are different limits: 100 against 500. Matching case
+    insensitively answered the HTTP number for both and never logged the
+    deprecation this function's own docstring promises, so a caller asking
+    about the deprecated RCAN role was quietly told somebody else's limit.
     """
-    lowered = name.lower()
-    if lowered in API_ROLE_RATE_LIMITS:
-        return API_ROLE_RATE_LIMITS[lowered]
+    if name in API_ROLE_RATE_LIMITS:
+        return API_ROLE_RATE_LIMITS[name]
     resolved = resolve_role_name(name)
     return ROLE_RATE_LIMITS[RCANRole[resolved]]
 

@@ -502,3 +502,32 @@ def test_a_broken_cap_is_named_on_a_read_too(monkeypatch):
     assert sl.read("/proc/status", principal="api") is None
     rows = sl.ns.read("/var/log/safety") or []
     assert any("rate_limit_unavailable" in str(r) for r in rows), rows
+
+
+def test_operator_means_two_different_limits_and_case_says_which():
+    """``operator`` (HTTP) and ``OPERATOR`` (deprecated RCAN) are not the same.
+
+    The HTTP role ``operator`` is paced at 100, the floor of LEASEE and USER.
+    ``OPERATOR`` is the pre-f414b90 spelling of LEASEE and is paced at 500. A
+    case-insensitive lookup answered 100 for both and never logged the
+    deprecation, so a caller asking about the old RCAN role was told somebody
+    else's number.
+    """
+    assert rbac.rate_limit_for_role_name("operator") == API_ROLE_RATE_LIMITS["operator"]
+    assert rbac.rate_limit_for_role_name("OPERATOR") == ROLE_RATE_LIMITS[RCANRole.LEASEE]
+    assert rbac.rate_limit_for_role_name("ADMIN") == ROLE_RATE_LIMITS[RCANRole.OWNER]
+    assert rbac.rate_limit_for_role_name("admin") == API_ROLE_RATE_LIMITS["admin"]
+    with pytest.raises(KeyError):
+        rbac.rate_limit_for_role_name("nobody")
+
+
+def test_owner_and_leasee_are_the_current_names_not_the_old_ones():
+    """Direction check: f414b90 renamed ADMIN to OWNER and OPERATOR to LEASEE.
+
+    So OWNER and LEASEE are current and ADMIN and OPERATOR are deprecated, not
+    the other way round. The rate-limit table is keyed on the current names.
+    """
+    assert set(ROLE_RATE_LIMITS) == set(RCANRole)
+    assert rbac._DEPRECATED_ROLE_NAMES == {"ADMIN": "OWNER", "OPERATOR": "LEASEE"}
+    assert not hasattr(RCANRole, "ADMIN")
+    assert not hasattr(RCANRole, "OPERATOR")
