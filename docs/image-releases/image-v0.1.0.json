@@ -1,0 +1,12 @@
+{
+  "base_image": "raspios-lite-arm64.img.xz",
+  "build_host": "Linux 6.18.39+rpt-rpi-2712 aarch64",
+  "built_at": "2026-08-17T18:01:27Z",
+  "git_branch": "feat/pair-attest-pub",
+  "git_dirty": false,
+  "git_head": "d21ef99a0c124e8c007797e09d3a3c8bcc2cbaca",
+  "model": "qwen3.5:2b",
+  "schema": 1,
+  "wheelhouse_manifest_sha256": "fc50abd9f2af93e80f08130c5cd2fcc5a7541323e948e861979dc8cb61e17dde",
+  "wheelhouse_wheels": 98
+}
