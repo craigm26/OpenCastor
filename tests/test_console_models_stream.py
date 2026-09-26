@@ -33,6 +33,7 @@ import socket
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
@@ -1069,3 +1070,76 @@ def test_the_embedder_is_marked_so_nothing_suggests_it_for_chat(client, ollama):
     assert kinds.pop("nomic-embed-text") == "embedding"
     assert set(kinds.values()) == {"chat"}
 
+
+# ---------------------------------------------------------------------------
+# `castor up` picks a CHAT brain
+# ---------------------------------------------------------------------------
+
+
+class _Resp:
+    def __init__(self, body: dict) -> None:
+        self._data = json.dumps(body).encode()
+
+    def read(self) -> bytes:
+        return self._data
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _fake_daemon(monkeypatch, tags: list[dict], shows: dict | None):
+    """Patch urllib for both `up.detect_brain` and the console's `_ollama`."""
+    import urllib.error
+    import urllib.request
+
+    asked: list[str] = []
+
+    def urlopen(req, timeout=None):
+        url = req if isinstance(req, str) else req.full_url
+        asked.append(url)
+        if url.endswith("/api/tags"):
+            return _Resp({"models": tags})
+        if url.endswith("/api/show"):
+            name = json.loads(req.data)["model"]
+            if shows is None or name not in shows:
+                raise urllib.error.URLError("show refused")
+            return _Resp(shows[name])
+        raise AssertionError(f"detect_brain must not call {url}")
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    return asked
+
+
+def test_up_never_picks_an_embedding_model_as_the_chat_brain(monkeypatch, tmp_path):
+    from castor import up
+
+    tags = [_tag("nomic-embed-text:latest", 274302450, "sha-nomic", "nomic-bert"),
+            _tag("qwen3.5:2b", 2741192820, "sha-qwen2b", "qwen35"),
+            _tag("gemma4:e2b", 7162405886, "sha-e2b", "gemma4")]
+    shows = {"nomic-embed-text:latest": _show("nomic-bert", 2048, ["embedding"]),
+             "qwen3.5:2b": _show("qwen35", 262144, ["completion"])}
+    asked = _fake_daemon(monkeypatch, tags, shows)
+    assert up.detect_brain() == ("ollama", "qwen3.5:2b")
+    assert all(url.startswith("http://127.0.0.1:11434/") for url in asked)
+
+
+def test_up_skips_the_embedder_by_family_when_ollama_will_not_describe_it(monkeypatch):
+    from castor import up
+
+    tags = [_tag("nomic-embed-text:latest", 274302450, "sha-nomic", "nomic-bert"),
+            _tag("qwen3.5:2b", 2741192820, "sha-qwen2b", "qwen35")]
+    _fake_daemon(monkeypatch, tags, shows=None)
+    assert up.detect_brain() == ("ollama", "qwen3.5:2b")
+
+
+def test_up_with_only_an_embedder_installed_has_no_local_chat_brain(monkeypatch, tmp_path):
+    from castor import up
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    tags = [_tag("nomic-embed-text:latest", 274302450, "sha-nomic", "nomic-bert")]
+    _fake_daemon(monkeypatch, tags, {"nomic-embed-text:latest":
+                                     _show("nomic-bert", 2048, ["embedding"])})
+    assert up.detect_brain() == ("ollama", "")
