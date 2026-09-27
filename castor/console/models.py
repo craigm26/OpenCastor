@@ -848,6 +848,71 @@ def parse_think(value: Any) -> bool | str:
 #: make Ollama compile into a grammar on a Pi that also drives.
 FORMAT_MAX_BYTES = 64 * 1024
 
+#: The keywords a reply schema may use: the phone's draft schema is written in
+#: the first six (ProposalSchemaSpec), and the rest are annotations or a literal.
+#: Everything else is refused, because Ollama's schema-to-grammar converter runs
+#: in its server process with no depth or size guard of its own: ``pattern``
+#: recurses once per nested group, ``$ref`` shares one rule among many places,
+#: and counts (``minItems``, ``maxLength``) multiply rules.
+FORMAT_KEYWORDS = frozenset({
+    "anyOf", "type", "properties", "required", "additionalProperties", "enum",
+    "const", "description", "title",
+})
+#: How many schemas deep a reply schema may nest. The phone's is four deep (the
+#: root's anyOf, a branch, its args, one argument). The converter recurses once
+#: per level and grows each rule's name by the level's name, so ten thousand
+#: levels fit in FORMAT_MAX_BYTES and cost Ollama far more than the bytes.
+FORMAT_MAX_DEPTH = 16
+#: How many properties one object in a reply schema may declare. The converter
+#: builds optional properties by copying the rest of the list for each one,
+#: cubic in their number; a capability's arguments are a handful.
+FORMAT_MAX_PROPERTIES = 64
+
+
+def _check_schema(node: Any, depth: int = 1) -> None:
+    """422 unless *node* is a schema in `FORMAT_KEYWORDS`, within the bounds.
+
+    Recursion here is bounded by FORMAT_MAX_DEPTH, checked before descending.
+    """
+    if not isinstance(node, dict):
+        raise _refuse("format: every schema in it must be a JSON object")
+    if depth > FORMAT_MAX_DEPTH:
+        raise _refuse(f"format nests more than {FORMAT_MAX_DEPTH} schemas deep")
+    unknown = [str(key)[:40] for key in node if key not in FORMAT_KEYWORDS]
+    if unknown:
+        raise _refuse(f"format uses {', '.join(sorted(unknown)[:3])}; this robot takes only "
+                      f"{', '.join(sorted(FORMAT_KEYWORDS))}")
+    for key, value in node.items():
+        if key == "properties":
+            if not isinstance(value, dict):
+                raise _refuse("format: properties must be an object")
+            if len(value) > FORMAT_MAX_PROPERTIES:
+                raise _refuse(f"format declares {len(value)} properties on one object; "
+                              f"this robot takes at most {FORMAT_MAX_PROPERTIES}")
+            for sub in value.values():
+                _check_schema(sub, depth + 1)
+        elif key == "anyOf":
+            if not isinstance(value, list) or not value:
+                raise _refuse("format: anyOf must be a non-empty list of schemas")
+            for sub in value:
+                _check_schema(sub, depth + 1)
+        elif key == "additionalProperties":
+            if not isinstance(value, bool):
+                _check_schema(value, depth + 1)
+        elif key == "type":
+            names = value if isinstance(value, list) else [value]
+            if not names or not all(isinstance(name, str) for name in names):
+                raise _refuse("format: type must be a name or a list of names")
+        elif key in ("enum", "required"):
+            scalar = (str,) if key == "required" else (str, int, float, bool, type(None))
+            if not isinstance(value, list) or not all(isinstance(v, scalar) for v in value):
+                raise _refuse(f"format: {key} must be a list of plain values")
+        elif key == "const":
+            if not isinstance(value, (str, int, float, bool, type(None))):
+                raise _refuse("format: const must be a plain value")
+        elif not isinstance(value, str):  # description, title
+            raise _refuse(f"format: {key} must be text")
+
 
 def parse_format(raw: Any) -> dict | None:
     """``format``: a JSON Schema the reply is held to, or None.
@@ -856,7 +921,12 @@ def parse_format(raw: Any) -> dict | None:
     any shape. That constrains nothing the phone can read a draft from, and a
     receipt saying ``format_applied: true`` over it would be a promise nobody
     kept, so it is refused (422), as is any other non-object and an empty
-    object. Bigger than FORMAT_MAX_BYTES serialized is refused too.
+    object. Bigger than FORMAT_MAX_BYTES serialized is refused too, and so is
+    any keyword outside FORMAT_KEYWORDS, nesting past FORMAT_MAX_DEPTH, or an
+    object with more than FORMAT_MAX_PROPERTIES properties (`_check_schema`):
+    Ollama compiles the schema into a grammar inside its own server, on a Pi
+    that has rebooted under load, and a few KB of the wrong schema costs it far
+    more than a few KB.
 
     The object is passed on as given, keys in the order they arrived: a
     constrained decoder writes properties in schema order, and the phone puts
@@ -872,6 +942,9 @@ def parse_format(raw: Any) -> dict | None:
         raise _refuse("format must be a JSON Schema object")
     if not raw:
         raise _refuse("format must be a non-empty JSON Schema object")
+    # Shape first: it bounds the depth, so the serialization below cannot recurse
+    # without end.
+    _check_schema(raw)
     try:
         size = len(json.dumps(raw, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
     except (TypeError, ValueError):

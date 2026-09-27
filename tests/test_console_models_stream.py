@@ -878,6 +878,58 @@ def test_an_oversized_format_is_refused(client, ollama):
     assert chat(client, format=fits).json()["format_applied"] is True
 
 
+def _nested(levels: int) -> dict:
+    """A schema *levels* schemas deep, one object property inside another."""
+    schema: dict = {"type": "string"}
+    for _ in range(levels - 1):
+        schema = {"type": "object", "properties": {"a": schema}}
+    return schema
+
+
+# Each is a few KB at most and well under FORMAT_MAX_BYTES, and each makes
+# Ollama's schema-to-grammar converter, which runs inside its server with no
+# guard of its own, do far more than the bytes: recurse once per level or per
+# regex group, grow every rule name by its parent's, or copy the rest of an
+# optional property list once per property. Before the shape check, the
+# 1500-level one reached /api/chat.
+HOSTILE_FORMATS = {
+    "1500 levels": _nested(1500),
+    "17 levels": _nested(17),
+    "17 levels of anyOf": {"anyOf": [_nested(16)]},
+    "nested regex groups": {"type": "string", "pattern": "^" + "(" * 2000 + "a" + ")" * 2000 + "$"},
+    "a reference": {"$defs": {"a": {"type": "string"}}, "$ref": "#/$defs/a"},
+    "a count": {"type": "string", "maxLength": 1_000_000},
+    "items": {"type": "array", "items": {"type": "string"}},
+    "65 optional properties": {"type": "object",
+                               "properties": {f"p{i}": {"type": "string"} for i in range(65)}},
+    "an empty anyOf": {"anyOf": []},
+    "a property that is not a schema": {"type": "object", "properties": {"a": "string"}},
+    "an enum of objects": {"enum": [{"kind": "draft"}]},
+}
+
+
+@pytest.mark.parametrize("name", list(HOSTILE_FORMATS))
+@pytest.mark.parametrize("stream", [False, True])
+def test_a_format_outside_the_draft_schemas_shape_is_refused_before_ollama_sees_it(
+        client, ollama, name, stream):
+    resp = chat(client, stream=stream, format=HOSTILE_FORMATS[name])
+    assert resp.status_code == 422, resp.text
+    assert "format" in resp.json()["detail"]
+    assert ollama.posts("/api/chat") == []
+
+
+def test_a_format_at_the_bounds_still_reaches_ollama(client, ollama):
+    from castor.console import models
+
+    wide = {"type": "object",
+            "properties": {f"p{i}": {"type": "string"}
+                           for i in range(models.FORMAT_MAX_PROPERTIES)}}
+    for fmt in (DRAFT_SCHEMA, _nested(models.FORMAT_MAX_DEPTH), wide,
+                {"type": ["string", "null"], "const": "x", "title": "t", "description": "d"}):
+        assert chat(client, format=fmt).json()["format_applied"] is True
+    assert len(ollama.posts("/api/chat")) == 4
+
+
 @pytest.mark.parametrize("offer", [
     {"tools": [{"type": "function", "function": {"name": "drive.stop", "parameters": {}}}]},
     {"tool_choice": "auto"},
