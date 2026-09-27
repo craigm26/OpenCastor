@@ -285,7 +285,8 @@ def home(tmp_path, monkeypatch):
     """A scratch ROBOT_HOME, a console token, and no ambient robot settings."""
     monkeypatch.setenv("ROBOT_HOME", str(tmp_path))
     monkeypatch.setenv("CONSOLE_TOKEN", TOKEN)
-    for name in ("CHAT_UPSTREAM", "OLLAMA_URL", "ROBOT_GATEWAY_URL", "GATEWAY_READ_TOKEN"):
+    for name in ("CHAT_UPSTREAM", "OLLAMA_URL", "ROBOT_GATEWAY_URL", "GATEWAY_READ_TOKEN",
+                 "CONSOLE_SIGNING_KEY_PATH", "CONSOLE_SIGNING_KID"):
         monkeypatch.delenv(name, raising=False)
     (tmp_path / "active-model.json").write_text(
         json.dumps({"provider": "ollama", "model": "qwen3.5:2b"}))
@@ -1250,6 +1251,165 @@ def test_the_drive_state_is_reused_briefly_then_asked_again(client, ollama, gate
     gateway.telemetry = {"moving": True, "envelope": None}
     assert chat(client).status_code == 409, "a stale 'parked' is not reused past its TTL"
     assert len(gateway.calls) == 2
+
+
+# ---------------------------------------------------------------------------
+# The drive check signs its own envelope (a gateway that enforces envelope
+# signatures refuses an unsigned one before the tool, and drive_aware would
+# silently fall to false while the car moves)
+# ---------------------------------------------------------------------------
+
+#: Not a registered kid: a scratch name for a key generated inside the test.
+CONSOLE_KID = "console-test-only-kid"
+
+
+def _write_ed25519(path: Path):
+    """A fresh Ed25519 key at ``path`` (PKCS8 PEM, 0600); returns its public key."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    key = Ed25519PrivateKey.generate()
+    path.write_bytes(key.private_bytes(serialization.Encoding.PEM,
+                                       serialization.PrivateFormat.PKCS8,
+                                       serialization.NoEncryption()))
+    path.chmod(0o600)
+    return key.public_key()
+
+
+class _OneKid:
+    """The gateway's resolver shape, holding exactly one public key."""
+
+    def __init__(self, kid: str, public_key) -> None:
+        from cryptography.hazmat.primitives import serialization
+
+        self.kid = kid
+        self.pem = public_key.public_bytes(serialization.Encoding.PEM,
+                                           serialization.PublicFormat.SubjectPublicKeyInfo)
+
+    def resolve_public_key_pem(self, kid: str):
+        return self.pem if kid == self.kid else None
+
+
+@pytest.fixture
+def signing_key(home, monkeypatch):
+    """The console configured to sign its drive check; yields the public key."""
+    public = _write_ed25519(home / "console-ed25519-private.pem")
+    monkeypatch.setenv("CONSOLE_SIGNING_KEY_PATH", str(home / "console-ed25519-private.pem"))
+    monkeypatch.setenv("CONSOLE_SIGNING_KID", CONSOLE_KID)
+    return public
+
+
+def test_THEPOINT_a_signed_drive_check_verifies_with_the_consoles_public_key(
+        client, ollama, gateway, signing_key, monkeypatch):
+    from robot_md_gateway.cert.envelope import verify_envelope
+
+    from castor.console import models
+
+    monkeypatch.setattr(models, "DRIVE_STATE_TTL_S", 0.0)
+    before_ms = int(time.time() * 1000)
+    body = client.get("/models/local", headers=auth()).json()
+    assert body["drive_aware"] is True
+    assert body["drive_signed_by"] == CONSOLE_KID
+    assert chat(client).status_code == 200
+    assert len(gateway.calls) == 2
+    resolver = _OneKid(CONSOLE_KID, signing_key)
+    for bearer, invoke in gateway.calls:
+        assert bearer == f"Bearer {GATEWAY_READ}", "the same read bearer, now signed too"
+        assert invoke["envelope_signature"]["kid"] == CONSOLE_KID
+        assert invoke["envelope_signature"]["alg"] == "Ed25519"
+        result = verify_envelope(invoke, resolver=resolver)
+        assert result.accepted, result.reason
+        assert before_ms - 1000 <= invoke["timestamp_ms"] <= int(time.time() * 1000) + 1000
+        # Any field changed after signing, and the gateway's own check refuses it.
+        for field, value in (("tool_name", "drive.stop"), ("scope", "MANIPULATE"),
+                             ("timestamp_ms", invoke["timestamp_ms"] + 1)):
+            assert not verify_envelope({**invoke, field: value}, resolver=resolver).accepted
+    # Never the same envelope twice: a replay window would refuse the second.
+    (_, first), (_, second) = gateway.calls
+    assert first["msg_id"] != second["msg_id"] and first["nonce"] != second["nonce"]
+    # Another key under the same kid does not verify it.
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    other = Ed25519PrivateKey.generate().public_key()
+    assert not verify_envelope(first, resolver=_OneKid(CONSOLE_KID, other)).accepted
+
+
+@pytest.mark.parametrize("case", ["missing file", "kid without path", "path without kid",
+                                  "not a key", "not Ed25519"])
+def test_a_signing_key_that_cannot_be_loaded_sends_nothing_and_is_not_drive_aware(
+        client, ollama, gateway, home, monkeypatch, case):
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    from castor.console import models
+
+    key_path = home / "console-ed25519-private.pem"
+    if case == "missing file":
+        monkeypatch.setenv("CONSOLE_SIGNING_KEY_PATH", str(key_path))
+        monkeypatch.setenv("CONSOLE_SIGNING_KID", CONSOLE_KID)
+    elif case == "kid without path":
+        monkeypatch.setenv("CONSOLE_SIGNING_KID", CONSOLE_KID)
+    elif case == "path without kid":
+        _write_ed25519(key_path)
+        monkeypatch.setenv("CONSOLE_SIGNING_KEY_PATH", str(key_path))
+    elif case == "not a key":
+        key_path.write_text("not a PEM at all\n")
+        monkeypatch.setenv("CONSOLE_SIGNING_KEY_PATH", str(key_path))
+        monkeypatch.setenv("CONSOLE_SIGNING_KID", CONSOLE_KID)
+    else:
+        key_path.write_bytes(ec.generate_private_key(ec.SECP256R1()).private_bytes(
+            serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption()))
+        monkeypatch.setenv("CONSOLE_SIGNING_KEY_PATH", str(key_path))
+        monkeypatch.setenv("CONSOLE_SIGNING_KID", CONSOLE_KID)
+
+    body = client.get("/models/local", headers=auth()).json()
+    assert body["drive_aware"] is False, "it cannot know, so it must not claim to"
+    assert body["drive_signed_by"] is None
+    # Unknown is not driving: the turn is answered, and nothing went out UNSIGNED
+    # in the signed check's place.
+    assert chat(client).status_code == 200
+    assert gateway.calls == []
+    state = models.read_drive_state()
+    assert state["known"] is False and "not sent" in state["detail"]
+    # Said loudly at start, and never with the key file's contents.
+    line = models.drive_signing_startup_line()
+    assert line.startswith("ERROR:") and "drive_aware is false" in line
+    if key_path.exists() and case != "not Ed25519":
+        assert key_path.read_text() not in line
+
+
+def test_no_signing_configured_is_the_unsigned_check_it_always_was(client, ollama, gateway):
+    from castor.console import models
+
+    body = client.get("/models/local", headers=auth()).json()
+    assert body["drive_aware"] is True
+    assert body["drive_signed_by"] is None
+    (_, invoke), = gateway.calls
+    assert "envelope_signature" not in invoke
+    assert set(invoke) == {"msg_id", "type", "ruri", "scope", "tool_name", "tool_args",
+                           "manifest_path", "nonce", "timestamp_ms"}
+    assert models.drive_signing_startup_line().startswith("drive check: unsigned")
+
+
+def test_a_stock_console_with_no_drive_check_says_nothing_about_signing(home):
+    from castor.console import models
+
+    assert models.drive_signing_startup_line() is None
+
+
+def test_the_startup_line_reaches_stderr_before_the_server_starts(home, signing_key,
+                                                                  monkeypatch, capsys):
+    import uvicorn
+
+    from castor.console import __main__ as console_main
+
+    monkeypatch.setattr(uvicorn, "run", lambda *a, **k: None)
+    console_main.main()
+    assert f"drive check: signed as {CONSOLE_KID}" in capsys.readouterr().err
+    (home / "console-ed25519-private.pem").unlink()
+    console_main.main()
+    assert "ERROR: the drive check will NOT be sent" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------

@@ -482,7 +482,9 @@ def local_models() -> dict:
     reply to; see `parse_format`), and ``drive_aware`` (this console can ask the
     gateway whether the robot is driving right now, and refuses to think while
     it is; false means it cannot know, because it was not configured or the
-    gateway would not say, and the phone must check for itself).
+    gateway would not say, and the phone must check for itself), and
+    ``drive_signed_by`` (the kid that check is signed with, null when unsigned;
+    see `drive_signer`).
     """
     try:
         tags = _ollama("/api/tags")
@@ -520,6 +522,7 @@ def local_models() -> dict:
             }
         )
     models.sort(key=lambda m: m["size_bytes"])
+    guard = read_drive_state() if drive_guard_configured() else None
     return {
         "models": models,
         "active": active,
@@ -530,8 +533,13 @@ def local_models() -> dict:
         "guided": True,
         # What the console can actually know right now, not only whether it was
         # configured: a manifest with no RRN, a refused token or a gateway that is
-        # down all leave every turn unrefused.
-        "drive_aware": drive_guard_configured() and read_drive_state()["known"],
+        # down all leave every turn unrefused. So does a signing key that was
+        # asked for and cannot be loaded: the check is then never sent at all.
+        "drive_aware": bool(guard and guard["known"]),
+        # The kid the drive check went out signed with; null when it went out
+        # unsigned or was not sent. A gateway that enforces envelope signatures
+        # answers only a signed one.
+        "drive_signed_by": guard.get("signed_by") if guard else None,
     }
 
 
@@ -1038,6 +1046,95 @@ DRIVE_PROBE_TIMEOUT_S = 2.0
 _drive_lock = threading.Lock()
 _drive_cached: tuple[float, dict] | None = None
 
+#: The drive check's own envelope-signing identity: a PEM path and a kid, both
+#: optional, read at call time like every other setting (see `drive_signer`).
+SIGNING_KEY_ENV = "CONSOLE_SIGNING_KEY_PATH"
+SIGNING_KID_ENV = "CONSOLE_SIGNING_KID"
+
+
+class DriveSignerUnavailable(RuntimeError):
+    """Signing was asked for and cannot be done, so the drive check is not sent."""
+
+
+def drive_signer() -> tuple[str, Any] | None:
+    """``(kid, Ed25519 private key)`` the drive check signs with, or None.
+
+    WHY THE CHECK SIGNS. A gateway that enforces envelope signatures
+    (``ROBOT_MD_REQUIRE_ENVELOPE_SIGNATURE``) checks the signature BEFORE the
+    tool, so an unsigned status.report gets a signed 403, the check reads
+    "unknown", ``drive_aware`` falls to false, and the console quietly stops
+    refusing chat while the car moves. The recipe is the gateway's own
+    (`robot_md_gateway.cert.envelope.sign_envelope`: Ed25519 over the rcan
+    canonical JSON of the whole envelope, ``envelope_signature`` excluded), the
+    same one a rover runtime signs its own requests with. The public half has
+    to be where the gateway resolves kids (its RRF stub). The key names this
+    console, not a person, and changes nothing about what the read bearer may do.
+
+    None when neither ``CONSOLE_SIGNING_KEY_PATH`` nor ``CONSOLE_SIGNING_KID`` is
+    set: the check goes out unsigned, as it always has.
+
+    FAIL CLOSED. Either one set means signing was asked for, and then a missing
+    partner, an unreadable file or a key that is not Ed25519 raises
+    `DriveSignerUnavailable`. The caller then sends nothing, never an unsigned
+    check in its place: an unsigned check that happens to pass today is the one
+    that stops passing the day enforcement is switched on. The message names the
+    file, never its bytes.
+    """
+    path = os.environ.get(SIGNING_KEY_ENV, "").strip()
+    kid = os.environ.get(SIGNING_KID_ENV, "").strip()
+    if not path and not kid:
+        return None
+    if not (path and kid):
+        missing, present = (
+            (SIGNING_KID_ENV, SIGNING_KEY_ENV) if path else (SIGNING_KEY_ENV, SIGNING_KID_ENV)
+        )
+        raise DriveSignerUnavailable(f"{missing} is not set, and signing needs it as well "
+                                     f"as {present}")
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    try:
+        key = serialization.load_pem_private_key(
+            Path(path).expanduser().read_bytes(), password=None
+        )
+    except Exception as exc:  # noqa: BLE001 - reported by type; never the file's bytes
+        raise DriveSignerUnavailable(
+            f"cannot load the signing key {path} ({type(exc).__name__})"
+        ) from None
+    if not isinstance(key, Ed25519PrivateKey):
+        raise DriveSignerUnavailable(
+            f"{path} is not an Ed25519 key; the gateway verifies envelope signatures "
+            "as Ed25519 only"
+        )
+    return kid, key
+
+
+def drive_signing_startup_line() -> str | None:
+    """What the console says once at start about how its drive check is signed.
+
+    Loud when signing was asked for and cannot be done, because from then on
+    ``drive_aware`` is false and nothing refuses chat while the robot moves.
+    None on a stock robot, whose console has no drive check to sign.
+    """
+    try:
+        signer = drive_signer()
+    except DriveSignerUnavailable as exc:
+        return (
+            f"ERROR: the drive check will NOT be sent: {exc}. It is never sent unsigned "
+            "in its place, so drive_aware is false and chat is NOT refused while the "
+            f"robot moves until {SIGNING_KEY_ENV} and {SIGNING_KID_ENV} name a "
+            "readable Ed25519 key."
+        )
+    if signer is not None:
+        return f"drive check: signed as {signer[0]}"
+    if drive_guard_configured():
+        return (
+            f"drive check: unsigned ({SIGNING_KEY_ENV} and {SIGNING_KID_ENV} are not set); "
+            "a gateway that enforces envelope signatures refuses it, and drive_aware "
+            "is then false"
+        )
+    return None
+
 
 def drive_guard_configured() -> bool:
     """Whether this console has been told how to ask the gateway about motion.
@@ -1094,8 +1191,13 @@ def _probe_drive_state() -> dict:
         rrn = ""
     if not rrn:
         return _unknown("this robot's ROBOT.md names no RRN to address")
+    try:
+        signer = drive_signer()
+    except DriveSignerUnavailable as exc:
+        return _unknown(f"the drive check was not sent: {exc}")
     # The same RCAN INVOKE the runtime sends for its telemetry frame: OBSERVE
-    # scope, the read-tier status tool, this robot's own identity.
+    # scope, the read-tier status tool, this robot's own identity. A fresh
+    # msg_id, nonce and timestamp_ms every time, inside the signed bytes.
     invoke = {
         "msg_id": f"console-{uuid.uuid4().hex[:12]}",
         "type": "rcan/v1/invoke",
@@ -1107,6 +1209,24 @@ def _probe_drive_state() -> dict:
         "nonce": uuid.uuid4().hex,
         "timestamp_ms": int(time.time() * 1000),
     }
+    signed_by = None
+    if signer is not None:
+        kid, key = signer
+        try:
+            from robot_md_gateway.cert.envelope import sign_envelope
+
+            sign_envelope(key, invoke, kid)
+        except Exception as exc:  # noqa: BLE001 - fail closed, see drive_signer
+            return _unknown(
+                f"the drive check was not sent: signing as {kid} failed ({type(exc).__name__})"
+            )
+        signed_by = kid
+    state = _ask_gateway(url, token, invoke)
+    state["signed_by"] = signed_by
+    return state
+
+
+def _ask_gateway(url: str, token: str, invoke: dict) -> dict:
     req = urllib.request.Request(
         f"{url}/v1/invoke",
         data=json.dumps(invoke).encode(),
@@ -1128,6 +1248,9 @@ def _probe_drive_state() -> dict:
 
 def read_drive_state() -> dict:
     """``{"known": bool, "driving": bool, "detail": str}``, asked of the gateway.
+
+    A check that went out also says ``signed_by``: the kid it was signed with,
+    or None when it went out unsigned.
 
     UNKNOWN IS NOT PARKED. Not configured, no RRN, a gateway that is down or
     refuses: every one of them is ``known: False``, and a turn is not refused on

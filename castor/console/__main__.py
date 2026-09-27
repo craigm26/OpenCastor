@@ -8,8 +8,11 @@ robot's brains to the network.
 
 from __future__ import annotations
 
+import sys
+
 from .app import build_app
 from .config import console_port, console_token, robot_home
+from .models import drive_signing_startup_line
 
 
 def main() -> None:
@@ -23,6 +26,12 @@ def main() -> None:
             "warning: CONSOLE_TOKEN is not set — every authenticated endpoint "
             "will answer 503 until it is (see <ROBOT_HOME>/console.env)"
         )
+    # Said once at start, on stderr and flushed, because stdout into journald is
+    # block-buffered and this line matters most on the day it is an ERROR: a
+    # drive check that cannot be signed is never sent, so drive_aware is false.
+    line = drive_signing_startup_line()
+    if line:
+        print(line, file=sys.stderr, flush=True)
     port = console_port()
     print(f"OpenCastor console for {robot_home()} on :{port}")
     # ACCESS LOG OFF, deliberately. The console bearer may ride in the query
