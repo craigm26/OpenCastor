@@ -356,12 +356,15 @@ def test_the_json_reply_keeps_every_old_field_and_adds_the_receipt(client, ollam
     assert body["metrics"] == {"total_ns": 9_000_000_000, "load_ns": 4_000_000_000,
                                "prompt_eval_count": 120, "prompt_eval_ns": 2_000_000_000,
                                "eval_count": 3, "eval_ns": 3_000_000_000}
-    assert body["options_applied"] == {"think": False}
+    assert body["options_applied"] == {"num_predict": 2048, "think": False}
     assert body["memories_recalled"] == 0
     assert body["system_sha256"] == sha("You are a rover.")
     sent = ollama.posts("/api/chat")[0]
     assert sent["stream"] is False
-    assert "options" not in sent and "keep_alive" not in sent, "defaults stay Ollama's"
+    # Every default stays Ollama's but one: no limit named is the robot's cap, not
+    # "forever", so a turn cannot hold the one generation lock with no end.
+    assert sent["options"] == {"num_predict": 2048}
+    assert "keep_alive" not in sent, "defaults stay Ollama's"
 
 
 def test_the_receipt_hashes_the_prompt_actually_sent_after_grounding(client, ollama, monkeypatch):
@@ -460,8 +463,8 @@ def test_nonsense_options_are_refused_with_a_sentence(client, ollama, options):
 def test_sampling_options_are_sent_and_echoed_as_applied(client, ollama):
     options = {"temperature": 0.2, "top_p": 0.9, "top_k": 40, "seed": 7}
     body = chat(client, options=options).json()
-    assert ollama.posts("/api/chat")[0]["options"] == options
-    assert body["options_applied"] == {**options, "think": False}
+    assert ollama.posts("/api/chat")[0]["options"] == {**options, "num_predict": 2048}
+    assert body["options_applied"] == {**options, "num_predict": 2048, "think": False}
 
 
 @pytest.mark.parametrize(("asked", "applied"), [(64, 64), (100_000, 2048), (-1, 2048),
@@ -564,7 +567,8 @@ def test_the_stream_is_ndjson_deltas_then_one_done_with_the_whole_receipt(client
     assert done["provider"] == "ollama"
     assert done["done_reason"] == "stop"
     assert done["metrics"]["load_ns"] == 4_000_000_000
-    assert done["options_applied"] == {"temperature": 0.0, "seed": 7, "think": False}
+    assert done["options_applied"] == {"temperature": 0.0, "seed": 7, "num_predict": 2048,
+                                       "think": False}
     assert done["memories_recalled"] == 0
     assert done["system_sha256"] == sha("You are a rover.")
     assert "elapsed_s" in done

@@ -634,8 +634,9 @@ CHAT_OPTION_KEYS = ("temperature", "top_p", "top_k", "seed", "num_predict", "num
 
 #: The most tokens one turn may generate. Ollama's own default is "until the
 #: model stops", which on a Pi at a few tokens a second is a turn that can hold
-#: the CPU for an hour. A caller asking for more, or for -1 ("forever") or -2
-#: ("fill the context"), gets this, and the receipt says so.
+#: the CPU, and the one generation lock every phone shares, for an hour. A
+#: caller asking for more, for -1 ("forever") or -2 ("fill the context"), or
+#: naming no limit at all, gets this, and the receipt says so.
 NUM_PREDICT_MAX = 2048
 
 #: The smallest context a caller may ask for. Below this nothing useful fits.
@@ -1122,7 +1123,10 @@ def _applied_options(turn: _Turn) -> dict:
     if turn.provider != "ollama":
         return {}
     context_length = _context_length_of(turn.model) if "num_ctx" in turn.options else None
-    applied = clamp_options(turn.options, context_length=context_length, ram_gb=_total_ram_gb())
+    # No limit named is not "forever": the cap applies to every turn, so a small
+    # model in a repetition loop cannot hold the lock with no end.
+    options = {"num_predict": NUM_PREDICT_MAX, **turn.options}
+    applied = clamp_options(options, context_length=context_length, ram_gb=_total_ram_gb())
     applied["think"] = turn.think
     if turn.keep_alive_s is not None:
         applied["keep_alive"] = turn.keep_alive_s
