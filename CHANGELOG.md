@@ -9,6 +9,103 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-09-27
+
+Published on PyPI as `1!3.5.0` (the epoch is required; see `docs/pypi-versioning.md`).
+
+**The robot's own model answers the phone turn by turn, and every turn carries a
+receipt.** The console's `POST /models/chat` streams, says which brain answered and
+what it applied, runs one generation at a time, and can hold a local Ollama model to
+the phone's draft schema. On the Pi bench, Gemma 4 E4B drafted 11 of 12 rover cases
+with the schema applied and 8 of 12 in the fenced form (personal result on this
+device, not a benchmark number). This is the robot side of the OpenCastor iOS 1.4
+on-device intelligence work. The release also carries everything merged since 3.4.0:
+the signed incident report to a PlatAtlas org (PA-18), the pacing cap that fails
+closed (OC-M-05), the trace shipper unit (OC-10, OC-M-04), the stop, audit and
+authority fixes (OC-01 to OC-13, OC-M-01), and Sacramento PaintBench in colour with a
+stroke primitive.
+
+**Requires robot-md-gateway 0.5.0a8 or later** (was `>=0.4.0a1`). The shipper unit
+`castor up` renders lists `RestartPreventExitStatus=3`, which is written for the
+0.5.0a8 shipper: it stops with a named report when its export file was cut short,
+where 0.5.0a6 re-sends everything from the start.
+
+### The console's chat turn (`castor.console.models`)
+
+- **The chat turn streams, carries a receipt, and holds one generation at a time.**
+  `POST /models/chat` with `stream: true` proxies Ollama's own NDJSON as status,
+  thinking and content lines, then one done line with the whole answer. A stream
+  that ends without Ollama's done is an error line, never a quietly short answer,
+  and a phone that leaves closes the upstream request, which is what stops Ollama
+  generating for nobody on a Pi that also drives. Every reply, JSON or streamed,
+  carries a receipt: `provider`, `options_applied` after this robot's clamps,
+  `memories_recalled`, `system_sha256` of the prompt actually sent and, for Ollama,
+  `done_reason` and its own timings. A second turn from anyone is refused with 409
+  `busy` at once, not queued. Chat, pulls and activations are refused with 409
+  `driving` when the gateway says the robot is moving or holds an open drive
+  approval; a console with no `ROBOT_GATEWAY_URL` / `GATEWAY_READ_TOKEN` cannot
+  know that and does not guess. `GET /models/ps` is new.
+- **Options come from an allowlist and are clamped, never silently dropped.**
+  `temperature`, `top_p`, `top_k`, `seed`, `num_predict` and `num_ctx`; an unknown
+  key or a nonsense value is a 422. `num_ctx` is clamped to the model's context
+  length and a RAM ceiling. Every Ollama turn is capped at `NUM_PREDICT_MAX` (2048)
+  whether or not the caller named a limit, so a small model in a repetition loop
+  cannot hold the generation lock and the CPU for tens of minutes. `think` takes
+  true, false or low/medium/high; `keep_alive` takes seconds or `"30m"` and is
+  capped at an hour; `ground: false` skips recalled memories for a bench that needs
+  identical prompts. A number too large to be a float is a 422 or a clamp, never a
+  500.
+- **A reply can be held to the phone's draft schema (`format`).** Only the Ollama
+  branch sends it, and every receipt carries `format_applied`, true only when the
+  schema reached the model, so the phone reads a cloud brain's reply as free text
+  instead of trusting a constraint nobody applied. The schema is checked for shape
+  before size: only the keywords the draft schema is written in (`anyOf`, `type`,
+  `properties`, `required`, `additionalProperties`, `enum`, plus `const`,
+  `description` and `title`), at most 16 schemas deep, at most 64 properties on one
+  object, at most 64 KB. Anything else is a 422 and nothing is generated, because
+  Ollama's grammar converter has no depth or size guard of its own. The string
+  `"json"` is refused, and so are `tools` and `tool_choice`.
+- **A native tool call the model wrote reaches the phone.** Ollama moves a tool call
+  out of the content into `message.tool_calls`, and the console read only the
+  content, so the phone got an empty reply. The calls now ride on the done line, or
+  beside the JSON content, and only when there are any. The console still offers no
+  tool and runs nothing.
+- **An Ollama cloud tag says so.** `/models/local` rows and every receipt carry
+  `runs_elsewhere` (rows also `remote_host`), the providers note says when the
+  active tag runs on ollama.com, and `castor up` never picks a cloud tag. The
+  provider id stays `ollama`.
+- **`/models/local` says what this console can do**: `guided`, `stream`,
+  `honors_provider`, `measured_sizes`, `drive_aware` and `drive_signed_by`.
+  `drive_aware` is true only when the gateway settings are present AND the last
+  drive-state read was known. Rows gain `capabilities`, `vision`,
+  `context_length`, `digest` and `kind` from Ollama's `/api/show`. Suggested model
+  sizes are measured on a Pi 5 (`gemma4:e2b` is 7.16 GB, not 3.0) and
+  `nomic-embed-text` is marked `kind: embedding`.
+- **The console's drive check can sign its own envelope.** With
+  `CONSOLE_SIGNING_KEY_PATH` (an Ed25519 PKCS8 PEM) and `CONSOLE_SIGNING_KID` in
+  `console.env`, the read-tier `status.report` the console sends before a chat turn
+  carries an `envelope_signature` made with the gateway's own recipe
+  (`robot_md_gateway.cert.envelope.sign_envelope`), over a fresh msg_id, nonce and
+  timestamp, so a gateway that requires envelope signatures still answers it. If
+  either is set and the key cannot be used, the check is not sent at all, never sent
+  unsigned in its place, `drive_aware` reads false, and the console says so on
+  stderr at start (naming the file, never its bytes). With neither set, the check is
+  the unsigned one it always was. `drive_signed_by` names the kid the last check
+  went out under.
+- **`castor up` picks the smallest CHAT model, never an embedder.** It used to take
+  the smallest installed Ollama model, which on a robot with memory recall is
+  `nomic-embed-text`. It now asks Ollama's `/api/show` what each model can do,
+  using the same classifier as `/models/local`, and skips cloud tags. A robot with
+  only an embedder gets no local brain, as a robot with none did.
+
+### Also in this release
+
+- The flashable Pi image's provenance is kept in `docs/image-releases/`: which
+  commit produced `image-v0.1.0`, and the sha256 a download is checked against.
+  The build tree that produced it is not kept.
+
+### Safety, audit, incidents and the trace (merged since 3.4.0)
+
 - **`castor incidents report --platatlas` files a signed `incident-report/1` to a
   PlatAtlas org (PA-18).** The incident log had the FORMAT and its own hash chain
   (`castor/incidents.py`, `castor incidents verify`) and no way to file anything
