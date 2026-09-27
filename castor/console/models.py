@@ -698,7 +698,11 @@ def parse_options(raw: Any) -> dict:
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 raise _refuse(f"{key} must be a number")
             high = 2.0 if key == "temperature" else 1.0
-            if not math.isfinite(value) or not 0.0 <= value <= high:
+            try:
+                in_range = math.isfinite(value) and 0.0 <= value <= high
+            except OverflowError:  # an integer too large to be a float
+                in_range = False
+            if not in_range:
                 raise _refuse(f"{key} must be between 0 and {high:g}")
             out[key] = float(value)
             continue
@@ -760,10 +764,13 @@ def parse_keep_alive(value: Any) -> int | None:
         return None
     if isinstance(value, bool):
         raise _refuse("keep_alive must be seconds or a duration like '30m'")
-    if isinstance(value, (int, float)):
+    if isinstance(value, int):
+        # Kept an integer: one too large to be a float is still just "a lot".
+        seconds = value
+    elif isinstance(value, float):
         if not math.isfinite(value):
             raise _refuse("keep_alive must be a finite number of seconds")
-        seconds = float(value)
+        seconds = value
     elif isinstance(value, str):
         match = _KEEP_ALIVE_RE.fullmatch(value.strip())
         if not match:
@@ -773,7 +780,9 @@ def parse_keep_alive(value: Any) -> int | None:
         raise _refuse("keep_alive must be seconds or a duration like '30m'")
     if seconds < 0:
         return KEEP_ALIVE_MAX_S
-    return int(min(math.ceil(seconds), KEEP_ALIVE_MAX_S))
+    # Clamped before rounding: "999...9s" as a string is a float infinity, which
+    # math.ceil cannot turn into an integer.
+    return int(math.ceil(min(seconds, KEEP_ALIVE_MAX_S)))
 
 
 def parse_think(value: Any) -> bool | str:

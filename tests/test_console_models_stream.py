@@ -509,6 +509,20 @@ def test_keep_alive_is_seconds_and_never_forever(client, ollama, asked, seconds)
     assert body["options_applied"]["keep_alive"] == seconds
 
 
+@pytest.mark.parametrize("options", [{"temperature": 10**400}, {"top_p": -(10**400)}])
+def test_an_integer_too_large_for_a_float_is_refused_not_a_500(client, ollama, options):
+    resp = chat(client, options=options)
+    assert resp.status_code == 422
+    assert "between 0 and" in resp.json()["detail"]
+    assert ollama.posts("/api/chat") == []
+
+
+@pytest.mark.parametrize("asked", [10**400, "9" * 400 + "s"])
+def test_a_keep_alive_too_large_for_a_float_is_the_maximum(client, ollama, asked):
+    body = chat(client, keep_alive=asked).json()
+    assert body["options_applied"]["keep_alive"] == 3600
+
+
 @pytest.mark.parametrize("asked", ["1h30m", "soon", True, [30]])
 def test_a_keep_alive_this_console_cannot_read_is_refused(client, ollama, asked):
     assert chat(client, keep_alive=asked).status_code == 422
