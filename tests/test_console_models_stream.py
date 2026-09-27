@@ -763,6 +763,148 @@ def test_a_stream_refused_before_it_starts_is_an_ordinary_http_error(client, oll
 
 
 # ---------------------------------------------------------------------------
+# Guided output: a reply schema (`format`) the Ollama branch holds the reply to
+# ---------------------------------------------------------------------------
+
+# The phone's draft schema in miniature (ProposalSchemaSpec in the iOS repo):
+# an answer or one draft, `kind` FIRST in every branch. Sorted, `args` would
+# come before `kind`, and a constrained decoder writes properties in order.
+DRAFT_SCHEMA = {"anyOf": [
+    {"type": "object",
+     "properties": {"kind": {"type": "string", "enum": ["answer"]},
+                    "text": {"type": "string"}},
+     "required": ["kind", "text"], "additionalProperties": False},
+    {"type": "object",
+     "properties": {"kind": {"type": "string", "enum": ["draft"]},
+                    "capability": {"type": "string", "enum": ["drive.stop"]},
+                    "args": {"type": "object", "properties": {},
+                             "additionalProperties": False},
+                    "rationale": {"type": "string"}},
+     "required": ["kind", "capability", "args", "rationale"],
+     "additionalProperties": False},
+]}
+
+
+def _draft_keys(schema: dict) -> list[str]:
+    return list(schema["anyOf"][1]["properties"])
+
+
+def test_a_format_reaches_ollama_as_given_and_the_receipt_says_so(client, ollama):
+    body = chat(client, format=DRAFT_SCHEMA).json()
+    sent = ollama.posts("/api/chat")[0]
+    assert sent["format"] == DRAFT_SCHEMA
+    assert _draft_keys(sent["format"]) == ["kind", "capability", "args", "rationale"], \
+        "key order is the phone's, not sorted"
+    assert body["format_applied"] is True
+    assert body["provider"] == "ollama"
+
+
+def test_a_streamed_turn_carries_the_format_and_says_so_on_the_done_line(client, ollama):
+    ollama.loaded = ["qwen3.5:2b"]
+    ollama.chat_lines = [_delta('{"kind":"answer",'), _delta('"text":"four"}'), FINAL]
+    events = ndjson(chat(client, stream=True, format=DRAFT_SCHEMA))
+    sent = ollama.posts("/api/chat")[0]
+    assert sent["stream"] is True
+    assert _draft_keys(sent["format"]) == ["kind", "capability", "args", "rationale"]
+    done = events[-1]
+    assert done["type"] == "done"
+    assert done["format_applied"] is True
+    assert done["content"] == '{"kind":"answer","text":"four"}'
+
+
+def test_no_format_sends_none_and_the_receipt_says_none_applied(client, ollama):
+    ollama.loaded = ["qwen3.5:2b"]
+    assert chat(client).json()["format_applied"] is False
+    assert ndjson(chat(client, stream=True))[-1]["format_applied"] is False
+    for sent in ollama.posts("/api/chat"):
+        assert "format" not in sent, "an ordinary turn is the payload it always was"
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("provider", ["anthropic-sub", "gemini-er"])
+def test_a_robot_hosted_brain_is_never_sent_the_format_and_says_so(client, ollama, monkeypatch,
+                                                                   provider, stream):
+    # The subscription CLI and Gemini take no schema. The turn still answers,
+    # and the receipt says the schema was not applied, so the phone reads the
+    # reply as free text instead of trusting a constraint nobody applied.
+    from castor.console import brains
+
+    seen: list[tuple] = []
+
+    def claude(system, message, history, image_jpeg=None):
+        seen.append((system, message))
+        return {"content": "on it", "thinking": ""}
+
+    def gemini(prompt, image_jpeg=None):
+        seen.append((prompt,))
+        return {"content": "a red block", "points": [], "model": "gemini-robotics-er"}
+
+    monkeypatch.setattr(brains, "anthropic_chat", claude)
+    monkeypatch.setattr(brains, "gemini_er", gemini)
+    resp = chat(client, system="be brief", provider=provider, stream=stream, format=DRAFT_SCHEMA)
+    assert resp.status_code == 200, resp.text
+    reply = ndjson(resp)[-1] if stream else resp.json()
+    assert reply["provider"] == provider
+    assert reply["format_applied"] is False
+    assert len(seen) == 1
+    assert all("anyOf" not in part for part in seen[0]), "the schema rode nowhere"
+    assert ollama.posts("/api/chat") == []
+
+
+@pytest.mark.parametrize("fmt", ["json", "", 7, True, ["kind"], {}])
+@pytest.mark.parametrize("stream", [False, True])
+def test_a_format_that_is_not_a_schema_object_is_refused_and_nothing_is_generated(
+        client, ollama, fmt, stream):
+    # "json" is Ollama's any-shape JSON mode: it constrains nothing a draft can
+    # be read from, and `format_applied: true` over it would be a false promise.
+    resp = chat(client, stream=stream, format=fmt)
+    assert resp.status_code == 422, resp.text
+    assert "format" in resp.json()["detail"]
+    assert ollama.posts("/api/chat") == []
+
+
+def test_an_oversized_format_is_refused(client, ollama):
+    from castor.console import models
+
+    huge = {"type": "object", "description": "x" * models.FORMAT_MAX_BYTES}
+    resp = chat(client, format=huge)
+    assert resp.status_code == 422
+    assert str(models.FORMAT_MAX_BYTES) in resp.json()["detail"]
+    assert ollama.posts("/api/chat") == []
+    # Just under the cap is fine.
+    room = models.FORMAT_MAX_BYTES - len(json.dumps({"type": "object", "description": ""},
+                                                    separators=(",", ":")))
+    fits = {"type": "object", "description": "x" * room}
+    assert chat(client, format=fits).json()["format_applied"] is True
+
+
+@pytest.mark.parametrize("offer", [
+    {"tools": [{"type": "function", "function": {"name": "drive.stop", "parameters": {}}}]},
+    {"tool_choice": "auto"},
+    {"tools": [], "tool_choice": "none"},
+])
+@pytest.mark.parametrize("stream", [False, True])
+def test_a_turn_that_offers_a_tool_is_refused_before_anything_is_generated(client, ollama,
+                                                                           offer, stream):
+    resp = chat(client, stream=stream, format=DRAFT_SCHEMA, **offer)
+    assert resp.status_code == 422
+    assert "never offers its model a tool" in resp.json()["detail"]
+    assert ollama.posts("/api/chat") == []
+
+
+def test_a_guided_turn_never_offers_a_tool_either(client, ollama):
+    ollama.loaded = ["qwen3.5:2b"]
+    chat(client, format=DRAFT_SCHEMA)
+    chat(client, stream=True, format=DRAFT_SCHEMA, think="low")
+    sent = ollama.posts("/api/chat")
+    assert len(sent) == 2
+    for payload in sent:
+        assert "format" in payload
+        assert "tools" not in payload
+        assert "tool_choice" not in payload
+
+
+# ---------------------------------------------------------------------------
 # One generation at a time
 # ---------------------------------------------------------------------------
 
@@ -1079,6 +1221,7 @@ def test_local_rows_carry_capabilities_and_the_console_its_flags(client, ollama)
     assert body["honors_provider"] is True
     assert body["stream"] is True
     assert body["measured_sizes"] is True
+    assert body["guided"] is True, "a turn may carry a reply schema (format)"
     assert body["drive_aware"] is False
     # Old fields unchanged.
     assert {"size_bytes", "family", "parameter_size", "quantization", "loaded",

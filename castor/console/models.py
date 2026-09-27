@@ -25,7 +25,8 @@ and the sha256 of the system prompt it really sent. The phone decides whether
 words stayed on the owner's network, and a trace claims temperature 0 and seed
 7, from what the robot SAYS it did, never from what the phone asked for: an
 old console that silently dropped an option looked exactly like one that
-applied it.
+applied it. The same goes for a reply schema (`format`): `format_applied` says
+whether the robot passed it to its model, and only the Ollama branch can.
 
 ONE GENERATION AT A TIME, FOR EVERYBODY. The robot's model shares a Pi with the
 gateway and the runtime, and that Pi has rebooted under load. Two phones, a
@@ -476,11 +477,12 @@ def local_models() -> dict:
     The top-level flags are what this console can do, so a phone can tell it
     from an older one without guessing from a version string:
     ``honors_provider`` (a per-turn `provider` is obeyed), ``stream`` (NDJSON
-    chat), ``measured_sizes`` (suggestion sizes are measured), and
-    ``drive_aware`` (this console can ask the gateway whether the robot is
-    driving right now, and refuses to think while it is; false means it cannot
-    know, because it was not configured or the gateway would not say, and the
-    phone must check for itself).
+    chat), ``measured_sizes`` (suggestion sizes are measured), ``guided`` (a
+    chat turn may carry ``format``, a JSON Schema the Ollama branch holds the
+    reply to; see `parse_format`), and ``drive_aware`` (this console can ask the
+    gateway whether the robot is driving right now, and refuses to think while
+    it is; false means it cannot know, because it was not configured or the
+    gateway would not say, and the phone must check for itself).
     """
     try:
         tags = _ollama("/api/tags")
@@ -525,6 +527,7 @@ def local_models() -> dict:
         "honors_provider": True,
         "stream": True,
         "measured_sizes": True,
+        "guided": True,
         # What the console can actually know right now, not only whether it was
         # configured: a manifest with no RRN, a refused token or a gateway that is
         # down all leave every turn unrefused.
@@ -839,6 +842,59 @@ def parse_think(value: Any) -> bool | str:
     raise _refuse(f"think must be true, false, or one of {', '.join(THINK_LEVELS)}")
 
 
+#: The largest reply schema a turn may carry, serialized. The phone's draft
+#: schema for Bob, the largest robot here, is a few KB; 64 KB is room for any
+#: manifest a robot could sensibly declare, and a bound on what one request can
+#: make Ollama compile into a grammar on a Pi that also drives.
+FORMAT_MAX_BYTES = 64 * 1024
+
+
+def parse_format(raw: Any) -> dict | None:
+    """``format``: a JSON Schema the reply is held to, or None.
+
+    ONLY AN OBJECT. Ollama also takes the string "json", which forces JSON of
+    any shape. That constrains nothing the phone can read a draft from, and a
+    receipt saying ``format_applied: true`` over it would be a promise nobody
+    kept, so it is refused (422), as is any other non-object and an empty
+    object. Bigger than FORMAT_MAX_BYTES serialized is refused too.
+
+    The object is passed on as given, keys in the order they arrived: a
+    constrained decoder writes properties in schema order, and the phone puts
+    the discriminator (``kind``) first on purpose.
+
+    A SCHEMA IS NOT A TOOL. It shapes the text the model writes; nothing here
+    offers the model a tool or runs anything, and ``tools`` / ``tool_choice``
+    are refused outright (see `refuse_tools`).
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise _refuse("format must be a JSON Schema object")
+    if not raw:
+        raise _refuse("format must be a non-empty JSON Schema object")
+    try:
+        size = len(json.dumps(raw, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+    except (TypeError, ValueError):
+        raise _refuse("format must be a JSON Schema object") from None
+    if size > FORMAT_MAX_BYTES:
+        raise _refuse(f"format is {size} bytes; this robot takes at most {FORMAT_MAX_BYTES}")
+    return raw
+
+
+def refuse_tools(req: ChatRequest) -> None:
+    """422 when a caller offers the robot's model a tool.
+
+    Invariant 1 of the phone's design, held on the robot: the model is never
+    given a tool, whatever it writes back. An older console ignored the fields;
+    naming them is refused now, so a caller cannot believe it sent one.
+    """
+    offered = [name for name in ("tools", "tool_choice") if getattr(req, name) is not None]
+    if offered:
+        raise _refuse(
+            f"{' and '.join(offered)} not accepted: this robot never offers its model a tool"
+        )
+
+
 class GenerationLock:
     """At most one generation on this robot at a time, for every caller.
 
@@ -1055,6 +1111,14 @@ class ChatRequest(BaseModel):
     #: compares brains needs every member to see the same instructions, and on a
     #: one-model-at-a-time host the embed call can evict the model under test.
     ground: bool = True
+    #: A JSON Schema the reply is held to (Ollama's ``format``), see
+    #: `parse_format`. Only the Ollama branch applies it; the receipt's
+    #: ``format_applied`` says whether it did.
+    format: Any = None
+    #: Never accepted (`refuse_tools`). Declared only so that naming them is a
+    #: 422 with a sentence rather than a field silently ignored.
+    tools: Any = None
+    tool_choice: Any = None
 
 
 @dataclass
@@ -1071,6 +1135,14 @@ class _Turn:
     #: The answering tag is one Ollama forwards to ollama.com. True for the
     #: robot-hosted cloud brains, which run elsewhere by definition.
     runs_elsewhere: bool = False
+    #: The reply schema, when the caller sent one. The robot-hosted brains take
+    #: none, so on their branches it is carried here and never sent anywhere.
+    format: dict | None = None
+
+    @property
+    def format_applied(self) -> bool:
+        """The schema went to the model: only the Ollama branch can send it."""
+        return self.provider == "ollama" and self.format is not None
 
 
 def _decode_frame(image_b64: str) -> bytes:
@@ -1086,6 +1158,8 @@ def _prepare(req: ChatRequest) -> _Turn:
     """Everything that can be refused before the robot starts thinking."""
     if req.provider is not None and req.provider not in PROVIDERS:
         raise HTTPException(status_code=422, detail=f"unknown provider {req.provider!r}")
+    refuse_tools(req)
+    reply_format = parse_format(req.format)
     options = parse_options(req.options)
     think = parse_think(req.think)
     keep_alive_s = parse_keep_alive(req.keep_alive)
@@ -1106,7 +1180,8 @@ def _prepare(req: ChatRequest) -> _Turn:
             image = _decode_frame(req.image_b64)
         model = "claude (subscription)" if provider == "anthropic-sub" else "gemini-robotics-er"
     elsewhere = _runs_elsewhere_of(model) if provider == "ollama" else True
-    return _Turn(req, provider, model, options, think, keep_alive_s, image, elsewhere)
+    return _Turn(req, provider, model, options, think, keep_alive_s, image, elsewhere,
+                 reply_format)
 
 
 # Grounding and the receipt --------------------------------------------------
@@ -1176,6 +1251,11 @@ def _receipt(turn: _Turn, system: str, memories: int, applied: dict) -> dict:
         "options_applied": applied,
         "memories_recalled": memories,
         "system_sha256": hashlib.sha256(system.encode("utf-8")).hexdigest(),
+        # Whether the reply schema went to the model. False with no schema, and
+        # false on the robot-hosted brains, which were never sent the one given:
+        # a phone reading their reply as schema-shaped would be trusting a
+        # constraint nobody applied.
+        "format_applied": turn.format_applied,
     }
 
 
@@ -1226,6 +1306,9 @@ def _chat_payload(turn: _Turn, messages: list[dict], applied: dict, *, stream: b
         payload["options"] = options
     if turn.keep_alive_s is not None:
         payload["keep_alive"] = turn.keep_alive_s
+    if turn.format is not None:
+        # As given, key order and all (see parse_format).
+        payload["format"] = turn.format
     return payload
 
 
@@ -1499,10 +1582,13 @@ def chat(req: ChatRequest) -> dict | StreamingResponse:
     THE REPLY. Without ``stream`` one JSON object, the same fields as ever
     (model, content, thinking, elapsed_s, eval_count; points for Gemini) plus
     the receipt: provider, options_applied, memories_recalled, system_sha256,
-    done_reason and metrics (null for the robot-hosted brains), and
-    ``tool_calls`` in Ollama's shape when the model wrote native tool calls
-    although none were offered (passed through for the phone to read; never
-    run here). With ``stream: true``, NDJSON, one event per line:
+    done_reason and metrics (null for the robot-hosted brains),
+    ``format_applied`` (the request's ``format`` schema was sent to the model:
+    true only on the Ollama branch, false with no schema or on a robot-hosted
+    brain, which ignores it), and ``tool_calls`` in Ollama's shape when the
+    model wrote native tool calls although none were offered (passed through
+    for the phone to read; never run here). With ``stream: true``, NDJSON, one
+    event per line:
 
       {"type":"status","state":"loading","model":M}   Ollama must load M first
       {"type":"thinking","delta":...}                  reasoning, display only
@@ -1511,7 +1597,9 @@ def chat(req: ChatRequest) -> dict | StreamingResponse:
       {"type":"error","status":int,"detail":...}       the turn failed mid-stream
 
     Refusals happen before anything is generated, as ordinary HTTP errors on
-    both routes: 422 for a bad request, 409 "no active model set", 409 "busy"
+    both routes: 422 for a bad request (including a ``format`` that is not a
+    JSON Schema object or is over FORMAT_MAX_BYTES, and any ``tools`` or
+    ``tool_choice``), 409 "no active model set", 409 "busy"
     while another turn is generating, 409 "driving" (see `read_drive_state`).
     """
     turn = _prepare(req)
