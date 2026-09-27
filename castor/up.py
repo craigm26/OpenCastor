@@ -1626,7 +1626,7 @@ def resolve_actuator(archetype: str = "rc-car") -> tuple[str, str | None]:
 
 
 def detect_brain() -> tuple[str, str]:
-    """Local-first: the smallest Ollama CHAT model, else the Claude
+    """Local-first: the smallest local Ollama CHAT model, else the Claude
     subscription, else Ollama-with-no-model (the console explains how to pull
     one).
 
@@ -1642,11 +1642,15 @@ def detect_brain() -> tuple[str, str]:
     try:
         import urllib.request
 
-        from castor.console.models import is_chat_model
+        from castor.console.models import is_chat_model, runs_elsewhere
 
         with urllib.request.urlopen(f"{base}/api/tags", timeout=3) as r:
             models = json.load(r).get("models", [])
         for model in sorted(models, key=lambda m: m.get("size", 0)):
+            # An Ollama cloud tag is the smallest row there is (a few hundred
+            # bytes) and answers from ollama.com: never the robot's own brain.
+            if runs_elsewhere(model):
+                continue
             if is_chat_model(model, base=base, timeout=3):
                 return "ollama", model["name"]
     except Exception:  # noqa: BLE001

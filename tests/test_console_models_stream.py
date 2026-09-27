@@ -359,6 +359,7 @@ def test_the_json_reply_keeps_every_old_field_and_adds_the_receipt(client, ollam
     assert body["options_applied"] == {"num_predict": 2048, "think": False}
     assert body["memories_recalled"] == 0
     assert body["system_sha256"] == sha("You are a rover.")
+    assert body["runs_elsewhere"] is False
     sent = ollama.posts("/api/chat")[0]
     assert sent["stream"] is False
     # Every default stays Ollama's but one: no limit named is the robot's cap, not
@@ -569,6 +570,7 @@ def test_the_stream_is_ndjson_deltas_then_one_done_with_the_whole_receipt(client
     assert done["metrics"]["load_ns"] == 4_000_000_000
     assert done["options_applied"] == {"temperature": 0.0, "seed": 7, "num_predict": 2048,
                                        "think": False}
+    assert done["runs_elsewhere"] is False
     assert done["memories_recalled"] == 0
     assert done["system_sha256"] == sha("You are a rover.")
     assert "elapsed_s" in done
@@ -1019,6 +1021,25 @@ def test_local_rows_carry_capabilities_and_the_console_its_flags(client, ollama)
     assert body["cold_load_hint_s"] == 75
 
 
+CLOUD_TAG = {**_tag("gpt-oss:120b-cloud", 384, "sha-cloud", "gptoss"),
+             "remote_host": "https://ollama.com:443", "remote_model": "gpt-oss:120b"}
+
+
+def test_a_cloud_tag_is_marked_on_its_row_and_on_its_receipt(client, ollama):
+    # Listed by the robot's own daemon, answered by ollama.com: "ollama" alone
+    # must not read as "nothing left the network".
+    ollama.tags.append(CLOUD_TAG)
+    ollama.shows["gpt-oss:120b-cloud"] = _show("gptoss", 131072, ["completion"])
+    rows = {m["name"]: m for m in client.get("/models/local", headers=auth()).json()["models"]}
+    assert rows["gpt-oss:120b-cloud"]["runs_elsewhere"] is True
+    assert rows["gpt-oss:120b-cloud"]["remote_host"] == "https://ollama.com:443"
+    assert rows["qwen3.5:2b"]["runs_elsewhere"] is False
+    body = chat(client, model="gpt-oss:120b-cloud").json()
+    assert body["provider"] == "ollama"
+    assert body["runs_elsewhere"] is True
+    assert chat(client).json()["runs_elsewhere"] is False
+
+
 def test_capabilities_are_asked_once_per_digest_and_again_when_the_weights_change(client,
                                                                                   ollama):
     client.get("/models/local", headers=auth())
@@ -1144,6 +1165,17 @@ def test_up_never_picks_an_embedding_model_as_the_chat_brain(monkeypatch, tmp_pa
     asked = _fake_daemon(monkeypatch, tags, shows)
     assert up.detect_brain() == ("ollama", "qwen3.5:2b")
     assert all(url.startswith("http://127.0.0.1:11434/") for url in asked)
+
+
+def test_up_never_picks_an_ollama_cloud_tag_as_the_robots_brain(monkeypatch):
+    from castor import up
+
+    # The smallest row there is, and it answers from ollama.com.
+    tags = [CLOUD_TAG, _tag("qwen3.5:2b", 2741192820, "sha-qwen2b", "qwen35")]
+    shows = {"gpt-oss:120b-cloud": _show("gptoss", 131072, ["completion"]),
+             "qwen3.5:2b": _show("qwen35", 262144, ["completion"])}
+    _fake_daemon(monkeypatch, tags, shows)
+    assert up.detect_brain() == ("ollama", "qwen3.5:2b")
 
 
 def test_up_skips_the_embedder_by_family_when_ollama_will_not_describe_it(monkeypatch):

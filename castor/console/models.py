@@ -306,6 +306,32 @@ def _base_tag(name: str) -> str:
     return name[:-7] if name.endswith(":latest") else name
 
 
+def runs_elsewhere(row: dict) -> bool:
+    """A tag the local Ollama forwards to ollama.com: an Ollama cloud model.
+
+    Listed by the robot's own daemon at a few hundred bytes, and answered by
+    somebody else's computer. Ollama marks its rows with ``remote_host`` /
+    ``remote_model``; the ``-cloud`` / ``:cloud`` tag convention is the fallback
+    for a daemon too old to say.
+    """
+    if row.get("remote_host") or row.get("remote_model"):
+        return True
+    name = str(row.get("name") or row.get("model") or "").lower()
+    return name.endswith(("-cloud", ":cloud"))
+
+
+def _runs_elsewhere_of(model: str) -> bool:
+    """Whether *model* is a cloud tag, from its /api/tags row when Ollama answers,
+    else from its name alone."""
+    try:
+        for row in _ollama("/api/tags").get("models", []):
+            if _base_tag(row.get("name", "")) == _base_tag(model):
+                return runs_elsewhere(row)
+    except Exception:  # noqa: BLE001 - the name still says what it can
+        pass
+    return runs_elsewhere({"name": model})
+
+
 # --------------------------------------------------------------------------- #
 # What each installed model can do, as Ollama itself reports it
 # --------------------------------------------------------------------------- #
@@ -439,7 +465,9 @@ def local_models() -> dict:
     Each row says what the model CAN DO, from Ollama's own /api/show (cached per
     digest): ``capabilities`` as Ollama lists them ("completion" or
     "embedding", plus "vision", "tools", "thinking"), ``vision``,
-    ``context_length`` and ``digest``, and ``kind`` ("chat" or "embedding").
+    ``context_length`` and ``digest``, ``kind`` ("chat" or "embedding"), and
+    ``runs_elsewhere`` with ``remote_host`` (an Ollama cloud tag, whose every
+    turn goes to ollama.com).
     The phone classified robot models by name and read an unknown prefix as
     remote, so nomic-embed-text would have been labelled a brain "over the
     internet". ``capabilities``, ``vision`` and ``context_length`` are null when
@@ -484,6 +512,9 @@ def local_models() -> dict:
                 "kind": "embedding"
                 if is_embedding_model(m["name"], details=details, capabilities=capabilities)
                 else "chat",
+                # A cloud tag: listed here, answered by ollama.com.
+                "remote_host": m.get("remote_host"),
+                "runs_elsewhere": runs_elsewhere(m),
             }
         )
     models.sort(key=lambda m: m["size_bytes"])
@@ -1037,6 +1068,9 @@ class _Turn:
     think: bool | str
     keep_alive_s: int | None
     image: bytes | None
+    #: The answering tag is one Ollama forwards to ollama.com. True for the
+    #: robot-hosted cloud brains, which run elsewhere by definition.
+    runs_elsewhere: bool = False
 
 
 def _decode_frame(image_b64: str) -> bytes:
@@ -1071,7 +1105,8 @@ def _prepare(req: ChatRequest) -> _Turn:
         if req.image_b64:
             image = _decode_frame(req.image_b64)
         model = "claude (subscription)" if provider == "anthropic-sub" else "gemini-robotics-er"
-    return _Turn(req, provider, model, options, think, keep_alive_s, image)
+    elsewhere = _runs_elsewhere_of(model) if provider == "ollama" else True
+    return _Turn(req, provider, model, options, think, keep_alive_s, image, elsewhere)
 
 
 # Grounding and the receipt --------------------------------------------------
@@ -1136,6 +1171,8 @@ def _applied_options(turn: _Turn) -> dict:
 def _receipt(turn: _Turn, system: str, memories: int, applied: dict) -> dict:
     return {
         "provider": turn.provider,
+        # "ollama" alone does not say the words stayed here: a cloud tag goes out.
+        "runs_elsewhere": turn.runs_elsewhere,
         "options_applied": applied,
         "memories_recalled": memories,
         "system_sha256": hashlib.sha256(system.encode("utf-8")).hexdigest(),
@@ -1466,6 +1503,14 @@ def chat(req: ChatRequest) -> dict | StreamingResponse:
             ticket.release()
 
 
+def _active_runs_elsewhere() -> bool:
+    active = read_active()
+    if (active.get("provider") or "ollama") != "ollama":
+        return False
+    model = active.get("model") or ""
+    return bool(model) and _runs_elsewhere_of(model)
+
+
 @router.get("/models/providers")
 def providers() -> dict:
     """Provider metadata for the settings screen.
@@ -1481,7 +1526,11 @@ def providers() -> dict:
                 "label": "On this robot",
                 "kind": "local",
                 "configured": True,
-                "note": "Runs on the robot. Nothing leaves your network.",
+                "note": (
+                    "The active model is an Ollama cloud model: every turn goes to ollama.com."
+                    if _active_runs_elsewhere()
+                    else "Runs on the robot. Nothing leaves your network."
+                ),
             },
             {
                 "id": "anthropic-sub",
