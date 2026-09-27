@@ -949,6 +949,8 @@ def test_a_gateway_that_refuses_the_probe_is_unknown_not_driving(client, ollama,
     assert chat(client).status_code == 200
     state = models.read_drive_state()
     assert state["known"] is False and str(status) in state["detail"]
+    # Configured, but it cannot know: it must not claim it refuses while driving.
+    assert client.get("/models/local", headers=auth()).json()["drive_aware"] is False
 
 
 def test_a_gateway_that_is_down_is_unknown_not_parked(client, ollama, gateway, monkeypatch):

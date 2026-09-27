@@ -449,9 +449,10 @@ def local_models() -> dict:
     from an older one without guessing from a version string:
     ``honors_provider`` (a per-turn `provider` is obeyed), ``stream`` (NDJSON
     chat), ``measured_sizes`` (suggestion sizes are measured), and
-    ``drive_aware`` (this console has been told how to ask the gateway whether
-    the robot is driving, and refuses to think while it is; false means it
-    cannot know, and the phone must check for itself).
+    ``drive_aware`` (this console can ask the gateway whether the robot is
+    driving right now, and refuses to think while it is; false means it cannot
+    know, because it was not configured or the gateway would not say, and the
+    phone must check for itself).
     """
     try:
         tags = _ollama("/api/tags")
@@ -493,7 +494,10 @@ def local_models() -> dict:
         "honors_provider": True,
         "stream": True,
         "measured_sizes": True,
-        "drive_aware": drive_guard_configured(),
+        # What the console can actually know right now, not only whether it was
+        # configured: a manifest with no RRN, a refused token or a gateway that is
+        # down all leave every turn unrefused.
+        "drive_aware": drive_guard_configured() and read_drive_state()["known"],
     }
 
 
