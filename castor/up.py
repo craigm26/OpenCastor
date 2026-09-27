@@ -1626,16 +1626,33 @@ def resolve_actuator(archetype: str = "rc-car") -> tuple[str, str | None]:
 
 
 def detect_brain() -> tuple[str, str]:
-    """Local-first: the smallest Ollama model, else the Claude subscription,
-    else Ollama-with-no-model (the console explains how to pull one)."""
+    """Local-first: the smallest local Ollama CHAT model, else the Claude
+    subscription, else Ollama-with-no-model (the console explains how to pull
+    one).
+
+    CHAT model, not smallest model. The smallest thing on a robot with memory
+    recall set up is nomic-embed-text (0.27 GB), which embeds and cannot answer,
+    so picking by size alone hands that robot a brain whose every chat turn
+    fails. Whether a model can chat is Ollama's own answer (/api/show
+    capabilities), with the model family as the fallback when it will not say
+    (`castor.console.models`, the one classifier the console's model list uses
+    too).
+    """
+    base = "http://127.0.0.1:11434"
     try:
         import urllib.request
 
-        with urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=3) as r:
+        from castor.console.models import is_chat_model, runs_elsewhere
+
+        with urllib.request.urlopen(f"{base}/api/tags", timeout=3) as r:
             models = json.load(r).get("models", [])
-        if models:
-            smallest = min(models, key=lambda m: m.get("size", 0))
-            return "ollama", smallest["name"]
+        for model in sorted(models, key=lambda m: m.get("size", 0)):
+            # An Ollama cloud tag is the smallest row there is (a few hundred
+            # bytes) and answers from ollama.com: never the robot's own brain.
+            if runs_elsewhere(model):
+                continue
+            if is_chat_model(model, base=base, timeout=3):
+                return "ollama", model["name"]
     except Exception:  # noqa: BLE001
         pass
     if (Path.home() / ".claude" / ".credentials.json").is_file():
