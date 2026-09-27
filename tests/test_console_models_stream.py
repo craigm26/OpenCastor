@@ -129,8 +129,12 @@ class FakeOllama:
                           for e in self.chat_lines if not e.get("done"))
         thinking = "".join((e.get("message") or {}).get("thinking", "")
                            for e in self.chat_lines if not e.get("done"))
+        calls = [c for e in self.chat_lines
+                 for c in ((e.get("message") or {}).get("tool_calls") or [])]
         out = dict(self.chat_lines[-1])
         out["message"] = {"role": "assistant", "content": content, "thinking": thinking}
+        if calls:
+            out["message"]["tool_calls"] = calls
         return out
 
     # -- the server ----------------------------------------------------------
@@ -604,6 +608,67 @@ def test_a_length_stop_reaches_the_phone_as_length(client, ollama):
     done = ndjson(chat(client, stream=True))[-1]
     assert done["type"] == "done"
     assert done["done_reason"] == "length"
+
+
+# A native tool call the model wrote although no tool was offered. On the Pi,
+# gemma4:e4b-it-qat answered "Draft sensor.battery so I can sign it." with an
+# empty content and this in tool_calls (docs/bench/gemma-on-a-pi-2026-09.md in
+# the iOS repo). The phone reads one call as a draft; the console must only
+# not lose it.
+BATTERY_CALL = {"function": {"name": "sensor.battery", "arguments": {}}}
+
+
+def _tool_call_line(*calls: dict) -> dict:
+    return {"model": "qwen3.5:2b", "done": False,
+            "message": {"role": "assistant", "content": "", "tool_calls": list(calls)}}
+
+
+def test_a_native_tool_call_rides_on_the_done_line_verbatim(client, ollama):
+    ollama.loaded = ["qwen3.5:2b"]
+    ollama.chat_lines = [_tool_call_line(BATTERY_CALL), FINAL]
+    events = ndjson(chat(client, stream=True))
+    assert [e["type"] for e in events] == ["done"], "a call is not content, nor streamed as it"
+    done = events[-1]
+    assert done["content"] == ""
+    assert done["tool_calls"] == [BATTERY_CALL]
+    assert done["done_reason"] == "stop"
+
+
+def test_calls_on_separate_lines_all_reach_the_done_line_in_order(client, ollama):
+    ollama.loaded = ["qwen3.5:2b"]
+    stop = {"function": {"name": "drive.stop", "arguments": {}}}
+    ollama.chat_lines = [_tool_call_line(BATTERY_CALL), _delta("Also "), _tool_call_line(stop),
+                         FINAL]
+    done = ndjson(chat(client, stream=True))[-1]
+    assert done["tool_calls"] == [BATTERY_CALL, stop]
+    assert done["content"] == "Also ", "text beside a call is kept; the phone decides"
+
+
+def test_the_json_reply_carries_a_native_tool_call_too(client, ollama):
+    ollama.chat_lines = [_tool_call_line(BATTERY_CALL), FINAL]
+    body = chat(client).json()
+    assert body["content"] == ""
+    assert body["tool_calls"] == [BATTERY_CALL]
+
+
+def test_an_ordinary_turn_has_no_tool_calls_field(client, ollama):
+    ollama.loaded = ["qwen3.5:2b"]
+    assert "tool_calls" not in ndjson(chat(client, stream=True))[-1]
+    assert "tool_calls" not in chat(client).json()
+
+
+def test_no_request_to_ollama_ever_offers_a_tool(client, ollama):
+    # Invariant 1 of the phone's design, held on the robot too: the model is
+    # never given a tool, whatever it writes back.
+    ollama.loaded = ["qwen3.5:2b"]
+    ollama.chat_lines = [_tool_call_line(BATTERY_CALL), FINAL]
+    chat(client, stream=True, options={"temperature": 0.2}, think="low")
+    chat(client)
+    sent = ollama.posts("/api/chat")
+    assert len(sent) == 2
+    for payload in sent:
+        assert "tools" not in payload
+        assert "tool_choice" not in payload
 
 
 def test_an_ollama_http_error_is_one_error_line_and_no_done(client, ollama):

@@ -1229,6 +1229,23 @@ def _chat_payload(turn: _Turn, messages: list[dict], applied: dict, *, stream: b
     return payload
 
 
+def _tool_calls_of(msg: dict) -> list:
+    """Ollama's ``message.tool_calls``, verbatim, as a list; empty when none.
+
+    This console never offers the model a tool (no payload here carries
+    ``tools``). Some models write a native tool call anyway, Gemma 4 among
+    them, and Ollama moves it out of ``content`` into ``tool_calls``. Dropped,
+    the phone saw an empty reply and the model's draft was lost. So the calls
+    ride on the reply for the phone to read by its own rule (one call is a
+    draft it validates and a person signs; more is an answer). Nothing here
+    runs them.
+    """
+    calls = msg.get("tool_calls")
+    if not calls:
+        return []
+    return list(calls) if isinstance(calls, list) else [calls]
+
+
 def _chat_ollama_json(turn: _Turn) -> dict:
     system, memories = _ground(turn)
     applied = _applied_options(turn)
@@ -1241,7 +1258,7 @@ def _chat_ollama_json(turn: _Turn) -> dict:
     except Exception as exc:  # noqa: BLE001 - anything else read as a timeout
         raise HTTPException(status_code=504, detail=f"ollama timeout: {exc}") from exc
     msg = out.get("message") or {}
-    return {
+    reply = {
         "model": turn.model,
         "content": msg.get("content", ""),
         "thinking": msg.get("thinking", ""),
@@ -1251,6 +1268,11 @@ def _chat_ollama_json(turn: _Turn) -> dict:
         "done_reason": out.get("done_reason"),
         "metrics": _metrics(out),
     }
+    # Only when there are any, so an ordinary reply is the bytes it always was.
+    calls = _tool_calls_of(msg)
+    if calls:
+        reply["tool_calls"] = calls
+    return reply
 
 
 def _is_loaded(model: str) -> bool | None:
@@ -1290,7 +1312,8 @@ async def _stream_ollama(turn: _Turn) -> AsyncIterator[bytes]:
     """Ollama's own /api/chat stream, re-framed line by line as it arrives.
 
     Deltas are for DISPLAY. The phone interprets only the ``done`` line, which
-    carries the whole answer and Ollama's done_reason; a stream that ends
+    carries the whole answer and Ollama's done_reason, and any native tool calls
+    the model wrote on any line (``_tool_calls_of``); a stream that ends
     without one is an ``error`` line, never a quiet short answer.
     """
     try:
@@ -1302,6 +1325,7 @@ async def _stream_ollama(turn: _Turn) -> AsyncIterator[bytes]:
         started = time.time()
         content: list[str] = []
         thinking: list[str] = []
+        tool_calls: list = []
         final: dict | None = None
         timeout = httpx.Timeout(CHAT_TIMEOUT_S, connect=5.0)
         # trust_env off: the operator named this daemon's address outright, and
@@ -1338,25 +1362,27 @@ async def _stream_ollama(turn: _Turn) -> AsyncIterator[bytes]:
                     if msg.get("content"):
                         content.append(msg["content"])
                         yield _line({"type": "content", "delta": msg["content"]})
+                    tool_calls.extend(_tool_calls_of(msg))
                     if evt.get("done"):
                         final = evt
                         break
         if final is None:
             yield _error(502, "ollama ended the stream before the answer finished")
             return
-        yield _line(
-            {
-                "type": "done",
-                "model": turn.model,
-                "content": "".join(content),
-                "thinking": "".join(thinking),
-                "elapsed_s": round(time.time() - started, 2),
-                "eval_count": final.get("eval_count"),
-                **_receipt(turn, system, memories, applied),
-                "done_reason": final.get("done_reason"),
-                "metrics": _metrics(final),
-            }
-        )
+        done = {
+            "type": "done",
+            "model": turn.model,
+            "content": "".join(content),
+            "thinking": "".join(thinking),
+            "elapsed_s": round(time.time() - started, 2),
+            "eval_count": final.get("eval_count"),
+            **_receipt(turn, system, memories, applied),
+            "done_reason": final.get("done_reason"),
+            "metrics": _metrics(final),
+        }
+        if tool_calls:
+            done["tool_calls"] = tool_calls
+        yield _line(done)
     except httpx.TimeoutException as exc:
         yield _error(504, f"ollama timeout: {type(exc).__name__}")
     except httpx.ConnectError as exc:
@@ -1473,8 +1499,10 @@ def chat(req: ChatRequest) -> dict | StreamingResponse:
     THE REPLY. Without ``stream`` one JSON object, the same fields as ever
     (model, content, thinking, elapsed_s, eval_count; points for Gemini) plus
     the receipt: provider, options_applied, memories_recalled, system_sha256,
-    done_reason and metrics (null for the robot-hosted brains). With
-    ``stream: true``, NDJSON, one event per line:
+    done_reason and metrics (null for the robot-hosted brains), and
+    ``tool_calls`` in Ollama's shape when the model wrote native tool calls
+    although none were offered (passed through for the phone to read; never
+    run here). With ``stream: true``, NDJSON, one event per line:
 
       {"type":"status","state":"loading","model":M}   Ollama must load M first
       {"type":"thinking","delta":...}                  reasoning, display only
