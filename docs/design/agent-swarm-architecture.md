@@ -576,7 +576,7 @@ await self.send_message(
 
 ### 6.3 RCAN Integration
 
-The blackboard extends naturally to OpenCastor's **RCAN (Robot Communication and Networking)** layer. Remote robots can subscribe to blackboard keys across the network:
+The blackboard extends naturally to OpenCastor's **RCAN (Robot Communication and Addressing Network)** layer. Remote robots can subscribe to blackboard keys across the network:
 
 ```python
 # Robot A publishes its scene graph
