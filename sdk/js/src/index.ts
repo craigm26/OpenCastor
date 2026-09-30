@@ -270,7 +270,8 @@ export class CastorClient {
   async invoke(request: InvokeRequest): Promise<InvokeResponse> {
     const msgId = request.msgId ?? crypto.randomUUID();
     const payload: Record<string, unknown> = {
-      msg_type: 11, // MessageType.INVOKE
+      msg_type: 11, // MessageType.INVOKE (RCAN §3.2)
+      type_name: "INVOKE",
       msg_id: msgId,
       skill: request.skill,
       params: request.params ?? {},
@@ -311,7 +312,8 @@ export class CastorClient {
    */
   async invokeCancel(msgId: string): Promise<{ ok: boolean }> {
     return this.fetch<{ ok: boolean }>("POST", "/rcan", {
-      msg_type: 15, // MessageType.INVOKE_CANCEL
+      msg_type: 13, // MessageType.INVOKE_CANCEL (RCAN §3.2; was 15 before OpenCastor 3.6)
+      type_name: "INVOKE_CANCEL",
       invoke_id: msgId,
     });
   }
@@ -368,20 +370,22 @@ export class CastorClient {
    */
   async registryRegister(request: RegistryRegisterRequest): Promise<RegistryRegisterResponse> {
     return this.fetch<RegistryRegisterResponse>("POST", "/rcan", {
-      msg_type: 13, // MessageType.REGISTRY_REGISTER
+      msg_type: 14, // MessageType.REGISTRY_REGISTER (RCAN §3.2; was 13 before OpenCastor 3.6)
+      type_name: "REGISTRY_REGISTER",
       ...request,
     });
   }
 
   /**
-   * Resolve an RRN to a RURI and metadata (RCAN §21 REGISTRY_RESOLVE, type 14).
+   * Resolve an RRN to a RURI and metadata (RCAN §21 REGISTRY_RESOLVE, type 15).
    *
    * Returns `status: "found"` with the `ruri` when the RRN is known, or
    * `status: "not_found"` when it is not.
    */
   async registryResolve(rrn: string): Promise<RegistryResolveResponse> {
     return this.fetch<RegistryResolveResponse>("POST", "/rcan", {
-      msg_type: 14, // MessageType.REGISTRY_RESOLVE
+      msg_type: 15, // MessageType.REGISTRY_RESOLVE (RCAN §3.2; was 14 before OpenCastor 3.6)
+      type_name: "REGISTRY_RESOLVE",
       rrn,
     });
   }

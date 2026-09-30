@@ -76,12 +76,12 @@ describe("invoke()", () => {
 // ── §19 invokeCancel() ──────────────────────────────────────────────────────
 
 describe("invokeCancel()", () => {
-  it("sends INVOKE_CANCEL (type 15) with invoke_id", async () => {
+  it("sends INVOKE_CANCEL (type 13) with invoke_id", async () => {
     mockFetch.mockResolvedValueOnce(jsonResp({ ok: true }));
     const result = await client.invokeCancel("abc-invoke-id");
     expect(result.ok).toBe(true);
     const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
-    expect(body.msg_type).toBe(15);
+    expect(body.msg_type).toBe(13);
     expect(body.invoke_id).toBe("abc-invoke-id");
   });
 });
@@ -119,7 +119,7 @@ describe("invokeAll()", () => {
 // ── §21 registryRegister() ──────────────────────────────────────────────────
 
 describe("registryRegister()", () => {
-  it("sends REGISTRY_REGISTER (type 13) and returns success", async () => {
+  it("sends REGISTRY_REGISTER (type 14) and returns success", async () => {
     mockFetch.mockResolvedValueOnce(
       jsonResp({ status: "success", rrn: "RRN-000000000001" })
     );
@@ -133,7 +133,7 @@ describe("registryRegister()", () => {
     expect(result.status).toBe("success");
     expect(result.rrn).toBe("RRN-000000000001");
     const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
-    expect(body.msg_type).toBe(13);
+    expect(body.msg_type).toBe(14);
     expect(body.rrn).toBe("rrn://craigm26/robot/opencastor-rpi5-hailo/bob-001");
   });
 
@@ -153,7 +153,7 @@ describe("registryRegister()", () => {
 // ── §21 registryResolve() ───────────────────────────────────────────────────
 
 describe("registryResolve()", () => {
-  it("sends REGISTRY_RESOLVE (type 14) and returns found", async () => {
+  it("sends REGISTRY_RESOLVE (type 15) and returns found", async () => {
     mockFetch.mockResolvedValueOnce(
       jsonResp({
         status: "found",
@@ -166,7 +166,7 @@ describe("registryResolve()", () => {
     expect(result.status).toBe("found");
     expect(result.ruri).toBe("rcan://robot.local:8000/bob");
     const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
-    expect(body.msg_type).toBe(14);
+    expect(body.msg_type).toBe(15);
     expect(body.rrn).toBe("RRN-000000000001");
   });
 
