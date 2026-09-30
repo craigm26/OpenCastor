@@ -94,8 +94,8 @@ class TestMessageSerialization:
     def test_from_dict_with_ints(self):
         d = {
             "id": "test-id",
-            "type": 3,
-            "priority": 1,
+            "type": 1,  # COMMAND in the §3.2 canonical table
+            "priority": 2,  # NORMAL in §3.4
             "source": "rcan://a.b.c",
             "target": "rcan://d.e.f",
             "payload": {"x": 1},
@@ -181,22 +181,31 @@ class TestMessageTypes:
     """Enum coverage."""
 
     def test_all_message_types(self):
-        # RCAN v1.2 adds AUTHORIZE (9) and PENDING_AUTH (10)
-        # RCAN v1.3 §19 adds INVOKE (11), INVOKE_RESULT (12), INVOKE_CANCEL (15)
-        # RCAN v1.3 §21 adds REGISTRY_REGISTER (13), REGISTRY_RESOLVE (14)
-        # RCAN v1.3 §21 adds REGISTRY_REGISTER_RESULT (16), REGISTRY_RESOLVE_RESULT (17)
-        assert len(MessageType) == 44  # RCAN v2.1: types 1-44 (41-44 added in v2.1)
-        assert MessageType.DISCOVER == 1
+        # Canonical table, RCAN spec §3.2 (same numbers as rcan-py / rcan-ts),
+        # plus AUTHORIZE = 45. len() counts canonical members, not aliases.
+        assert len(MessageType) == 45
+        assert MessageType.COMMAND == 1
+        assert MessageType.RESPONSE == 2
+        assert MessageType.STATUS == 3
+        assert MessageType.HEARTBEAT == 4
+        assert MessageType.CONFIG == 5
+        assert MessageType.SAFETY == 6
+        assert MessageType.AUTH == 7
         assert MessageType.ERROR == 8
-        assert MessageType.AUTHORIZE == 9
+        assert MessageType.DISCOVER == 9
         assert MessageType.PENDING_AUTH == 10
         assert MessageType.INVOKE == 11
         assert MessageType.INVOKE_RESULT == 12
-        assert MessageType.REGISTRY_REGISTER == 13
-        assert MessageType.REGISTRY_RESOLVE == 14
-        assert MessageType.INVOKE_CANCEL == 15
-        assert MessageType.REGISTRY_REGISTER_RESULT == 16
-        assert MessageType.REGISTRY_RESOLVE_RESULT == 17
+        assert MessageType.INVOKE_CANCEL == 13
+        assert MessageType.REGISTRY_REGISTER == 14
+        assert MessageType.REGISTRY_RESOLVE == 15
+        assert MessageType.TRANSPARENCY == 16
+        assert MessageType.SBOM_UPDATE == 44
+        assert MessageType.AUTHORIZE == 45
+        # Deprecated aliases resolve to RESPONSE.
+        assert MessageType.ACK is MessageType.RESPONSE
+        assert MessageType.REGISTRY_REGISTER_RESULT is MessageType.RESPONSE
+        assert MessageType.REGISTRY_RESOLVE_RESULT is MessageType.RESPONSE
 
     def test_all_priorities(self):
         assert len(Priority) == 4

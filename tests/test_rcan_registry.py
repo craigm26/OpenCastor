@@ -17,10 +17,10 @@ from castor.rcan.registry import (
 
 class TestRegistryMessageType:
     def test_registry_register_value(self):
-        assert MessageType.REGISTRY_REGISTER == 13
+        assert MessageType.REGISTRY_REGISTER == 14
 
     def test_registry_resolve_value(self):
-        assert MessageType.REGISTRY_RESOLVE == 14
+        assert MessageType.REGISTRY_RESOLVE == 15
 
     def test_registry_register_name_lookup(self):
         assert MessageType["REGISTRY_REGISTER"] is MessageType.REGISTRY_REGISTER
@@ -160,10 +160,11 @@ class TestRegistryResolveResponse:
 
 class TestRegistryRegisterResultMessageType:
     def test_register_result_enum_value(self):
-        assert MessageType.REGISTRY_REGISTER_RESULT == 16
+        # §3.2 has no separate result types; the name is a deprecated alias of RESPONSE.
+        assert MessageType.REGISTRY_REGISTER_RESULT is MessageType.RESPONSE
 
     def test_resolve_result_enum_value(self):
-        assert MessageType.REGISTRY_RESOLVE_RESULT == 17
+        assert MessageType.REGISTRY_RESOLVE_RESULT is MessageType.RESPONSE
 
 
 class TestRegistryRegisterResult:

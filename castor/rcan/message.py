@@ -4,17 +4,15 @@ RCAN Message Envelope.
 Defines the standard JSON message format for RCAN protocol communication.
 Messages are plain JSON (no protobuf) -- readable with ``curl``, zero deps.
 
-Message types follow the RCAN spec::
+Message types are numbered per the canonical table in RCAN spec §3.2
+(the same numbers rcan-py and rcan-ts use). Among them::
 
-    DISCOVER      -- mDNS / peer discovery
-    STATUS        -- Telemetry / state reporting
     COMMAND       -- Motor, config, or action command
-    STREAM        -- Continuous sensor data
-    EVENT         -- Asynchronous notifications
+    RESPONSE      -- Reply to a prior message (``ack()`` builds one)
+    STATUS        -- Telemetry / state reporting
     SAFETY        -- STOP / ESTOP / RESUME safety events (highest priority)
-    HANDOFF       -- Transfer control between principals
-    ACK           -- Acknowledgement of a prior message
     ERROR         -- Error response
+    DISCOVER      -- mDNS / peer discovery
     AUTHORIZE     -- Out-of-band authorization for HiTL gate (v1.2)
     PENDING_AUTH  -- Notification that HiTL gate is awaiting authorization (v1.2)
     INVOKE             -- Trigger a named skill/behavior on the robot runtime (v1.3 §19)
@@ -22,8 +20,6 @@ Message types follow the RCAN spec::
     INVOKE_CANCEL      -- Cancel an in-flight INVOKE by invoke_id (v1.3 §19)
     REGISTRY_REGISTER        -- Register robot with RRF (v1.3 §21)
     REGISTRY_RESOLVE         -- Resolve RRN to RURI/metadata (v1.3 §21)
-    REGISTRY_REGISTER_RESULT -- Result of REGISTRY_REGISTER (v1.3 §21)
-    REGISTRY_RESOLVE_RESULT  -- Result of REGISTRY_RESOLVE (v1.3 §21)
 
 Each message carries a priority (LOW, NORMAL, HIGH, SAFETY) that determines
 queue ordering.  SAFETY priority messages skip the queue entirely
@@ -46,54 +42,134 @@ RCAN_SPEC_VERSION = "3.0"
 
 
 class MessageType(IntEnum):
-    """RCAN message types."""
+    """RCAN message types, numbered per the canonical table in RCAN spec §3.2.
 
-    DISCOVER = 1
-    STATUS = 2
-    COMMAND = 3
-    STREAM = 4
-    EVENT = 5
+    The same numbers are used by rcan-py and rcan-ts. Until 3.6.0 OpenCastor
+    used its own pre-v2.1 numbering for types 1-19 (DISCOVER was 1, COMMAND
+    was 3, AUTHORIZE was 9), so a bare integer from an older OpenCastor peer
+    meant something different. Older peers always send ``type_name`` as well,
+    and :meth:`RCANMessage.from_dict` trusts the name over the number, which
+    keeps them interoperable.
+    """
+
+    # Core protocol (1-8)
+    COMMAND = 1
+    RESPONSE = 2  # generic reply to a prior message
+    STATUS = 3
+    HEARTBEAT = 4
+    CONFIG = 5
     SAFETY = 6  # RCAN §6: STOP / ESTOP / RESUME — bypasses all queues
-    ACK = 7
+    AUTH = 7
     ERROR = 8
-    AUTHORIZE = 9  # Out-of-band authorization for HiTL gate (RCAN v1.2)
-    PENDING_AUTH = 10  # Notification that HiTL gate is awaiting authorization (RCAN v1.2)
-    INVOKE = 11  # Trigger a named skill/behavior on the robot runtime (RCAN v1.3 §19)
-    INVOKE_RESULT = 12  # Result of an INVOKE invocation (RCAN v1.3 §19)
-    REGISTRY_REGISTER = 13  # §21 — register robot with RRF
-    REGISTRY_RESOLVE = 14  # §21 — resolve RRN to RURI/metadata
-    INVOKE_CANCEL = 15  # Cancel an in-flight INVOKE by invoke_id (RCAN v1.3 §19)
-    REGISTRY_REGISTER_RESULT = (
-        16  # §21 — result of REGISTRY_REGISTER (success/failure + assigned RRN)
-    )
-    REGISTRY_RESOLVE_RESULT = 17  # §21 — result of REGISTRY_RESOLVE (RURI + metadata or error)
-    TRANSPARENCY = 18  # EU AI Act Art. 13 transparency disclosure
-    HANDOFF = 19  # Transfer control between principals
-    CONSENT_REQUEST = 20  # R2RAM §5: request cross-owner robot-to-robot authorization
-    CONSENT_GRANT = 21  # R2RAM §5: grant cross-owner authorization with scopes
-    CONSENT_DENY = 22  # R2RAM §5: deny cross-owner authorization request
-    FLEET_COMMAND = 23  # Fleet-level command from orchestrator (v2.1)
-    SUBSCRIBE = 24  # Subscribe to a robot event stream
-    UNSUBSCRIBE = 25  # Unsubscribe from a robot event stream
-    FAULT_REPORT = 26  # Fault report from robot to registry
-    KEY_ROTATION = 27  # Ed25519 key rotation notification
-    COMMAND_COMMIT = 28  # Commit a pending command (HiTL confirmation)
-    SENSOR_DATA = 29  # Sensor data push from robot
-    TRAINING_CONSENT_REQUEST = 30  # Request consent for training data collection
-    TRAINING_CONSENT_GRANT = 31  # Grant training data consent
-    TRAINING_CONSENT_DENY = 32  # Deny training data consent
-    CONTRIBUTE_REQUEST = 33  # Idle compute contribution offer (v1.7)
-    CONTRIBUTE_RESULT = 34  # Contribution task result
-    CONTRIBUTE_CANCEL = 35  # Cancel an active contribution
-    TRAINING_DATA = 36  # Training data payload
-    COMPETITION_ENTER = 37  # Competition protocol — enter event (v1.10)
-    COMPETITION_SCORE = 38  # Competition protocol — score report (v1.10)
-    SEASON_STANDING = 39  # Competition protocol — season standings (v1.10)
-    PERSONAL_RESEARCH_RESULT = 40  # Research result from personal compute (v1.10)
-    AUTHORITY_ACCESS = 41  # EU AI Act §16(j) authority audit request (v2.1)
-    AUTHORITY_RESPONSE = 42  # Response to authority audit request (v2.1)
-    FIRMWARE_ATTESTATION = 43  # Firmware manifest attestation broadcast (v2.1)
-    SBOM_UPDATE = 44  # SBOM update notification (v2.1)
+    # Discovery & authorization (9-10)
+    DISCOVER = 9
+    PENDING_AUTH = 10  # HiTL gate awaiting authorization (§16.4)
+    # Skill invocation (11-13)
+    INVOKE = 11  # §19
+    INVOKE_RESULT = 12  # §19
+    INVOKE_CANCEL = 13  # §19
+    # Registry (14-15)
+    REGISTRY_REGISTER = 14  # §21
+    REGISTRY_RESOLVE = 15  # §21
+    # Audit & transparency (16)
+    TRANSPARENCY = 16  # EU AI Act Art. 13
+    # Acknowledgement & QoS (17-18)
+    COMMAND_ACK = 17
+    COMMAND_NACK = 18
+    # Identity & consent (19-22)
+    ROBOT_REVOCATION = 19
+    CONSENT_REQUEST = 20  # R2RAM §5
+    CONSENT_GRANT = 21
+    CONSENT_DENY = 22
+    # Fleet & telemetry (23-29)
+    FLEET_COMMAND = 23
+    SUBSCRIBE = 24
+    UNSUBSCRIBE = 25
+    FAULT_REPORT = 26
+    KEY_ROTATION = 27
+    COMMAND_COMMIT = 28
+    SENSOR_DATA = 29
+    # Training data consent (30-32)
+    TRAINING_CONSENT_REQUEST = 30
+    TRAINING_CONSENT_GRANT = 31
+    TRAINING_CONSENT_DENY = 32
+    # Idle compute contribution (33-36)
+    CONTRIBUTE_REQUEST = 33
+    CONTRIBUTE_RESULT = 34
+    CONTRIBUTE_CANCEL = 35
+    TRAINING_DATA = 36
+    # Competition (37-40)
+    COMPETITION_ENTER = 37
+    COMPETITION_SCORE = 38
+    SEASON_STANDING = 39
+    PERSONAL_RESEARCH_RESULT = 40
+    # Authority & attestation (41-44)
+    AUTHORITY_ACCESS = 41  # EU AI Act Art. 16(j)
+    AUTHORITY_RESPONSE = 42
+    FIRMWARE_ATTESTATION = 43
+    SBOM_UPDATE = 44
+    # HiTL authorization (45)
+    AUTHORIZE = 45  # approve or deny a PENDING_AUTH (§16.4)
+
+    # Deprecated aliases (3.6.0). The canonical table has no separate ACK or
+    # registry-result types; replies are RESPONSE. These names still resolve,
+    # so older peers that send them by name are understood.
+    ACK = 2
+    REGISTRY_REGISTER_RESULT = 2
+    REGISTRY_RESOLVE_RESULT = 2
+
+
+def resolve_message_type(data: dict[str, Any]) -> MessageType:
+    """Resolve the message type of a wire dict, name first.
+
+    ``type_name`` (or a string ``type``) wins over an integer ``type``, because
+    older OpenCastor peers send pre-3.6.0 integers alongside the name. A bare
+    integer is read as the §3.2 canonical number. An unknown name is an error,
+    never a fallback to the integer, so an old-only name cannot be silently
+    reinterpreted.
+
+    Raises:
+        ValueError: if no type is present or it is not a known type.
+    """
+    name = data.get("type_name")
+    if name is None and isinstance(data.get("type"), str):
+        name = data["type"]
+    if name is not None:
+        key = str(name).upper()
+        if key not in MessageType.__members__:
+            raise ValueError(f"unknown RCAN message type name: {name!r}")
+        return MessageType.__members__[key]
+    raw = data.get("type", data.get("msg_type"))
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise ValueError(f"missing or non-integer RCAN message type: {raw!r}")
+    try:
+        return MessageType(raw)
+    except ValueError:
+        raise ValueError(f"unknown RCAN message type number: {raw}") from None
+
+
+def resolve_priority(data: dict[str, Any]) -> Priority:
+    """Resolve the priority of a wire dict, name first (see resolve_message_type).
+
+    A missing priority is NORMAL.
+    """
+    name = data.get("priority_name")
+    if name is None and isinstance(data.get("priority"), str):
+        name = data["priority"]
+    if name is not None:
+        key = str(name).upper()
+        if key not in Priority.__members__:
+            raise ValueError(f"unknown RCAN priority name: {name!r}")
+        return Priority.__members__[key]
+    raw = data.get("priority")
+    if raw is None:
+        return Priority.NORMAL
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise ValueError(f"non-integer RCAN priority: {raw!r}")
+    try:
+        return Priority(raw)
+    except ValueError:
+        raise ValueError(f"unknown RCAN priority number: {raw}") from None
 
 
 @dataclass
@@ -132,12 +208,14 @@ class MediaChunk:
 
 
 class Priority(IntEnum):
-    """Message priority levels.  SAFETY skips the normal queue."""
+    """Message priority levels, numbered per RCAN spec §3.4.  SAFETY skips the
+    normal queue.  (Before 3.6.0 OpenCastor used 0-3; older peers also send
+    ``priority_name``, which :func:`resolve_priority` trusts.)"""
 
-    LOW = 0
-    NORMAL = 1
-    HIGH = 2
-    SAFETY = 3
+    LOW = 1
+    NORMAL = 2
+    HIGH = 3
+    SAFETY = 4
 
 
 @dataclass
@@ -369,9 +447,13 @@ class RCANMessage:
         """
         d = dict(data)
 
-        # Remove display-only fields
+        # Resolve type and priority name-first (older peers used different
+        # integers but always send the names), then drop the display fields.
+        d["type"] = resolve_message_type(d)
+        d["priority"] = resolve_priority(d)
         d.pop("type_name", None)
         d.pop("priority_name", None)
+        d.pop("msg_type", None)
 
         # v1.5 version negotiation — warn on mismatch, don't reject
         incoming_version = d.get("rcan_version")
@@ -400,13 +482,6 @@ class RCANMessage:
                     "Received RCAN message with unparseable rcan_version=%r",
                     incoming_version,
                 )
-
-        # Coerce type from name if needed
-        if isinstance(d.get("type"), str):
-            d["type"] = MessageType[d["type"].upper()]
-        # Coerce priority from name if needed
-        if isinstance(d.get("priority"), str):
-            d["priority"] = Priority[d["priority"].upper()]
 
         # Populate v2.2 envelope fields
         d.setdefault("firmware_hash", "")

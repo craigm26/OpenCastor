@@ -155,7 +155,7 @@ def parse_inbound(body: dict) -> Any:
 
     Accepts both formats:
       - Spec v2.2 format: ``{"rcan": "2.2", "cmd": ..., "target": "rcan://...", ...}``
-      - OpenCastor internal format: ``{"msg_type": 3, "source": ..., ...}``
+      - OpenCastor internal format: ``{"type": 1, "type_name": "COMMAND", "source": ..., ...}``
 
     Returns the appropriate message object:
       - ``rcan.RCANMessage`` for spec format (bridge with ``spec_message_to_opencastor``)
