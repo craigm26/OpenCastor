@@ -175,25 +175,28 @@ move(cmd)  ──►  SafetyLayer.check(cmd)  ──►  _move(cmd)  ──►  
 ## RCAN Protocol (v3.0)
 
 ### MessageTypes
+Numbered per the RCAN spec §3.2 canonical table (the numbers rcan-py and rcan-ts use); full list in `castor/rcan/message.py`. Decode with `resolve_message_type()`: `type_name` wins over the integer, a bare integer is canonical, unknown names are rejected. Before 3.6 types 1-19 used a different numbering (DISCOVER was 1, COMMAND 3), so never compare a raw wire integer.
 ```python
-DISCOVER = 1       # Robot announces presence
-STATUS = 2         # Health/state query
-COMMAND = 3        # Action instruction
-STREAM = 4         # Continuous data stream
-EVENT = 5          # Triggered state change
-HANDOFF = 6        # Session transfer
-ACK = 7            # Acknowledgment
-ERROR = 8          # Error response
-AUTHORIZE = 9      # HiTL approval (§8)
-PENDING_AUTH = 10  # HiTL gate awaiting (§8)
+COMMAND = 1        # Action instruction
+RESPONSE = 2       # Reply to a prior message (ACK and REGISTRY_*_RESULT are deprecated aliases)
+STATUS = 3         # Health/state
+HEARTBEAT = 4
+CONFIG = 5
+SAFETY = 6         # STOP / ESTOP / RESUME
+AUTH = 7
+ERROR = 8
+DISCOVER = 9       # Public peer handshake (the only type /api/rcan/message accepts unauthenticated)
+PENDING_AUTH = 10  # HiTL gate awaiting (§16.4)
 INVOKE = 11        # Skill invocation (§19)
-INVOKE_RESULT = 12 # Skill result (§19)
-REGISTRY_REGISTER = 13    # Register with RRF (§21)
-REGISTRY_RESOLVE = 14     # Resolve RRN→RURI (§21)
-INVOKE_CANCEL = 15        # Cancel in-flight INVOKE (§19)
-REGISTRY_REGISTER_RESULT = 16  # Registration result (§21)
-REGISTRY_RESOLVE_RESULT = 17   # Resolution result (§21)
+INVOKE_RESULT = 12
+INVOKE_CANCEL = 13
+REGISTRY_REGISTER = 14   # §21
+REGISTRY_RESOLVE = 15    # §21
+TRANSPARENCY = 16
+# 17-44 as in §3.2
+AUTHORIZE = 45     # HiTL approval (§16.4)
 ```
+Priority: LOW 1, NORMAL 2, HIGH 3, SAFETY 4 (§3.4).
 
 ### Robot Registration Numbers (RRN)
 ```

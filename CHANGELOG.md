@@ -9,6 +9,31 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+### Changed (breaking on the wire for bare integers)
+
+- **RCAN message numbers follow the spec.** `MessageType` is now the canonical table in
+  RCAN spec §3.2, the same numbers rcan-py and rcan-ts use, plus `AUTHORIZE = 45`.
+  Types 1-19 moved (COMMAND 3 -> 1, STATUS 2 -> 3, DISCOVER 1 -> 9, AUTHORIZE 9 -> 45,
+  INVOKE_CANCEL 15 -> 13, REGISTRY_REGISTER 13 -> 14, REGISTRY_RESOLVE 14 -> 15); 20-44
+  are unchanged. `Priority` is LOW 1 to SAFETY 4 (was 0-3).
+- Older OpenCastor peers keep working: they always send `type_name` and `priority_name`,
+  and the new `resolve_message_type()` / `resolve_priority()` trust the name over the
+  integer. A bare integer is read as canonical. An unknown name is rejected rather than
+  guessed from its integer.
+- `ACK`, `REGISTRY_REGISTER_RESULT` and `REGISTRY_RESOLVE_RESULT` are deprecated aliases
+  of `RESPONSE` (2). `STREAM`, `EVENT` and `HANDOFF` had no users and are removed.
+- `sdk/js` sends the canonical numbers and `type_name`.
+
+### Fixed
+
+- **`/api/rcan/message` auth gate.** DISCOVER is decided with the same name-first
+  resolver as the router. The old check compared the raw integer to 1, which is COMMAND
+  in §3.2.
+- **RCAN INVOKE hooks.** `POST /rcan` looked for `msg.msg_type`, which does not exist, so
+  the PreToolUse gate never ran. The default hook, which denies motion skills while
+  `/tmp/robot-estop` exists, was skipped for every RCAN INVOKE, and the PostToolUse audit
+  hook never fired on that path. Both run now.
+
 ## [3.5.0] - 2026-09-27
 
 Published on PyPI as `1!3.5.0` (the epoch is required; see `docs/pypi-versioning.md`).
