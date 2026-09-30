@@ -3354,7 +3354,7 @@ async def rcan_message_endpoint(request: Request):
 
     Accepts two formats:
       - **RCAN v1.2 spec format** (rcan-py SDK): ``{"rcan": "1.2", "cmd": ..., "target": "rcan://...", ...}``
-      - **OpenCastor internal format**: ``{"msg_type": 3, "source": ..., ...}``
+      - **OpenCastor internal format**: ``{"type": 11, "type_name": "INVOKE", "source": ..., "target": ..., "payload": {...}}``
 
     Spec-format messages are bridged to OpenCastor's router transparently.
     """
@@ -3380,14 +3380,22 @@ async def rcan_message_endpoint(request: Request):
 
         principal = getattr(request.state, "principal", None)
 
-        # PreToolUse hook gate — runs before INVOKE dispatch (#817)
-        _msg_type = getattr(msg, "msg_type", None)
-        _INVOKE_TYPE = 11
+        # PreToolUse hook gate — runs before INVOKE dispatch (#817).
+        # Until 3.6 this read ``msg.msg_type``, an attribute RCANMessage does
+        # not have, so the gate never ran: the default safety hook (deny motion
+        # while /tmp/robot-estop exists) was skipped for every RCAN INVOKE, and
+        # the post-tool audit hook below, which keys on _skill_name, never
+        # fired either. The router reads skill and params from the payload, so
+        # the gate reads them from the same place.
+        from castor.rcan.message import MessageType as _MT
+
         _skill_name: str | None = None
-        if _msg_type == _INVOKE_TYPE and state.hook_runner is not None:
-            _skill_name = getattr(msg, "skill", None) or body.get("skill", "")
-            _skill_params = getattr(msg, "params", None) or body.get("params", {})
-            _hook_result = state.hook_runner.run_pre_tool(_skill_name, _skill_params or {})
+        if getattr(msg, "type", None) == _MT.INVOKE:
+            _payload_in = getattr(msg, "payload", None) or {}
+            _skill_name = _payload_in.get("skill") or body.get("skill") or ""
+            _skill_params = _payload_in.get("params") or body.get("params") or {}
+        if _skill_name is not None and state.hook_runner is not None:
+            _hook_result = state.hook_runner.run_pre_tool(_skill_name, _skill_params)
             if not _hook_result.allowed:
                 raise HTTPException(
                     status_code=403,

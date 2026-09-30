@@ -105,6 +105,7 @@ def _reset_state_and_env(monkeypatch):
     api_mod.state.mdns_broadcaster = None
     api_mod.state.mdns_browser = None
     api_mod.state.rcan_router = None
+    api_mod.state.hook_runner = None
     api_mod.state.capability_registry = None
     api_mod.state.offline_fallback = None
     api_mod.state.thought_history = collections.deque(maxlen=50)
@@ -791,6 +792,60 @@ class TestRCANMessageEndpoint:
         resp = client.post("/rcan", json={"type": "command", "payload": {}})
         assert resp.status_code == 501
         assert "RCAN router not initialized" in resp.json()["error"]
+
+    def _invoke_body(self, skill="robot_move"):
+        return {
+            "type": 11, "type_name": "INVOKE",
+            "source": "rcan://opencastor.op.00000001",
+            "target": "rcan://opencastor.bot.00000002",
+            "payload": {"skill": skill, "params": {"x": 1}},
+        }
+
+    def test_rcan_invoke_runs_pre_tool_hook_and_honours_a_denial(self, client, api_mod):
+        """A denying PreToolUse hook (e.g. the e-stop flag) blocks the INVOKE.
+
+        Before 3.6 the gate read a nonexistent msg.msg_type and never ran.
+        """
+        from castor.hooks.runner import HookResult
+
+        router = MagicMock()
+        api_mod.state.rcan_router = router
+        hooks = MagicMock()
+        hooks.run_pre_tool.return_value = HookResult(allowed=False, message="E-stop active")
+        api_mod.state.hook_runner = hooks
+        resp = client.post("/rcan", json=self._invoke_body())
+        assert resp.status_code == 403
+        hooks.run_pre_tool.assert_called_once_with("robot_move", {"x": 1})
+        router.route.assert_not_called()
+
+    def test_rcan_invoke_allowed_runs_post_tool_hook(self, client, api_mod):
+        from castor.hooks.runner import HookResult
+        from castor.rcan.message import RCANMessage
+
+        router = MagicMock()
+        router.route.return_value = RCANMessage.ack(source="a", target="b", reply_to="x")
+        api_mod.state.rcan_router = router
+        hooks = MagicMock()
+        hooks.run_pre_tool.return_value = HookResult(allowed=True)
+        api_mod.state.hook_runner = hooks
+        resp = client.post("/rcan", json=self._invoke_body("robot_status"))
+        assert resp.status_code == 200
+        router.route.assert_called_once()
+        hooks.run_post_tool.assert_called_once()
+        assert hooks.run_post_tool.call_args.args[0] == "robot_status"
+
+    def test_rcan_non_invoke_skips_tool_hooks(self, client, api_mod):
+        from castor.rcan.message import RCANMessage
+
+        router = MagicMock()
+        router.route.return_value = RCANMessage.ack(source="a", target="b", reply_to="x")
+        api_mod.state.rcan_router = router
+        hooks = MagicMock()
+        api_mod.state.hook_runner = hooks
+        body = {**self._invoke_body(), "type": 3, "type_name": "STATUS"}
+        assert client.post("/rcan", json=body).status_code == 200
+        hooks.run_pre_tool.assert_not_called()
+        hooks.run_post_tool.assert_not_called()
 
     def test_rcan_message_invalid_body(self, client, api_mod):
         router = MagicMock()
