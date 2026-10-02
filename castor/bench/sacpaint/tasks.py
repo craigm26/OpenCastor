@@ -21,6 +21,13 @@ from inspect_robots.registry import task
 from inspect_robots.scene import Scene, Target
 from inspect_robots.task import Task
 
+# Importing this registers ``agent_strokes`` (castor.bench.sacpaint.stroke_policy).
+# It lives here because Inspect Robots loads this module through the task entry
+# point on every ``inspect-robots`` invocation, so the policy is resolvable even
+# in an environment whose installed metadata predates its own entry point.
+from castor.bench.sacpaint import (
+    stroke_policy as _stroke_policy,  # noqa: F401  (registers agent_strokes)
+)
 from castor.bench.sacpaint.reference import (
     DEFAULT_REFERENCE,
     LINE_REFERENCE,
@@ -37,12 +44,6 @@ from castor.bench.sacpaint.scorers import (
     landmark_geometry,
     structure,
 )
-
-# Importing this registers ``agent_strokes`` (castor.bench.sacpaint.stroke_policy).
-# It lives here because Inspect Robots loads this module through the task entry
-# point on every ``inspect-robots`` invocation, so the policy is resolvable even
-# in an environment whose installed metadata predates its own entry point.
-from castor.bench.sacpaint import stroke_policy as _stroke_policy  # noqa: F401  (registers agent_strokes)
 
 INSTRUCTION = (
     "Draw the reference image on the canvas with the pen. You may look at the "

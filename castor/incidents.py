@@ -185,6 +185,7 @@ def _configured_max_bytes() -> int:
         return DEFAULT_INCIDENT_LOG_MAX_BYTES
     return value
 
+
 # OpenCastor crosswalk of the serious-incident reporting windows. Every clock
 # runs from discovery (``discovered_at``), never from the event timestamp.
 # These are the project's own figures, summarised, not quoted.
@@ -253,9 +254,7 @@ def days_to_deadline(incident: dict[str, Any], now: datetime | None = None) -> f
     Returns None when the record carries no usable discovery time.
     """
     now = now or datetime.now(timezone.utc)
-    discovered = _parse_iso(incident.get("discovered_at")) or _parse_iso(
-        incident.get("timestamp")
-    )
+    discovered = _parse_iso(incident.get("discovered_at")) or _parse_iso(incident.get("timestamp"))
     if discovered is None:
         return None
     days = incident.get("reporting_deadline_days")
@@ -625,7 +624,7 @@ class IncidentLog:
 
     # -- verification ----------------------------------------------------
 
-    def verify_chain(self) -> "ChainCheck":
+    def verify_chain(self) -> ChainCheck:
         """Walk every link of the chain, rotated files first, then the active one.
 
         What a pass says, and all it says: every line parses, every line carries
@@ -724,9 +723,7 @@ class IncidentLog:
 
         return ChainCheck(state=CHAIN_OK, log_path=self._path, files=checked)
 
-    def _rotation_break_reason(
-        self, path: Path, row: dict[str, Any], claimed: str
-    ) -> str | None:
+    def _rotation_break_reason(self, path: Path, row: dict[str, Any], claimed: str) -> str | None:
         """Why this ``log_rotation`` line is not a carry-over, or None if it is."""
         raw_target = row.get("rotated_to")
         if not raw_target:
