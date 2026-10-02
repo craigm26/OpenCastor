@@ -172,8 +172,7 @@ class AuthorityRequestExpiredError(AuthorityError):
 class AuthorityRateLimitedError(AuthorityError):
     def __init__(self, authority_id: str, window_s: int):
         super().__init__(
-            f"Authority '{authority_id}' has already made a request in the last "
-            f"{window_s} seconds",
+            f"Authority '{authority_id}' has already made a request in the last {window_s} seconds",
             code="AUTHORITY_RATE_LIMITED",
         )
 
