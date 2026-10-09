@@ -15,14 +15,18 @@ pytest.importorskip(
     "inspect_robots", reason="castor bench sacpaint needs pip install 'opencastor[paintbench]'"
 )
 
+import argparse
 from pathlib import Path
 
+import cv2
 import numpy as np
 import pytest
 from inspect_robots import eval as ir_eval
 from inspect_robots.scene import Scene
 
+from castor.bench.sacpaint import cli
 from castor.bench.sacpaint import palette as pal
+from castor.bench.sacpaint import reference as refmod
 from castor.bench.sacpaint import strokes as stroke_lib
 from castor.bench.sacpaint.mock import (
     IdlePolicy,
@@ -34,9 +38,51 @@ from castor.bench.sacpaint.mock import (
 from castor.bench.sacpaint.reference import get_spec
 from castor.bench.sacpaint.tasks import make_task
 
-COLOR_REFERENCE = "starry-night"
+#: Built by the `colour_reference` fixture below. These tests used to name a
+#: reference that existed only in one developer's ~/.sacpaint/references.
+COLOR_REFERENCE = "strokes-colour"
 MONO_REFERENCE = "sacramento-line-v0"
 SCENE = Scene(id="strokes", instruction="Draw the reference image.")
+
+
+def _synthetic_photo() -> np.ndarray:
+    """Indigo on the left, gold on the right, a black bar between, white rules across
+    (the recipe test_bench_sacpaint_colour.py uses): edges for the auto-tracer, and
+    two large, unambiguous colour fields for the colour reference."""
+    img = np.zeros((400, 300, 3), np.uint8)
+    img[:, :150] = (40, 60, 170)
+    img[:, 150:] = (200, 160, 20)
+    cv2.rectangle(img, (140, 0), (160, 399), (0, 0, 0), -1)
+    for y in range(0, 400, 60):
+        cv2.line(img, (0, y), (299, y), (255, 255, 255), 3)
+    return img
+
+
+@pytest.fixture(scope="module", autouse=True)
+def colour_reference(tmp_path_factory: pytest.TempPathFactory):
+    """A colour reference made for this module, in its own SACPAINT_REFERENCES."""
+    root = tmp_path_factory.mktemp("sacpaint-strokes")
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("SACPAINT_REFERENCES", str(root / "refs"))
+        refmod.refresh()
+        photo = root / f"{COLOR_REFERENCE}-source.jpg"
+        cv2.imwrite(str(photo), cv2.cvtColor(_synthetic_photo(), cv2.COLOR_RGB2BGR))
+        cli.cmd_new(
+            argparse.Namespace(
+                name=COLOR_REFERENCE,
+                from_reference="sacramento-photo-v1",
+                canvas="150x200",
+                description="",
+                photo=str(photo),
+                photo_credit="",
+                auto_trace=True,
+                color=True,
+                force=True,
+            )
+        )
+        refmod.refresh()
+        yield COLOR_REFERENCE
+    refmod.refresh()
 
 
 def _plotter(reference: str, **kwargs) -> PlotterEmbodiment:

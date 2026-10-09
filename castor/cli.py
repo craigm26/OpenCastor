@@ -121,9 +121,11 @@ def _load_benchmark_record(record_path: "str | None") -> dict:
     for key in ("reference_sha256", "ink_sha256"):
         val = rec.get(key)
         if val is None:
-            val = (rec.get("evidence") or {}).get(key) if isinstance(
-                rec.get("evidence"), dict
-            ) else None
+            val = (
+                (rec.get("evidence") or {}).get(key)
+                if isinstance(rec.get("evidence"), dict)
+                else None
+            )
         if val:
             details[key] = val
 
@@ -229,9 +231,7 @@ def _cmd_compliance_submit(args) -> int:
                     f"{md.get('manufacturer', '')}/{md.get('model', '')}/{md.get('version', '')}"
                 )
                 _basis = getattr(args, "annex_iii_basis", None) or extra.get("annex_iii_basis")
-                _status = getattr(args, "conformity_status", None) or extra.get(
-                    "conformity_status"
-                )
+                _status = getattr(args, "conformity_status", None) or extra.get("conformity_status")
                 if _basis:
                     extra["annex_iii_basis"] = _basis
                 if _status:
@@ -4361,10 +4361,7 @@ def cmd_duck(args) -> int:
                     f"using {clamped:g} m/s.[/yellow]"
                 )
             elif requested is None:
-                say(
-                    f"  [dim]Faster, up to the envelope: "
-                    f"castor duck test --speed {max_vx:g}[/dim]"
-                )
+                say(f"  [dim]Faster, up to the envelope: castor duck test --speed {max_vx:g}[/dim]")
             if not confirm("Ready?", default=False):
                 say("  Cancelled.\n")
                 return 0
@@ -4409,11 +4406,15 @@ def cmd_duck(args) -> int:
         say("        [dim]from the SoC serial, which cannot be guessed.[/dim]")
         say("")
         say("        [dim]Ways to learn the address:[/dim]")
-        say("          [dim]duckctl ip[/dim]                 over Bluetooth, from a clone of "
-            "pollen-robotics/microduck")
+        say(
+            "          [dim]duckctl ip[/dim]                 over Bluetooth, from a clone of "
+            "pollen-robotics/microduck"
+        )
         say("          [dim]your router's client list[/dim]  look for radxa-zero3 or duck-*")
-        say("          [cyan]castor duck --deep[/cyan]        sweep this machine's ARP "
-            "neighbours and browse mDNS")
+        say(
+            "          [cyan]castor duck --deep[/cyan]        sweep this machine's ARP "
+            "neighbours and browse mDNS"
+        )
         say("")
         return 1
     say(f"        [green]found[/green] {cand.describe()}")
@@ -4665,8 +4666,10 @@ def _duck_plan_from_request(duck, request: str, say, agent: "dict | None" = None
         text = getattr(thought, "text", None) or str(thought)
     except Exception as exc:  # noqa: BLE001
         say(f"\n  [yellow]{provider_name} could not answer:[/yellow] {exc}")
-        say(f"  [dim]Sign in with:[/dim] castor login    [dim]or pick another:[/dim] "
-            f"castor duck do --brain ollama …")
+        say(
+            "  [dim]Sign in with:[/dim] castor login    [dim]or pick another:[/dim] "
+            "castor duck do --brain ollama …"
+        )
         say("  Name a routine instead: " + ", ".join(sorted(ROUTINES)) + "\n")
         return None
 
@@ -5817,12 +5820,14 @@ def _submit_incident_report_platatlas(args, log, pending=None) -> int:
         for obj in objects:
             print(_json.dumps(obj, indent=2, sort_keys=True))
         missing = " and ".join(
-            n for n, v in (("PLATATLAS_ORG_SLUG", org_slug), ("PLATATLAS_INGEST_KEY", ingest_key)) if not v
+            n
+            for n, v in (("PLATATLAS_ORG_SLUG", org_slug), ("PLATATLAS_INGEST_KEY", ingest_key))
+            if not v
         )
         sys.stderr.write(
             f"{label}: {missing} not set, so nothing was sent and nothing was stamped "
             f"as reported. The {len(objects)} signed object(s) above are the filing. To "
-            f"send them, POST one JSON object per line as {{\"event\": <object>}} to "
+            f'send them, POST one JSON object per line as {{"event": <object>}} to '
             f"https://<your-org>.platatlas.com/api/traces?source=rcan with "
             f"Authorization: Bearer <your ingest key> and "
             f"Content-Type: application/x-ndjson.\n"
@@ -6093,15 +6098,11 @@ def cmd_pause(args) -> None:
 
     home = _latch.robot_home(getattr(args, "home", None))
     if home is None:
-        print(
-            "\n  No robot home. Set ROBOT_HOME, or pass --home, or run `castor up`"
-            " first.\n"
-        )
+        print("\n  No robot home. Set ROBOT_HOME, or pass --home, or run `castor up` first.\n")
         raise SystemExit(2)
     reason = (getattr(args, "reason", "") or "").strip()
     if not reason:
-        print("\n  --reason is required. A pause nobody can explain reads as broken"
-              " hardware.\n")
+        print("\n  --reason is required. A pause nobody can explain reads as broken hardware.\n")
         raise SystemExit(2)
     principal = (getattr(args, "principal", "") or "").strip() or _current_operator()
     state = _latch.record_pause(principal=principal, reason=reason, home=home)
@@ -6143,10 +6144,7 @@ def cmd_resume(args) -> None:
 
     if before.estop_engaged:
         if not getattr(args, "clear_estop", False):
-            print(
-                f"\n  An e-stop is still latched (source="
-                f"{before.estop_source or 'unknown'})"
-            )
+            print(f"\n  An e-stop is still latched (source={before.estop_source or 'unknown'})")
             print(f"  Set by   {before.estop_principal or 'unknown'}")
             print(f"  At       {_latch._stamp(before.estop_at)}")
             print(f"  Because  {before.estop_reason or '(no reason recorded)'}")

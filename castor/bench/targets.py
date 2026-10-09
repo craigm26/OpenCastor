@@ -280,8 +280,7 @@ class SimTarget(Target):
         gaps: list[str] = []
         if not self.repo or not (self.repo / "scripts" / "duck-sim").is_file():
             gaps.append(
-                f"no scripts/duck-sim under {self.repo or '<unset>'}: "
-                f"{SIM_REQUIREMENTS[0][1]}"
+                f"no scripts/duck-sim under {self.repo or '<unset>'}: {SIM_REQUIREMENTS[0][1]}"
             )
             return gaps  # nothing below can be checked without the checkout
         for name in ("robotd", "robotctl"):
@@ -294,9 +293,7 @@ class SimTarget(Target):
     def setup(self, record: Record) -> None:
         gaps = self.missing()
         if gaps:
-            raise TargetUnavailable(
-                "duck-sim cannot run here:\n  " + "\n  ".join(gaps)
-            )
+            raise TargetUnavailable("duck-sim cannot run here:\n  " + "\n  ".join(gaps))
         env = {
             **os.environ,
             "DUCK_SIM_RL": str(self.rl),
@@ -314,8 +311,12 @@ class SimTarget(Target):
             f"DUCK_SIM_VIEWER=0 DUCK_SIM_PORT={self.port} {' '.join(cmd)}"
         )
         self._proc = subprocess.Popen(
-            cmd, env=env, cwd=str(self.repo), stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, text=True
+            cmd,
+            env=env,
+            cwd=str(self.repo),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
         )
         sock = self.driver_config["socket"]
         deadline = time.monotonic() + 120.0

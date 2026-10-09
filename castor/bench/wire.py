@@ -211,7 +211,7 @@ SOURCES: dict[str, str] = {
 }
 
 
-def missing_keys(payload: object, required: "tuple[str, ...]") -> list[str]:
+def missing_keys(payload: object, required: tuple[str, ...]) -> list[str]:
     """Which of ``required`` are absent from ``payload``.
 
     A non-dict payload is missing all of them: a reply that is not an object is

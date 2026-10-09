@@ -29,6 +29,25 @@ def _make_pypi_response(version: str, status_code: int = 200) -> MagicMock:
     return resp
 
 
+def _newer_than_installed() -> str:
+    """A release that sorts above whatever is installed.
+
+    Since 3.1.0 the 3.x line is published with the PEP 440 epoch ``1!`` (1!3.5.0
+    and so on), because pip otherwise prefers the 2026.x CalVer releases (see
+    docs/pypi-versioning.md). A bare 9999.0.0 sorts BELOW every epoch-1 version,
+    so "9999.0.0" stopped being newer the day the epoch shipped.
+    """
+    from packaging.version import Version
+
+    import castor
+
+    epoch = Version(castor.__version__).epoch
+    return f"{epoch}!9999.0.0" if epoch else "9999.0.0"
+
+
+NEWER = _newer_than_installed()
+
+
 def _fake_httpx(version: str = "1.0.0", status_code: int = 200, side_effect=None):
     """Return a fake httpx module whose get() returns the given response."""
     mod = ModuleType("httpx")
@@ -178,7 +197,7 @@ class TestCheckForUpdateCache:
         current = castor.__version__
         data = {
             "current": current,
-            "latest": "9999.0.0",
+            "latest": NEWER,
             "update_available": True,
             "checked_at": time.time(),
         }
@@ -188,9 +207,9 @@ class TestCheckForUpdateCache:
         with patch.dict(sys.modules, {"rich": None, "rich.console": None}):
             result = check_for_update(quiet=False)
         assert result["update_available"] is True
-        assert result["latest"] == "9999.0.0"
+        assert result["latest"] == NEWER
         captured = capsys.readouterr()
-        assert "9999.0.0" in captured.err
+        assert NEWER in captured.err
 
     def test_cache_hit_quiet_suppresses_hint(self, monkeypatch, tmp_path, capsys):
         cache = tmp_path / "cache.json"
@@ -199,7 +218,7 @@ class TestCheckForUpdateCache:
         current = castor.__version__
         data = {
             "current": current,
-            "latest": "9999.0.0",
+            "latest": NEWER,
             "update_available": True,
             "checked_at": time.time(),
         }
@@ -218,7 +237,7 @@ class TestCheckForUpdateCache:
         current = castor.__version__
         data = {
             "current": "0.0.0",  # different from actual current
-            "latest": "9999.0.0",
+            "latest": NEWER,
             "update_available": True,
             "checked_at": time.time(),
         }
@@ -242,7 +261,7 @@ class TestCheckForUpdateCache:
         }
         cache.write_text(json.dumps(data))
         monkeypatch.setattr(uc, "_CACHE_FILE", str(cache))
-        with patch.dict(sys.modules, {"httpx": _fake_httpx("9999.0.0")}):
+        with patch.dict(sys.modules, {"httpx": _fake_httpx(NEWER)}):
             result = check_for_update(quiet=True)
         assert result["update_available"] is True
 
@@ -267,10 +286,10 @@ class TestCheckForUpdatePyPI:
         import castor
 
         current = castor.__version__
-        with patch.dict(sys.modules, {"httpx": _fake_httpx("9999.0.0")}):
+        with patch.dict(sys.modules, {"httpx": _fake_httpx(NEWER)}):
             result = check_for_update(quiet=True)
         assert result["update_available"] is True
-        assert result["latest"] == "9999.0.0"
+        assert result["latest"] == NEWER
         assert result["current"] == current
 
     def test_same_version_no_update(self, monkeypatch, tmp_path):
@@ -309,7 +328,7 @@ class TestCheckForUpdatePyPI:
 
     def test_http_non_200_no_update(self, monkeypatch, tmp_path):
         self._no_cache(monkeypatch, tmp_path)
-        with patch.dict(sys.modules, {"httpx": _fake_httpx("9999.0.0", status_code=404)}):
+        with patch.dict(sys.modules, {"httpx": _fake_httpx(NEWER, status_code=404)}):
             result = check_for_update(quiet=True)
         assert result["update_available"] is False
 
@@ -364,12 +383,12 @@ class TestCheckForUpdatePyPI:
     def test_update_prints_hint_when_not_quiet(self, monkeypatch, tmp_path, capsys):
         self._no_cache(monkeypatch, tmp_path)
         with patch.dict(
-            sys.modules, {"httpx": _fake_httpx("9999.0.0"), "rich": None, "rich.console": None}
+            sys.modules, {"httpx": _fake_httpx(NEWER), "rich": None, "rich.console": None}
         ):
             result = check_for_update(quiet=False)
         assert result["update_available"] is True
         captured = capsys.readouterr()
-        assert "9999.0.0" in captured.err
+        assert NEWER in captured.err
 
     def test_no_update_no_hint(self, monkeypatch, tmp_path, capsys):
         self._no_cache(monkeypatch, tmp_path)
@@ -385,7 +404,7 @@ class TestCheckForUpdatePyPI:
 
     def test_write_cache_called_on_success(self, monkeypatch, tmp_path):
         self._no_cache(monkeypatch, tmp_path)
-        with patch.dict(sys.modules, {"httpx": _fake_httpx("9999.0.0")}):
+        with patch.dict(sys.modules, {"httpx": _fake_httpx(NEWER)}):
             check_for_update(quiet=True)
         # Cache file should now exist (written successfully)
         cache_path = str(tmp_path / "no_cache.json")
@@ -477,7 +496,7 @@ class TestPrintUpdateStatus:
         import castor
 
         v = castor.__version__
-        return {"current": v, "latest": "9999.0.0", "update_available": True}
+        return {"current": v, "latest": NEWER, "update_available": True}
 
     def test_update_available_with_rich(self):
         mock_console = MagicMock()
@@ -489,7 +508,7 @@ class TestPrintUpdateStatus:
             with patch.dict(sys.modules, {"rich.console": mock_rich}):
                 print_update_status()
         calls = [str(c) for c in mock_console.print.call_args_list]
-        assert any("Update" in c or "9999.0.0" in c for c in calls)
+        assert any("Update" in c or NEWER in c for c in calls)
 
     def test_up_to_date_with_rich(self):
         mock_console = MagicMock()

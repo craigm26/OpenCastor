@@ -145,7 +145,7 @@ class WireTap:
 
     def wait_for(
         self,
-        predicate: "Callable[[Frame], bool]",
+        predicate: Callable[[Frame], bool],
         timeout: float,
         *,
         since: float = 0.0,
@@ -163,7 +163,7 @@ class WireTap:
             time.sleep(0.005)
         return None
 
-    def carry(self, frames: "list[Frame]") -> None:
+    def carry(self, frames: list[Frame]) -> None:
         """Copy frames into the record's ``wire`` list, in order."""
         for frame in frames:
             self._record.wire_line(frame.direction, frame.obj, t=frame.t)
@@ -382,9 +382,7 @@ def build_target(
             )
         return MockModeTarget()
     if ci:
-        return MockTarget(
-            in_process=in_process_mock, mock_cmd=mock_cmd, replies=mock_replies
-        )
+        return MockTarget(in_process=in_process_mock, mock_cmd=mock_cmd, replies=mock_replies)
     if transport == "auto":
         transport = "unix" if host is None else "ssh"
     return RealTarget(
@@ -408,7 +406,7 @@ def run(
     wifi_reason: Optional[str] = None,
     fresh_venv: Optional[str] = None,
     repo_shas: Optional[dict[str, Optional[str]]] = None,
-    say: "Callable[[str], None]" = lambda _line: None,
+    say: Callable[[str], None] = lambda _line: None,
 ) -> Record:
     """Run the benchmark and return the record. Never raises on a failed checkpoint.
 
@@ -728,9 +726,7 @@ def _c3_identity(
     else:
         gone = wire.missing_keys(battery, wire.BATTERY_REQUIRED)
         if battery is not None and gone:
-            problems.append(
-                f"{wire.HEALTH_BATTERY} is missing {gone} ({wire.SOURCES['Battery']})"
-            )
+            problems.append(f"{wire.HEALTH_BATTERY} is missing {gone} ({wire.SOURCES['Battery']})")
 
     if health_d and health_d.get(wire.HEALTH_HEALTHY) is not True:
         problems.append(
@@ -765,16 +761,15 @@ def _c3_identity(
 
     gone = wire.missing_keys(policies, wire.POLICIES_REQUIRED)
     if gone:
-        problems.append(
-            f"{wire.M_POLICIES} is missing {gone} ({wire.SOURCES['PoliciesResult']})"
-        )
+        problems.append(f"{wire.M_POLICIES} is missing {gone} ({wire.SOURCES['PoliciesResult']})")
     policies_d = policies if isinstance(policies, dict) else {}
     slots = policies_d.get(wire.POL_SLOTS) or []
     walk_slot = next(
         (
             s
             for s in slots
-            if isinstance(s, dict) and s.get(wire.SLOT_SLOT) == wire.WALK_SLOT
+            if isinstance(s, dict)
+            and s.get(wire.SLOT_SLOT) == wire.WALK_SLOT
             and s.get(wire.SLOT_PATH)
         ),
         None,
@@ -817,14 +812,11 @@ def _c3_identity(
         problems.append(f"{wire.M_SUBSCRIBE} did not answer: {exc}")
     gone = wire.missing_keys(subscribed, wire.SUBSCRIBE_REQUIRED)
     if gone:
-        problems.append(
-            f"{wire.M_SUBSCRIBE} is missing {gone} ({wire.SOURCES['SubscribeResult']})"
-        )
+        problems.append(f"{wire.M_SUBSCRIBE} is missing {gone} ({wire.SOURCES['SubscribeResult']})")
     subscribed_d = subscribed if isinstance(subscribed, dict) else {}
     evidence["subscribe"] = {
         key: subscribed_d.get(key)
-        for key in (wire.SUB_ACCEPTED, *wire.SUBSCRIBE_SLOTS, wire.SUB_UNAVAILABLE,
-                    wire.SUB_SKILLS)
+        for key in (wire.SUB_ACCEPTED, *wire.SUBSCRIBE_SLOTS, wire.SUB_UNAVAILABLE, wire.SUB_SKILLS)
     }
     if "networks" in subscribed_d:
         record.note(
@@ -974,7 +966,7 @@ def _c4_brain(record: Record, driver: Any, brain: Any, request: str, say) -> Opt
 # ---------------------------------------------------------------------------
 
 
-def _first_motion(plan: "list[dict]") -> Optional[dict]:
+def _first_motion(plan: list[dict]) -> Optional[dict]:
     """The first step of an expanded plan that produces a twist."""
     for step in plan:
         if step.get("move") in ("walk", "turn", "strafe"):
@@ -1048,7 +1040,7 @@ def _c5_c6_c7(
     )
     twist = _twist_of(first) or (0.0, 0.0, 0.0)
     c5_evidence: dict[str, Any] = {
-        "params": dict(zip(wire.MOVE_KEYS, twist)),
+        "params": dict(zip(wire.MOVE_KEYS, twist, strict=False)),
         "intent_hz": intent_hz,
         "command_ttl_s": ttl,
         "resend_seen_at": round(resend.t, 4) if resend else None,
@@ -1077,8 +1069,7 @@ def _c5_c6_c7(
     record.mark("C5", True, c5_evidence, t=first.t)
     tap.carry([first, resend])
     say(
-        f"  C5 move: ok ({c5_evidence['params']}, re-sent at "
-        f"+{(resend.t - first.t) * 1000:.0f} ms)"
+        f"  C5 move: ok ({c5_evidence['params']}, re-sent at +{(resend.t - first.t) * 1000:.0f} ms)"
     )
 
     # ── C6: stop sending, and watch for the stop ───────────────────────
@@ -1125,8 +1116,7 @@ def _c5_c6_c7(
         )
         tap.carry([stopper])
         say(
-            f"  C6 stop: ok ({fired_by}, "
-            f"{(stopper.t - silence_start) * 1000:.0f} ms after silence)"
+            f"  C6 stop: ok ({fired_by}, {(stopper.t - silence_start) * 1000:.0f} ms after silence)"
         )
 
     # ── C7 ─────────────────────────────────────────────────────────────
@@ -1167,7 +1157,8 @@ def _c5_c6_c7(
     p0 = list(odom_before.get(wire.ODOM_POSITION) or [])
     p1 = list(odom_after.get(wire.ODOM_POSITION) or [])
     moved = (
-        sum((a - b) ** 2 for a, b in zip(p1[:2], p0[:2])) ** 0.5 if len(p0) >= 2 and len(p1) >= 2
+        sum((a - b) ** 2 for a, b in zip(p1[:2], p0[:2], strict=False)) ** 0.5
+        if len(p0) >= 2 and len(p1) >= 2
         else None
     )
     fallen = bool((driver.get_state().get(wire.STATE_SAFETY) or {}).get(wire.SAFETY_FALLEN))

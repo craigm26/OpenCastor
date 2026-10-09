@@ -176,11 +176,16 @@ def test_ac_001_allow_records_audit_entry():
         json=_envelope(msg_id="msg-ac-001-allow"),
     )
     assert response.status_code == 200
-    assert len(chain.entries) == 1
-    entry = chain.entries[0]
+    # robot-md-gateway 0.5.0a8 (OC-M-04) records an "intent" entry once every gate
+    # has passed and before the actuator is called, then the "outcome" entry, so an
+    # allow is a linked pair.
+    assert [e.entry_kind for e in chain.entries] == ["intent", "outcome"]
+    intent, entry = chain.entries
     assert entry.decision == "allow"
     assert entry.msg_id == "msg-ac-001-allow"
     assert entry.envelope_kid is not None
+    assert intent.msg_id == entry.msg_id
+    assert entry.intent_chain_hash == intent.chain_hash
 
 
 def test_ac_001_deny_records_audit_entry():
@@ -228,7 +233,8 @@ def test_ac_001_signed_bundle_verifies_offline():
         headers={"Authorization": "Bearer actuate-token"},
         json=_envelope(msg_id="msg-ac-001-bundle-2", tool_name="mcp__robot__not_allowed"),
     )
-    assert len(chain.entries) == 2
+    # The allow is an intent and an outcome entry; the deny is one entry.
+    assert [e.decision for e in chain.entries] == ["allow", "allow", "deny"]
 
     priv_pem, pub_pem = _ed25519_pair()
     bundle = chain.export_signed(

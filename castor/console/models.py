@@ -862,10 +862,19 @@ FORMAT_MAX_BYTES = 64 * 1024
 #: in its server process with no depth or size guard of its own: ``pattern``
 #: recurses once per nested group, ``$ref`` shares one rule among many places,
 #: and counts (``minItems``, ``maxLength``) multiply rules.
-FORMAT_KEYWORDS = frozenset({
-    "anyOf", "type", "properties", "required", "additionalProperties", "enum",
-    "const", "description", "title",
-})
+FORMAT_KEYWORDS = frozenset(
+    {
+        "anyOf",
+        "type",
+        "properties",
+        "required",
+        "additionalProperties",
+        "enum",
+        "const",
+        "description",
+        "title",
+    }
+)
 #: How many schemas deep a reply schema may nest. The phone's is four deep (the
 #: root's anyOf, a branch, its args, one argument). The converter recurses once
 #: per level and grows each rule's name by the level's name, so ten thousand
@@ -888,15 +897,19 @@ def _check_schema(node: Any, depth: int = 1) -> None:
         raise _refuse(f"format nests more than {FORMAT_MAX_DEPTH} schemas deep")
     unknown = [str(key)[:40] for key in node if key not in FORMAT_KEYWORDS]
     if unknown:
-        raise _refuse(f"format uses {', '.join(sorted(unknown)[:3])}; this robot takes only "
-                      f"{', '.join(sorted(FORMAT_KEYWORDS))}")
+        raise _refuse(
+            f"format uses {', '.join(sorted(unknown)[:3])}; this robot takes only "
+            f"{', '.join(sorted(FORMAT_KEYWORDS))}"
+        )
     for key, value in node.items():
         if key == "properties":
             if not isinstance(value, dict):
                 raise _refuse("format: properties must be an object")
             if len(value) > FORMAT_MAX_PROPERTIES:
-                raise _refuse(f"format declares {len(value)} properties on one object; "
-                              f"this robot takes at most {FORMAT_MAX_PROPERTIES}")
+                raise _refuse(
+                    f"format declares {len(value)} properties on one object; "
+                    f"this robot takes at most {FORMAT_MAX_PROPERTIES}"
+                )
             for sub in value.values():
                 _check_schema(sub, depth + 1)
         elif key == "anyOf":
@@ -1088,8 +1101,9 @@ def drive_signer() -> tuple[str, Any] | None:
         missing, present = (
             (SIGNING_KID_ENV, SIGNING_KEY_ENV) if path else (SIGNING_KEY_ENV, SIGNING_KID_ENV)
         )
-        raise DriveSignerUnavailable(f"{missing} is not set, and signing needs it as well "
-                                     f"as {present}")
+        raise DriveSignerUnavailable(
+            f"{missing} is not set, and signing needs it as well as {present}"
+        )
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -1376,8 +1390,7 @@ def _prepare(req: ChatRequest) -> _Turn:
             image = _decode_frame(req.image_b64)
         model = "claude (subscription)" if provider == "anthropic-sub" else "gemini-robotics-er"
     elsewhere = _runs_elsewhere_of(model) if provider == "ollama" else True
-    return _Turn(req, provider, model, options, think, keep_alive_s, image, elsewhere,
-                 reply_format)
+    return _Turn(req, provider, model, options, think, keep_alive_s, image, elsewhere, reply_format)
 
 
 # Grounding and the receipt --------------------------------------------------
