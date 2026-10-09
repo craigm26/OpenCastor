@@ -80,18 +80,26 @@ def get_loc() -> str:
     return None
 
 
+#: OpenCastor's own version in the README's ecosystem table, found by its row
+#: rather than by its shape: the same table lists other projects' vX.Y.Z
+#: versions, and a 3.x number looks like any of them.
+OWN_ROW = re.compile(r"(\| \*\*OpenCastor\*\* \(this\) \| )v[0-9][^ |]*")
+
+#: The old CalVer line (v2026.2.19.0 and so on), wherever it still appears.
+CALVER = re.compile(r"v20\d\d\.\d+\.\d+\.\d+")
+
+
 def replace_version_in_file(path: Path, version: str, v_version: str) -> bool:
-    """Replace any older vYYYY.M.DD.P pattern with the current version."""
+    """Put the current version in this project's own version touchpoints."""
     if not path.exists():
         return False
     text = path.read_text()
-    # Match versioned strings like v2026.2.19.0, v2026.2.20.3, etc.
-    new_text = re.sub(r"v20\d\d\.\d+\.\d+\.\d+", v_version, text)
+    new_text, own = OWN_ROW.subn(lambda m: m.group(1) + v_version, text)
+    new_text, legacy = CALVER.subn(v_version, new_text)
     if new_text != text:
         path.write_text(new_text)
-        count = len(re.findall(r"v20\d\d\.\d+\.\d+\.\d+", text))
         rel = str(path.relative_to(ROOT))
-        print(f"  {rel:<35} → {v_version}  ({count} replacement(s))")
+        print(f"  {rel:<35} → {v_version}  ({own + legacy} replacement(s))")
         return True
     return False
 

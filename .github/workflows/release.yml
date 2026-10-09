@@ -174,12 +174,18 @@ jobs:
           TAG_VERSION="${GITHUB_REF#refs/tags/v}"
           PYPROJECT_VERSION=$(python3 -c "import tomllib; f=open('pyproject.toml','rb'); d=tomllib.load(f); print(d['project']['version'])" 2>/dev/null || \
                               python3 -c "import re; s=open('pyproject.toml').read(); print(re.search(r'version\s*=\s*\"([^\"]+)\"', s).group(1))")
-          PUBLIC_VERSION="${PYPROJECT_VERSION#*!}"   # drop a PEP 440 epoch, if any
+          # A CalVer tag (the old 2026.x line) has no epoch; every other tag is the
+          # 3.x line and must carry the 1! epoch, or the wheel lands in epoch 0 and
+          # sorts below 2026.4.23.0 on PyPI.
+          case "$TAG_VERSION" in
+            20[0-9][0-9].*) EXPECTED="$TAG_VERSION" ;;
+            *)              EXPECTED="1!$TAG_VERSION" ;;
+          esac
           echo "Tag version:       $TAG_VERSION"
-          echo "pyproject version: $PYPROJECT_VERSION"
-          if [ "$TAG_VERSION" != "$PUBLIC_VERSION" ]; then
-            echo "::error::Version mismatch! Tag is v$TAG_VERSION but pyproject.toml has $PYPROJECT_VERSION."
-            echo "::error::Bump the version in pyproject.toml and castor/__init__.py to $TAG_VERSION (keeping the 1! epoch on the 3.x line), commit, then re-push the tag."
+          echo "pyproject version: $PYPROJECT_VERSION (expected $EXPECTED)"
+          if [ "$PYPROJECT_VERSION" != "$EXPECTED" ]; then
+            echo "::error::Version mismatch! Tag is v$TAG_VERSION, so pyproject.toml must say $EXPECTED; it says $PYPROJECT_VERSION."
+            echo "::error::Set the version in pyproject.toml and castor/__init__.py to $EXPECTED, commit, then re-push the tag."
             exit 1
           fi
           echo "✅ Versions match: $TAG_VERSION ($PYPROJECT_VERSION)"
