@@ -33,6 +33,8 @@ import sys
 import tempfile
 import threading
 import uuid
+from collections.abc import Callable
+from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -386,29 +388,35 @@ class ShimHandler(BaseHTTPRequestHandler):
 
         scratch = self.runner.scratch_for_request()
         try:
-            try:
-                plan = prepare(body, scratch)
-            except TranslationError as exc:
-                self._error(400, str(exc))
-                return
-            try:
-                envelope = self.runner.run(plan, scratch)
-            except ShimBusy as exc:
-                # 429, not a queue: the caller decides whether to wait. Holding
-                # the connection open would let a burst pile up unbounded.
-                self._error(429, str(exc), error_type="rate_limit_error")
-                return
-            except ClaudeCLIError as exc:
-                # 502: the upstream (the CLI) failed, not the caller's request.
-                # The agent policy retries 5xx, which is the behaviour we want
-                # for a transient CLI hiccup.
-                self._error(502, str(exc))
-                return
-            model = plan.model or self.runner.model
-            builder = anthropic_response if anthropic else chat_response
-            self._send(200, builder(envelope, plan.tool_names, model))
+            reply = self._completion(body, scratch, anthropic=anthropic)
         finally:
+            # The frames go before the reply does, so a caller holding the
+            # response never finds them still on disk.
             self.runner.cleanup(scratch)
+        reply()
+
+    def _completion(
+        self, body: dict[str, Any], scratch: Path, *, anthropic: bool
+    ) -> Callable[[], None]:
+        """Run one completion; return the reply to send once frames are gone."""
+        try:
+            plan = prepare(body, scratch)
+        except TranslationError as exc:
+            return partial(self._error, 400, str(exc))
+        try:
+            envelope = self.runner.run(plan, scratch)
+        except ShimBusy as exc:
+            # 429, not a queue: the caller decides whether to wait. Holding
+            # the connection open would let a burst pile up unbounded.
+            return partial(self._error, 429, str(exc), error_type="rate_limit_error")
+        except ClaudeCLIError as exc:
+            # 502: the upstream (the CLI) failed, not the caller's request.
+            # The agent policy retries 5xx, which is the behaviour we want
+            # for a transient CLI hiccup.
+            return partial(self._error, 502, str(exc))
+        model = plan.model or self.runner.model
+        builder = anthropic_response if anthropic else chat_response
+        return partial(self._send, 200, builder(envelope, plan.tool_names, model))
 
 
 def make_server(
