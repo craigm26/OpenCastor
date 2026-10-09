@@ -340,13 +340,13 @@ OpenCastor is Apache 2.0 and community-driven.
 <!-- BEGIN: ecosystem certification disclaimer (canonical, derived from spec §10) -->
 > **Conformance is not certification.**
 >
-> Conformance to RCAN tracks (L1–L4 protocol, Gateway Authority, HIL Runtime Safety) is *self-asserted via signed bundles* and *independently replayable from those bundles*. Conformance is not certification. Certification requires audit by a qualified third-party body, which is intentionally out-of-scope for the foundation in 2026.
+> Conformance to RCAN tracks (L1–L4 protocol, Gateway Authority, HIL Runtime Safety) is *self-asserted via signed bundles* and *independently replayable from those bundles*. Conformance is not certification. Certification requires audit by a qualified third-party body, which is intentionally out of scope for this project in 2026.
 <!-- END: ecosystem certification disclaimer -->
 
-<!-- BEGIN: ecosystem authority disclaimer (canonical, derived from spec §10) -->
-> **Where safety is actually enforced.**
+<!-- BEGIN: ecosystem authority disclaimer (canonical; revised 2026-10-08 from spec §10 after EV-03; keep identical in robot-md, robot-md-gateway and OpenCastor) -->
+> **Where safety is meant to be enforced.**
 >
-> Physical safety is enforced at Layer 3 (`robot-md-gateway`) or Layer 4 (a runtime that embeds it, e.g., OpenCastor). Declaration alone (Layer 1) does not enforce safety. Agent host alone (Layer 2) is not the safety boundary. If a deployment lacks Layer 3, no safety claim attaches to it.
+> Physical limits are meant to be enforced at Layer 3 (`robot-md-gateway` and the actuator driver it calls), and only for commands that pass through it. OpenCastor (Layer 4) does not embed the gateway yet, so actuators it drives directly are not covered. Declaration alone (Layer 1) does not enforce safety. Agent host alone (Layer 2) is not the safety boundary. If a deployment lacks Layer 3, no safety claim attaches to it. Layer 3 is not a certified safety function, and hostile-input testing in simulation (October 2026) found motions it does not yet bound.
 <!-- END: ecosystem authority disclaimer -->
 
 ## License
