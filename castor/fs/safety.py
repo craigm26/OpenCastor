@@ -133,6 +133,12 @@ class SafetyLayer:
         #: the signature of an out-of-process CLEAR, and the stop is reverted.
         #: Reentrant so a future caller that already holds it cannot deadlock.
         self._hold_lock = threading.RLock()
+        #: Serialises every read-check-write of the standing motor command: a
+        #: /dev/motor write and :meth:`enforce_workspace`, which re-checks the
+        #: command from the workspace enforcer's thread every control cycle.
+        #: Public as :attr:`motor_lock` so the caller that hands /dev/motor to
+        #: the driver can hold it from the write to the driver call.
+        self._motor_lock = threading.RLock()
         self.capability_broker = capability_broker
 
         # Rate limiting state
@@ -707,36 +713,59 @@ class SafetyLayer:
         A refused motor write leaves the previous command standing, and a command that was safe
         when it was accepted stops being safe as the robot moves. So whenever a motor write is
         refused, the standing command is re-checked against the workspace policy (if one is set);
-        see :meth:`enforce_workspace`, which a driver loop should also call every control cycle.
+        see :meth:`enforce_workspace`, which
+        :class:`~castor.safety.workspace_enforcer.WorkspaceEnforcer` also calls every control
+        cycle. A motor write holds :attr:`motor_lock`, so it never interleaves with that re-check.
         """
-        ok = self._write_checked(path, data, principal=principal, meta=meta, source=source)
-        if not ok and path.startswith("/dev/motor") and not (self._estop or self._paused):
-            self.enforce_workspace(path)
-        return ok
+        if not path.startswith("/dev/motor"):
+            return self._write_checked(path, data, principal=principal, meta=meta, source=source)
+        with self._motor_lock:
+            ok = self._write_checked(path, data, principal=principal, meta=meta, source=source)
+            if not ok and not (self._estop or self._paused):
+                self.enforce_workspace(path)
+            return ok
+
+    @property
+    def motor_lock(self) -> threading.RLock:
+        """Held by every read-check-write of the standing motor command (reentrant).
+
+        A caller that writes /dev/motor, reads it back and hands the result to a driver holds
+        this from the write to the driver call. Otherwise a per-cycle re-check could replace the
+        command between the read-back and the driver call: the driver would run the old command
+        while /dev/motor held the safe replacement, and no later re-check would see it.
+        """
+        return self._motor_lock
 
     def enforce_workspace(self, path: str = "/dev/motor") -> bool:
         """Re-check the motor command that is standing now against the workspace policy.
 
         Returns True if it may keep running. If its stopping path leaves the workspace, it is
         replaced by the policy's refusal command (no translation) and False is returned. A
-        standing command that is not a finite velocity is replaced by a stop. With no workspace
-        policy, or the ``workspace_motor`` policy disabled, this does nothing and returns True.
+        standing command that is not a finite velocity, or one the policy cannot check (it
+        raised), is replaced by a stop. With no workspace policy, or the ``workspace_motor``
+        policy disabled, this does nothing and returns True.
         """
         if self.workspace_policy is None or not POLICIES["workspace_motor"]["enabled"]:
             return True
-        current = self.ns.read(path)
-        if not isinstance(current, dict) or self._is_stop_write(path, current):
-            return True
-        invalid = self._invalid_motor_reason(current)
-        if invalid:
-            self._stop_motors(path, "safety", "invalid_motor_command", invalid, None)
+        with self._motor_lock:
+            current = self.ns.read(path)
+            if not isinstance(current, dict) or self._is_stop_write(path, current):
+                return True
+            invalid = self._invalid_motor_reason(current)
+            if invalid:
+                self._stop_motors(path, "safety", "invalid_motor_command", invalid, None)
+                return False
+            try:
+                allowed, why = self.workspace_policy.check(current)
+            except Exception as exc:  # noqa: BLE001 - a check that cannot run is not a pass
+                logger.error("Workspace check failed, motors stopped: %s", exc)
+                self._stop_motors(path, "safety", "workspace_check_failed", repr(exc), None)
+                return False
+            if allowed:
+                return True
+            self._audit_safety("safety", path, "workspace_enforced", why)
+            self.ns.write(path, self.workspace_policy.refusal_command(current))
             return False
-        allowed, why = self.workspace_policy.check(current)
-        if allowed:
-            return True
-        self._audit_safety("safety", path, "workspace_enforced", why)
-        self.ns.write(path, self.workspace_policy.refusal_command(current))
-        return False
 
     def _write_checked(
         self,
