@@ -145,7 +145,7 @@ class WireTap:
 
     def wait_for(
         self,
-        predicate: "Callable[[Frame], bool]",
+        predicate: Callable[[Frame], bool],
         timeout: float,
         *,
         since: float = 0.0,
@@ -163,7 +163,7 @@ class WireTap:
             time.sleep(0.005)
         return None
 
-    def carry(self, frames: "list[Frame]") -> None:
+    def carry(self, frames: list[Frame]) -> None:
         """Copy frames into the record's ``wire`` list, in order."""
         for frame in frames:
             self._record.wire_line(frame.direction, frame.obj, t=frame.t)
@@ -408,7 +408,7 @@ def run(
     wifi_reason: Optional[str] = None,
     fresh_venv: Optional[str] = None,
     repo_shas: Optional[dict[str, Optional[str]]] = None,
-    say: "Callable[[str], None]" = lambda _line: None,
+    say: Callable[[str], None] = lambda _line: None,
 ) -> Record:
     """Run the benchmark and return the record. Never raises on a failed checkpoint.
 
@@ -974,7 +974,7 @@ def _c4_brain(record: Record, driver: Any, brain: Any, request: str, say) -> Opt
 # ---------------------------------------------------------------------------
 
 
-def _first_motion(plan: "list[dict]") -> Optional[dict]:
+def _first_motion(plan: list[dict]) -> Optional[dict]:
     """The first step of an expanded plan that produces a twist."""
     for step in plan:
         if step.get("move") in ("walk", "turn", "strafe"):
@@ -1048,7 +1048,7 @@ def _c5_c6_c7(
     )
     twist = _twist_of(first) or (0.0, 0.0, 0.0)
     c5_evidence: dict[str, Any] = {
-        "params": dict(zip(wire.MOVE_KEYS, twist)),
+        "params": dict(zip(wire.MOVE_KEYS, twist, strict=False)),
         "intent_hz": intent_hz,
         "command_ttl_s": ttl,
         "resend_seen_at": round(resend.t, 4) if resend else None,
@@ -1167,7 +1167,7 @@ def _c5_c6_c7(
     p0 = list(odom_before.get(wire.ODOM_POSITION) or [])
     p1 = list(odom_after.get(wire.ODOM_POSITION) or [])
     moved = (
-        sum((a - b) ** 2 for a, b in zip(p1[:2], p0[:2])) ** 0.5 if len(p0) >= 2 and len(p1) >= 2
+        sum((a - b) ** 2 for a, b in zip(p1[:2], p0[:2], strict=False)) ** 0.5 if len(p0) >= 2 and len(p1) >= 2
         else None
     )
     fallen = bool((driver.get_state().get(wire.STATE_SAFETY) or {}).get(wire.SAFETY_FALLEN))

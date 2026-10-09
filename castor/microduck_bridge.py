@@ -136,7 +136,7 @@ def read_token(path: str) -> str:
     if mode & (stat.S_IRGRP | stat.S_IROTH | stat.S_IWGRP | stat.S_IWOTH):
         raise Refusal(f"{path} is readable or writable by other users "
                       f"(mode {oct(stat.S_IMODE(mode))}). chmod 600 it.")
-    with open(path, "r", encoding="utf-8") as handle:
+    with open(path, encoding="utf-8") as handle:
         token = handle.read().strip()
     if len(token) < MIN_TOKEN_LEN:
         raise Refusal(f"the token in {path} is {len(token)} characters; "
@@ -162,7 +162,7 @@ def mint_token(path: str) -> tuple[str, bool]:
     """
     target = os.path.expanduser(path)
     if os.path.exists(target):
-        with open(target, "r", encoding="utf-8") as handle:
+        with open(target, encoding="utf-8") as handle:
             existing = handle.read().strip()
         if len(existing) >= MIN_TOKEN_LEN:
             os.chmod(target, 0o600)
@@ -201,7 +201,7 @@ def hello_line(token: str) -> bytes:
     bytes today and a different order the day somebody sorts keys, so this
     formats the string the same way Swift does and a test compares the two.
     """
-    return f'{{"microduck":"{HELLO_VERSION}","token":"{_escaped(token)}"}}\n'.encode("utf-8")
+    return f'{{"microduck":"{HELLO_VERSION}","token":"{_escaped(token)}"}}\n'.encode()
 
 
 def hello_is_valid(line: bytes, token: str) -> bool:
@@ -334,7 +334,7 @@ class Installer:
         try:
             data = base64.b64decode(encoded, validate=True)
         except (ValueError, TypeError):
-            raise Refusal("the `bytes` field is not base64")
+            raise Refusal("the `bytes` field is not base64") from None
         if not data:
             raise Refusal("the policy is empty")
         if len(data) > INSTALL_CAP:
@@ -374,7 +374,7 @@ class Installer:
                     "why": "this bridge was started without --robotd-toml; edit the "
                            f"[policy] table yourself: {slot} = \"{path}\""}
         try:
-            with open(self.robotd_toml, "r", encoding="utf-8") as f:
+            with open(self.robotd_toml, encoding="utf-8") as f:
                 lines = f.read().split("\n")
         except OSError as why:
             return {"asked": slot, "applied": False,
@@ -404,7 +404,7 @@ class Installer:
         lines[found] = f'{indent}{slot} = "{path}"'
         backup = f"{self.robotd_toml}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
         with open(backup, "w", encoding="utf-8") as f:
-            with open(self.robotd_toml, "r", encoding="utf-8") as original:
+            with open(self.robotd_toml, encoding="utf-8") as original:
                 f.write(original.read())
         tmp = f"{self.robotd_toml}.part-{os.getpid()}"
         with open(tmp, "w", encoding="utf-8") as f:
@@ -680,7 +680,7 @@ def _greet(client: socket.socket, where, upstream: Upstream, token: str,
         Relay(client, robotd, deadman_ms, log=log, installer=installer).run()
         robotd.close()
         log(f"closed {where[0]}")
-    except socket.timeout:
+    except TimeoutError:
         log(f"refused {where[0]}: no hello within 5 s")
     except (FileNotFoundError, ConnectionRefusedError):
         client.sendall(b'{"error":"microduck-bridge: no robotd socket here"}\n')

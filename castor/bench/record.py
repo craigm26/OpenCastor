@@ -202,7 +202,7 @@ class Record:
     # the pass rule
     # ------------------------------------------------------------------
 
-    def decide(self, mandatory: "tuple[str, ...]", *, real: bool, real_reason: str) -> str:
+    def decide(self, mandatory: tuple[str, ...], *, real: bool, real_reason: str) -> str:
         """Apply the pass rule and set ``verdict``, ``verdict_reason``, ``elapsed_s``.
 
         The rule: **all mandatory checkpoints, in order, with the last one's
@@ -287,7 +287,7 @@ class Record:
             "notes": self.notes,
         }
 
-    def write(self, path: "str | Path") -> Path:
+    def write(self, path: str | Path) -> Path:
         """Write the record as pretty JSON. Returns the path written."""
         out = Path(path)
         out.parent.mkdir(parents=True, exist_ok=True)

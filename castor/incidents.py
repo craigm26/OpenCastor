@@ -625,7 +625,7 @@ class IncidentLog:
 
     # -- verification ----------------------------------------------------
 
-    def verify_chain(self) -> "ChainCheck":
+    def verify_chain(self) -> ChainCheck:
         """Walk every link of the chain, rotated files first, then the active one.
 
         What a pass says, and all it says: every line parses, every line carries

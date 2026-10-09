@@ -74,8 +74,6 @@ def to_eval_log(record: Record, *, scene: str = "A") -> dict:
     data = record.to_dict()
     checkpoints = data["checkpoints"]
     by_id = {cp["id"]: cp for cp in checkpoints}
-    passed = sum(1 for cp in checkpoints if cp["ok"] is True and cp["id"] != "C7")
-
     c7 = by_id.get("C7") or {"ok": None, "evidence": {}}
     stepped = c7.get("evidence", {}).get("stepped")
     measured_motion = c7.get("ok") is True and stepped is True
@@ -257,7 +255,7 @@ def _termination_for(cid: str, cp: dict, data: dict) -> str:
     return f"{cid} failed"
 
 
-def write_eval_log(record: Record, path: "str | Path", *, scene: str = "A") -> Path:
+def write_eval_log(record: Record, path: str | Path, *, scene: str = "A") -> Path:
     """Write the EvalLog v1 file. Returns the path.
 
     The bytes are ``json.dumps(..., indent=2, sort_keys=True)``, which is what

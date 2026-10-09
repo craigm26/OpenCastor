@@ -2191,9 +2191,10 @@ def open_duck_link(target: DuckTarget, timeout: float = 3.0):
                 continue
             sock.settimeout(timeout)
 
-            def _close() -> None:
+            # The connection is bound as a default so the closure never sees a later loop value.
+            def _close(conn: socket.socket = sock) -> None:
                 try:
-                    sock.close()
+                    conn.close()
                 finally:
                     _close_proc()
 
@@ -2226,7 +2227,7 @@ def duck_rpc(sock, methods, timeout: float = 3.0) -> dict:
     while pending and time.monotonic() < deadline:
         try:
             chunk = sock.recv(65536)
-        except socket.timeout:
+        except TimeoutError:
             break
         if not chunk:
             break

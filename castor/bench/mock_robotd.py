@@ -150,7 +150,7 @@ class MockRobotd:
 
     # -- lifecycle ----------------------------------------------------
 
-    def start(self) -> "MockRobotd":
+    def start(self) -> MockRobotd:
         """Bind, listen and serve in a daemon thread. Returns self."""
         if os.path.exists(self.path):
             os.unlink(self.path)
@@ -180,7 +180,7 @@ class MockRobotd:
         except OSError:
             pass
 
-    def __enter__(self) -> "MockRobotd":
+    def __enter__(self) -> MockRobotd:
         return self.start()
 
     def __exit__(self, *_exc) -> None:
@@ -246,7 +246,7 @@ class MockRobotd:
                         return
 
 
-def main(argv: "list[str] | None" = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--socket", default="/tmp/mock-robotd.sock")
     args = parser.parse_args(argv)

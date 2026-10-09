@@ -4665,8 +4665,8 @@ def _duck_plan_from_request(duck, request: str, say, agent: "dict | None" = None
         text = getattr(thought, "text", None) or str(thought)
     except Exception as exc:  # noqa: BLE001
         say(f"\n  [yellow]{provider_name} could not answer:[/yellow] {exc}")
-        say(f"  [dim]Sign in with:[/dim] castor login    [dim]or pick another:[/dim] "
-            f"castor duck do --brain ollama …")
+        say("  [dim]Sign in with:[/dim] castor login    [dim]or pick another:[/dim] "
+            "castor duck do --brain ollama …")
         say("  Name a routine instead: " + ", ".join(sorted(ROUTINES)) + "\n")
         return None
 
