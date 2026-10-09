@@ -147,6 +147,10 @@ def main():
     else:
         version = read_version_from_pyproject()
 
+    # A PEP 440 epoch ("1!3.5.0") belongs in pyproject.toml, where it makes pip
+    # prefer the 3.x line over the old CalVer wheels. Everywhere a person reads
+    # the version, and in the tags, it is the public number.
+    version = version.split("!", 1)[-1]
     v_version = f"v{version}"
     print(f"\n🔄  Syncing version {v_version} across all touchpoints...\n")
 
