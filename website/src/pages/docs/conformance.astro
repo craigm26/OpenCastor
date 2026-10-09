@@ -138,12 +138,12 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
     <div class="doc-section reveal" style="margin-top:32px">
       <blockquote>
         <strong>Conformance is not certification.</strong><br><br>
-        Conformance to RCAN tracks (L1–L4 protocol, Gateway Authority, HIL Runtime Safety) is <em>self-asserted via signed bundles</em> and <em>independently replayable from those bundles</em>. Conformance is not certification. Certification requires audit by a qualified third-party body, which is intentionally out-of-scope for the foundation in 2026.
+        Conformance to RCAN tracks (L1–L4 protocol, Gateway Authority, HIL Runtime Safety) is <em>self-asserted via signed bundles</em> and <em>independently replayable from those bundles</em>. Conformance is not certification. Certification requires audit by a qualified third-party body, which is intentionally out of scope for this project in 2026.
       </blockquote>
 
       <blockquote style="margin-top:16px">
-        <strong>Where safety is actually enforced.</strong><br><br>
-        Physical safety is enforced at Layer 3 (<code>robot-md-gateway</code>) or Layer 4 (a runtime that embeds it, e.g., OpenCastor). Declaration alone (Layer 1) does not enforce safety. Agent host alone (Layer 2) is not the safety boundary. If a deployment lacks Layer 3, no safety claim attaches to it.
+        <strong>Where safety is meant to be enforced.</strong><br><br>
+        Physical limits are meant to be enforced at Layer 3 (<code>robot-md-gateway</code> and the actuator driver it calls) or Layer 4 (a runtime that embeds it, e.g., OpenCastor). Declaration alone (Layer 1) does not enforce safety. Agent host alone (Layer 2) is not the safety boundary. If a deployment lacks Layer 3, no safety claim attaches to it. Layer 3 is not a certified safety function, and hostile-input testing in simulation (October 2026) found motions it does not yet bound.
       </blockquote>
     </div>
   </section>
