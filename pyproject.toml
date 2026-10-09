@@ -74,8 +74,9 @@ dependencies = [
     # CLI & Demo
     "rich>=13.0.0",
     "argcomplete>=3.0.0",
-    # RCAN Python SDK — official protocol implementation
-    "rcan>=3.3,<4",
+    # RCAN Python SDK — official protocol implementation. 3.5 is the first release
+    # that refuses a cross-registry command with no consent record (3.3 and 3.4 allow it).
+    "rcan>=3.5,<4",
     # Gateway Authority enforcement (Plan 6 Track 2 / Plan 7 open-core)
     # 0.5.0a8: the shipper that stops (exit 3) on a cut export, which the
     # RestartPreventExitStatus=3 in castor up's shipper unit is written for.
@@ -121,7 +122,7 @@ channels = [
 ]
 rcan = [
     "zeroconf>=0.131.0",
-    "rcan>=3.3,<4",
+    "rcan>=3.5,<4",
 ]
 dynamixel = ["dynamixel-sdk>=3.7.31"]
 hlabs = ["python-can>=4.0"]  # HLaboratories ACB v2.0 CAN Bus support (pyserial is a core dep)

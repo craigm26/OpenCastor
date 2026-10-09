@@ -100,7 +100,7 @@ class TestFederationEstopBypass:
             from_rrn="rrn://foreign-registry/robot/some-bot",
         )
         doc["loa"] = 2  # LoA >= 2 required for cross-registry commands
-        # rcan >= 3.6 also refuses a cross-registry command with no local consent record.
+        # rcan >= 3.5 also refuses a cross-registry command with no local consent record.
         doc["params"] = {"consent_id": "consent-cross-001"}
 
         with caplog.at_level(logging.INFO, logger="castor.cloud.bridge"):
