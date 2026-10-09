@@ -30,6 +30,7 @@ import hashlib
 import json
 import select
 import socket
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -909,13 +910,32 @@ HOSTILE_FORMATS = {
 }
 
 
+def _encoded(body: dict) -> bytes:
+    """``json.dumps`` with room to recurse. CPython before 3.12 cannot encode the
+    1500-level schema at its default recursion limit, so httpx would refuse to
+    send it; the limit is raised for the encoding only, never for the server."""
+    limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(max(limit, 10_000))
+    try:
+        return json.dumps(body).encode()
+    finally:
+        sys.setrecursionlimit(limit)
+
+
 @pytest.mark.parametrize("name", list(HOSTILE_FORMATS))
 @pytest.mark.parametrize("stream", [False, True])
 def test_a_format_outside_the_draft_schemas_shape_is_refused_before_ollama_sees_it(
         client, ollama, name, stream):
-    resp = chat(client, stream=stream, format=HOSTILE_FORMATS[name])
-    assert resp.status_code == 422, resp.text
-    assert "format" in resp.json()["detail"]
+    body = {"message": "what is 2+2?", "stream": stream, "format": HOSTILE_FORMATS[name]}
+    resp = client.post("/models/chat", headers={**auth(), "Content-Type": "application/json"},
+                       content=_encoded(body))
+    if resp.status_code == 400:
+        # Before 3.12, CPython's own JSON parser refuses a body nested this deep,
+        # so FastAPI answers 400 before the shape check runs. Refused either way.
+        assert sys.version_info < (3, 12) and name == "1500 levels", resp.text
+    else:
+        assert resp.status_code == 422, resp.text
+        assert "format" in resp.json()["detail"]
     assert ollama.posts("/api/chat") == []
 
 
