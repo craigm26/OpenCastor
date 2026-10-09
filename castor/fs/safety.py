@@ -5,7 +5,10 @@ Sits between the caller and the namespace, enforcing:
 
 1. **Permission checks** -- rwx ACL + capability gates.
 2. **Rate limiting** -- Prevents motor command flooding.
-3. **Value clamping** -- Physical safety bounds on motor outputs.
+3. **Value clamping** -- Physical safety bounds on motor outputs. A velocity that is not a finite
+   number (NaN, inf, a bool, a string) is refused and the motors are stopped, never clamped.
+   Optionally, a workspace policy refuses base motion whose stopping path leaves a declared area
+   (see :mod:`castor.safety.workspace`).
 4. **Audit logging** -- Every write and denied access is recorded.
 5. **Lockout** -- Repeated violations trigger temporary lockout.
 6. **Emergency stop** -- Immediate halt through any principal with CAP_ESTOP.
@@ -18,6 +21,7 @@ read/write/ls API but with enforcement.
 from __future__ import annotations
 
 import logging
+import math
 import os
 import threading
 import time
@@ -29,6 +33,7 @@ from castor.rcan.rbac import CapabilityBroker, Scope
 from castor.safety.anti_subversion import scan_before_write as _scan_before_write
 from castor.safety.bounds import BoundsChecker, check_write_bounds
 from castor.safety.protocol import check_write_protocol
+from castor.safety.workspace import BaseWorkspacePolicy
 
 logger = logging.getLogger("OpenCastor.FS.Safety")
 
@@ -62,6 +67,15 @@ POLICIES = {
         "description": "Rate-limit motor commands to prevent flooding",
         "enabled": True,
     },
+    "validate_motor": {
+        "description": "Refuse motor velocities that are not finite numbers, and stop the motors",
+        "enabled": True,
+    },
+    "workspace_motor": {
+        "description": "Refuse base motion whose stopping path leaves the declared workspace "
+        "(needs a workspace policy with a pose source)",
+        "enabled": True,
+    },
     "audit_writes": {
         "description": "Log all write operations to /var/log/actions",
         "enabled": True,
@@ -87,6 +101,9 @@ class SafetyLayer:
         ns:     The underlying namespace.
         perms:  The permission table.
         limits: Optional dict overriding default safety limits.
+        workspace_policy: Optional :class:`~castor.safety.workspace.BaseWorkspacePolicy`; when
+            set, a base move whose stopping path leaves the workspace is refused and replaced by
+            a zero-translation command.
     """
 
     def __init__(
@@ -95,8 +112,10 @@ class SafetyLayer:
         perms: PermissionTable,
         limits: Optional[dict] = None,
         capability_broker: Optional[CapabilityBroker] = None,
+        workspace_policy: Optional[BaseWorkspacePolicy] = None,
     ):
         self.ns = ns
+        self.workspace_policy = workspace_policy
         self.perms = perms
         self.limits = {**DEFAULT_LIMITS, **(limits or {})}
         self._lock = threading.Lock()
@@ -595,6 +614,34 @@ class SafetyLayer:
             self._motor_timestamps.append(now)
         return True
 
+    @staticmethod
+    def _invalid_motor_reason(data: Any) -> Optional[str]:
+        """Why a motor command's velocities cannot be used, or None if they can.
+
+        Clamping cannot fix these. ``min(hi, nan)`` returns ``hi``, so before this check a NaN
+        velocity from a model was clamped to full speed; ``True`` was read as 1.0 and a string as
+        whatever it parsed to. A velocity has to be a real, finite number.
+        """
+        if not isinstance(data, dict):
+            return None
+        for field in ("linear", "angular"):
+            if field not in data:
+                continue
+            value = data[field]
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                return f"{field} must be a number, got {type(value).__name__}"
+            if not math.isfinite(value):
+                return f"{field} must be finite, got {value!r}"
+        return None
+
+    def _stop_motors(self, path: str, principal: str, event: str, detail: str, meta) -> None:
+        """Fail closed: a refused command must not leave the previous one running."""
+        self._audit_safety(principal, path, event, detail)
+        try:
+            self.ns.write(path, {"type": "stop"}, meta=meta)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Could not write the stop after %s: %s", event, exc)
+
     def _clamp_motor_data(self, data: Any) -> Any:
         """Clamp motor command values to safe ranges."""
         if not POLICIES["clamp_motor"]["enabled"]:
@@ -655,7 +702,50 @@ class SafetyLayer:
         meta: Optional[dict] = None,
         source: str = "local",
     ) -> bool:
-        """Write to a file node, checking permissions and safety."""
+        """Write to a file node, checking permissions and safety.
+
+        A refused motor write leaves the previous command standing, and a command that was safe
+        when it was accepted stops being safe as the robot moves. So whenever a motor write is
+        refused, the standing command is re-checked against the workspace policy (if one is set);
+        see :meth:`enforce_workspace`, which a driver loop should also call every control cycle.
+        """
+        ok = self._write_checked(path, data, principal=principal, meta=meta, source=source)
+        if not ok and path.startswith("/dev/motor") and not (self._estop or self._paused):
+            self.enforce_workspace(path)
+        return ok
+
+    def enforce_workspace(self, path: str = "/dev/motor") -> bool:
+        """Re-check the motor command that is standing now against the workspace policy.
+
+        Returns True if it may keep running. If its stopping path leaves the workspace, it is
+        replaced by the policy's refusal command (no translation) and False is returned. A
+        standing command that is not a finite velocity is replaced by a stop. With no workspace
+        policy, or the ``workspace_motor`` policy disabled, this does nothing and returns True.
+        """
+        if self.workspace_policy is None or not POLICIES["workspace_motor"]["enabled"]:
+            return True
+        current = self.ns.read(path)
+        if not isinstance(current, dict) or self._is_stop_write(path, current):
+            return True
+        invalid = self._invalid_motor_reason(current)
+        if invalid:
+            self._stop_motors(path, "safety", "invalid_motor_command", invalid, None)
+            return False
+        allowed, why = self.workspace_policy.check(current)
+        if allowed:
+            return True
+        self._audit_safety("safety", path, "workspace_enforced", why)
+        self.ns.write(path, self.workspace_policy.refusal_command(current))
+        return False
+
+    def _write_checked(
+        self,
+        path: str,
+        data: Any,
+        principal: str = "root",
+        meta: Optional[dict] = None,
+        source: str = "local",
+    ) -> bool:
         if self._estop and path.startswith("/dev/motor"):
             logger.warning("WRITE denied: emergency stop active")
             self._audit_safety(principal, path, "deny_estop", "e-stop active, motor writes blocked")
@@ -847,12 +937,31 @@ class SafetyLayer:
 
         # Motor-specific safety enforcement
         if path.startswith("/dev/motor"):
+            if POLICIES["validate_motor"]["enabled"]:
+                invalid = self._invalid_motor_reason(data)
+                if invalid:
+                    logger.warning("WRITE refused, motors stopped: %s", invalid)
+                    self._stop_motors(path, principal, "invalid_motor_command", invalid, meta)
+                    self._last_write_denial = f"Invalid motor command ({invalid}); motors stopped."
+                    return False
             if not self._check_motor_rate():
                 self._audit_safety(principal, path, "rate_limited", "motor command rate exceeded")
                 logger.warning("Motor rate limit hit by %s", principal)
                 self._last_write_denial = "Motor command rate limit exceeded."
                 return False
             data = self._clamp_motor_data(data)
+            if (
+                self.workspace_policy is not None
+                and POLICIES["workspace_motor"]["enabled"]
+                and not self._is_stop_write(path, data)
+            ):
+                allowed, why = self.workspace_policy.check(data)
+                if not allowed:
+                    logger.warning("WRITE refused: %s", why)
+                    self._audit_safety(principal, path, "workspace_refused", why)
+                    self.ns.write(path, self.workspace_policy.refusal_command(data), meta=meta)
+                    self._last_write_denial = f"Workspace: {why}"
+                    return False
 
         self._audit_action(principal, path, "w", data, source=source)
         self._audit_access(principal, path, "w", True)
