@@ -9,6 +9,40 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+### Safety: the base workspace, re-checked every control cycle (EV-03)
+
+The EV-03 hostile-model test (simulated rover, random and malformed commands where the model's
+would go) found that the safety layer held speed but not position. See
+[docs/safety/workspace.md](docs/safety/workspace.md).
+
+- **A motor value that is not a finite number is refused and stops the motors.** Clamping used
+  `min()`/`max()`, and `min(hi, nan)` is `hi`: a NaN velocity from a model reached `/dev/motor` as
+  full speed, `True` as 1.0 and a string as whatever it parsed to.
+- **Optional base workspace, `safety.workspace`** (`castor/safety/workspace.py`): keep-in polygon,
+  keep-outs, top speed, worst-case deceleration, reaction time, margin. A move whose stopping path
+  leaves the workspace is refused and `/dev/motor` gets a zero-translation command, instead of the
+  previous command running on. The pose comes from a pose source a localizer registers
+  (`register_pose_source()`). OpenCastor ships no localizer: with no pose, every translating move
+  is refused; stops and turning in place still work. Absent block, no change. An invalid block
+  stops `castor run` at boot and names every problem.
+- **The standing command is re-checked every control cycle**
+  (`castor/safety/workspace_enforcer.py`). `castor run` writes `/dev/motor` once per brain step, so
+  with a slow brain an accepted full-speed command ran on after its stopping path had left the
+  workspace. A thread re-checks it at `enforce_hz` (default 50 Hz) and stops the motors when it
+  has to be replaced. It never starts them.
+- **`castor run` hands the motors what the safety layer left standing, or stops them.** When the
+  paced read-back of `/dev/motor` was refused, the brain's raw, unchecked action went to the
+  driver; now the motors stop. With a workspace configured, an action the wheels do not take
+  (`wait`, `grip`, no `type`) stops them too, so the per-cycle re-check sees what they run.
+
+In simulation (seeds 7, 11 and 23, 10 minutes each, a 2 Hz brain on a 50 Hz control loop, pose
+from the simulator's ground truth), the workspace policy without the per-cycle re-check let the
+rover out of its bay on every seed, 0.03 to 0.18 m; with it, the rover stayed inside on every
+seed. Simulation results, not hardware.
+
+Wired into `castor run` only. The `castor up` runtime (`castor.api`) does not read
+`safety.workspace` yet.
+
 ## [3.5.0] - 2026-09-27
 
 Published on PyPI as `1!3.5.0` (the epoch is required; see `docs/pypi-versioning.md`).
