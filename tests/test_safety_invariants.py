@@ -734,7 +734,10 @@ class TestV15SafetyInvariants:
         """OpenCastor version must be calver (2026.x.y.z) or SemVer (X.Y.Z).
 
         opencastor 3.0.0 switched from calver to SemVer to signal RCAN 3.x
-        peer-runtime alignment. Future bumps continue SemVer cadence.
+        peer-runtime alignment. Future bumps continue SemVer cadence. From 3.1.0
+        the SemVer line carries the PEP 440 epoch ``1!`` (published as
+        ``1!3.1.0`` and so on), because without it pip prefers the 2026.x CalVer
+        releases, which sort above every 3.x.
         """
         import re
 
@@ -742,16 +745,17 @@ class TestV15SafetyInvariants:
 
         version = castor.__version__
         is_calver = version.startswith("2026.")
-        is_semver = bool(re.fullmatch(r"\d+\.\d+\.\d+", version))
+        is_semver = bool(re.fullmatch(r"(?:1!)?\d+\.\d+\.\d+", version))
         assert is_calver or is_semver, (
-            f"Expected calver (2026.x.y.z) or SemVer (X.Y.Z), got {version}"
+            f"Expected calver (2026.x.y.z) or SemVer ([1!]X.Y.Z), got {version}"
         )
 
     def test_pyproject_version_2026_3_17(self):
         """pyproject.toml declares a valid version.
 
         opencastor 3.0.0 switched from calver (2026.x.y.z) to SemVer (3.x.y)
-        to signal RCAN 3.x peer-runtime alignment. Either scheme is valid.
+        to signal RCAN 3.x peer-runtime alignment. Either scheme is valid, and
+        the SemVer line carries the epoch ``1!`` from 3.1.0 (see the test above).
         """
         import os
         import re as _re
@@ -760,7 +764,7 @@ class TestV15SafetyInvariants:
         with open(pyproject) as f:
             content = f.read()
         has_calver = _re.search(r'version\s*=\s*"2026\.\d+\.\d+\.\d+"', content)
-        has_semver = _re.search(r'version\s*=\s*"\d+\.\d+\.\d+"', content)
+        has_semver = _re.search(r'version\s*=\s*"(?:1!)?\d+\.\d+\.\d+"', content)
         assert has_calver or has_semver, (
-            "pyproject.toml must declare either a 2026.x.y.z (calver) or X.Y.Z (SemVer) version"
+            "pyproject.toml must declare either a 2026.x.y.z (calver) or [1!]X.Y.Z (SemVer) version"
         )

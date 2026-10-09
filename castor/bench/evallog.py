@@ -74,8 +74,6 @@ def to_eval_log(record: Record, *, scene: str = "A") -> dict:
     data = record.to_dict()
     checkpoints = data["checkpoints"]
     by_id = {cp["id"]: cp for cp in checkpoints}
-    passed = sum(1 for cp in checkpoints if cp["ok"] is True and cp["id"] != "C7")
-
     c7 = by_id.get("C7") or {"ok": None, "evidence": {}}
     stepped = c7.get("evidence", {}).get("stepped")
     measured_motion = c7.get("ok") is True and stepped is True
@@ -106,9 +104,7 @@ def to_eval_log(record: Record, *, scene: str = "A") -> dict:
     scored = [e for e in epochs if e]
     reduced: dict[str, Any] = {}
     if scored:
-        reduced["checkpoint_reached"] = sum(
-            e["checkpoint_reached"] for e in scored
-        ) / len(scored)
+        reduced["checkpoint_reached"] = sum(e["checkpoint_reached"] for e in scored) / len(scored)
     if measured_motion:
         # Only now may a success number exist, and it never travels alone.
         reduced["motion_evidence"] = 1.0
@@ -257,7 +253,7 @@ def _termination_for(cid: str, cp: dict, data: dict) -> str:
     return f"{cid} failed"
 
 
-def write_eval_log(record: Record, path: "str | Path", *, scene: str = "A") -> Path:
+def write_eval_log(record: Record, path: str | Path, *, scene: str = "A") -> Path:
     """Write the EvalLog v1 file. Returns the path.
 
     The bytes are ``json.dumps(..., indent=2, sort_keys=True)``, which is what
@@ -268,9 +264,7 @@ def write_eval_log(record: Record, path: "str | Path", *, scene: str = "A") -> P
     log.pop("_checkpoints_passed", None)
     # `checkpoints_passed` belongs in metrics, where their reducer can see it.
     passed = sum(
-        1
-        for cp in record.to_dict()["checkpoints"]
-        if cp["ok"] is True and cp["id"] != "C7"
+        1 for cp in record.to_dict()["checkpoints"] if cp["ok"] is True and cp["id"] != "C7"
     )
     log["results"]["metrics"] = {
         **log["results"]["metrics"],
@@ -283,7 +277,5 @@ def write_eval_log(record: Record, path: "str | Path", *, scene: str = "A") -> P
     # `json.dumps(_sanitize(log.to_dict()), indent=2, sort_keys=True)`, and one
     # extra byte is the difference between "their writer reproduces this file"
     # and a red parity gate. Measured against inspect-robots 0.58.0.
-    out.write_text(
-        json.dumps(log, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8"
-    )
+    out.write_text(json.dumps(log, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8")
     return out

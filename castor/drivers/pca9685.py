@@ -86,6 +86,7 @@ def _unavailable(config: dict, reason: str) -> None:
         return
     raise PCA9685Unavailable(f"{reason}. {_REAL_SURFACE_HINT}")
 
+
 # ---------------------------------------------------------------------------
 # Hardware imports (graceful degradation)
 # ---------------------------------------------------------------------------

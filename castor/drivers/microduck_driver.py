@@ -309,8 +309,7 @@ class MicroduckDriver(DriverBase):
 
                 sock = connect_webrtc(self._config)
                 target = (
-                    f"webrtc://{self._host}:"
-                    f"{self._config.get('port') or DEFAULT_SIGNALLING_PORT}"
+                    f"webrtc://{self._host}:{self._config.get('port') or DEFAULT_SIGNALLING_PORT}"
                 )
             else:
                 logger.warning("MicroduckDriver: unknown transport %r — mock mode", self._transport)

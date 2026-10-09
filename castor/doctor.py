@@ -529,7 +529,7 @@ def print_report(report) -> None:
     # says nothing about a car that will not move has answered the wrong question.
     blocking = report.blocking_failures
     if blocking:
-        print("\n  ❌ THIS ROBOT CANNOT MOVE — " f"{len(blocking)} blocking check(s):")
+        print(f"\n  ❌ THIS ROBOT CANNOT MOVE — {len(blocking)} blocking check(s):")
         for c in blocking:
             print(f"     • {c.name}: {c.detail}")
             if c.fix:
@@ -1451,7 +1451,7 @@ def _check_i2c_bus(policy: dict, exists=None, bus: int = 1) -> CheckResult:
 def _check_drive_mode(
     robot: Optional[RobotUnits], policy: dict, addresses: Optional[set] = None
 ) -> CheckResult:
-    """"Your wheels are simulated."
+    """ "Your wheels are simulated."
 
     `castor up` ships OPENCASTOR_DRIVE commented out on purpose, and the rule
     behind that is right: a driver built by accident must not move a real
@@ -1563,9 +1563,7 @@ def _read_pca9685_registers(address: int, bus: int = 1) -> tuple[int, int]:
     from smbus2 import SMBus
 
     with SMBus(bus) as b:
-        return b.read_byte_data(address, PCA9685_MODE1), b.read_byte_data(
-            address, PCA9685_PRESCALE
-        )
+        return b.read_byte_data(address, PCA9685_MODE1), b.read_byte_data(address, PCA9685_PRESCALE)
 
 
 def _check_pca9685_persistence(
@@ -2140,9 +2138,7 @@ def open_duck_link(target: DuckTarget, timeout: float = 3.0):
         sock = socket.create_connection((target.tcp_host, target.tcp_port), timeout=timeout)
         token = target.bridge_token
         if token:
-            sock.sendall(
-                (json.dumps({"microduck": "v1", "token": token}) + "\n").encode()
-            )
+            sock.sendall((json.dumps({"microduck": "v1", "token": token}) + "\n").encode())
         return sock, sock.close
 
     if transport == "ssh":
@@ -2153,11 +2149,17 @@ def open_duck_link(target: DuckTarget, timeout: float = 3.0):
         dest = f"{target.ssh_user}@{target.ssh_host}" if target.ssh_user else str(target.ssh_host)
         proc = subprocess.Popen(
             [
-                "ssh", "-N", "-T",
-                "-o", "ExitOnForwardFailure=yes",
-                "-o", "BatchMode=yes",
-                "-o", "ConnectTimeout=5",
-                "-L", f"127.0.0.1:{target.local_port}:{target.socket_path}",
+                "ssh",
+                "-N",
+                "-T",
+                "-o",
+                "ExitOnForwardFailure=yes",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=5",
+                "-L",
+                f"127.0.0.1:{target.local_port}:{target.socket_path}",
                 dest,
             ],
             stdin=subprocess.DEVNULL,
@@ -2191,9 +2193,10 @@ def open_duck_link(target: DuckTarget, timeout: float = 3.0):
                 continue
             sock.settimeout(timeout)
 
-            def _close() -> None:
+            # The connection is bound as a default so the closure never sees a later loop value.
+            def _close(conn: socket.socket = sock) -> None:
                 try:
-                    sock.close()
+                    conn.close()
                 finally:
                     _close_proc()
 
@@ -2226,7 +2229,7 @@ def duck_rpc(sock, methods, timeout: float = 3.0) -> dict:
     while pending and time.monotonic() < deadline:
         try:
             chunk = sock.recv(65536)
-        except socket.timeout:
+        except TimeoutError:
             break
         if not chunk:
             break
@@ -2389,7 +2392,7 @@ def _check_robotd(target: Optional[DuckTarget], probe: Optional[dict]) -> CheckR
 
 
 def _check_duck_mock_mode(target: Optional[DuckTarget], probe: Optional[dict]) -> CheckResult:
-    """"Your duck is a mock."
+    """ "Your duck is a mock."
 
     The car's simulated-wheels trap in a new costume.  `MicroduckDriver`
     degrades to mock mode on ANY connect failure and then answers
@@ -2706,9 +2709,7 @@ def _check_duck_gaps(target: Optional[DuckTarget], collect=None) -> list:
         return [CheckResult("Duck gaps", "skip", f"gap scan failed: {exc}")]
     if not gaps:
         return [CheckResult("Duck gaps", "ok", "none — the duck's tools reach the brain")]
-    return [
-        CheckResult(f"gap:{gap.id}", "warn", gap.evidence, fix=gap.suggestion) for gap in gaps
-    ]
+    return [CheckResult(f"gap:{gap.id}", "warn", gap.evidence, fix=gap.suggestion) for gap in gaps]
 
 
 def run_duck_checks(

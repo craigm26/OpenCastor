@@ -471,9 +471,7 @@ class SafetyLayer:
         and a failed audit write must not turn a refusal into a traceback.
         """
         self.last_rate_limit_reason = reason
-        logger.warning(
-            "RATE LIMIT REFUSED %s: reason=%s detail=%s", principal, reason, detail
-        )
+        logger.warning("RATE LIMIT REFUSED %s: reason=%s detail=%s", principal, reason, detail)
         try:
             self._audit_safety(principal, "/", reason, detail)
         except Exception as audit_exc:  # noqa: BLE001 - never raise from a refusal

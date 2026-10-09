@@ -695,7 +695,7 @@ def discovery_env(plan: UpPlan) -> str:
     return (
         "# What this robot publishes on the LAN — written by `castor up`,\n"
         "# regenerated on every run. No credential is in this file and none\n"
-        "# belongs here: the record answers \"where is this RRN now?\" and\n"
+        '# belongs here: the record answers "where is this RRN now?" and\n'
         "# nothing else. Pairing still happens through the QR.\n"
         f"ROBOT_RRN={plan.rrn}\n"
         f"ROBOT_NAME={plan.name}\n"
@@ -869,9 +869,7 @@ def occupied_ports(base: int, probe) -> list[int]:
     services listening, which is health, not a collision.
     """
     return [
-        base + offset
-        for offset in (GATEWAY_OFF, RUNTIME_OFF, CONSOLE_OFF)
-        if probe(base + offset)
+        base + offset for offset in (GATEWAY_OFF, RUNTIME_OFF, CONSOLE_OFF) if probe(base + offset)
     ]
 
 
