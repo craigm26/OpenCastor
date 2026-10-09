@@ -100,12 +100,33 @@ class TestFederationEstopBypass:
             from_rrn="rrn://foreign-registry/robot/some-bot",
         )
         doc["loa"] = 2  # LoA >= 2 required for cross-registry commands
+        # rcan >= 3.6 also refuses a cross-registry command with no local consent record.
+        doc["params"] = {"consent_id": "consent-cross-001"}
 
         with caplog.at_level(logging.INFO, logger="castor.cloud.bridge"):
             result = bridge._check_federation("cmd-cross-001", doc, scope="chat")
 
         assert result is True
         assert "Cross-registry command from foreign-registry" in caplog.text
+
+    def test_cross_registry_command_without_consent_is_refused(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """LoA 2 is not enough on its own: no consent record, no command."""
+        bridge = _make_bridge()
+
+        doc = _cmd_doc(
+            scope="chat",
+            instruction="move forward",
+            from_rrn="rrn://foreign-registry/robot/some-bot",
+        )
+        doc["loa"] = 2
+
+        with caplog.at_level(logging.INFO, logger="castor.cloud.bridge"):
+            result = bridge._check_federation("cmd-cross-002", doc, scope="chat")
+
+        assert result is False
+        assert "missing consent_id" in caplog.text
 
     def test_same_registry_skips_federation(self, caplog: pytest.LogCaptureFixture) -> None:
         """Commands from same registry don't trigger cross-registry check."""

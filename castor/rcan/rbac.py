@@ -245,6 +245,7 @@ def rate_limit_for_role_name(name: str) -> int:
     resolved = resolve_role_name(name)
     return ROLE_RATE_LIMITS[RCANRole[resolved]]
 
+
 # Session timeout per role (seconds, 0 = no timeout)
 ROLE_SESSION_TIMEOUT: dict[RCANRole, int] = {
     RCANRole.GUEST: 300,  # 5 minutes
