@@ -102,7 +102,7 @@ class BaseWorkspacePolicy:
 
     def _pose(self) -> Optional[Pose]:
         try:
-            pose = self.pose_provider()
+            pose: Any = self.pose_provider()
         except Exception:  # noqa: BLE001 - a broken localizer is the same as none
             return None
         if pose is None:
@@ -110,6 +110,7 @@ class BaseWorkspacePolicy:
         if isinstance(pose, dict):
             pose = (pose.get("x"), pose.get("y"), pose.get("theta"), pose.get("v", 0.0))
         try:
+            # None, a non-number or the wrong length lands in except: no pose.
             x, y, theta, v = (float(p) for p in pose)
         except (TypeError, ValueError):
             return None
