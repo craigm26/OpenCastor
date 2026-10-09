@@ -238,8 +238,8 @@ class Record:
             reasons.append("checkpoints are not in order")
 
         last = self.checkpoint(mandatory[-1]) if mandatory else None
-        self.elapsed_s = round(last.t, 3) if last is not None and last.t is not None else round(
-            self.now(), 3
+        self.elapsed_s = (
+            round(last.t, 3) if last is not None and last.t is not None else round(self.now(), 3)
         )
         if passed and self.elapsed_s >= self.budget_s:
             passed = False
@@ -257,8 +257,8 @@ class Record:
             )
             self.verdict_reason = head if real else f"{head}; {real_reason}"
         else:
-            self.verdict_reason = "; ".join(reasons) if real else (
-                "; ".join(reasons) + f"; {real_reason}"
+            self.verdict_reason = (
+                "; ".join(reasons) if real else ("; ".join(reasons) + f"; {real_reason}")
             )
         return self.verdict
 

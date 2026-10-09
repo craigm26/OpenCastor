@@ -131,16 +131,22 @@ def read_token(path: str) -> str:
     try:
         mode = os.stat(path).st_mode
     except OSError as error:
-        raise Refusal(f"no token file at {path}: {error.strerror}. "
-                      "Run `castor duck --bridge`, or pass --token-file.") from error
+        raise Refusal(
+            f"no token file at {path}: {error.strerror}. "
+            "Run `castor duck --bridge`, or pass --token-file."
+        ) from error
     if mode & (stat.S_IRGRP | stat.S_IROTH | stat.S_IWGRP | stat.S_IWOTH):
-        raise Refusal(f"{path} is readable or writable by other users "
-                      f"(mode {oct(stat.S_IMODE(mode))}). chmod 600 it.")
+        raise Refusal(
+            f"{path} is readable or writable by other users "
+            f"(mode {oct(stat.S_IMODE(mode))}). chmod 600 it."
+        )
     with open(path, encoding="utf-8") as handle:
         token = handle.read().strip()
     if len(token) < MIN_TOKEN_LEN:
-        raise Refusal(f"the token in {path} is {len(token)} characters; "
-                      f"{MIN_TOKEN_LEN} is the minimum this bridge accepts.")
+        raise Refusal(
+            f"the token in {path} is {len(token)} characters; "
+            f"{MIN_TOKEN_LEN} is the minimum this bridge accepts."
+        )
     return token
 
 
@@ -228,9 +234,17 @@ def hello_is_valid(line: bytes, token: str) -> bool:
 
 def greeting_line(deadman_ms: int, policy_install: bool) -> bytes:
     """What the bridge says back when it has accepted the relay."""
-    return json.dumps({"microduck": HELLO_VERSION, "bridge": VERSION,
-                       "deadman_ms": deadman_ms,
-                       "policy_install": bool(policy_install)}).encode() + b"\n"
+    return (
+        json.dumps(
+            {
+                "microduck": HELLO_VERSION,
+                "bridge": VERSION,
+                "deadman_ms": deadman_ms,
+                "policy_install": bool(policy_install),
+            }
+        ).encode()
+        + b"\n"
+    )
 
 
 def read_greeting(line: bytes) -> dict:
@@ -244,19 +258,25 @@ def read_greeting(line: bytes) -> dict:
     try:
         top = json.loads(line.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as why:
-        raise Refusal("that answered, but not with anything a Microduck bridge says. "
-                      "Check the address and the port.") from why
+        raise Refusal(
+            "that answered, but not with anything a Microduck bridge says. "
+            "Check the address and the port."
+        ) from why
     if not isinstance(top, dict):
         raise Refusal("that answered with JSON, but not an object; not a Microduck bridge.")
     if isinstance(top.get("error"), str):
         raise Refusal(f"the bridge refused: {top['error']}")
     version = top.get("microduck")
     if not isinstance(version, str):
-        raise Refusal("that answered, but not with anything a Microduck bridge says. "
-                      "Check the address and the port.")
+        raise Refusal(
+            "that answered, but not with anything a Microduck bridge says. "
+            "Check the address and the port."
+        )
     if version != HELLO_VERSION:
-        raise Refusal(f"that bridge speaks {version} and this speaks {HELLO_VERSION}; "
-                      "update whichever is older.")
+        raise Refusal(
+            f"that bridge speaks {version} and this speaks {HELLO_VERSION}; "
+            "update whichever is older."
+        )
     return top
 
 
@@ -290,8 +310,7 @@ class Installer:
     when robotd restarts, because it does.
     """
 
-    def __init__(self, policy_dir: str | None, robotd_toml: str | None = None,
-                 log=print) -> None:
+    def __init__(self, policy_dir: str | None, robotd_toml: str | None = None, log=print) -> None:
         self.policy_dir = os.path.abspath(policy_dir) if policy_dir else None
         self.robotd_toml = os.path.abspath(robotd_toml) if robotd_toml else None
         self.log = log
@@ -310,24 +329,30 @@ class Installer:
             result = self.install(message.get("params") or {})
             reply = {"jsonrpc": "2.0", "id": rpc_id, "result": result}
         except Refusal as why:
-            reply = {"jsonrpc": "2.0", "id": rpc_id,
-                     "error": {"code": -32602, "message": str(why)}}
+            reply = {"jsonrpc": "2.0", "id": rpc_id, "error": {"code": -32602, "message": str(why)}}
         except (ValueError, UnicodeDecodeError) as why:
-            reply = {"jsonrpc": "2.0", "id": rpc_id,
-                     "error": {"code": -32700, "message": f"that line is not JSON: {why}"}}
+            reply = {
+                "jsonrpc": "2.0",
+                "id": rpc_id,
+                "error": {"code": -32700, "message": f"that line is not JSON: {why}"},
+            }
         return json.dumps(reply, separators=(",", ":")).encode() + b"\n"
 
     def install(self, params: dict) -> dict:
         if not self.policy_dir:
-            raise Refusal("this bridge was started without --policy-dir, so it cannot "
-                          "install a policy; start it with the directory robotd loads "
-                          "policies from")
+            raise Refusal(
+                "this bridge was started without --policy-dir, so it cannot "
+                "install a policy; start it with the directory robotd loads "
+                "policies from"
+            )
         name = str(params.get("name") or "")
         if name.lower().endswith(".onnx"):
             name = name[:-5]
         if not INSTALL_NAME.match(name) or ".." in name:
-            raise Refusal(f'"{name}" cannot name a policy on the robot: letters, digits, dots, '
-                          "dashes and underscores, up to 64, starting with a letter or digit")
+            raise Refusal(
+                f'"{name}" cannot name a policy on the robot: letters, digits, dots, '
+                "dashes and underscores, up to 64, starting with a letter or digit"
+            )
         encoded = params.get("bytes")
         if not isinstance(encoded, str) or not encoded:
             raise Refusal("policy.install needs `bytes`: the .onnx file, base64")
@@ -338,16 +363,22 @@ class Installer:
         if not data:
             raise Refusal("the policy is empty")
         if len(data) > INSTALL_CAP:
-            raise Refusal(f"the policy is {len(data)} bytes; the shipped ones are under 1 MB "
-                          f"and this bridge stops at {INSTALL_CAP}")
+            raise Refusal(
+                f"the policy is {len(data)} bytes; the shipped ones are under 1 MB "
+                f"and this bridge stops at {INSTALL_CAP}"
+            )
         claimed = str(params.get("sha256") or "").lower()
         actual = hashlib.sha256(data).hexdigest()
         if not claimed:
-            raise Refusal("policy.install needs `sha256`: the digest of the bytes as sent, "
-                          "so a network that arrived short is refused rather than driven")
+            raise Refusal(
+                "policy.install needs `sha256`: the digest of the bytes as sent, "
+                "so a network that arrived short is refused rather than driven"
+            )
         if claimed != actual:
-            raise Refusal(f"the bytes that arrived digest to {actual[:12]}…, not the "
-                          f"{claimed[:12]}… that was claimed; nothing was written")
+            raise Refusal(
+                f"the bytes that arrived digest to {actual[:12]}…, not the "
+                f"{claimed[:12]}… that was claimed; nothing was written"
+            )
         os.makedirs(self.policy_dir, exist_ok=True)
         path = os.path.join(self.policy_dir, f"{name}.onnx")
         tmp = f"{path}.part-{os.getpid()}"
@@ -358,8 +389,12 @@ class Installer:
         os.chmod(tmp, 0o644)
         os.replace(tmp, path)
         self.log(f"policy.install: {len(data)} bytes -> {path} ({actual[:12]})")
-        result = {"installed": path, "sha256": actual, "bytes": len(data),
-                  "takes_effect": "when robotd next starts; this bridge does not restart it"}
+        result = {
+            "installed": path,
+            "sha256": actual,
+            "bytes": len(data),
+            "takes_effect": "when robotd next starts; this bridge does not restart it",
+        }
         slot = params.get("slot")
         if slot is not None:
             result["slot"] = self.assign(str(slot), path)
@@ -370,15 +405,17 @@ class Installer:
         if not INSTALL_NAME.match(slot):
             raise Refusal(f'"{slot}" is not the shape of a robotd.toml policy key')
         if not self.robotd_toml:
-            return {"asked": slot, "applied": False,
-                    "why": "this bridge was started without --robotd-toml; edit the "
-                           f"[policy] table yourself: {slot} = \"{path}\""}
+            return {
+                "asked": slot,
+                "applied": False,
+                "why": "this bridge was started without --robotd-toml; edit the "
+                f'[policy] table yourself: {slot} = "{path}"',
+            }
         try:
             with open(self.robotd_toml, encoding="utf-8") as f:
                 lines = f.read().split("\n")
         except OSError as why:
-            return {"asked": slot, "applied": False,
-                    "why": f"robotd.toml could not be read: {why}"}
+            return {"asked": slot, "applied": False, "why": f"robotd.toml could not be read: {why}"}
         in_policy = False
         found = None
         keys = []
@@ -396,10 +433,13 @@ class Installer:
             if match.group(1) == slot:
                 found = index
         if found is None:
-            return {"asked": slot, "applied": False,
-                    "why": f"robotd.toml has no `{slot}` key under [policy]; the keys it has "
-                           f"are {', '.join(keys) or 'none'}. A key robotd does not expect is "
-                           "not added for it."}
+            return {
+                "asked": slot,
+                "applied": False,
+                "why": f"robotd.toml has no `{slot}` key under [policy]; the keys it has "
+                f"are {', '.join(keys) or 'none'}. A key robotd does not expect is "
+                "not added for it.",
+            }
         indent = lines[found][: len(lines[found]) - len(lines[found].lstrip())]
         lines[found] = f'{indent}{slot} = "{path}"'
         backup = f"{self.robotd_toml}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
@@ -428,13 +468,21 @@ def forward_command(dest: str, socket_path: str, local_port: int, ssh_port: int 
     service rather than fail it.
     """
     return [
-        "ssh", "-N", "-T",
-        "-p", str(ssh_port),
-        "-o", "ExitOnForwardFailure=yes",
-        "-o", "BatchMode=yes",
-        "-o", "ServerAliveInterval=5",
-        "-o", "ServerAliveCountMax=2",
-        "-L", f"127.0.0.1:{local_port}:{socket_path}",
+        "ssh",
+        "-N",
+        "-T",
+        "-p",
+        str(ssh_port),
+        "-o",
+        "ExitOnForwardFailure=yes",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ServerAliveInterval=5",
+        "-o",
+        "ServerAliveCountMax=2",
+        "-L",
+        f"127.0.0.1:{local_port}:{socket_path}",
         dest,
     ]
 
@@ -461,9 +509,15 @@ class Upstream:
     has no opinion about what travels over it.
     """
 
-    def __init__(self, socket_path: str = DEFAULT_SOCKET, *, ssh: str | None = None,
-                 ssh_port: int = 22, forward_port: int = DEFAULT_FORWARD_PORT,
-                 log=print) -> None:
+    def __init__(
+        self,
+        socket_path: str = DEFAULT_SOCKET,
+        *,
+        ssh: str | None = None,
+        ssh_port: int = 22,
+        forward_port: int = DEFAULT_FORWARD_PORT,
+        log=print,
+    ) -> None:
         self.socket_path = socket_path
         self.ssh = ssh or None
         self.ssh_port = ssh_port
@@ -485,20 +539,24 @@ class Upstream:
         if not self.ssh:
             return
         if shutil.which("ssh") is None:
-            raise Refusal("this bridge was asked to reach a duck over ssh and there is no "
-                          "`ssh` on PATH.")
+            raise Refusal(
+                "this bridge was asked to reach a duck over ssh and there is no `ssh` on PATH."
+            )
         cmd = forward_command(self.ssh, self.socket_path, self.forward_port, self.ssh_port)
         self.log(f"forward: {' '.join(cmd)}")
-        self._proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL,
-                                      stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        self._proc = subprocess.Popen(
+            cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+        )
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             if self._proc.poll() is not None:
                 err = b""
                 if self._proc.stderr is not None:
                     err = self._proc.stderr.read() or b""
-                raise Refusal(f"the ssh forward exited: "
-                              f"{err.decode(errors='replace').strip() or 'no reason given'}")
+                raise Refusal(
+                    f"the ssh forward exited: "
+                    f"{err.decode(errors='replace').strip() or 'no reason given'}"
+                )
             try:
                 probe = socket.create_connection(("127.0.0.1", self.forward_port), timeout=0.2)
                 probe.close()
@@ -537,8 +595,14 @@ class Upstream:
 class Relay:
     """One client, one robotd connection, bytes both ways and a deadman."""
 
-    def __init__(self, client: socket.socket, robotd: socket.socket,
-                 deadman_ms: int, log=print, installer: Installer | None = None) -> None:
+    def __init__(
+        self,
+        client: socket.socket,
+        robotd: socket.socket,
+        deadman_ms: int,
+        log=print,
+        installer: Installer | None = None,
+    ) -> None:
         self.client = client
         self.robotd = robotd
         self.deadman = deadman_ms / 1000 if deadman_ms > 0 else 0
@@ -616,10 +680,18 @@ class Relay:
                 self.running = False
 
 
-def serve(host: str, port: int, socket_path: str, token: str,
-          deadman_ms: int, log=print, ready=None,
-          policy_dir: str | None = None, robotd_toml: str | None = None,
-          upstream: Upstream | None = None) -> None:
+def serve(
+    host: str,
+    port: int,
+    socket_path: str,
+    token: str,
+    deadman_ms: int,
+    log=print,
+    ready=None,
+    policy_dir: str | None = None,
+    robotd_toml: str | None = None,
+    upstream: Upstream | None = None,
+) -> None:
     """Listen, greet, relay. ``socket_path`` is ignored when ``upstream`` is given.
 
     The signature keeps duck-studio's positional order so its own 17 tests port
@@ -637,24 +709,35 @@ def serve(host: str, port: int, socket_path: str, token: str,
     # not a line forwarded to a robotd that has no such method and a phone
     # waiting on a reply that never comes.
     installer = Installer(policy_dir, robotd_toml, log=log)
-    log(f"{VERSION} on {host}:{listener.getsockname()[1]} -> {up.describe()}, "
+    log(
+        f"{VERSION} on {host}:{listener.getsockname()[1]} -> {up.describe()}, "
         f"deadman {deadman_ms} ms, policy.install "
-        + (f"-> {installer.policy_dir}" if installer.policy_dir else "off (no --policy-dir)"))
+        + (f"-> {installer.policy_dir}" if installer.policy_dir else "off (no --policy-dir)")
+    )
     if ready:
         ready(listener.getsockname()[1])
     try:
         while True:
             client, where = listener.accept()
-            threading.Thread(target=_greet,
-                             args=(client, where, up, token, deadman_ms, log, installer),
-                             daemon=True).start()
+            threading.Thread(
+                target=_greet,
+                args=(client, where, up, token, deadman_ms, log, installer),
+                daemon=True,
+            ).start()
     finally:
         listener.close()
         up.close()
 
 
-def _greet(client: socket.socket, where, upstream: Upstream, token: str,
-           deadman_ms: int, log, installer: Installer | None = None) -> None:
+def _greet(
+    client: socket.socket,
+    where,
+    upstream: Upstream,
+    token: str,
+    deadman_ms: int,
+    log,
+    installer: Installer | None = None,
+) -> None:
     client.settimeout(5)
     try:
         hello = b""
@@ -674,8 +757,7 @@ def _greet(client: socket.socket, where, upstream: Upstream, token: str,
         robotd = upstream.connect()
         # THE GREETING SAYS WHETHER INSTALL IS ON, so a phone can offer the
         # button or the sentence without asking and being refused.
-        client.sendall(greeting_line(deadman_ms,
-                                     bool(installer and installer.policy_dir)))
+        client.sendall(greeting_line(deadman_ms, bool(installer and installer.policy_dir)))
         log(f"relaying {where[0]}")
         Relay(client, robotd, deadman_ms, log=log, installer=installer).run()
         robotd.close()
@@ -717,46 +799,76 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--socket", default=_env("SOCKET", DEFAULT_SOCKET))
     parser.add_argument("--port", type=int, default=int(_env("PORT", DEFAULT_PORT)))
-    parser.add_argument("--host", default=_env("HOST", "0.0.0.0"),
-                        help="the interface to bind. The default is every "
-                             "interface on the robot's own LAN; do not "
-                             "port-forward it.")
+    parser.add_argument(
+        "--host",
+        default=_env("HOST", "0.0.0.0"),
+        help="the interface to bind. The default is every "
+        "interface on the robot's own LAN; do not "
+        "port-forward it.",
+    )
     parser.add_argument("--token-file", default=_env("TOKEN_FILE", DEFAULT_TOKEN_FILE))
-    parser.add_argument("--ssh", default=_env("SSH", None),
-                        help="user@host of the machine robotd runs on, when that is not "
-                             "this machine. One `ssh -L` is held open for the life of the "
-                             "process and every client dials its local end.")
+    parser.add_argument(
+        "--ssh",
+        default=_env("SSH", None),
+        help="user@host of the machine robotd runs on, when that is not "
+        "this machine. One `ssh -L` is held open for the life of the "
+        "process and every client dials its local end.",
+    )
     parser.add_argument("--ssh-port", type=int, default=int(_env("SSH_PORT", 22)))
-    parser.add_argument("--forward-port", type=int,
-                        default=int(_env("FORWARD_PORT", DEFAULT_FORWARD_PORT)),
-                        help="local end of the ssh forward; must not be --port")
-    parser.add_argument("--policy-dir", default=_env("POLICY_DIR", None),
-                        help="the directory robotd loads policies from; enables policy.install")
-    parser.add_argument("--robotd-toml", default=_env("ROBOTD_TOML", None),
-                        help="robotd's config, so an install can point a [policy] key at the file")
-    parser.add_argument("--deadman", type=int, default=int(_env("DEADMAN_MS", DEFAULT_DEADMAN_MS)),
-                        help="milliseconds of client silence before robot.stop. "
-                             "0 disables it, which you should not do on hardware.")
+    parser.add_argument(
+        "--forward-port",
+        type=int,
+        default=int(_env("FORWARD_PORT", DEFAULT_FORWARD_PORT)),
+        help="local end of the ssh forward; must not be --port",
+    )
+    parser.add_argument(
+        "--policy-dir",
+        default=_env("POLICY_DIR", None),
+        help="the directory robotd loads policies from; enables policy.install",
+    )
+    parser.add_argument(
+        "--robotd-toml",
+        default=_env("ROBOTD_TOML", None),
+        help="robotd's config, so an install can point a [policy] key at the file",
+    )
+    parser.add_argument(
+        "--deadman",
+        type=int,
+        default=int(_env("DEADMAN_MS", DEFAULT_DEADMAN_MS)),
+        help="milliseconds of client silence before robot.stop. "
+        "0 disables it, which you should not do on hardware.",
+    )
     return parser
 
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     if args.ssh and args.forward_port == args.port:
-        print(f"microduck-bridge: --forward-port {args.forward_port} is also --port; the "
-              "forward would loop back onto this listener.", file=sys.stderr)
+        print(
+            f"microduck-bridge: --forward-port {args.forward_port} is also --port; the "
+            "forward would loop back onto this listener.",
+            file=sys.stderr,
+        )
         return 2
     try:
         token = read_token(os.path.expanduser(args.token_file))
     except Refusal as refusal:
         print(f"microduck-bridge: {refusal}", file=sys.stderr)
         return 2
-    upstream = Upstream(args.socket, ssh=args.ssh, ssh_port=args.ssh_port,
-                        forward_port=args.forward_port)
+    upstream = Upstream(
+        args.socket, ssh=args.ssh, ssh_port=args.ssh_port, forward_port=args.forward_port
+    )
     try:
-        serve(args.host, args.port, args.socket, token, args.deadman,
-              policy_dir=args.policy_dir, robotd_toml=args.robotd_toml,
-              upstream=upstream)
+        serve(
+            args.host,
+            args.port,
+            args.socket,
+            token,
+            args.deadman,
+            policy_dir=args.policy_dir,
+            robotd_toml=args.robotd_toml,
+            upstream=upstream,
+        )
     except Refusal as refusal:
         print(f"microduck-bridge: {refusal}", file=sys.stderr)
         return 2

@@ -1408,9 +1408,7 @@ class CastorBridge:
         try:
             cmd_ref.update(entry)
         except Exception as exc:
-            log.warning(
-                "ESTOP ack write failed (verdict=%s, cmd_id=%s): %s", verdict, cmd_id, exc
-            )
+            log.warning("ESTOP ack write failed (verdict=%s, cmd_id=%s): %s", verdict, cmd_id, exc)
         if verdict == "acknowledged":
             log.info(
                 "ESTOP acknowledged by the robot in %.3fs cmd_id=%s",
@@ -1702,13 +1700,12 @@ class CastorBridge:
                 # OC-M-01: a failed ESTOP command is a stop nobody can claim
                 # reached the robot. Recomputed from the doc because the
                 # exception may predate the is_estop binding above.
-                failed_estop = doc.get("scope") == "safety" and "estop" in str(
-                    doc.get("instruction", "")
-                ).lower()
+                failed_estop = (
+                    doc.get("scope") == "safety"
+                    and "estop" in str(doc.get("instruction", "")).lower()
+                )
                 failed_entry.update(
-                    self._estop_not_confirmed_fields(
-                        failed_estop, _describe_dispatch_failure(exc)
-                    )
+                    self._estop_not_confirmed_fields(failed_estop, _describe_dispatch_failure(exc))
                 )
                 cmd_ref.update(failed_entry)
             except Exception:

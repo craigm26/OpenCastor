@@ -99,8 +99,7 @@ class LatchState:
             parts.append(
                 f"e-stop latched by {self.estop_principal or 'unknown'} "
                 f"(source={self.estop_source or 'unknown'}) at "
-                f"{_stamp(self.estop_at)}"
-                + (f": {self.estop_reason}" if self.estop_reason else "")
+                f"{_stamp(self.estop_at)}" + (f": {self.estop_reason}" if self.estop_reason else "")
             )
         if self.paused:
             parts.append(

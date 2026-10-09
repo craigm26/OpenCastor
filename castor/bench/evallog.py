@@ -104,9 +104,7 @@ def to_eval_log(record: Record, *, scene: str = "A") -> dict:
     scored = [e for e in epochs if e]
     reduced: dict[str, Any] = {}
     if scored:
-        reduced["checkpoint_reached"] = sum(
-            e["checkpoint_reached"] for e in scored
-        ) / len(scored)
+        reduced["checkpoint_reached"] = sum(e["checkpoint_reached"] for e in scored) / len(scored)
     if measured_motion:
         # Only now may a success number exist, and it never travels alone.
         reduced["motion_evidence"] = 1.0
@@ -266,9 +264,7 @@ def write_eval_log(record: Record, path: str | Path, *, scene: str = "A") -> Pat
     log.pop("_checkpoints_passed", None)
     # `checkpoints_passed` belongs in metrics, where their reducer can see it.
     passed = sum(
-        1
-        for cp in record.to_dict()["checkpoints"]
-        if cp["ok"] is True and cp["id"] != "C7"
+        1 for cp in record.to_dict()["checkpoints"] if cp["ok"] is True and cp["id"] != "C7"
     )
     log["results"]["metrics"] = {
         **log["results"]["metrics"],
@@ -281,7 +277,5 @@ def write_eval_log(record: Record, path: str | Path, *, scene: str = "A") -> Pat
     # `json.dumps(_sanitize(log.to_dict()), indent=2, sort_keys=True)`, and one
     # extra byte is the difference between "their writer reproduces this file"
     # and a red parity gate. Measured against inspect-robots 0.58.0.
-    out.write_text(
-        json.dumps(log, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8"
-    )
+    out.write_text(json.dumps(log, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8")
     return out

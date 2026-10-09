@@ -226,7 +226,9 @@ class StrokeToolset:
                     **({"chunk_final": True} if index == total - 1 else {}),
                 },
             )
-            for index, (action, point) in enumerate(zip(planned.actions, planned.points, strict=False))
+            for index, (action, point) in enumerate(
+                zip(planned.actions, planned.points, strict=False)
+            )
         ]
         points = len(targets) - 2  # the travel in and the lift out are not drawn points
         note_text = (

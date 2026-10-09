@@ -532,9 +532,7 @@ class OpenCastorEmbodiment:
             _reference_image(self.reference_name), name=REFERENCE_CAM
         )
         self.color_reference_camera: FrameSource | None = (
-            StaticFrameSource(
-                _color_reference_image(self.reference_name), name=REFERENCE_COLOR_CAM
-            )
+            StaticFrameSource(_color_reference_image(self.reference_name), name=REFERENCE_COLOR_CAM)
             if self.colored
             else None
         )
