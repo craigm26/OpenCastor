@@ -100,7 +100,7 @@ class RCANServiceBroadcaster:
         capabilities: Optional[list[str]] = None,
         model: str = "unknown",
         status_fn: Optional[Callable[[], str]] = None,
-        record: Optional["RobotRecord"] = None,
+        record: Optional[RobotRecord] = None,
     ):
         #: The client-facing half of the record. Passed in by a caller that
         #: knows it, else read from the environment the units already set.

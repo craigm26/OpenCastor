@@ -98,7 +98,10 @@ ATTESTATION_KID_ENV = "ROBOT_MD_ATTESTATION_KID"
 #: ``event_verdict = 'unresolvable'`` and nobody can check it. The key and its kid are
 #: only ever taken from the same source.
 ATTESTATION_ENV_FILES = (
-    lambda: Path(os.environ.get("ROBOT_HOME", "") or (Path.home() / "robot")) / "gateway-attestation.env",
+    lambda: (
+        Path(os.environ.get("ROBOT_HOME", "") or (Path.home() / "robot"))
+        / "gateway-attestation.env"
+    ),
     lambda: Path.home() / ".config" / "opencastor" / "gateway-attestation.env",
 )
 
@@ -166,7 +169,9 @@ def _assert_canonicalisable(value: Any, path: str = "$") -> None:
         return
     if isinstance(value, str):
         if any(0xD800 <= ord(ch) <= 0xDFFF for ch in value):
-            raise PlatAtlasIncidentError(f"{path}: the string contains a surrogate, which the two canonicalisers escape differently")
+            raise PlatAtlasIncidentError(
+                f"{path}: the string contains a surrogate, which the two canonicalisers escape differently"
+            )
         return
     if isinstance(value, list):
         for i, item in enumerate(value):
@@ -177,7 +182,9 @@ def _assert_canonicalisable(value: Any, path: str = "$") -> None:
             if not isinstance(k, str):
                 raise PlatAtlasIncidentError(f"{path}: object keys must be strings")
             if not k.isascii():
-                raise PlatAtlasIncidentError(f"{path}.{k}: a non-ASCII object key sorts differently in the two canonicalisers")
+                raise PlatAtlasIncidentError(
+                    f"{path}.{k}: a non-ASCII object key sorts differently in the two canonicalisers"
+                )
             _assert_canonicalisable(value[k], f"{path}.{k}")
         return
     raise PlatAtlasIncidentError(f"{path}: unsupported type {type(value).__name__}")
@@ -195,9 +202,13 @@ def _ser(value: Any) -> str:
     if isinstance(value, list):
         return "[" + ",".join(_ser(v) for v in value) + "]"
     if isinstance(value, dict):
-        return "{" + ",".join(
-            json.dumps(k, ensure_ascii=False) + ":" + _ser(value[k]) for k in sorted(value)
-        ) + "}"
+        return (
+            "{"
+            + ",".join(
+                json.dumps(k, ensure_ascii=False) + ":" + _ser(value[k]) for k in sorted(value)
+            )
+            + "}"
+        )
     raise PlatAtlasIncidentError(f"unsupported type {type(value).__name__}")
 
 
@@ -430,11 +441,13 @@ class _NoRedirects(urllib.request.HTTPRedirectHandler):
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D102
         raise urllib.error.HTTPError(
-            req.full_url, code,
+            req.full_url,
+            code,
             f"refusing to follow a redirect to {newurl}: the ingest key is in this "
             "request's headers and urllib would carry it to the new host, and a "
             "redirected POST is silently downgraded to a GET with no body",
-            headers, fp,
+            headers,
+            fp,
         )
 
 
@@ -551,7 +564,9 @@ def attestation_identity() -> tuple[Path, str]:
     from_file = _read_attestation_env_file()
     if from_file:
         path = Path(from_file[ATTESTATION_KEY_ENV]).expanduser()
-        return path, (from_file.get(ATTESTATION_KID_ENV, "").strip() or env_kid or load_attestation_kid(path))
+        return path, (
+            from_file.get(ATTESTATION_KID_ENV, "").strip() or env_kid or load_attestation_kid(path)
+        )
     raise PlatAtlasIncidentError(
         "no attestation identity: set "
         f"{ATTESTATION_KEY_ENV} (and {ATTESTATION_KID_ENV}), or run `castor up` or "

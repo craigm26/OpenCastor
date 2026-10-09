@@ -157,9 +157,7 @@ async def _safety_latch_resync_loop() -> None:
     while True:
         try:
             if _resync_safety_latch():
-                logger.warning(
-                    "safety hold reconciled from the latch file; see the audit row"
-                )
+                logger.warning("safety hold reconciled from the latch file; see the audit row")
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 - a guard that dies is worse than a slow one
@@ -6481,7 +6479,7 @@ def _rate_limit_http_error(reason: str, principal: str, action_type: str) -> HTT
             "action": action_type,
             "hint": (
                 "A matching row is in /var/log/safety: POST /api/fs/read with "
-                "{\"path\": \"/var/log/safety\"} (that read is itself paced, so "
+                '{"path": "/var/log/safety"} (that read is itself paced, so '
                 "wait out the window first). "
                 "reason=rate_limit_unavailable means the cap could not run and refused; "
                 "reason=role_rate_limited means this principal asked for too much. "
@@ -7686,9 +7684,7 @@ async def fleet_command(ruri: str, body: _FleetCommandRequest, request: Request)
 async def fleet_status(
     ruri: str,
     request: Request,
-    peer_token: Optional[str] = Query(
-        None, description="The peer robot's own bearer token."
-    ),
+    peer_token: Optional[str] = Query(None, description="The peer robot's own bearer token."),
     x_peer_token: Optional[str] = Header(None),
 ):
     """Proxy a status request to a remote robot identified by RURI.

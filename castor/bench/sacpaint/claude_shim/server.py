@@ -426,9 +426,7 @@ def make_server(
     """
     if not auth_token:
         raise ValueError("the shim needs a non-empty auth_token")
-    handler = type(
-        "BoundShimHandler", (ShimHandler,), {"runner": runner, "auth_token": auth_token}
-    )
+    handler = type("BoundShimHandler", (ShimHandler,), {"runner": runner, "auth_token": auth_token})
     return ThreadingHTTPServer((host, port), handler)
 
 
