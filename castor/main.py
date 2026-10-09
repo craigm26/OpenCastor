@@ -18,7 +18,8 @@ import yaml
 from castor.fs import CastorFS
 from castor.providers import get_provider
 from castor.safety.bounds import BoundsChecker
-from castor.safety.workspace_enforcer import start_workspace_enforcer
+from castor.safety.workspace import WorkspaceConfigError, parse_workspace_config
+from castor.safety.workspace_enforcer import DEFAULT_ENFORCE_HZ, start_workspace_enforcer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -851,10 +852,36 @@ def main():
 
     # 1b. INITIALIZE VIRTUAL FILESYSTEM
     _safety_limits = {}
-    _safety_cfg = config.get("safety", {})
+    _safety_cfg = config.get("safety") or {}
     if "motor_rate_hz" in _safety_cfg:
         _safety_limits["motor_rate_hz"] = float(_safety_cfg["motor_rate_hz"])
-    fs = CastorFS(persist_dir=args.memory_dir, limits=_safety_limits)
+    # Optional base workspace (safety.workspace; absent = no workspace policy). An invalid block
+    # stops the boot: a robot whose declared workspace cannot be read must not run as if it had
+    # none. With no pose_source, or none registered, every translating move is refused.
+    try:
+        _workspace_cfg = parse_workspace_config(_safety_cfg.get("workspace"))
+    except WorkspaceConfigError as exc:
+        logger.critical(f"Invalid RCAN config: {exc}")
+        raise SystemExit(1) from exc
+    if _workspace_cfg is not None:
+        logger.info(
+            "Workspace policy: keep-in of %d points, %d keep-out(s), re-checked at %.0f Hz, "
+            "pose source %s",
+            len(_workspace_cfg.workspace.keep_in),
+            len(_workspace_cfg.workspace.keep_out),
+            _workspace_cfg.enforce_hz,
+            repr(_workspace_cfg.pose_source) if _workspace_cfg.pose_source else "none",
+        )
+        if not _workspace_cfg.pose_source:
+            logger.warning(
+                "safety.workspace has no pose_source: every translating move will be refused "
+                "(stops and turning in place still work)"
+            )
+    fs = CastorFS(
+        persist_dir=args.memory_dir,
+        limits=_safety_limits,
+        workspace_policy=_workspace_cfg.build_policy() if _workspace_cfg else None,
+    )
     fs.boot(config)
     set_shared_fs(fs)
     logger.info("Virtual Filesystem Online")
@@ -1118,6 +1145,7 @@ def main():
     # try/except: a runtime that has a workspace policy but cannot re-check it must not run.
     workspace_enforcer = start_workspace_enforcer(
         fs.safety,
+        hz=_workspace_cfg.enforce_hz if _workspace_cfg else DEFAULT_ENFORCE_HZ,
         halt=driver.stop if driver and not args.simulate else None,
     )
     if workspace_enforcer is not None:
