@@ -464,7 +464,12 @@ def installer(tmp_path):
     )
 
     def start(policy=policy_dir, config=str(toml)):
-        return _start(socket_path, policy_dir=policy, robotd_toml=config)
+        # Deadman off: these tests assert exactly which lines reach robotd, and
+        # a slow runner can leave a client quiet for the default 300 ms while an
+        # install is hashed and written, so the deadman's robot.stop showed up
+        # in robotd.lines (CI on #972, Python 3.12). The deadman has its own
+        # tests on the relay fixture.
+        return _start(socket_path, deadman_ms=0, policy_dir=policy, robotd_toml=config)
 
     def connect(port):
         client = socket.create_connection(("127.0.0.1", port), timeout=5)
