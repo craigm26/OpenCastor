@@ -8,13 +8,20 @@ the commands the robot was sent: a fence that dead-reckons from its own commands
 where the robot is (the EV-03 hostile-model test measured 0.73 m believed against 11.47 m actual
 after ten minutes).
 
-For each move the policy predicts the worst-case stopping path: the commanded (or current, if larger)
-speed for one reaction time, then braking at the deceleration the base can always achieve, along the
-heading the command drives. If any point of that path, plus a margin, is outside the keep-in polygon
-or inside a keep-out polygon, the move is refused, and the SafetyLayer writes a command with zero
-linear velocity (turning in place is still allowed) instead of leaving the last command running.
+For each move the policy predicts the worst-case stopping path along the base's heading. In each
+direction, the base can travel at the larger of its current and its commanded speed in that
+direction for one reaction time, and then brakes at the deceleration it can always achieve. So a
+base moving forward that is told to reverse is checked forwards as well: it keeps going the way it
+was moving while it brakes. Every point of that path must stay at least ``margin_m`` from every edge
+of the keep-in polygon and of each keep-out polygon, measured exactly against each edge rather than
+at sample points, so a narrow keep-out cannot hide between two samples and the margin applies
+sideways as well as ahead. If the base is already within the margin of an edge (a push, or a jump
+in the pose), the only moves allowed near that edge are ones that never bring it closer and end
+farther away. A refused move is replaced by a command with zero linear velocity (turning in place
+is still allowed), and the SafetyLayer stops the motors instead of leaving the last command running.
 
-With no pose (the localizer has stopped, or has not started yet) every move is refused.
+With no pose (the localizer has stopped, or has not started yet), or a pose outside the workspace,
+every translating move is refused.
 
 Usage::
 
@@ -76,29 +83,40 @@ class BaseWorkspace:
     def __post_init__(self) -> None:
         if len(self.keep_in) < 3:
             raise ValueError("keep_in needs at least three points")
-        for name in ("top_speed_mps", "max_decel_mps2"):
-            value = getattr(self, name)
-            if not (isinstance(value, (int, float)) and math.isfinite(value) and value > 0):
-                raise ValueError(f"{name} must be a positive number, got {value!r}")
+        # Every limit is checked here, not only in the config parser: a negative or non-finite
+        # reaction time or margin would shorten the stopping path, or make it NaN, and a NaN
+        # comparison never refuses anything.
+        for name, zero_ok in (
+            ("top_speed_mps", False),
+            ("max_decel_mps2", False),
+            ("reaction_s", True),
+            ("margin_m", True),
+        ):
+            value = _finite(getattr(self, name))
+            if value is None or value < 0 or (value == 0 and not zero_ok):
+                kind = "a non-negative" if zero_ok else "a positive"
+                raise ValueError(f"{name} must be {kind} number, got {getattr(self, name)!r}")
 
     def allowed(self, x: float, y: float) -> bool:
         if not _in_polygon(x, y, self.keep_in):
             return False
         return not any(_in_polygon(x, y, poly) for poly in self.keep_out)
 
+    def stopping_distance(self, speed: float) -> float:
+        """How far the base travels at *speed* (m/s) for one reaction time and then braking."""
+        return speed * self.reaction_s + speed * speed / (2.0 * self.max_decel_mps2)
+
+    def boundary_edges(self) -> list[tuple[Point, Point]]:
+        """Every edge of the keep-in polygon and of each keep-out polygon."""
+        return [edge for poly in [self.keep_in, *self.keep_out] for edge in _edges(poly)]
+
 
 class BaseWorkspacePolicy:
     """Refuses base motion whose worst-case stopping path leaves the workspace."""
 
-    def __init__(
-        self,
-        workspace: BaseWorkspace,
-        pose_provider: Callable[[], Optional[Any]],
-        samples: int = 8,
-    ):
+    def __init__(self, workspace: BaseWorkspace, pose_provider: Callable[[], Optional[Any]]):
         self.workspace = workspace
         self.pose_provider = pose_provider
-        self.samples = max(2, int(samples))
 
     def _pose(self) -> Optional[Pose]:
         try:
@@ -119,7 +137,11 @@ class BaseWorkspacePolicy:
         return x, y, theta, v
 
     def check(self, data: Any) -> tuple[bool, str]:
-        """(True, "") if the move may run; otherwise (False, reason)."""
+        """(True, "") if the move may run; otherwise (False, reason).
+
+        The pose's speed is signed: positive while the base moves along its heading, negative
+        while it reverses.
+        """
         if not isinstance(data, dict):
             return True, ""
         linear = data.get("linear", 0.0) or 0.0
@@ -130,18 +152,42 @@ class BaseWorkspacePolicy:
             return False, "no pose from the localizer; refusing to move"
         x, y, theta, v_now = pose
         ws = self.workspace
+        if not ws.allowed(x, y):
+            return False, (
+                f"the pose ({x:.2f}, {y:.2f}) is outside the workspace; refusing to translate"
+            )
         v_cmd = float(linear) * ws.top_speed_mps
-        speed = max(abs(v_cmd), abs(v_now))
-        reach = speed * ws.reaction_s + speed * speed / (2.0 * ws.max_decel_mps2) + ws.margin_m
-        heading = theta if v_cmd >= 0 else theta + math.pi
-        for i in range(1, self.samples + 1):
-            d = reach * i / self.samples
-            px, py = x + d * math.cos(heading), y + d * math.sin(heading)
-            if not ws.allowed(px, py):
-                return False, (
-                    f"stopping path ({reach:.2f} m at {speed:.2f} m/s) leaves the workspace "
-                    f"near ({px:.2f}, {py:.2f})"
-                )
+        # In each direction along the heading, the fastest the base can be going while the command
+        # takes effect: its current velocity or the commanded one. A reversal therefore has a
+        # path both ways, the way it is moving now (it brakes first) and the way it was told.
+        reach_ahead = ws.stopping_distance(max(0.0, v_now, v_cmd))
+        reach_behind = ws.stopping_distance(max(0.0, -v_now, -v_cmd))
+        ux, uy = math.cos(theta), math.sin(theta)
+        start: Point = (x, y)
+        path = (
+            (x - reach_behind * ux, y - reach_behind * uy),
+            (x + reach_ahead * ux, y + reach_ahead * uy),
+        )
+        end = path[1] if v_cmd > 0 else path[0]  # where the commanded motion takes it
+        for edge in ws.boundary_edges():
+            clearance = _segment_distance(path, edge)
+            if clearance > ws.margin_m:
+                continue
+            # Already within the margin of this edge: allow only a path that never comes closer
+            # and ends farther away, so the base can leave the band but never ride along it.
+            now = _point_segment_distance(start, edge)
+            eps = 1e-9 * max(1.0, now)
+            if (
+                now > 0.0
+                and clearance >= now - eps
+                and _point_segment_distance(end, edge) > now + eps
+            ):
+                continue
+            return False, (
+                f"stopping path ({reach_behind:.2f} m behind, {reach_ahead:.2f} m ahead) leaves the "
+                f"workspace or comes within {ws.margin_m:.2f} m of its edge "
+                f"({edge[0][0]:.2f}, {edge[0][1]:.2f})-({edge[1][0]:.2f}, {edge[1][1]:.2f})"
+            )
         return True, ""
 
     @staticmethod
@@ -160,6 +206,44 @@ def _in_polygon(x: float, y: float, poly: list[Point]) -> bool:
     return inside
 
 
+def _edges(poly: list[Point]) -> list[tuple[Point, Point]]:
+    return [(poly[i], poly[(i + 1) % len(poly)]) for i in range(len(poly))]
+
+
+def _point_segment_distance(p: Point, seg: tuple[Point, Point]) -> float:
+    (x1, y1), (x2, y2) = seg
+    dx, dy = x2 - x1, y2 - y1
+    length2 = dx * dx + dy * dy
+    t = 0.0 if length2 == 0 else max(0.0, min(1.0, ((p[0] - x1) * dx + (p[1] - y1) * dy) / length2))
+    return math.hypot(p[0] - (x1 + t * dx), p[1] - (y1 + t * dy))
+
+
+def _orientation(a: Point, b: Point, c: Point) -> float:
+    return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+
+def _segments_intersect(s1: tuple[Point, Point], s2: tuple[Point, Point]) -> bool:
+    (p1, p2), (q1, q2) = s1, s2
+    d1, d2 = _orientation(q1, q2, p1), _orientation(q1, q2, p2)
+    d3, d4 = _orientation(p1, p2, q1), _orientation(p1, p2, q2)
+    if ((d1 > 0) != (d2 > 0)) and ((d3 > 0) != (d4 > 0)) and 0 not in (d1, d2, d3, d4):
+        return True
+    # Touching or collinear: covered by the endpoint distances in _segment_distance being zero.
+    return False
+
+
+def _segment_distance(s1: tuple[Point, Point], s2: tuple[Point, Point]) -> float:
+    """Shortest distance between two segments: 0 if they cross or touch."""
+    if _segments_intersect(s1, s2):
+        return 0.0
+    return min(
+        _point_segment_distance(s1[0], s2),
+        _point_segment_distance(s1[1], s2),
+        _point_segment_distance(s2[0], s1),
+        _point_segment_distance(s2[1], s1),
+    )
+
+
 # ----- pose sources -----------------------------------------------------------------------------
 PoseProvider = Callable[[], Optional[Any]]
 
@@ -174,6 +258,7 @@ def register_pose_source(name: str, provider: PoseProvider) -> None:
     the robot's own sensors); ``safety.workspace.pose_source`` names it. *provider* returns
     ``(x, y, heading_rad, speed_mps)``, or a dict with ``x``, ``y``, ``theta`` and ``v``, in the
     workspace's frame, and None whenever it has no current fix: a stale pose is worse than none.
+    The speed is signed: positive while the base moves along its heading, negative in reverse.
     Registering a name again replaces its provider (a localizer that restarted).
     """
     if not isinstance(name, str) or not name:

@@ -110,6 +110,86 @@ def test_bad_workspace_is_rejected_at_construction():
         BaseWorkspace(keep_in=BAY, max_decel_mps2=0.0)
 
 
+@pytest.mark.parametrize(
+    "limits",
+    [
+        {"reaction_s": -0.05},
+        {"reaction_s": math.nan},
+        {"margin_m": -0.01},
+        {"margin_m": math.inf},
+        {"top_speed_mps": True},
+        {"max_decel_mps2": math.inf},
+        {"reaction_s": "0.05"},
+    ],
+)
+def test_every_limit_is_validated_at_construction(limits):
+    """A negative or non-finite reaction time or margin would shorten the stopping path or make it
+    NaN, and a NaN comparison never refuses; a bool is not a speed."""
+    with pytest.raises(ValueError):
+        BaseWorkspace(keep_in=BAY, **limits)
+
+
+# ----- the path: both directions, exact edges, a margin on every side ---------------------------
+def test_a_reversal_also_checks_the_way_the_base_is_still_moving():
+    """Moving forward at 1 m/s, 0.5 m from the wall ahead, and told to reverse: the base keeps
+    going forward while it reacts and brakes (0.05 m + 0.5 m), so it reaches the wall."""
+    policy, _ = _policy(pose=(5.5, 2.0, 0.0, 1.0))
+    allowed, why = policy.check({"linear": -1.0})
+    assert not allowed
+    assert "leaves the workspace" in why
+    policy, _ = _policy(pose=(5.7, 2.0, 0.0, 1.0))
+    assert not policy.check({"linear": -0.2})[0]
+
+
+def test_reversing_away_from_a_wall_behind_is_still_allowed():
+    policy, _ = _policy(pose=(5.0, 2.0, 0.0, 0.0))  # 1 m from the wall ahead, standing still
+    assert policy.check({"linear": -0.3})[0]
+
+
+def test_a_narrow_keep_out_cannot_hide_between_samples():
+    """The old check sampled eight points; a 2 cm keep-out between two of them was missed."""
+    sliver = [[(1.17, 1.9), (1.19, 1.9), (1.19, 2.1), (1.17, 2.1)]]
+    policy, _ = _policy(pose=(1.0, 2.0, 0.0, 0.0), keep_out=sliver)
+    # 1 m/s: a 0.60 m path with the margin, sampled every 7.5 cm at x = 1.075, 1.15, 1.225 ...
+    assert not policy.check({"linear": 1.0 / 1.5})[0]
+
+
+def test_a_concave_keep_in_is_checked_along_the_whole_path():
+    """A U-shaped bay with a 10 cm slot between its arms: both ends of the path are inside, and
+    the old samples (every 16 cm) landed either side of the slot."""
+    u_bay = [(0, 0), (3, 0), (3, 3), (1.1, 3), (1.1, 1), (1, 1), (1, 3), (0, 3)]
+    ws = BaseWorkspace(keep_in=u_bay, top_speed_mps=1.5, max_decel_mps2=1.0, margin_m=0.05)
+    policy = BaseWorkspacePolicy(ws, lambda: (0.5, 2.0, 0.0, 1.5))  # in the left arm, heading +x
+    assert not policy.check({"linear": 1.0})[0]  # its stopping path crosses the slot
+
+
+def test_the_margin_applies_sideways_too():
+    """A path along the wall 3 cm away was accepted with a 5 cm margin: the margin was only added
+    to the length of the path. Now no point of the path may come within the margin of an edge."""
+    policy, _ = _policy(pose=(1.0, 0.03, 0.0, 0.0))  # 3 cm from the y = 0 wall, heading along it
+    assert not policy.check({"linear": 0.3})[0]
+    policy, _ = _policy(pose=(1.0, 0.10, 0.0, 0.0))  # 10 cm away: clear of the margin
+    assert policy.check({"linear": 0.3})[0]
+    # 10 cm away, angled in: the path (0.12 m) ends 3 cm from the wall. The old check added the
+    # margin to the length only, and that point was still 2 mm inside, so it was allowed.
+    policy, _ = _policy(pose=(1.0, 0.10, -0.6, 0.0))
+    assert not policy.check({"linear": 0.3})[0]
+
+
+def test_inside_the_margin_only_a_move_away_is_allowed():
+    policy, _ = _policy(pose=(1.0, 0.03, math.pi / 2, 0.0))  # 3 cm from the wall, facing away
+    assert policy.check({"linear": 0.2})[0]
+    assert not policy.check({"linear": -0.2})[0]  # backing into it
+
+
+def test_a_pose_outside_the_workspace_refuses_translation():
+    policy, _ = _policy(pose=(6.1, 2.0, math.pi, 0.0))  # 10 cm past the wall, facing back in
+    allowed, why = policy.check({"linear": 0.2})
+    assert not allowed
+    assert "outside the workspace" in why
+    assert policy.check({"linear": 0.0, "angular": 0.5})[0]  # turning in place still works
+
+
 # ----- inside SafetyLayer -----------------------------------------------------------------------
 def test_refused_move_writes_zero_translation_not_the_old_command():
     policy, _ = _policy(pose=(5.7, 2.0, 0.0, 0.0))
@@ -140,6 +220,26 @@ def test_stops_always_go_through():
     sl = _safety(policy)
     assert sl.write("/dev/motor", {"type": "stop"}, principal="brain")
     assert sl.write("/dev/motor", {"type": "move", "linear": 0, "angular": 0}, principal="brain")
+
+
+def test_a_refused_move_also_stops_the_motors():
+    """/dev/motor is only a node: a refusal has to reach the driver, or the last command it was
+    given keeps running (found by review on the API's direct-action path)."""
+    policy, _ = _policy(pose=(5.7, 2.0, 0.0, 0.0))
+    sl = _safety(policy)
+    stops = []
+    sl.add_motor_halt(lambda: stops.append("stop"))
+    assert sl.write("/dev/motor", {"type": "move", "linear": 0.5}, principal="brain") is False
+    assert stops == ["stop"]
+
+
+def test_an_allowed_move_does_not_stop_the_motors():
+    policy, _ = _policy(pose=(1.0, 2.0, 0.0, 0.0))
+    sl = _safety(policy)
+    stops = []
+    sl.add_motor_halt(lambda: stops.append("stop"))
+    assert sl.write("/dev/motor", {"type": "move", "linear": 0.3}, principal="brain")
+    assert stops == []
 
 
 def test_without_a_policy_behaviour_is_unchanged():
@@ -190,6 +290,16 @@ def test_enforce_workspace_replaces_an_unsafe_command():
     assert sl.ns.read("/dev/motor") == {"type": "move", "linear": 0.0, "angular": 0.2}
     events = [row.get("event") for row in sl.ns.read("/var/log/safety") or []]
     assert "workspace_enforced" in events
+
+
+def test_replacing_the_standing_command_also_stops_the_motors():
+    policy, _ = _policy(pose=(5.85, 2.0, 0.0, 0.5))
+    sl = _safety(policy)
+    stops = []
+    sl.add_motor_halt(lambda: stops.append("stop"))
+    sl.ns.write("/dev/motor", {"type": "move", "linear": 0.3, "angular": 0.2})
+    assert sl.enforce_workspace() is False
+    assert stops == ["stop"]
 
 
 def test_enforce_workspace_stops_an_invalid_standing_command():

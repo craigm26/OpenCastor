@@ -20,8 +20,10 @@ would go) found that the safety layer held speed but not position. See
   full speed, `True` as 1.0 and a string as whatever it parsed to.
 - **Optional base workspace, `safety.workspace`** (`castor/safety/workspace.py`): keep-in polygon,
   keep-outs, top speed, worst-case deceleration, reaction time, margin. A move whose stopping path
-  leaves the workspace is refused and `/dev/motor` gets a zero-translation command, instead of the
-  previous command running on. The pose comes from a pose source a localizer registers
+  leaves the workspace, or comes within the margin of any edge, is refused and `/dev/motor` gets a
+  zero-translation command, instead of the previous command running on. The path is checked in
+  both directions during a reversal (the base brakes the way it was going) and exactly against each
+  edge, so a narrow keep-out cannot fall between sample points. The pose comes from a pose source a localizer registers
   (`register_pose_source()`). OpenCastor ships no localizer: with no pose, every translating move
   is refused; stops and turning in place still work. Absent block, no change. An invalid block
   stops `castor run` at boot and names every problem.
@@ -30,6 +32,10 @@ would go) found that the safety layer held speed but not position. See
   with a slow brain an accepted full-speed command ran on after its stopping path had left the
   workspace. A thread re-checks it at `enforce_hz` (default 50 Hz) and stops the motors when it
   has to be replaced. It never starts them.
+- **A refused motor command stops the motors, on every path.** Drivers register their `stop()`
+  with the safety layer (`SafetyLayer.add_motor_halt()`), which calls it whenever it refuses a
+  motor command or replaces the standing one. `POST /api/action` used to answer 422 to a NaN
+  velocity while the last accepted move kept running.
 - **`castor run` hands the motors what the safety layer left standing, or stops them.** When the
   paced read-back of `/dev/motor` was refused, the brain's raw, unchecked action went to the
   driver; now the motors stop. With a workspace configured, an action the wheels do not take

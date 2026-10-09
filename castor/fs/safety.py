@@ -25,7 +25,7 @@ import math
 import os
 import threading
 import time
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from castor.fs.namespace import Namespace
 from castor.fs.permissions import Cap, PermissionTable
@@ -139,6 +139,11 @@ class SafetyLayer:
         #: Public as :attr:`motor_lock` so the caller that hands /dev/motor to
         #: the driver can hold it from the write to the driver call.
         self._motor_lock = threading.RLock()
+        #: Stop the physical motors. Whoever hands /dev/motor to a driver registers the driver's
+        #: stop() here (:meth:`add_motor_halt`). /dev/motor is only a node: when the safety layer
+        #: refuses a motor command and writes a stop or a no-translation command there, the motors
+        #: keep running the last command they were given until someone tells them otherwise.
+        self._motor_halts: list[Callable[[], Any]] = []
         self.capability_broker = capability_broker
 
         # Rate limiting state
@@ -647,6 +652,33 @@ class SafetyLayer:
             self.ns.write(path, {"type": "stop"}, meta=meta)
         except Exception as exc:  # noqa: BLE001
             logger.error("Could not write the stop after %s: %s", event, exc)
+        self._halt_motors(event)
+
+    def add_motor_halt(self, halt: Callable[[], Any]) -> None:
+        """Register *halt* (a driver's ``stop``) to be called whenever this layer stops motion.
+
+        That is: a refused invalid velocity, a refused workspace move, and a standing command the
+        workspace re-check replaces. Every caller that hands /dev/motor to a driver should register
+        the driver here; ``castor/main.py`` and the API gateway do.
+        """
+        if not callable(halt):
+            raise TypeError("a motor halt must be callable")
+        with self._motor_lock:
+            if halt not in self._motor_halts:
+                self._motor_halts.append(halt)
+
+    def remove_motor_halt(self, halt: Callable[[], Any]) -> None:
+        """Unregister *halt* (a driver that is being closed)."""
+        with self._motor_lock:
+            if halt in self._motor_halts:
+                self._motor_halts.remove(halt)
+
+    def _halt_motors(self, event: str) -> None:
+        for halt in list(self._motor_halts):
+            try:
+                halt()
+            except Exception as exc:  # noqa: BLE001 - try every driver; say so loudly
+                logger.critical("Could not stop the motors after %s: %s", event, exc)
 
     def _clamp_motor_data(self, data: Any) -> Any:
         """Clamp motor command values to safe ranges."""
@@ -765,6 +797,7 @@ class SafetyLayer:
                 return True
             self._audit_safety("safety", path, "workspace_enforced", why)
             self.ns.write(path, self.workspace_policy.refusal_command(current))
+            self._halt_motors("workspace_enforced")
             return False
 
     def _write_checked(
@@ -989,6 +1022,7 @@ class SafetyLayer:
                     logger.warning("WRITE refused: %s", why)
                     self._audit_safety(principal, path, "workspace_refused", why)
                     self.ns.write(path, self.workspace_policy.refusal_command(data), meta=meta)
+                    self._halt_motors("workspace_refused")
                     self._last_write_denial = f"Workspace: {why}"
                     return False
 

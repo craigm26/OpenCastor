@@ -7273,6 +7273,11 @@ async def on_startup():
             from castor.main import Camera, Speaker
 
             state.driver = get_driver(state.config)
+            # A refused motor command must stop the wheels as well as /dev/motor: the safety
+            # layer calls this driver's stop() when it refuses one (SafetyLayer.add_motor_halt).
+            # Otherwise /api/action answers 422 while the last accepted move keeps running.
+            if state.driver is not None and state.fs is not None:
+                state.fs.safety.add_motor_halt(state.driver.stop)
 
             # Initialize camera + speaker for live frames and TTS
             from castor.main import set_shared_camera, set_shared_speaker
@@ -10795,6 +10800,11 @@ async def on_shutdown():
     set_shared_speaker(None)
 
     if state.driver:
+        if state.fs is not None:
+            try:
+                state.fs.safety.remove_motor_halt(state.driver.stop)
+            except Exception as _rm_exc:  # noqa: BLE001 - shutting down regardless
+                logger.debug("Could not unregister the driver's motor halt: %s", _rm_exc)
         state.driver.close()
     if hasattr(state, "speaker") and state.speaker:
         state.speaker.close()

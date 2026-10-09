@@ -1138,7 +1138,12 @@ def main():
     except Exception as e:
         logger.debug(f"Sensor monitor skipped: {e}")
 
-    # 6e-iii. WORKSPACE ENFORCER — re-check the standing motor command every control cycle.
+    # 6e-iii. A REFUSAL STOPS THE WHEELS, not only /dev/motor: the safety layer calls driver.stop()
+    # itself when it refuses a motor command or replaces the standing one (add_motor_halt).
+    if driver and not args.simulate:
+        fs.safety.add_motor_halt(driver.stop)
+
+    # 6e-iv. WORKSPACE ENFORCER — re-check the standing motor command every control cycle.
     # The brain writes /dev/motor once per step, so with a slow brain the last command used to
     # run unchecked until the next step. Off unless a workspace policy is configured. It only
     # ever stops the motors (driver.stop), never starts them. Deliberately not wrapped in

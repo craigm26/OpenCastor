@@ -35,11 +35,19 @@ safety:
 
 ## What it does
 
-1. **On every motor write**, the safety layer predicts the worst-case stopping path: the commanded
-   (or current, if larger) speed for `reaction_s`, then braking at `max_decel_mps2`, along the
-   heading the command drives, plus `margin_m`. A move whose path leaves `keep_in` or enters a
-   keep-out is refused, and `/dev/motor` gets a zero-translation command with the same turn rate.
-   The previous command is never left running.
+1. **On every motor write**, the safety layer predicts the worst-case stopping path along the
+   base's heading. In each direction, the base can run at the larger of its current and its
+   commanded speed that way for `reaction_s`, then brakes at `max_decel_mps2`. So a base moving
+   forward that is told to reverse is checked forwards too: it keeps going while it brakes.
+   - Every point of the path has to stay at least `margin_m` from every edge of `keep_in` and of
+     each keep-out. The distance is computed exactly against each edge, not at sample points, so
+     a narrow keep-out or a slot in a concave `keep_in` cannot sit between two samples. The margin
+     applies sideways as well as ahead.
+   - A base that is already within `margin_m` of an edge (a push, or a jump in the pose) may only
+     make moves that never bring it closer to that edge and end farther from it.
+   - A base whose pose is outside the workspace may not translate at all.
+   - A refused move gets a zero-translation command on `/dev/motor`, with the same turn rate, and
+     the motors are stopped (point 5). The previous command is never left running.
 2. **Every control cycle** (`enforce_hz`), a thread re-checks the command standing on `/dev/motor`
    from the current pose. `castor run` writes once per brain step, and with a slow brain a
    full-speed command that was safe when it was accepted stops being safe long before the next
@@ -50,6 +58,11 @@ safety:
 4. **The wheels run what `/dev/motor` holds, or nothing.** The brain step writes, reads back and
    calls the driver under `SafetyLayer.motor_lock`, so a re-check cannot land in between. With a
    workspace configured, an action the wheels do not take (`wait`, `grip`, no `type`) stops them.
+5. **Every refusal reaches the driver.** `/dev/motor` is only a node. Whoever hands it to a driver
+   registers the driver's `stop()` with `SafetyLayer.add_motor_halt()`, and the safety layer calls
+   it whenever it refuses a motor command or replaces the standing one. `castor run` and the API
+   gateway both register theirs. Before this, `POST /api/action` answered 422 to a NaN velocity
+   while the last accepted move kept the wheels turning.
 
 ## No pose: every translating move is refused
 
@@ -73,7 +86,8 @@ and turning in place still work. `castor run` warns at boot when no `pose_source
 A command that passes one re-check runs until the next one, so `reaction_s` must cover one
 enforcement period plus the latency from the check to the motors. The config refuses a `reaction_s`
 shorter than `1 / enforce_hz`; the latency is yours to add. Add the localizer's error to
-`margin_m`. The stopping path is a straight line along the heading: a base that keeps turning while
+`margin_m`: it is kept on every side of the path. The pose's speed is signed (positive along the
+heading). The stopping path is a straight line along the heading: a base that keeps turning while
 it brakes is not modelled.
 
 ## Where it runs

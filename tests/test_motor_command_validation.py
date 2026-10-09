@@ -53,6 +53,43 @@ def test_invalid_velocity_is_refused_and_stops_the_motors(field, value):
     assert "invalid_motor_command" in _events(sl)
 
 
+def test_an_invalid_velocity_stops_every_registered_driver():
+    sl = _safety()
+    stops = []
+    sl.add_motor_halt(lambda: stops.append("a"))
+    sl.add_motor_halt(lambda: stops.append("b"))
+    sl.write("/dev/motor", {"type": "move", "linear": math.nan}, principal="api")
+    assert stops == ["a", "b"]
+
+
+def test_a_driver_whose_stop_fails_does_not_undo_the_refusal():
+    sl = _safety()
+    stops = []
+
+    def broken():
+        raise RuntimeError("serial port gone")
+
+    sl.add_motor_halt(broken)
+    sl.add_motor_halt(lambda: stops.append("other"))
+    assert sl.write("/dev/motor", {"type": "move", "linear": math.inf}, principal="api") is False
+    assert sl.ns.read("/dev/motor") == {"type": "stop"}
+    assert stops == ["other"]
+
+
+def test_a_removed_driver_is_not_stopped():
+    sl = _safety()
+    stops = []
+
+    def halt():
+        stops.append("stop")
+
+    sl.add_motor_halt(halt)
+    sl.add_motor_halt(halt)  # registering twice is one registration
+    sl.remove_motor_halt(halt)
+    sl.write("/dev/motor", {"type": "move", "linear": math.nan}, principal="api")
+    assert stops == []
+
+
 def test_nan_is_no_longer_clamped_to_full_speed():
     sl = _safety()
     sl.write("/dev/motor", {"type": "move", "linear": math.nan, "angular": 0.0}, principal="brain")
