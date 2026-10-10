@@ -18,6 +18,8 @@ import yaml
 from castor.fs import CastorFS
 from castor.providers import get_provider
 from castor.safety.bounds import BoundsChecker
+from castor.safety.workspace import WorkspaceConfigError, parse_workspace_config
+from castor.safety.workspace_enforcer import DEFAULT_ENFORCE_HZ, start_workspace_enforcer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -850,10 +852,36 @@ def main():
 
     # 1b. INITIALIZE VIRTUAL FILESYSTEM
     _safety_limits = {}
-    _safety_cfg = config.get("safety", {})
+    _safety_cfg = config.get("safety") or {}
     if "motor_rate_hz" in _safety_cfg:
         _safety_limits["motor_rate_hz"] = float(_safety_cfg["motor_rate_hz"])
-    fs = CastorFS(persist_dir=args.memory_dir, limits=_safety_limits)
+    # Optional base workspace (safety.workspace; absent = no workspace policy). An invalid block
+    # stops the boot: a robot whose declared workspace cannot be read must not run as if it had
+    # none. With no pose_source, or none registered, every translating move is refused.
+    try:
+        _workspace_cfg = parse_workspace_config(_safety_cfg.get("workspace"))
+    except WorkspaceConfigError as exc:
+        logger.critical(f"Invalid RCAN config: {exc}")
+        raise SystemExit(1) from exc
+    if _workspace_cfg is not None:
+        logger.info(
+            "Workspace policy: keep-in of %d points, %d keep-out(s), re-checked at %.0f Hz, "
+            "pose source %s",
+            len(_workspace_cfg.workspace.keep_in),
+            len(_workspace_cfg.workspace.keep_out),
+            _workspace_cfg.enforce_hz,
+            repr(_workspace_cfg.pose_source) if _workspace_cfg.pose_source else "none",
+        )
+        if not _workspace_cfg.pose_source:
+            logger.warning(
+                "safety.workspace has no pose_source: every translating move will be refused "
+                "(stops and turning in place still work)"
+            )
+    fs = CastorFS(
+        persist_dir=args.memory_dir,
+        limits=_safety_limits,
+        workspace_policy=_workspace_cfg.build_policy() if _workspace_cfg else None,
+    )
     fs.boot(config)
     set_shared_fs(fs)
     logger.info("Virtual Filesystem Online")
@@ -1109,6 +1137,27 @@ def main():
         )
     except Exception as e:
         logger.debug(f"Sensor monitor skipped: {e}")
+
+    # 6e-iii. A REFUSAL STOPS THE WHEELS, not only /dev/motor: the safety layer calls driver.stop()
+    # itself when it refuses a motor command or replaces the standing one (add_motor_halt).
+    if driver and not args.simulate:
+        fs.safety.add_motor_halt(driver.stop)
+
+    # 6e-iv. WORKSPACE ENFORCER — re-check the standing motor command every control cycle.
+    # The brain writes /dev/motor once per step, so with a slow brain the last command used to
+    # run unchecked until the next step. Off unless a workspace policy is configured. It only
+    # ever stops the motors (driver.stop), never starts them. Deliberately not wrapped in
+    # try/except: a runtime that has a workspace policy but cannot re-check it must not run.
+    workspace_enforcer = start_workspace_enforcer(
+        fs.safety,
+        hz=_workspace_cfg.enforce_hz if _workspace_cfg else DEFAULT_ENFORCE_HZ,
+        halt=driver.stop if driver and not args.simulate else None,
+    )
+    if workspace_enforcer is not None:
+        logger.info(
+            "Workspace enforcer: standing motor command re-checked at %.0f Hz",
+            workspace_enforcer.hz,
+        )
 
     # 6f. GEOFENCE (limit operating radius)
     geofence = None
@@ -1563,63 +1612,73 @@ def main():
                             logger.debug(f"Work authorization check unavailable: {_wa_exc}")
 
                 if action_to_execute:
-                    # Write action through the safety layer (clamping + rate limiting)
-                    fs.write("/dev/motor", action_to_execute, principal="brain")
+                    # Write the action through the safety layer (clamping, rate limiting, the
+                    # workspace policy) and hand the motors what it left standing on /dev/motor.
+                    # The motor lock is held from the write to the driver call, so the workspace
+                    # enforcer's per-cycle re-check cannot replace the command in between.
+                    safe_action = None
+                    with fs.safety.motor_lock:
+                        fs.write("/dev/motor", action_to_execute, principal="brain")
 
-                    if driver and not args.simulate:
-                        # Read back the clamped values from the safety layer
-                        clamped_action = fs.read("/dev/motor", principal="brain")
-                        safe_action = clamped_action if clamped_action else action_to_execute
-                        action_type = safe_action.get("type", "")
-                        if action_type == "move":
-                            linear = safe_action.get("linear", 0.0)
-                            angular = safe_action.get("angular", 0.0)
-                            bounds_result = bounds_checker.check_action(safe_action)
-                            if bounds_result.violated:
-                                logger.error(
-                                    "Bounds violation — move blocked: %s",
-                                    bounds_result.details,
-                                )
+                        if driver and not args.simulate:
+                            # Read back the clamped values from the safety layer. Never fall back
+                            # to the action as the brain sent it: when this read was refused (the
+                            # pacing cap), the raw, unchecked action used to go to the motors.
+                            safe_action = fs.read("/dev/motor", principal="brain")
+                            if not isinstance(safe_action, dict):
+                                logger.warning("No readable command on /dev/motor; stopping")
+                                safe_action = {"type": "stop"}
+                            action_type = safe_action.get("type", "")
+                            if action_type == "move":
+                                linear = safe_action.get("linear", 0.0)
+                                angular = safe_action.get("angular", 0.0)
+                                bounds_result = bounds_checker.check_action(safe_action)
+                                if bounds_result.violated:
+                                    logger.error(
+                                        "Bounds violation — move blocked: %s",
+                                        bounds_result.details,
+                                    )
+                                    driver.stop()
+                                else:
+                                    if bounds_result.status == "warning":
+                                        logger.warning("Bounds warning: %s", bounds_result.details)
+                                    driver.move(linear, angular)
+                            elif action_type == "stop" or workspace_enforcer is not None:
+                                # With per-cycle enforcement the wheels run what /dev/motor holds
+                                # or nothing: a command they do not take (wait, grip, no type)
+                                # would leave the previous move running where no re-check sees it.
                                 driver.stop()
-                            else:
-                                if bounds_result.status == "warning":
-                                    logger.warning("Bounds warning: %s", bounds_result.details)
-                                driver.move(linear, angular)
-                            # §16.5 Watermark + ai_confidence propagation fix
-                            _wm_token = None
-                            try:
-                                from castor.rcan.message_signing import get_message_signer
-                                from castor.watermark import compute_watermark_token
 
-                                _signer = get_message_signer(config)
-                                _secret = _signer.secret_key_bytes() if _signer else None
-                                if _secret and thought is not None:
-                                    _ts = getattr(thought, "timestamp", None)
-                                    _ts_str = (
-                                        _ts.isoformat()
-                                        if hasattr(_ts, "isoformat")
-                                        else str(_ts or "")
-                                    )
-                                    _wm_token = compute_watermark_token(
-                                        rrn=config.get("metadata", {}).get("rrn", ""),
-                                        thought_id=getattr(thought, "id", "") or "",
-                                        timestamp=_ts_str,
-                                        private_key_bytes=_secret,
-                                    )
-                                    safe_action["watermark_token"] = _wm_token
-                                # Fix: propagate thought.confidence for SOFTWARE_002 safety rule
-                                if thought is not None:
-                                    safe_action["ai_confidence"] = getattr(
-                                        thought, "confidence", None
-                                    )
-                            except Exception as _wm_exc:
-                                logger.debug("Watermark embed skipped: %s", _wm_exc)
-                            if audit:
-                                audit.log_motor_command(
-                                    safe_action, thought=thought, watermark_token=_wm_token
+                    if safe_action is not None and safe_action.get("type") == "move":
+                        # §16.5 Watermark + ai_confidence propagation fix
+                        _wm_token = None
+                        try:
+                            from castor.rcan.message_signing import get_message_signer
+                            from castor.watermark import compute_watermark_token
+
+                            _signer = get_message_signer(config)
+                            _secret = _signer.secret_key_bytes() if _signer else None
+                            if _secret and thought is not None:
+                                _ts = getattr(thought, "timestamp", None)
+                                _ts_str = (
+                                    _ts.isoformat() if hasattr(_ts, "isoformat") else str(_ts or "")
                                 )
-                        elif action_type == "stop":
-                            driver.stop()
+                                _wm_token = compute_watermark_token(
+                                    rrn=config.get("metadata", {}).get("rrn", ""),
+                                    thought_id=getattr(thought, "id", "") or "",
+                                    timestamp=_ts_str,
+                                    private_key_bytes=_secret,
+                                )
+                                safe_action["watermark_token"] = _wm_token
+                            # Fix: propagate thought.confidence for SOFTWARE_002 safety rule
+                            if thought is not None:
+                                safe_action["ai_confidence"] = getattr(thought, "confidence", None)
+                        except Exception as _wm_exc:
+                            logger.debug("Watermark embed skipped: %s", _wm_exc)
+                        if audit:
+                            audit.log_motor_command(
+                                safe_action, thought=thought, watermark_token=_wm_token
+                            )
 
                 # Record for self-improving loop
                 if _episode_store is not None:
@@ -1812,7 +1871,15 @@ def main():
             except Exception as e:
                 logger.debug(f"Agent shutdown error: {e}")
 
-        # Phase 1: Stop motors immediately (safety first)
+        # Phase 1: Stop motors immediately (safety first). The workspace enforcer
+        # stops first, so the stop below is the last command the motors get.
+        if workspace_enforcer is not None:
+            try:
+                workspace_enforcer.stop()
+                logger.info("  ✓ Workspace enforcer stopped")
+            except Exception as e:
+                logger.warning(f"  ✗ Workspace enforcer stop failed: {e}")
+
         if driver and not args.simulate:
             try:
                 driver.stop()

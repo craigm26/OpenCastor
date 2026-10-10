@@ -115,15 +115,24 @@ class CastorFS:
     Args:
         persist_dir:  Optional directory for memory persistence.
         limits:       Optional dict overriding safety limits.
+        workspace_policy: Optional base workspace policy for the safety layer
+                      (:mod:`castor.safety.workspace`, the ``safety.workspace`` config block).
     """
 
-    def __init__(self, persist_dir: Optional[str] = None, limits: Optional[dict] = None):
+    def __init__(
+        self,
+        persist_dir: Optional[str] = None,
+        limits: Optional[dict] = None,
+        workspace_policy: Optional[Any] = None,
+    ):
         from castor.fs.safety import SafetyLayer
 
         # Core layers
         self.ns = Namespace()
         self.perms = PermissionTable()
-        self.safety = SafetyLayer(self.ns, self.perms, limits=limits)
+        self.safety = SafetyLayer(
+            self.ns, self.perms, limits=limits, workspace_policy=workspace_policy
+        )
 
         # Subsystems
         self.memory = MemoryStore(self.ns, persist_dir=persist_dir)

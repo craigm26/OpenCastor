@@ -972,6 +972,35 @@
           "default": 20,
           "minimum": 1,
           "maximum": 500
+        },
+        "workspace": {
+          "type": "object",
+          "description": "Optional mobile-base workspace (castor.safety.workspace). A move whose worst-case stopping path leaves keep_in or enters a keep_out is refused, and the standing command is re-checked every control cycle. Absent: no workspace policy. With no pose_source, or none registered, every translating move is refused.",
+          "required": ["keep_in", "top_speed_mps", "max_decel_mps2"],
+          "properties": {
+            "keep_in": {
+              "type": "array",
+              "description": "Polygon the base must stay inside: [[x, y], ...] in metres, in the pose source's frame.",
+              "minItems": 3,
+              "items": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}
+            },
+            "keep_out": {
+              "type": "array",
+              "description": "Polygons the base must stay out of.",
+              "items": {
+                "type": "array",
+                "minItems": 3,
+                "items": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}
+              }
+            },
+            "top_speed_mps": {"type": "number", "exclusiveMinimum": 0, "description": "Speed in m/s at linear = 1.0."},
+            "max_decel_mps2": {"type": "number", "exclusiveMinimum": 0, "description": "Braking the base can always achieve, m/s^2 (worst case)."},
+            "reaction_s": {"type": "number", "exclusiveMinimum": 0, "default": 0.05, "description": "Time a command runs before braking starts: at least one enforcement period plus latency to the motors."},
+            "margin_m": {"type": "number", "minimum": 0, "default": 0.05, "description": "Extra clearance, metres; include the localizer's error."},
+            "enforce_hz": {"type": "number", "exclusiveMinimum": 0, "maximum": 1000, "default": 50, "description": "Rate at which the standing motor command is re-checked."},
+            "pose_source": {"type": "string", "minLength": 1, "description": "Name of the pose source a localizer registers with castor.safety.workspace.register_pose_source()."}
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": true

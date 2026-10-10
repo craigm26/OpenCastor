@@ -24,6 +24,7 @@ This document maps OpenCastor's safety implementation to the RCAN protocol provi
 | Nightly memory loop | autoDream | `castor/brain/autodream.py` | `AutoDream.run()` |
 | Watchdog | §6 | `castor/watchdog.py` | `Watchdog.start()` |
 | E-stop and pause hold ([hold.md](safety/hold.md)) | §6 | `castor/safety/latch.py` | `load()`, `record_estop()`, `record_pause()` |
+| Base workspace ([workspace.md](safety/workspace.md)) | — | `castor/safety/workspace.py`, `castor/safety/workspace_enforcer.py` | `BaseWorkspacePolicy.check()`, `WorkspaceEnforcer.step()` |
 | Privacy policy | §PRIVACY | `castor/privacy.py` | `PrivacyPolicy.check_scope()` |
 
 ---
@@ -192,6 +193,10 @@ Use `--strict` to treat warnings as failures. Use `--json` for machine-readable 
   `castor pause` / `castor resume`, the e-stop clear code, and why a sensor
   latch clears only at the robot. It is a best-effort software hold, not a
   hardware cut.
+- [docs/safety/workspace.md](safety/workspace.md): the base workspace
+  (`safety.workspace`). Stopping-path check on every motor write, the standing
+  command re-checked every control cycle, and every translating move refused
+  when there is no pose from independent localization.
 
 ---
 
