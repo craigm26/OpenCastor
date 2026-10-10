@@ -9,9 +9,20 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+## [3.6.1] - 2026-10-09
+
+Published on PyPI as `1!3.6.1`. The same code as 3.6.0, which was tagged but never reached PyPI.
+
+### Fixed
+
+- **The release workflow could not read the version.** Its release job ran on Python 3.10,
+  which has no `tomllib`, so the step that reads the version from `pyproject.toml` failed and
+  the v3.6.0 run stopped before publishing. The job now runs on Python 3.11.
+
 ## [3.6.0] - 2026-10-09
 
-Published on PyPI as `1!3.6.0` (the epoch is required; see `docs/pypi-versioning.md`).
+Tagged, but not published to PyPI: the release workflow failed (see 3.6.1). Install `1!3.6.1`,
+which has the same code.
 
 ### Safety: the base workspace, re-checked every control cycle (EV-03)
 
