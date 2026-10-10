@@ -9,6 +9,10 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+## [3.6.0] - 2026-10-09
+
+Published on PyPI as `1!3.6.0` (the epoch is required; see `docs/pypi-versioning.md`).
+
 ### Safety: the base workspace, re-checked every control cycle (EV-03)
 
 The EV-03 hostile-model test (simulated rover, random and malformed commands where the model's
@@ -48,6 +52,14 @@ seed. Simulation results, not hardware.
 
 Wired into `castor run` only. The `castor up` runtime (`castor.api`) does not read
 `safety.workspace` yet.
+
+### Also in this release
+
+- **Requires rcan 3.5 or later.** rcan 3.3 and 3.4 let a cross-registry command through with no
+  consent record; 3.5 is the first release that refuses it (#973).
+- **Release tags carry no epoch.** `v3.6.0` publishes `1!3.6.0`; the release check now requires
+  the epoch in `pyproject.toml` for every 3.x tag (#974).
+- CI's lint step passes again, so the test suite runs on every PR (#973).
 
 ## [3.5.0] - 2026-09-27
 
