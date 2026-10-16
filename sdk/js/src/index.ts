@@ -304,14 +304,14 @@ export class CastorClient {
   }
 
   /**
-   * Cancel an in-flight INVOKE by its message id (RCAN §19 INVOKE_CANCEL, type 15).
+   * Cancel an in-flight INVOKE by its message id (RCAN §19 INVOKE_CANCEL, type 13).
    *
    * Best-effort: if the skill has already completed the cancellation is silently
    * ignored by the router.
    */
   async invokeCancel(msgId: string): Promise<{ ok: boolean }> {
     return this.fetch<{ ok: boolean }>("POST", "/rcan", {
-      msg_type: 15, // MessageType.INVOKE_CANCEL
+      msg_type: 13, // MessageType.INVOKE_CANCEL (RCAN §3.2)
       invoke_id: msgId,
     });
   }
@@ -361,27 +361,27 @@ export class CastorClient {
   // ── Registry (§21) ────────────────────────────────────────────────────
 
   /**
-   * Register a robot with the Robot Registry Foundation (RCAN §21 REGISTRY_REGISTER, type 13).
+   * Register a robot with the Robot Registry Foundation (RCAN §21 REGISTRY_REGISTER, type 14).
    *
    * On success the registry assigns a canonical RRN and returns
    * `status: "success"`.  Use {@link registryResolve} to look up a robot by RRN.
    */
   async registryRegister(request: RegistryRegisterRequest): Promise<RegistryRegisterResponse> {
     return this.fetch<RegistryRegisterResponse>("POST", "/rcan", {
-      msg_type: 13, // MessageType.REGISTRY_REGISTER
+      msg_type: 14, // MessageType.REGISTRY_REGISTER (RCAN §3.2)
       ...request,
     });
   }
 
   /**
-   * Resolve an RRN to a RURI and metadata (RCAN §21 REGISTRY_RESOLVE, type 14).
+   * Resolve an RRN to a RURI and metadata (RCAN §21 REGISTRY_RESOLVE, type 15).
    *
    * Returns `status: "found"` with the `ruri` when the RRN is known, or
    * `status: "not_found"` when it is not.
    */
   async registryResolve(rrn: string): Promise<RegistryResolveResponse> {
     return this.fetch<RegistryResolveResponse>("POST", "/rcan", {
-      msg_type: 14, // MessageType.REGISTRY_RESOLVE
+      msg_type: 15, // MessageType.REGISTRY_RESOLVE (RCAN §3.2)
       rrn,
     });
   }

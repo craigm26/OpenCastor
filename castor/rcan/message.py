@@ -4,26 +4,11 @@ RCAN Message Envelope.
 Defines the standard JSON message format for RCAN protocol communication.
 Messages are plain JSON (no protobuf) -- readable with ``curl``, zero deps.
 
-Message types follow the RCAN spec::
-
-    DISCOVER      -- mDNS / peer discovery
-    STATUS        -- Telemetry / state reporting
-    COMMAND       -- Motor, config, or action command
-    STREAM        -- Continuous sensor data
-    EVENT         -- Asynchronous notifications
-    SAFETY        -- STOP / ESTOP / RESUME safety events (highest priority)
-    HANDOFF       -- Transfer control between principals
-    ACK           -- Acknowledgement of a prior message
-    ERROR         -- Error response
-    AUTHORIZE     -- Out-of-band authorization for HiTL gate (v1.2)
-    PENDING_AUTH  -- Notification that HiTL gate is awaiting authorization (v1.2)
-    INVOKE             -- Trigger a named skill/behavior on the robot runtime (v1.3 §19)
-    INVOKE_RESULT      -- Result of an INVOKE invocation (v1.3 §19)
-    INVOKE_CANCEL      -- Cancel an in-flight INVOKE by invoke_id (v1.3 §19)
-    REGISTRY_REGISTER        -- Register robot with RRF (v1.3 §21)
-    REGISTRY_RESOLVE         -- Resolve RRN to RURI/metadata (v1.3 §21)
-    REGISTRY_REGISTER_RESULT -- Result of REGISTRY_REGISTER (v1.3 §21)
-    REGISTRY_RESOLVE_RESULT  -- Result of REGISTRY_RESOLVE (v1.3 §21)
+Message types use the RCAN spec §3.2 numbering (see :class:`MessageType`).
+The names OpenCastor uses most are COMMAND, STATUS, ACK, ERROR, SAFETY,
+DISCOVER, PENDING_AUTH, AUTHORIZE, INVOKE / INVOKE_RESULT / INVOKE_CANCEL and
+REGISTRY_REGISTER / REGISTRY_RESOLVE (plus their OpenCastor-only *_RESULT
+replies).
 
 Each message carries a priority (LOW, NORMAL, HIGH, SAFETY) that determines
 queue ordering.  SAFETY priority messages skip the queue entirely
@@ -46,54 +31,181 @@ RCAN_SPEC_VERSION = "3.0"
 
 
 class MessageType(IntEnum):
-    """RCAN message types."""
+    """RCAN message types, numbered per RCAN spec §3.2 (1-45).
 
-    DISCOVER = 1
-    STATUS = 2
-    COMMAND = 3
-    STREAM = 4
-    EVENT = 5
-    SAFETY = 6  # RCAN §6: STOP / ESTOP / RESUME — bypasses all queues
-    ACK = 7
+    The integer values for every spec type mirror ``rcan.MessageType`` from
+    rcan-py, which is generated from rcan-spec
+    ``spec/sections/MESSAGE_TYPE_NUMBERING.md``.  ``tests/test_rcan_message.py``
+    fails if this table and the installed rcan-py ever disagree.
+
+    OpenCastor 3.7 renumbered this table.  Before that it used a pre-v2.1
+    numbering for 1-19 (DISCOVER=1, COMMAND=3, AUTHORIZE=9, TRANSPARENCY=18,
+    ...).  ``RCANMessage.from_dict`` still decodes messages from older
+    OpenCastor peers by their ``type_name`` field; see :func:`resolve_type`.
+
+    Names are unchanged from earlier releases so call sites keep working.
+    """
+
+    # Core protocol (1-8)
+    COMMAND = 1
+    RESPONSE = 2
+    STATUS = 3
+    HEARTBEAT = 4
+    CONFIG = 5
+    SAFETY = 6  # RCAN §6: STOP / ESTOP / RESUME, bypasses all queues
+    AUTH = 7
     ERROR = 8
-    AUTHORIZE = 9  # Out-of-band authorization for HiTL gate (RCAN v1.2)
-    PENDING_AUTH = 10  # Notification that HiTL gate is awaiting authorization (RCAN v1.2)
-    INVOKE = 11  # Trigger a named skill/behavior on the robot runtime (RCAN v1.3 §19)
-    INVOKE_RESULT = 12  # Result of an INVOKE invocation (RCAN v1.3 §19)
-    REGISTRY_REGISTER = 13  # §21 — register robot with RRF
-    REGISTRY_RESOLVE = 14  # §21 — resolve RRN to RURI/metadata
-    INVOKE_CANCEL = 15  # Cancel an in-flight INVOKE by invoke_id (RCAN v1.3 §19)
-    REGISTRY_REGISTER_RESULT = (
-        16  # §21 — result of REGISTRY_REGISTER (success/failure + assigned RRN)
-    )
-    REGISTRY_RESOLVE_RESULT = 17  # §21 — result of REGISTRY_RESOLVE (RURI + metadata or error)
-    TRANSPARENCY = 18  # EU AI Act Art. 13 transparency disclosure
-    HANDOFF = 19  # Transfer control between principals
+
+    # Discovery & authorization (9-10)
+    DISCOVER = 9
+    PENDING_AUTH = 10  # HiTL gate is awaiting authorization
+
+    # Skill invocation (11-13), RCAN §19
+    INVOKE = 11
+    INVOKE_RESULT = 12
+    INVOKE_CANCEL = 13
+
+    # Registry (14-15), RCAN §21
+    REGISTRY_REGISTER = 14
+    REGISTRY_RESOLVE = 15
+
+    # Audit & transparency (16)
+    TRANSPARENCY = 16  # EU AI Act Art. 13 transparency disclosure
+
+    # Acknowledgement & QoS (17-18)
+    COMMAND_ACK = 17
+    COMMAND_NACK = 18
+
+    # Identity & consent (19-22)
+    ROBOT_REVOCATION = 19
     CONSENT_REQUEST = 20  # R2RAM §5: request cross-owner robot-to-robot authorization
     CONSENT_GRANT = 21  # R2RAM §5: grant cross-owner authorization with scopes
     CONSENT_DENY = 22  # R2RAM §5: deny cross-owner authorization request
-    FLEET_COMMAND = 23  # Fleet-level command from orchestrator (v2.1)
-    SUBSCRIBE = 24  # Subscribe to a robot event stream
-    UNSUBSCRIBE = 25  # Unsubscribe from a robot event stream
-    FAULT_REPORT = 26  # Fault report from robot to registry
-    KEY_ROTATION = 27  # Ed25519 key rotation notification
+
+    # Fleet & telemetry (23-25)
+    FLEET_COMMAND = 23
+    SUBSCRIBE = 24
+    UNSUBSCRIBE = 25
+
+    # Diagnostics (26-28)
+    FAULT_REPORT = 26
+    KEY_ROTATION = 27
     COMMAND_COMMIT = 28  # Commit a pending command (HiTL confirmation)
-    SENSOR_DATA = 29  # Sensor data push from robot
-    TRAINING_CONSENT_REQUEST = 30  # Request consent for training data collection
-    TRAINING_CONSENT_GRANT = 31  # Grant training data consent
-    TRAINING_CONSENT_DENY = 32  # Deny training data consent
-    CONTRIBUTE_REQUEST = 33  # Idle compute contribution offer (v1.7)
-    CONTRIBUTE_RESULT = 34  # Contribution task result
-    CONTRIBUTE_CANCEL = 35  # Cancel an active contribution
-    TRAINING_DATA = 36  # Training data payload
-    COMPETITION_ENTER = 37  # Competition protocol — enter event (v1.10)
-    COMPETITION_SCORE = 38  # Competition protocol — score report (v1.10)
-    SEASON_STANDING = 39  # Competition protocol — season standings (v1.10)
-    PERSONAL_RESEARCH_RESULT = 40  # Research result from personal compute (v1.10)
-    AUTHORITY_ACCESS = 41  # EU AI Act §16(j) authority audit request (v2.1)
-    AUTHORITY_RESPONSE = 42  # Response to authority audit request (v2.1)
-    FIRMWARE_ATTESTATION = 43  # Firmware manifest attestation broadcast (v2.1)
-    SBOM_UPDATE = 44  # SBOM update notification (v2.1)
+
+    # Sensor & training consent (29-32)
+    SENSOR_DATA = 29
+    TRAINING_CONSENT_REQUEST = 30
+    TRAINING_CONSENT_GRANT = 31
+    TRAINING_CONSENT_DENY = 32
+
+    # Idle compute contribution, v1.7 (33-35)
+    CONTRIBUTE_REQUEST = 33
+    CONTRIBUTE_RESULT = 34
+    CONTRIBUTE_CANCEL = 35
+
+    # Multimodal training data, v1.8 (36)
+    TRAINING_DATA = 36
+
+    # Competition protocol, v1.10 (37-40)
+    COMPETITION_ENTER = 37
+    COMPETITION_SCORE = 38
+    SEASON_STANDING = 39
+    PERSONAL_RESEARCH_RESULT = 40
+
+    # Authority & attestation, v2.1 (41-44)
+    AUTHORITY_ACCESS = 41  # EU AI Act §16(j) authority audit request
+    AUTHORITY_RESPONSE = 42  # Response to authority audit request
+    FIRMWARE_ATTESTATION = 43  # Firmware manifest attestation broadcast
+    SBOM_UPDATE = 44  # SBOM update notification
+
+    # HiTL authorization, v3.3 (45): approve or deny a PENDING_AUTH (§16.4)
+    AUTHORIZE = 45
+
+    # -- OpenCastor names that are not separate spec types ------------------
+    # ACK is the router's acknowledgement of a command or INVOKE; on the wire
+    # it is the spec's COMMAND_ACK (an alias, so MessageType(17).name is
+    # "COMMAND_ACK").
+    ACK = 17
+
+    # OpenCastor extensions with no spec equivalent.  They live in the
+    # vendor-specific range (100+, spec §3.2 "Reserved Ranges") so they can
+    # never collide with a spec type.  A non-OpenCastor peer will not know them.
+    STREAM = 100  # Continuous sensor data
+    EVENT = 101  # Asynchronous notifications
+    HANDOFF = 102  # Transfer control between principals
+    REGISTRY_REGISTER_RESULT = 103  # Result of REGISTRY_REGISTER (§21)
+    REGISTRY_RESOLVE_RESULT = 104  # Result of REGISTRY_RESOLVE (§21)
+
+
+# Pre-3.7 OpenCastor numbering, kept only so tests and docs can state exactly
+# what changed.  Never used to decode: a bare number is always read with the
+# spec table above (see resolve_type).
+LEGACY_OPENCASTOR_NUMBERS: dict[str, int] = {
+    "DISCOVER": 1,
+    "STATUS": 2,
+    "COMMAND": 3,
+    "STREAM": 4,
+    "EVENT": 5,
+    "ACK": 7,
+    "AUTHORIZE": 9,
+    "REGISTRY_REGISTER": 13,
+    "REGISTRY_RESOLVE": 14,
+    "INVOKE_CANCEL": 15,
+    "REGISTRY_REGISTER_RESULT": 16,
+    "REGISTRY_RESOLVE_RESULT": 17,
+    "TRANSPARENCY": 18,
+    "HANDOFF": 19,
+}
+
+
+def resolve_type(data: dict[str, Any]) -> Any:
+    """Return the message type of an inbound message dict.
+
+    Reads ``type`` (or ``msg_type``) as a spec §3.2 number or a type name.
+
+    Compatibility with OpenCastor before 3.7: those releases always sent a
+    ``type_name`` next to the number, and their numbers for 1-19 differ from
+    the spec.  When ``type_name`` names a known type and disagrees with the
+    number, the name wins and a deprecation warning is logged.  A bare number
+    with no ``type_name`` is never reinterpreted.
+
+    Returns a :class:`MessageType` when the type is known, the raw number
+    otherwise (``None`` when the message carries no type at all).  An unknown
+    type *name* raises ``KeyError``.
+    """
+    raw = data.get("type")
+    if raw is None:
+        raw = data.get("msg_type")
+
+    if isinstance(raw, str):
+        return MessageType[raw.upper()]  # unknown name: KeyError, as before
+
+    name = data.get("type_name")
+    by_name = None
+    if isinstance(name, str):
+        by_name = MessageType.__members__.get(name.upper())
+
+    if raw is None:
+        return by_name
+
+    try:
+        by_number = MessageType(raw)
+    except (ValueError, TypeError):
+        by_number = None
+
+    if by_name is not None and by_name != by_number:
+        log.warning(
+            "RCAN message type %r with type_name %r uses pre-3.7 OpenCastor "
+            "numbering; decoding by name as %s (%d). Upgrade the sender: "
+            "this fallback will be removed.",
+            raw,
+            name,
+            by_name.name,
+            int(by_name),
+        )
+        return by_name
+
+    return by_number if by_number is not None else raw
 
 
 @dataclass
@@ -401,9 +513,11 @@ class RCANMessage:
                     incoming_version,
                 )
 
-        # Coerce type from name if needed
-        if isinstance(d.get("type"), str):
-            d["type"] = MessageType[d["type"].upper()]
+        # Resolve the type: spec number, name, or a pre-3.7 OpenCastor
+        # number with its type_name (see resolve_type).
+        resolved = resolve_type(data)
+        if resolved is not None:
+            d["type"] = resolved
         # Coerce priority from name if needed
         if isinstance(d.get("priority"), str):
             d["priority"] = Priority[d["priority"].upper()]

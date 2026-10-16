@@ -236,7 +236,7 @@ class TestRcanMessageEndpointAuth:
     def test_rcan_message_non_discover_requires_auth(self):
         """Non-DISCOVER msg_types must trigger auth check (inline, not FastAPI dep).
 
-        DISCOVER (msg_type=1) is public; all other types require Bearer or
+        DISCOVER (msg_type=9, RCAN §3.2) is public; all other types require Bearer or
         RCAN-Signature.  Verify the inline auth guard exists in source.
         """
         import inspect
@@ -247,7 +247,9 @@ class TestRcanMessageEndpointAuth:
         assert "_verify_rcan_or_token" in src, (
             "rcan_receive_message must call _verify_rcan_or_token for non-DISCOVER types"
         )
-        assert "msg_type != 1" in src, "DISCOVER (msg_type=1) must be exempted from auth check"
+        assert "resolved_type is not MessageType.DISCOVER" in src, (
+            "DISCOVER must be the only type exempted from the auth check"
+        )
 
     # Lightweight logic tests (no FastAPI test client)
     @pytest.mark.parametrize(

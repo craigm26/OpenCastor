@@ -3232,7 +3232,7 @@ async def rcan_receive_message(request: Request):
     """Receive an inbound RCAN message from a remote robot (federation endpoint).
 
     Auth rules (RCAN v1.6 §2.6):
-      - DISCOVER (msg_type=1): unauthenticated — public peer-handshake; only
+      - DISCOVER (msg_type=9, RCAN §3.2): unauthenticated — public peer-handshake; only
         returns public capability info, no sensitive data exposed.
       - All other message types: require Bearer token OR ``RCAN-Signature``
         header; see ``_verify_rcan_or_token``.
@@ -3249,13 +3249,25 @@ async def rcan_receive_message(request: Request):
     if not data:
         return JSONResponse({"error": "empty body"}, status_code=400)
 
-    # Determine message type and source from either format
-    msg_type = data.get("type") or data.get("msg_type")
+    # Determine message type and source from either format.  resolve_type is
+    # the same decoder the router uses (RCANMessage.from_dict), so the auth
+    # exemption below and the dispatch can never disagree about the type.
+    from castor.rcan.message import MessageType, resolve_type
+
+    try:
+        resolved_type = resolve_type(data)
+    except KeyError:
+        resolved_type = None
+    msg_type = (
+        int(resolved_type)
+        if isinstance(resolved_type, MessageType)
+        else (data.get("type") or data.get("msg_type"))
+    )
     source = data.get("source") or data.get("source_ruri", "unknown")
 
-    # DISCOVER (msg_type=1) is a public peer-handshake — allow unauthenticated.
+    # DISCOVER (spec §3.2: 9) is a public peer-handshake — allow unauthenticated.
     # All other message types require Bearer or RCAN-Signature auth.
-    if msg_type != 1:
+    if resolved_type is not MessageType.DISCOVER:
         try:
             await _verify_rcan_or_token(request)
         except HTTPException as exc:
@@ -3281,8 +3293,8 @@ async def rcan_receive_message(request: Request):
     # Lightweight ack when router not available (e.g. API started standalone)
     response_payload: dict = {"status": "received", "type": msg_type, "source": source}
 
-    # MessageType.DISCOVER = 1 — respond with capabilities
-    if msg_type == 1:
+    # DISCOVER: respond with capabilities
+    if resolved_type is MessageType.DISCOVER:
         cfg = state.config or {}
         response_payload["capabilities"] = cfg.get(
             "capabilities", ["status", "teleop", "safety", "registry"]
@@ -3319,8 +3331,8 @@ async def rcan_receive_message(request: Request):
             "rcan_version": "3.0",
         }
 
-    # MessageType.STATUS = 2 — respond with robot info
-    elif msg_type == 2:
+    # STATUS: respond with robot info
+    elif resolved_type is MessageType.STATUS:
         cfg = state.config or {}
         response_payload["robot_name"] = cfg.get("robot_name", "opencastor")
         response_payload["version"] = _castor_pkg.__version__
@@ -3339,7 +3351,7 @@ async def rcan_message_endpoint(request: Request):
 
     Accepts two formats:
       - **RCAN v1.2 spec format** (rcan-py SDK): ``{"rcan": "1.2", "cmd": ..., "target": "rcan://...", ...}``
-      - **OpenCastor internal format**: ``{"msg_type": 3, "source": ..., ...}``
+      - **OpenCastor internal format**: ``{"type": 1, "source": ..., ...}`` (1 = COMMAND)
 
     Spec-format messages are bridged to OpenCastor's router transparently.
     """
@@ -11781,7 +11793,7 @@ async def rcan_spec_endpoint():
     try:
         from castor.rcan.message import RCAN_SPEC_VERSION, MessageType
 
-        msg_types = {m.name: m.value for m in MessageType}
+        msg_types = {name: int(m) for name, m in MessageType.__members__.items()}
         rcan_ver = RCAN_SPEC_VERSION
     except Exception:
         msg_types = {}

@@ -1298,7 +1298,7 @@ class TestISOCheck:
             "pq_signing_required": True,
         }
         # DISCOVER is unauthenticated
-        resp = client.post("/rcan/peer", json={"msg_type": 1, "source": "test"})
+        resp = client.post("/rcan/peer", json={"msg_type": 9, "source": "test"})
         if resp.status_code in (200, 404, 501):
             # Endpoint may not be mounted in test mode — check the inline handler path
             pass
