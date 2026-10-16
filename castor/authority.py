@@ -243,7 +243,7 @@ class AuditDataExporter:
         }
 
     def _export_transparency_records(self) -> tuple[list[dict], dict]:
-        """Export TRANSPARENCY (type 18) log entries plus an explicit note.
+        """Export TRANSPARENCY (type 16) log entries plus an explicit note.
 
         There is no transparency-record reader in the runtime today. Rather
         than import a function that does not exist and hand back a silent

@@ -175,24 +175,25 @@ move(cmd)  ──►  SafetyLayer.check(cmd)  ──►  _move(cmd)  ──►  
 ## RCAN Protocol (v3.0)
 
 ### MessageTypes
+Numbered per RCAN spec §3.2 (rcan-spec `spec/sections/MESSAGE_TYPE_NUMBERING.md`),
+mirrored from `rcan.MessageType`; a test fails if they drift. Since 3.7.
 ```python
-DISCOVER = 1       # Robot announces presence
-STATUS = 2         # Health/state query
-COMMAND = 3        # Action instruction
-STREAM = 4         # Continuous data stream
-EVENT = 5          # Triggered state change
-HANDOFF = 6        # Session transfer
-ACK = 7            # Acknowledgment
+COMMAND = 1        # Action instruction
+STATUS = 3         # Health/state query
+SAFETY = 6         # STOP / ESTOP / RESUME
 ERROR = 8          # Error response
-AUTHORIZE = 9      # HiTL approval (§8)
+DISCOVER = 9       # Robot announces presence
 PENDING_AUTH = 10  # HiTL gate awaiting (§8)
 INVOKE = 11        # Skill invocation (§19)
 INVOKE_RESULT = 12 # Skill result (§19)
-REGISTRY_REGISTER = 13    # Register with RRF (§21)
-REGISTRY_RESOLVE = 14     # Resolve RRN→RURI (§21)
-INVOKE_CANCEL = 15        # Cancel in-flight INVOKE (§19)
-REGISTRY_REGISTER_RESULT = 16  # Registration result (§21)
-REGISTRY_RESOLVE_RESULT = 17   # Resolution result (§21)
+INVOKE_CANCEL = 13 # Cancel in-flight INVOKE (§19)
+REGISTRY_REGISTER = 14    # Register with RRF (§21)
+REGISTRY_RESOLVE = 15     # Resolve RRN→RURI (§21)
+TRANSPARENCY = 16  # EU AI Act Art. 13 record
+ACK = 17           # alias of COMMAND_ACK
+AUTHORIZE = 45     # HiTL approval (§16.4)
+# OpenCastor-only, vendor range: STREAM=100 EVENT=101 HANDOFF=102
+# REGISTRY_REGISTER_RESULT=103 REGISTRY_RESOLVE_RESULT=104
 ```
 
 ### Robot Registration Numbers (RRN)

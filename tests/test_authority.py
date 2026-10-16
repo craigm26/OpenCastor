@@ -259,7 +259,7 @@ class TestDiscoverReadsTheSameFlag:
         state.config = cfg
         state.rcan_router = None
         client = TestClient(app, raise_server_exceptions=False)
-        resp = client.post("/api/rcan/message", json={"msg_type": 1, "source": "rcan://t/c"})
+        resp = client.post("/api/rcan/message", json={"msg_type": 9, "source": "rcan://t/c"})
         assert resp.status_code == 200
         return resp.json()
 

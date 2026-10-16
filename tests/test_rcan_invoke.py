@@ -11,7 +11,7 @@ def test_message_type_enum_invoke_values():
     """MessageType enum must define INVOKE=11, INVOKE_RESULT=12, INVOKE_CANCEL=15 (§19)."""
     assert MessageType.INVOKE == 11
     assert MessageType.INVOKE_RESULT == 12
-    assert MessageType.INVOKE_CANCEL == 15
+    assert MessageType.INVOKE_CANCEL == 13
     assert MessageType["INVOKE"] is MessageType.INVOKE
     assert MessageType["INVOKE_RESULT"] is MessageType.INVOKE_RESULT
     assert MessageType["INVOKE_CANCEL"] is MessageType.INVOKE_CANCEL

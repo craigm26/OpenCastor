@@ -92,19 +92,19 @@ class TestMediaEndpoint:
 
 
 class TestDiscoverV16Fields:
-    """POST /api/rcan/message with DISCOVER (msg_type=1) includes v1.6 fields."""
+    """POST /api/rcan/message with DISCOVER (msg_type=9) includes v1.6 fields."""
 
     def test_discover_response_200(self, client: TestClient) -> None:
         resp = client.post(
             "/api/rcan/message",
-            json={"msg_type": 1, "source": "rcan://test/client"},
+            json={"msg_type": 9, "source": "rcan://test/client"},
         )
         assert resp.status_code == 200
 
     def test_discover_includes_supported_transports(self, client: TestClient) -> None:
         resp = client.post(
             "/api/rcan/message",
-            json={"msg_type": 1, "source": "rcan://test/client"},
+            json={"msg_type": 9, "source": "rcan://test/client"},
         )
         data = resp.json()
         assert "supported_transports" in data
@@ -114,7 +114,7 @@ class TestDiscoverV16Fields:
     def test_discover_includes_rcan_version_16(self, client: TestClient) -> None:
         resp = client.post(
             "/api/rcan/message",
-            json={"msg_type": 1, "source": "rcan://test/client"},
+            json={"msg_type": 9, "source": "rcan://test/client"},
         )
         data = resp.json()
         assert data.get("rcan_version") in ("1.6", "2.2", "3.0")  # v3.0: DISCOVER returns "3.0"
@@ -122,7 +122,7 @@ class TestDiscoverV16Fields:
     def test_discover_includes_loa_enforcement(self, client: TestClient) -> None:
         resp = client.post(
             "/api/rcan/message",
-            json={"msg_type": 1, "source": "rcan://test/client"},
+            json={"msg_type": 9, "source": "rcan://test/client"},
         )
         data = resp.json()
         assert "loa_enforcement" in data
@@ -133,7 +133,7 @@ class TestDiscoverV16Fields:
     def test_discover_includes_min_loa_for_control(self, client: TestClient) -> None:
         resp = client.post(
             "/api/rcan/message",
-            json={"msg_type": 1, "source": "rcan://test/client"},
+            json={"msg_type": 9, "source": "rcan://test/client"},
         )
         data = resp.json()
         assert "min_loa_for_control" in data
@@ -142,7 +142,7 @@ class TestDiscoverV16Fields:
     def test_discover_includes_federation_enabled(self, client: TestClient) -> None:
         resp = client.post(
             "/api/rcan/message",
-            json={"msg_type": 1, "source": "rcan://test/client"},
+            json={"msg_type": 9, "source": "rcan://test/client"},
         )
         data = resp.json()
         assert "federation_enabled" in data
@@ -151,7 +151,7 @@ class TestDiscoverV16Fields:
     def test_discover_includes_ruri(self, client: TestClient) -> None:
         resp = client.post(
             "/api/rcan/message",
-            json={"msg_type": 1, "source": "rcan://test/client"},
+            json={"msg_type": 9, "source": "rcan://test/client"},
         )
         data = resp.json()
         assert "ruri" in data
@@ -159,11 +159,33 @@ class TestDiscoverV16Fields:
     def test_discover_includes_capabilities(self, client: TestClient) -> None:
         resp = client.post(
             "/api/rcan/message",
-            json={"msg_type": 1, "source": "rcan://test/client"},
+            json={"msg_type": 9, "source": "rcan://test/client"},
         )
         data = resp.json()
         assert "capabilities" in data
         assert isinstance(data["capabilities"], list)
+
+
+class TestDiscoverNumbering:
+    """Only DISCOVER (spec §3.2: 9) skips auth; 1 is COMMAND since 3.7."""
+
+    def test_type_1_is_command_and_needs_auth(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/rcan/message",
+            json={"msg_type": 1, "source": "rcan://test/client"},
+        )
+        assert resp.status_code == 401
+
+    def test_legacy_discover_with_type_name_still_answers(self, client: TestClient) -> None:
+        # OpenCastor < 3.7 sent DISCOVER as 1 with type_name "DISCOVER".
+        resp = client.post(
+            "/api/rcan/message",
+            json={"type": 1, "type_name": "DISCOVER", "source": "rcan://test/client"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "capabilities" in data
+        assert data["type"] == 9
 
 
 # ─────────────────────────────────────────────────────────────────────────────

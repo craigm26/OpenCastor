@@ -9,6 +9,45 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+Intended as 3.7.0: the message-type change below is a wire break, and the code and log
+messages refer to "3.7".
+
+### Changed (wire): RCAN MessageType numbers now follow the spec
+
+`castor.rcan.MessageType` used a pre-v2.1 numbering for 1-19 (DISCOVER=1, COMMAND=3,
+AUTHORIZE=9, TRANSPARENCY=18, ...) that disagreed with RCAN spec §3.2, rcan-py and rcan-ts.
+It now uses the spec table (1-45), and a test fails if it ever drifts from `rcan.MessageType`.
+Names are unchanged, so code that uses `MessageType.X` needs no edits; code or fixtures that
+use bare numbers do.
+
+| Name | Before | Now |
+|------|-------:|----:|
+| COMMAND | 3 | 1 |
+| STATUS | 2 | 3 |
+| DISCOVER | 1 | 9 |
+| ACK | 7 | 17 (alias of COMMAND_ACK) |
+| REGISTRY_REGISTER | 13 | 14 |
+| REGISTRY_RESOLVE | 14 | 15 |
+| INVOKE_CANCEL | 15 | 13 |
+| TRANSPARENCY | 18 | 16 |
+| AUTHORIZE | 9 | 45 |
+| STREAM / EVENT / HANDOFF | 4 / 5 / 19 | 100 / 101 / 102 |
+| REGISTRY_REGISTER_RESULT / REGISTRY_RESOLVE_RESULT | 16 / 17 | 103 / 104 |
+
+The last five have no spec equivalent and moved to the vendor range (100+). New types from
+the spec are now available by name: RESPONSE, HEARTBEAT, CONFIG, AUTH, COMMAND_ACK,
+COMMAND_NACK, ROBOT_REVOCATION. `rcan>=3.6` is now required.
+
+**Interoperability.** A robot on this release decodes messages from OpenCastor 3.6 and
+earlier: those always carry `type_name`, and when the name disagrees with the number the
+name wins (with a deprecation warning). A bare number is always read with the spec table.
+OpenCastor 3.6 and earlier cannot decode messages from this release, so upgrade every robot
+that federates with others. The unauthenticated DISCOVER exemption on
+`POST /api/rcan/message` now applies to 9, not 1 (1 is COMMAND and needs auth). The JS SDK
+in `sdk/js` sends 13/14/15 for INVOKE_CANCEL/REGISTRY_REGISTER/REGISTRY_RESOLVE.
+robot-md-gateway, its actuators, the iOS app and the Flutter client use type names, not
+numbers, and are unaffected.
+
 ## [3.6.1] - 2026-10-09
 
 Published on PyPI as `1!3.6.1`. The same code as 3.6.0, which was tagged but never reached PyPI.

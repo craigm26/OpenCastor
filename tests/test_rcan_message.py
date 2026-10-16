@@ -6,6 +6,7 @@ import time
 import pytest
 
 from castor.rcan.message import (
+    LEGACY_OPENCASTOR_NUMBERS,
     RCAN_SPEC_VERSION,
     DelegationHop,
     MediaChunk,
@@ -94,7 +95,7 @@ class TestMessageSerialization:
     def test_from_dict_with_ints(self):
         d = {
             "id": "test-id",
-            "type": 3,
+            "type": 1,  # COMMAND (RCAN §3.2)
             "priority": 1,
             "source": "rcan://a.b.c",
             "target": "rcan://d.e.f",
@@ -180,23 +181,90 @@ class TestMessageTTL:
 class TestMessageTypes:
     """Enum coverage."""
 
-    def test_all_message_types(self):
-        # RCAN v1.2 adds AUTHORIZE (9) and PENDING_AUTH (10)
-        # RCAN v1.3 §19 adds INVOKE (11), INVOKE_RESULT (12), INVOKE_CANCEL (15)
-        # RCAN v1.3 §21 adds REGISTRY_REGISTER (13), REGISTRY_RESOLVE (14)
-        # RCAN v1.3 §21 adds REGISTRY_REGISTER_RESULT (16), REGISTRY_RESOLVE_RESULT (17)
-        assert len(MessageType) == 44  # RCAN v2.1: types 1-44 (41-44 added in v2.1)
-        assert MessageType.DISCOVER == 1
+    def test_spec_numbering(self):
+        # RCAN spec §3.2 (rcan-spec spec/sections/MESSAGE_TYPE_NUMBERING.md)
+        assert MessageType.COMMAND == 1
+        assert MessageType.STATUS == 3
+        assert MessageType.SAFETY == 6
         assert MessageType.ERROR == 8
-        assert MessageType.AUTHORIZE == 9
+        assert MessageType.DISCOVER == 9
         assert MessageType.PENDING_AUTH == 10
         assert MessageType.INVOKE == 11
         assert MessageType.INVOKE_RESULT == 12
-        assert MessageType.REGISTRY_REGISTER == 13
-        assert MessageType.REGISTRY_RESOLVE == 14
-        assert MessageType.INVOKE_CANCEL == 15
-        assert MessageType.REGISTRY_REGISTER_RESULT == 16
-        assert MessageType.REGISTRY_RESOLVE_RESULT == 17
+        assert MessageType.INVOKE_CANCEL == 13
+        assert MessageType.REGISTRY_REGISTER == 14
+        assert MessageType.REGISTRY_RESOLVE == 15
+        assert MessageType.TRANSPARENCY == 16
+        assert MessageType.COMMAND_NACK == 18
+        assert MessageType.AUTHORIZE == 45
+
+    def test_matches_rcan_py(self):
+        """Every spec type has the same number as rcan-py's MessageType."""
+        from rcan.message import MessageType as SpecMessageType
+
+        for name, spec_member in SpecMessageType.__members__.items():
+            assert name in MessageType.__members__, f"missing spec type {name}"
+            assert int(MessageType[name]) == int(spec_member), name
+
+    def test_opencastor_extensions_do_not_collide(self):
+        from rcan.message import MessageType as SpecMessageType
+
+        spec_values = {int(m) for m in SpecMessageType}
+        assert MessageType.ACK is MessageType.COMMAND_ACK
+        for name in (
+            "STREAM",
+            "EVENT",
+            "HANDOFF",
+            "REGISTRY_REGISTER_RESULT",
+            "REGISTRY_RESOLVE_RESULT",
+        ):
+            value = int(MessageType[name])
+            assert value >= 100, name  # vendor range, spec §3.2
+            assert value not in spec_values, name
+
+    def test_ack_serialises_as_command_ack(self):
+        d = RCANMessage.ack("rcan://a.b.c", "rcan://d.e.f", "orig").to_dict()
+        assert d["type"] == 17
+        assert d["type_name"] == "COMMAND_ACK"
+
+
+class TestLegacyNumberingDecode:
+    """Messages from OpenCastor < 3.7 carry type_name; the name wins."""
+
+    @staticmethod
+    def _wire(type_value, type_name=None):
+        d = {"type": type_value, "source": "rcan://a.b.c", "target": "rcan://d.e.f"}
+        if type_name is not None:
+            d["type_name"] = type_name
+        return d
+
+    @pytest.mark.parametrize(
+        "name",
+        sorted(LEGACY_OPENCASTOR_NUMBERS),
+    )
+    def test_legacy_number_with_name_decodes_by_name(self, name, caplog):
+        old = LEGACY_OPENCASTOR_NUMBERS[name]
+        msg = RCANMessage.from_dict(self._wire(old, name))
+        assert msg.type == MessageType[name]
+        assert "pre-3.7 OpenCastor numbering" in caplog.text
+
+    def test_bare_number_is_always_spec(self):
+        # 3 was COMMAND before 3.7; without type_name it is read as the spec says.
+        assert RCANMessage.from_dict(self._wire(3)).type == MessageType.STATUS
+        assert RCANMessage.from_dict(self._wire(9)).type == MessageType.DISCOVER
+
+    def test_consistent_number_and_name_no_warning(self, caplog):
+        msg = RCANMessage.from_dict(self._wire(1, "COMMAND"))
+        assert msg.type == MessageType.COMMAND
+        assert "pre-3.7" not in caplog.text
+
+    def test_unknown_type_name_ignored(self):
+        assert RCANMessage.from_dict(self._wire(1, "NOT_A_TYPE")).type == MessageType.COMMAND
+
+    def test_roundtrip_new_numbers(self):
+        for member in (MessageType.COMMAND, MessageType.DISCOVER, MessageType.AUTHORIZE):
+            m = RCANMessage(type=member, source="rcan://a", target="rcan://b")
+            assert RCANMessage.from_dict(m.to_dict()).type is member
 
     def test_all_priorities(self):
         assert len(Priority) == 4
