@@ -428,8 +428,16 @@ def test_main_refuses_a_forward_port_that_is_the_listen_port(tmp_path, capsys):
     token.write_text(TOKEN)
     token.chmod(0o600)
     code = bridge.main(
-        ["--ssh", "radxa@duck", "--port", "7788", "--forward-port", "7788",
-         "--token-file", str(token)]
+        [
+            "--ssh",
+            "radxa@duck",
+            "--port",
+            "7788",
+            "--forward-port",
+            "7788",
+            "--token-file",
+            str(token),
+        ]
     )
     assert code == 2
     assert "loop back onto this listener" in capsys.readouterr().err
@@ -443,7 +451,10 @@ def test_every_flag_is_also_an_environment_variable(monkeypatch):
     monkeypatch.setenv("MICRODUCK_BRIDGE_SOCKET", "/tmp/elsewhere.sock")
     args = bridge.build_parser().parse_args([])
     assert (args.port, args.deadman, args.ssh, args.socket) == (
-        9001, 450, "radxa@duck", "/tmp/elsewhere.sock"
+        9001,
+        450,
+        "radxa@duck",
+        "/tmp/elsewhere.sock",
     )
 
 
@@ -483,16 +494,21 @@ def installer(tmp_path):
 
 
 def _payload(data=b"ONNX" * 1000, name="walk_two", **extra):
-    p = {"name": name, "bytes": base64.b64encode(data).decode(),
-         "sha256": hashlib.sha256(data).hexdigest()}
+    p = {
+        "name": name,
+        "bytes": base64.b64encode(data).decode(),
+        "sha256": hashlib.sha256(data).hexdigest(),
+    }
     p.update(extra)
     return p
 
 
 def _request(sock, params, rpc_id=7):
     sock.sendall(
-        json.dumps({"jsonrpc": "2.0", "id": rpc_id, "method": "policy.install",
-                    "params": params}).encode() + b"\n"
+        json.dumps(
+            {"jsonrpc": "2.0", "id": rpc_id, "method": "policy.install", "params": params}
+        ).encode()
+        + b"\n"
     )
     return json.loads(_line(sock))
 
@@ -587,3 +603,20 @@ def test_every_other_line_still_reaches_robotd_whole_and_in_order(installer):
     robotd.push('{"jsonrpc":"2.0","id":9,"result":true}')
     assert _line(client) == '{"jsonrpc":"2.0","id":9,"result":true}'
     client.close()
+
+
+def test_the_apps_name_for_install_is_answered_too(installer):
+    """Microduck Studio sends `studio.installPolicy` since 2026-10-02; it must not reach robotd."""
+    robotd, policy_dir, _toml, start, connect = installer
+    sock = connect(start())
+    _line(sock)  # greeting
+    sock.sendall(
+        json.dumps(
+            {"jsonrpc": "2.0", "id": 8, "method": "studio.installPolicy", "params": _payload()}
+        ).encode()
+        + b"\n"
+    )
+    reply = json.loads(_line(sock))
+    assert reply["id"] == 8 and "result" in reply, reply
+    assert os.path.exists(os.path.join(policy_dir, "walk_two.onnx"))
+    assert robotd.lines == []

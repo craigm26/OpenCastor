@@ -232,7 +232,7 @@ def hello_is_valid(line: bytes, token: str) -> bool:
     return hmac.compare_digest(given, token)
 
 
-def greeting_line(deadman_ms: int, policy_install: bool) -> bytes:
+def greeting_line(deadman_ms: int, policy_install: bool, dream: bool = False) -> bytes:
     """What the bridge says back when it has accepted the relay."""
     return (
         json.dumps(
@@ -241,6 +241,7 @@ def greeting_line(deadman_ms: int, policy_install: bool) -> bytes:
                 "bridge": VERSION,
                 "deadman_ms": deadman_ms,
                 "policy_install": bool(policy_install),
+                "dream": bool(dream),
             }
         ).encode()
         + b"\n"
@@ -286,6 +287,13 @@ def read_greeting(line: bytes) -> dict:
 
 
 INSTALL_METHOD = "policy.install"
+#: THE APP'S NAME FOR THE SAME VERB SINCE 2026-10-02. Microduck Studio renamed
+#: it because `policy.install` is updaterd's own method on a real duck (it
+#: installs an official set by version), and duck-studio's bridge answers only
+#: the new name. Until this line, a phone sending it here was forwarded to a
+#: robotd that has no such method and waited on an answer that never came.
+#: Both names are answered; the old one for clients older than that rename.
+INSTALL_METHODS = (INSTALL_METHOD, "studio.installPolicy")
 INSTALL_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 INSTALL_CAP = 8 * 1024 * 1024
 
@@ -317,14 +325,14 @@ class Installer:
 
     @staticmethod
     def wants(line: bytes) -> bool:
-        return b'"' + INSTALL_METHOD.encode() + b'"' in line
+        return any(b'"' + m.encode() + b'"' in line for m in INSTALL_METHODS)
 
     def handle(self, line: bytes) -> bytes:
         rpc_id = None
         try:
             message = json.loads(line.decode("utf-8"))
             rpc_id = message.get("id") if isinstance(message, dict) else None
-            if not isinstance(message, dict) or message.get("method") != INSTALL_METHOD:
+            if not isinstance(message, dict) or message.get("method") not in INSTALL_METHODS:
                 raise Refusal("that line is not a policy.install request")
             result = self.install(message.get("params") or {})
             reply = {"jsonrpc": "2.0", "id": rpc_id, "result": result}
@@ -588,6 +596,179 @@ class Upstream:
 
 
 # ---------------------------------------------------------------------------
+# dream.* — Dream Labs' Dream-1 with the user's own key, the second verb family
+# ---------------------------------------------------------------------------
+
+
+DREAM_PREFIX = "dream."
+DREAM_CAP = 4 * 1024 * 1024
+
+
+class DreamVerbs:
+    """THE SECOND THING THIS BRIDGE ANSWERS ITSELF, for the same kind of reason.
+
+    robotd has no verb that reaches a model on the internet, and the key that
+    pays for it belongs on the machine that makes the calls, not in every app
+    that might. So a phone hands the key over once (`dream.key.set`), the
+    bridge keeps it where Dream Labs' own tools keep it (`castor.dream`), and
+    after that a phone asks for actions (`dream.act`) without ever holding it.
+
+    WHAT IT DOES NOT DO: move the robot. `dream.act` answers the model's chunk
+    of actions and nothing else; the client plays those rows through the same
+    `robot.move` it always sends, past the same deadman. A model that answers
+    nonsense is a client that sends nonsense to a robot that still stops when
+    the client goes quiet, which is the floor this relay already promised.
+
+    WHAT IT REFUSES, BY NAME: an act with no key saved, an act while another
+    act from the same client is still waiting, a line over 4 MB, and a key the
+    platform refuses (`dream.key.set` checks it before saving it).
+
+    THE KEY NEVER COMES BACK. Every answer names it by its last four
+    characters, and nothing is logged with it.
+    """
+
+    def __init__(self, log=print) -> None:
+        self.log = log
+
+    @staticmethod
+    def wants(line: bytes) -> bool:
+        # The substring is the cheap test every robot.move pays; the parse is
+        # the exact one, so a robotd line that merely mentions "dream." (a
+        # sound's name, say) still reaches robotd.
+        if b'"' + DREAM_PREFIX.encode() not in line:
+            return False
+        try:
+            method = json.loads(line.decode("utf-8")).get("method")
+        except (ValueError, UnicodeDecodeError, AttributeError):
+            return False
+        return isinstance(method, str) and method.startswith(DREAM_PREFIX)
+
+    def handle(self, line: bytes, session: dict) -> bytes:
+        """Answers one dream.* line. `session` is this client's own state (its Dream session)."""
+        from castor import dream
+
+        rpc_id = None
+        try:
+            if len(line) > DREAM_CAP:
+                raise Refusal(f"a dream line is at most {DREAM_CAP // (1024 * 1024)} MB")
+            message = json.loads(line.decode("utf-8"))
+            rpc_id = message.get("id") if isinstance(message, dict) else None
+            method = message.get("method") if isinstance(message, dict) else None
+            if not isinstance(method, str) or not method.startswith(DREAM_PREFIX):
+                raise Refusal("that line is not a dream.* request")
+            params = message.get("params") or {}
+            if not isinstance(params, dict):
+                raise Refusal("dream.* params are an object")
+            result = self._answer(dream, method, params, session)
+            reply = {"jsonrpc": "2.0", "id": rpc_id, "result": result}
+        except Refusal as why:
+            reply = {"jsonrpc": "2.0", "id": rpc_id, "error": {"code": -32602, "message": str(why)}}
+        except dream.DreamError as why:
+            reply = {
+                "jsonrpc": "2.0",
+                "id": rpc_id,
+                "error": {"code": -32000, "message": str(why), "data": why.as_dict()},
+            }
+        except (ValueError, UnicodeDecodeError) as why:
+            reply = {
+                "jsonrpc": "2.0",
+                "id": rpc_id,
+                "error": {"code": -32700, "message": f"that line is not JSON: {why}"},
+            }
+        return json.dumps(reply, separators=(",", ":")).encode() + b"\n"
+
+    def _answer(self, dream, method: str, params: dict, session: dict) -> dict:
+        if method == "dream.status":
+            key = dream.load_key()
+            return {
+                "key": dream.hint(key),
+                "path": str(dream.credentials_path()),
+                "session_id": getattr(session.get("dream"), "session_id", None),
+            }
+        if method == "dream.key.set":
+            try:
+                key = dream.check_key_text(str(params.get("key") or ""))
+            except ValueError as why:
+                raise Refusal(str(why)) from None
+            models = dream.list_models(key)  # the check: a key the platform refuses is not saved
+            path = dream.save_key(key)
+            self._end(session)
+            self.log(f"dream: key {dream.hint(key)} saved to {path}")
+            return {
+                "saved": True,
+                "key": dream.hint(key),
+                "models": [dream.model_summary(m, params.get("embodiment")) for m in models],
+            }
+        if method == "dream.key.check":
+            key = self._key(dream)
+            return {
+                "key": dream.hint(key),
+                "models": [
+                    dream.model_summary(m, params.get("embodiment")) for m in dream.list_models(key)
+                ],
+            }
+        if method == "dream.key.clear":
+            self._end(session)
+            cleared = dream.clear_key()
+            if cleared:
+                self.log("dream: key cleared")
+            return {"cleared": cleared, "key": dream.hint(dream.load_key())}
+        if method == "dream.end":
+            self._end(session)
+            return {"ended": True}
+        if method == "dream.act":
+            return self._act(dream, params, session)
+        raise Refusal(f"{method} is not a dream verb this bridge has")
+
+    @staticmethod
+    def _key(dream) -> str:
+        key = dream.load_key()
+        if not key:
+            raise Refusal("no Dream Labs key is saved on this robot; send dream.key.set first")
+        return key
+
+    def _act(self, dream, params: dict, session: dict) -> dict:
+        checkpoint = params.get("checkpoint")
+        if not isinstance(checkpoint, str) or not checkpoint:
+            raise Refusal("dream.act needs a checkpoint: a model id from dream.key.check")
+        prompt = params.get("prompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise Refusal("dream.act needs a prompt: the task, in words")
+        frames = params.get("frames") or {}
+        state = params.get("state") or {}
+        if not isinstance(frames, dict) or not isinstance(state, dict):
+            raise Refusal(
+                "dream.act frames and state are objects keyed by camera role and state part"
+            )
+        observation: dict = {"prompt": prompt.strip()}
+        for role, window in frames.items():
+            if (
+                not isinstance(window, list)
+                or not window
+                or not all(isinstance(f, str) for f in window)
+            ):
+                raise Refusal(f"frames.{role} is a list of base64 JPEG frames, oldest first")
+            observation[f"video.{role}"] = window[-dream.OBS_WINDOW :]
+        for part, values in state.items():
+            if not isinstance(values, list) or not all(isinstance(v, (int, float)) for v in values):
+                raise Refusal(f"state.{part} is a list of numbers")
+            observation[f"state.{part}"] = [float(v) for v in values]
+        current = session.get("dream")
+        if params.get("reset") or current is None or current.checkpoint != checkpoint:
+            self._end(session)
+            current = dream.Session(self._key(dream), checkpoint, robot=params.get("robot"))
+            session["dream"] = current
+        actions = current.get_action(observation)
+        return {"actions": actions, "session_id": current.session_id, "timing": current.last_timing}
+
+    @staticmethod
+    def _end(session: dict) -> None:
+        current = session.pop("dream", None)
+        if current is not None:
+            current.end()
+
+
+# ---------------------------------------------------------------------------
 # The relay
 # ---------------------------------------------------------------------------
 
@@ -602,12 +783,26 @@ class Relay:
         deadman_ms: int,
         log=print,
         installer: Installer | None = None,
+        dream: DreamVerbs | None = None,
     ) -> None:
         self.client = client
         self.robotd = robotd
         self.deadman = deadman_ms / 1000 if deadman_ms > 0 else 0
         self.log = log
         self.installer = installer
+        self.dream = dream
+        # THIS CLIENT'S DREAM SESSION, and whether a dream.act is out. A Dream
+        # call waits on the internet for up to 15 s, so it runs on its own
+        # thread and the relay keeps moving robotd's bytes meanwhile.
+        self.dream_state: dict = {}
+        self.dream_busy = threading.Lock()
+        # ONE WRITER AT A TIME TO THE CLIENT, AND ONLY WHOLE LINES. robotd's
+        # bytes arrive in arbitrary chunks; a Dream answer written between two
+        # halves of a robotd line would corrupt both. So robotd's bytes are
+        # forwarded up to their last newline (the rest waits for its own), and
+        # every write to the client holds this lock.
+        self.client_lock = threading.Lock()
+        self.robotd_pending = b""
         self.last_from_client = time.monotonic()
         self.stopped_for_silence = False
         self.running = True
@@ -632,7 +827,6 @@ class Relay:
                 for key, _ in selector.select(timeout=0.2):
                     who = key.data
                     source = self.client if who == "client" else self.robotd
-                    target = self.robotd if who == "client" else self.client
                     chunk = source.recv(65536)
                     if not chunk:
                         self.running = False
@@ -646,7 +840,7 @@ class Relay:
                         self.stopped_for_silence = False
                         self._from_client(chunk)
                         continue
-                    target.sendall(chunk)
+                    self._from_robotd(chunk)
         except OSError:
             pass
         finally:
@@ -654,13 +848,62 @@ class Relay:
             selector.close()
             if watchdog:
                 watchdog.join(timeout=1)
+            if self.dream is not None:
+                # A client that left frees its Dream seat now, not at idle eviction.
+                threading.Thread(
+                    target=DreamVerbs._end, args=(self.dream_state,), daemon=True
+                ).start()
+
+    def _to_client(self, data: bytes) -> None:
+        with self.client_lock:
+            self.client.sendall(data)
+
+    def _from_robotd(self, chunk: bytes) -> None:
+        self.robotd_pending += chunk
+        cut = self.robotd_pending.rfind(b"\n")
+        if cut < 0:
+            return
+        whole, self.robotd_pending = self.robotd_pending[: cut + 1], self.robotd_pending[cut + 1 :]
+        self._to_client(whole)
+
+    def _dream_line(self, line: bytes) -> None:
+        if not self.dream_busy.acquire(blocking=False):
+            try:
+                rpc_id = json.loads(line.decode("utf-8")).get("id")
+            except (ValueError, UnicodeDecodeError, AttributeError):
+                rpc_id = None
+            refusal = {
+                "jsonrpc": "2.0",
+                "id": rpc_id,
+                "error": {
+                    "code": -32602,
+                    "message": "a dream request from this client is still waiting; one at a time",
+                },
+            }
+            self._to_client(json.dumps(refusal, separators=(",", ":")).encode() + b"\n")
+            return
+
+        def work() -> None:
+            try:
+                answer = self.dream.handle(line, self.dream_state)
+                if self.running:
+                    self._to_client(answer)
+            except OSError:
+                pass
+            finally:
+                self.dream_busy.release()
+
+        threading.Thread(target=work, daemon=True).start()
 
     def _from_client(self, chunk: bytes) -> None:
         self.pending += chunk
         while b"\n" in self.pending:
             line, self.pending = self.pending.split(b"\n", 1)
             if self.installer is not None and Installer.wants(line):
-                self.client.sendall(self.installer.handle(line))
+                self._to_client(self.installer.handle(line))
+                continue
+            if self.dream is not None and DreamVerbs.wants(line):
+                self._dream_line(line)
                 continue
             self.robotd.sendall(line + b"\n")
 
@@ -709,6 +952,7 @@ def serve(
     # not a line forwarded to a robotd that has no such method and a phone
     # waiting on a reply that never comes.
     installer = Installer(policy_dir, robotd_toml, log=log)
+    dream = DreamVerbs(log=log)
     log(
         f"{VERSION} on {host}:{listener.getsockname()[1]} -> {up.describe()}, "
         f"deadman {deadman_ms} ms, policy.install "
@@ -721,7 +965,7 @@ def serve(
             client, where = listener.accept()
             threading.Thread(
                 target=_greet,
-                args=(client, where, up, token, deadman_ms, log, installer),
+                args=(client, where, up, token, deadman_ms, log, installer, dream),
                 daemon=True,
             ).start()
     finally:
@@ -737,6 +981,7 @@ def _greet(
     deadman_ms: int,
     log,
     installer: Installer | None = None,
+    dream: DreamVerbs | None = None,
 ) -> None:
     client.settimeout(5)
     try:
@@ -757,9 +1002,11 @@ def _greet(
         robotd = upstream.connect()
         # THE GREETING SAYS WHETHER INSTALL IS ON, so a phone can offer the
         # button or the sentence without asking and being refused.
-        client.sendall(greeting_line(deadman_ms, bool(installer and installer.policy_dir)))
+        client.sendall(
+            greeting_line(deadman_ms, bool(installer and installer.policy_dir), dream is not None)
+        )
         log(f"relaying {where[0]}")
-        Relay(client, robotd, deadman_ms, log=log, installer=installer).run()
+        Relay(client, robotd, deadman_ms, log=log, installer=installer, dream=dream).run()
         robotd.close()
         log(f"closed {where[0]}")
     except TimeoutError:

@@ -30,6 +30,7 @@ PROVIDER_AUTH_MAP: dict[str, tuple] = {
     "deepseek": ("DEEPSEEK_API_KEY", "api_key"),
     "grok": ("XAI_API_KEY", "api_key"),
     "mistral": ("MISTRAL_API_KEY", "api_key"),
+    "dream": ("DREAM_API_KEY", "api_key"),
 }
 
 # Map of channel name -> list of (env var, config key) tuples

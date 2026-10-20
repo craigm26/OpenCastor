@@ -12,6 +12,34 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 Intended as 3.7.0: the message-type change below is a wire break, and the code and log
 messages refer to "3.7".
 
+### Added: Dream Labs' Dream-1 with your own key (`castor dream`, bridge `dream.*`)
+
+Dream-1 (https://dreamlabs.ai) is a vision-language-action model: camera frames, the robot's
+state and a task in words go out, a chunk of 48 actions comes back. You bring your own key.
+
+- `castor dream key` checks the key with Dream Labs, then saves it to `~/.dreamlabs/credentials`
+  (0600), the file Dream Labs' own tools read. `castor dream check [--duck]` lists the models
+  the key may run, and `castor dream clear` removes it. `DREAM_API_KEY` in the environment wins.
+- The Microduck bridge answers a second verb family itself, `dream.*`: `dream.key.set`,
+  `dream.key.check`, `dream.key.clear`, `dream.status`, `dream.act` and `dream.end`. A phone hands
+  the key over once and never holds it again. `dream.act` returns the action chunk and moves
+  nothing: the client plays the rows through the `robot.move` it already sends, past the same
+  deadman. The greeting now says `"dream": true`.
+- The bridge now forwards robotd's bytes a whole line at a time, so an answer written from
+  another thread can never land inside a robotd line.
+- `castor/dream.py` speaks the wire itself with the standard library (`/v1/get_action`,
+  `/v1/end_session`, `/v1/models`) rather than depending on `dreamlabs-client`. That package
+  needs numpy and Python 3.11, which the bridge must not. Its `DreamClient` also streams every
+  camera tick to Dream Labs' live service by default. Here, pictures leave only inside the
+  request that asks for an action.
+- Fixed: the bridge now also answers `studio.installPolicy`, the name Microduck Studio has sent
+  since 2026-10-02. Before this, that line was forwarded to robotd, which has no such method, so
+  installing a policy from the app through a castor bridge waited forever.
+- `MICRODUCK_EMBODIMENT` is castor's convention for a duck: state and action are the walk
+  command `[vx, vy, vyaw]`, and the camera is `head`. Dream-1's public model drives two-arm YAM
+  robots, so a duck runs a model fine-tuned on duck recordings. `dream.key.check` marks which
+  models fit.
+
 ### Changed (wire): RCAN MessageType numbers now follow the spec
 
 `castor.rcan.MessageType` used a pre-v2.1 numbering for 1-19 (DISCOVER=1, COMMAND=3,

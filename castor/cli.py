@@ -10119,6 +10119,9 @@ def main() -> None:
         help="URL or local file path to the plugin .py file",
     )
 
+    # castor dream — the user's own Dream Labs key (castor/dream_command.py)
+    __import__("castor.dream_command", fromlist=["add_parser"]).add_parser(sub)
+
     # castor duck — Pollen Microduck one-command setup
     p_duck = sub.add_parser(
         "duck",
@@ -11512,6 +11515,9 @@ def main() -> None:
         "flash": cmd_flash,
         "hub": cmd_hub,
         "duck": cmd_duck,
+        "dream": lambda _a: _exit_nonzero(
+            __import__("castor.dream_command", fromlist=["cmd_dream"]).cmd_dream(_a)
+        ),
         # castor bench ten-minutes — castor/bench/command.py owns the body.
         # main() discards a handler's return value, and a benchmark that failed
         # must not exit 0, so a non-zero code is raised rather than returned.
