@@ -31,6 +31,7 @@ PROVIDER_AUTH_MAP: dict[str, tuple] = {
     "grok": ("XAI_API_KEY", "api_key"),
     "mistral": ("MISTRAL_API_KEY", "api_key"),
     "taalas": ("TAALAS_ENDPOINT", "endpoint_url"),
+    "dream": ("DREAM_API_KEY", "api_key"),
 }
 
 # Map of channel name -> list of (env var, config key) tuples
