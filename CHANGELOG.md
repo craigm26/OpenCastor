@@ -32,6 +32,9 @@ state and a task in words go out, a chunk of 48 actions comes back. You bring yo
   needs numpy and Python 3.11, which the bridge must not. Its `DreamClient` also streams every
   camera tick to Dream Labs' live service by default. Here, pictures leave only inside the
   request that asks for an action.
+- Fixed: the bridge now also answers `studio.installPolicy`, the name Microduck Studio has sent
+  since 2026-10-02. Before this, that line was forwarded to robotd, which has no such method, so
+  installing a policy from the app through a castor bridge waited forever.
 - `MICRODUCK_EMBODIMENT` is castor's convention for a duck: state and action are the walk
   command `[vx, vy, vyaw]`, and the camera is `head`. Dream-1's public model drives two-arm YAM
   robots, so a duck runs a model fine-tuned on duck recordings. `dream.key.check` marks which

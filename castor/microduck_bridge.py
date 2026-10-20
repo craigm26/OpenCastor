@@ -287,6 +287,13 @@ def read_greeting(line: bytes) -> dict:
 
 
 INSTALL_METHOD = "policy.install"
+#: THE APP'S NAME FOR THE SAME VERB SINCE 2026-10-02. Microduck Studio renamed
+#: it because `policy.install` is updaterd's own method on a real duck (it
+#: installs an official set by version), and duck-studio's bridge answers only
+#: the new name. Until this line, a phone sending it here was forwarded to a
+#: robotd that has no such method and waited on an answer that never came.
+#: Both names are answered; the old one for clients older than that rename.
+INSTALL_METHODS = (INSTALL_METHOD, "studio.installPolicy")
 INSTALL_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 INSTALL_CAP = 8 * 1024 * 1024
 
@@ -318,14 +325,14 @@ class Installer:
 
     @staticmethod
     def wants(line: bytes) -> bool:
-        return b'"' + INSTALL_METHOD.encode() + b'"' in line
+        return any(b'"' + m.encode() + b'"' in line for m in INSTALL_METHODS)
 
     def handle(self, line: bytes) -> bytes:
         rpc_id = None
         try:
             message = json.loads(line.decode("utf-8"))
             rpc_id = message.get("id") if isinstance(message, dict) else None
-            if not isinstance(message, dict) or message.get("method") != INSTALL_METHOD:
+            if not isinstance(message, dict) or message.get("method") not in INSTALL_METHODS:
                 raise Refusal("that line is not a policy.install request")
             result = self.install(message.get("params") or {})
             reply = {"jsonrpc": "2.0", "id": rpc_id, "result": result}
