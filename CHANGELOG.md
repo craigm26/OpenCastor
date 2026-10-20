@@ -9,8 +9,10 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
-Intended as 3.7.0: the message-type change below is a wire break, and the code and log
-messages refer to "3.7".
+## [3.7.0] - 2026-10-19
+
+Published on PyPI as `1!3.7.0` (the epoch is required; see `docs/pypi-versioning.md`). The
+message-type change below is a wire break.
 
 ### Added: Dream Labs' Dream-1 with your own key (`castor dream`, bridge `dream.*`)
 
