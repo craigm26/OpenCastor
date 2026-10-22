@@ -9,6 +9,13 @@ Versions switched from date-based (`YYYY.MM.DD.patch`) to SemVer at
 
 ## [Unreleased]
 
+### Changed (docs): how the README describes OpenCastor
+
+- The README and `docs/rcan-integration.md` describe OpenCastor as an open-source robot runtime and
+  product that is one client of robot-md-gateway, separate from the vendor-neutral RCAN spec and the
+  Bounded Embodiment test method and kit. They no longer call the gateway OpenCastor's kernel:
+  OpenCastor does not embed the gateway yet, as the README's safety notice already said.
+
 ## [3.7.0] - 2026-10-19
 
 Published on PyPI as `1!3.7.0` (the epoch is required; see `docs/pypi-versioning.md`). The

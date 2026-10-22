@@ -5,7 +5,7 @@
 <h1 align="center">OpenCastor</h1>
 
 <p align="center">
-  Productized open-core RCAN runtime — gateway-as-kernel, drivers, fleet, cloud bridge, UI. The most fully-documented RCAN runtime; not the only one.
+  An open-source robot runtime and product — drivers, AI routing, fleet, cloud bridge, UI. One client of <a href="https://github.com/RobotRegistryFoundation/robot-md-gateway">robot-md-gateway</a>, and separate from the vendor-neutral <a href="https://rcan.dev/spec/">RCAN spec</a> and <a href="https://github.com/RobotRegistryFoundation/bounded-embodiment">Bounded Embodiment</a> test method and kit.
 </p>
 
 <p align="center">
@@ -31,11 +31,15 @@
 
 ## What is OpenCastor
 
-OpenCastor is an open-source runtime for embodied AI. It implements the [RCAN open protocol](https://rcan.dev/spec/) and handles the hard parts: safety gates, multi-provider AI routing, hardware drivers, messaging channels, and fleet management.
+OpenCastor is an open-source robot runtime and product. It implements the [RCAN open protocol](https://rcan.dev/spec/) and handles the hard parts: safety gates, multi-provider AI routing, hardware drivers, messaging channels, and fleet management.
+
+It is one client of [robot-md-gateway](https://github.com/RobotRegistryFoundation/robot-md-gateway): `castor up` runs the gateway as a separate service beside the runtime ([Ports](#ports--the-one-table)). OpenCastor does not embed the gateway yet; the safety notice at the end of this README says what that means.
 
 Point it at any LLM (Gemini, GPT-4.1, Claude, Ollama, and 13 more) and any robot body (Raspberry Pi, Jetson, Arduino, ESP32, LEGO) via a single YAML config. Your robot answers to WhatsApp, Telegram, Discord, Slack, and Home Assistant — and learns from its own experience through the Sisyphus self-improvement loop.
 
 > **RCAN ≠ OpenCastor.** [RCAN](https://rcan.dev) is an independent open protocol — like DNS and ICANN, but for robotics. Any robot can implement RCAN without using OpenCastor. OpenCastor is one implementation that helped inform the spec.
+>
+> **Bounded Embodiment ≠ OpenCastor.** The [Bounded Embodiment](https://github.com/RobotRegistryFoundation/bounded-embodiment) test method and its kit test whether a machine stays within its declared physical limits when its commands come from a source that cannot be trusted, such as an AI model. Like the RCAN spec, they are vendor-neutral and do not depend on OpenCastor. One person maintains all three.
 
 ## Quick Start
 
@@ -287,19 +291,20 @@ castor gateway --config so_arm101.rcan.yaml
 
 ## Where OpenCastor sits
 
-OpenCastor is **Layer 4** of the OpenCastor stack — the productized
-robot-facing runtime. It depends on:
+OpenCastor is an open-source robot runtime and product: drivers, AI
+routing, messaging channels, fleet management, the cloud bridge and the
+Fleet UI. In the layer model that the safety notice at the end of this
+README uses, it is **Layer 4**. It uses:
 
-- [`robot-md-gateway`](https://github.com/RobotRegistryFoundation/robot-md-gateway) — Layer 3, the open safety kernel. *Same code in commercial and community deployments.*
-- [`continuonai/rcan-spec`](https://github.com/continuonai/rcan-spec) — Layer 5, the wire protocol.
-- [Robot Registry Foundation](https://robotregistryfoundation.org) — Layer 6, the neutral registry.
+- [`robot-md-gateway`](https://github.com/RobotRegistryFoundation/robot-md-gateway) — Layer 3, the open gateway. OpenCastor is one client of it: `castor up` runs it as a separate service, and it applies only to commands that pass through it.
+- [`RobotRegistryFoundation/rcan-spec`](https://github.com/RobotRegistryFoundation/rcan-spec) — Layer 5, the wire protocol.
+- [Robot Registry Foundation](https://robotregistryfoundation.org) — Layer 6, the registry.
 
-The **safety story is identical** at every tier — hobbyist running
-gateway directly, or enterprise running OpenCastor full. What you
-pay for is operational ergonomics, fleet scale, compliance prep,
-and support.
-
-OpenCastor is a productized open-core RCAN runtime — gateway-as-kernel plus drivers, fleet management, cloud bridge, and commercial support. RCAN-the-protocol is implementation-independent; OpenCastor is the most fully-documented runtime that speaks it.
+The vendor-neutral pieces, the [RCAN spec](https://rcan.dev/spec/) and the
+[Bounded Embodiment](https://github.com/RobotRegistryFoundation/bounded-embodiment)
+test method and kit, do not depend on OpenCastor. RCAN-the-protocol is
+implementation-independent, and OpenCastor is one runtime that speaks it.
+The same person maintains OpenCastor and these pieces.
 
 Everything else in the ecosystem is independent; adopt one, or all seven.
 
@@ -311,7 +316,7 @@ Everything else in the ecosystem is independent; adopt one, or all seven.
 | **Python SDK** | [rcan-py](https://github.com/continuonai/rcan-py) | `pip install rcan` — `RCANMessage`, `RobotURI`, `ConfidenceGate`, `HiTLGate`, `AuditChain`. |
 | **TypeScript SDK** | [rcan-ts](https://github.com/continuonai/rcan-ts) | `npm install rcan-ts` — same API surface for Node + browser. |
 | **Registry** | [Robot Registry Foundation](https://robotregistryfoundation.org) | Permanent RRN identities. Public resolver at `/r/<rrn>`. Like ICANN for robots. |
-| **Productized runtime** ← *this* | [OpenCastor](https://github.com/craigm26/OpenCastor) | **This repo.** Productized open-core RCAN runtime — connects LLM brains to hardware bodies. Safety gates, multi-provider AI routing, 18+ hardware drivers, messaging channels, fleet management. |
+| **Runtime and product** ← *this* | [OpenCastor](https://github.com/craigm26/OpenCastor) | **This repo.** Open-source robot runtime and product, and one client of robot-md-gateway. Connects LLM brains to hardware bodies: safety gates, multi-provider AI routing, 18+ hardware drivers, messaging channels, fleet management. |
 
 See also: the [`ROBOT.md` quickstart](docs/robot-md-claude-code.md) — one command puts a Bob-class robot in Claude Code via the MCP bridge.
 
