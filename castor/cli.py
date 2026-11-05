@@ -4021,7 +4021,7 @@ WantedBy=default.target
     )
     say(f"            [dim]{token_path}, mode 0600[/dim]")
     say(f"    port    {DEFAULT_PORT}   [dim]robotd at {plan.ssh_dest or ''}{DEFAULT_SOCKET}[/dim]")
-    say(f"    deadman {DEFAULT_DEADMAN_MS} ms of client silence sends one robot.stop")
+    say(f"    deadman {DEFAULT_DEADMAN_MS} ms without a move sends one robot.stop")
     say("")
     say("  [dim]The token keeps a television out of your robot. It is not a security[/dim]")
     say("  [dim]boundary and it does not stop anybody who can read the same Wi-Fi.[/dim]")
