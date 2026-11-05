@@ -6,12 +6,17 @@ docs/plans/brains-layer.md, A1 and A3), proved against the recording robotd.
 (b) A `robot.stop` from any client zeroed robotd once, and a run the bridge
     itself carried sent its next move a tick later. Every stop now cancels
     every bridge-owned run before the stop line goes out.
+
+Then the two fixes that came back from duck-studio's bridge (#65): a client that
+hangs up with a live move gets one stop at once, and the deadman's check, clear
+and write are one step with a move's arming and its write.
 """
 
 from __future__ import annotations
 
 import json
 import socket
+import threading
 import time
 
 import pytest
@@ -211,3 +216,141 @@ def test_zero_twist_parsing():
     assert bridge.is_zero_twist(b'{"jsonrpc":"2.0","method":"robot.move","params":{},"id":2}')
     assert not bridge.is_zero_twist(MOVE)
     assert not bridge.is_zero_twist(b'{"method":"robot.move","params":{"vx":"fast"}}')
+
+
+# ---------------------------------------------------------------------------
+# a client that hangs up with a live move gets one stop at once
+# ---------------------------------------------------------------------------
+
+
+def _wait_for(robotd, name: str) -> bool:
+    return _wait(lambda: any(name in line for line in robotd.lines), timeout=0.2)
+
+
+def test_hanging_up_while_steering_stops_inside_the_deadman(duck):
+    robotd, connect = duck
+    client, _ = connect()
+    client.sendall(MOVE)
+    assert _wait(lambda: any('"robot.move"' in line for line in robotd.lines))
+    client.close()
+    assert _wait_for(robotd, "bridge-hangup"), f"no stop inside 200 ms: {robotd.lines}"
+    time.sleep(0.5)  # past the 300 ms deadman
+    assert len(_stops(robotd)) == 1, robotd.lines
+
+
+def test_hanging_up_while_standing_sends_nothing(duck):
+    robotd, connect = duck
+    client, _ = connect()
+    client.sendall(STATE)
+    client.sendall(ZERO)
+    assert _wait(lambda: any('"robot.state"' in line for line in robotd.lines))
+    client.close()
+    time.sleep(0.5)
+    assert _stops(robotd) == []
+
+
+def test_hanging_up_after_a_stop_sends_no_second_stop(duck):
+    robotd, connect = duck
+    client, _ = connect()
+    client.sendall(MOVE)
+    client.sendall(STOP)
+    assert _wait(lambda: any("studio-stop" in line for line in robotd.lines))
+    client.close()
+    time.sleep(0.3)
+    assert len(_stops(robotd)) == 1, robotd.lines
+
+
+def test_hanging_up_during_a_bridge_run_stops_it_and_says_so_once(duck):
+    robotd, connect = duck
+    client, relay = connect()
+    walk = bridge.MoveStream(relay, {"vx": 0.3}, hz=20, duration_s=10).start()
+    assert _wait(lambda: len(_walk_moves(robotd)) >= 2)
+    client.close()
+    assert _wait_for(robotd, "bridge-hangup"), robotd.lines
+    assert walk.finished.wait(1)
+    sent = walk.sent
+    time.sleep(0.4)
+    assert walk.sent == sent
+    assert len(_stops(robotd)) == 1, robotd.lines
+
+
+def test_a_hang_up_cancels_a_run_on_another_relay(duck):
+    """The stop zeroes the one twist they share, so the other run must not resume it."""
+    robotd, connect = duck
+    owner, relay = connect()
+    walk = bridge.MoveStream(relay, {"vx": 0.3}, hz=20, duration_s=10).start()
+    other, _ = connect()
+    other.sendall(MOVE)
+    assert _wait(lambda: '"robot.move"' in "".join(robotd.lines))
+    other.close()
+    assert _wait_for(robotd, "bridge-hangup"), robotd.lines
+    assert walk.finished.wait(0.1)
+    owner.close()
+
+
+# ---------------------------------------------------------------------------
+# the deadman's check, clear and write are one step with a move's arming
+# ---------------------------------------------------------------------------
+
+
+class HeldRobotd:
+    """Records writes, and holds the deadman's stop inside `sendall` until told."""
+
+    def __init__(self):
+        self.lines: list[bytes] = []
+        self.in_stop = threading.Event()
+        self.release = threading.Event()
+
+    def sendall(self, data):
+        self.lines.append(data)
+        if b"bridge-deadman" in data:
+            self.in_stop.set()
+            self.release.wait(2)
+
+
+def _quiet(*_):
+    return None
+
+
+def test_a_move_during_the_deadmans_stop_is_armed_and_written_after_it():
+    robotd = HeldRobotd()
+    relay = bridge.Relay(None, robotd, 1000, log=_quiet)
+    relay.armed = True
+    relay.last_motion = time.monotonic() - 5
+    watcher = threading.Thread(target=relay._watch, daemon=True)
+    watcher.start()
+    assert robotd.in_stop.wait(2)
+    mover = threading.Thread(target=relay._from_client, args=(MOVE,), daemon=True)
+    mover.start()
+    time.sleep(0.05)
+    # The stop is mid-write, so the move has neither armed nor been written.
+    assert not relay.armed
+    assert len(robotd.lines) == 1
+    robotd.release.set()
+    mover.join(2)
+    relay.running = False
+    watcher.join(2)
+    assert len(robotd.lines) == 2
+    assert b"bridge-deadman" in robotd.lines[0]
+    assert b"robot.move" in robotd.lines[1]
+    assert relay.armed, "the live twist the client sent last is armed"
+
+
+def test_a_run_waiting_to_send_cannot_deadlock_a_stop():
+    """The port's own trap: a stop cancels under `robotd_lock`, and a run sends under both.
+
+    This test is the stop: it holds `robotd_lock` as the deadman does. A run that
+    took its own lock first would now hold it while waiting for `robotd_lock`,
+    the cancel would wait for the run, and nobody would stop the duck.
+    """
+    robotd = HeldRobotd()
+    relay = bridge.Relay(None, robotd, 1000, log=_quiet)
+    with relay.robotd_lock:
+        walk = bridge.MoveStream(relay, {"vx": 0.2}, hz=50, duration_s=5).start()
+        time.sleep(0.1)  # the run is at its first send by now
+        canceller = threading.Thread(target=walk.cancel, daemon=True)
+        canceller.start()
+        canceller.join(1)
+        assert not canceller.is_alive(), "the stop waited on a run that waited on the stop"
+    assert walk.finished.wait(1)
+    assert walk.sent == 0 and robotd.lines == [], "a cancelled run sent its move anyway"
