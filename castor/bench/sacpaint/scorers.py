@@ -27,7 +27,11 @@ from typing import Any
 
 import cv2
 import numpy as np
-from inspect_robots.rollout import TrialRecord
+
+try:  # inspect-robots 1.0 renamed TrialRecord to Record; castor.bench has its own Record
+    from inspect_robots.rollout import Record as TrialRecord
+except ImportError:  # inspect-robots < 1.0
+    from inspect_robots.rollout import TrialRecord
 from inspect_robots.scene import Target
 from inspect_robots.scorer import Score
 

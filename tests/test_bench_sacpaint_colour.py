@@ -20,10 +20,16 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pytest
-from inspect_robots.rollout import TrialRecord
+
+try:  # inspect-robots 1.0 renamed TrialRecord to Record; castor.bench has its own Record
+    from inspect_robots.rollout import Record as TrialRecord
+except ImportError:  # inspect-robots < 1.0
+    from inspect_robots.rollout import TrialRecord
 from inspect_robots.types import Action, Observation
 
-from castor.bench.sacpaint import cli, palette as pal, reference as refmod
+from castor.bench.sacpaint import cli
+from castor.bench.sacpaint import palette as pal
+from castor.bench.sacpaint import reference as refmod
 from castor.bench.sacpaint.mock import (
     REFERENCE_COLOR_CAM,
     IdlePolicy,
@@ -372,8 +378,6 @@ def test_the_agent_tool_surface_gains_colour_and_nothing_else(refs: Path) -> Non
     assert colour_names == mono_names  # same tools, no new ones
     assert colour_built.state_labels() == ("eef_pos", ("x", "y", "z", "color"))
     assert mono_built.state_labels() == ("eef_pos", ("x", "y", "z"))
-    described = {
-        s["function"]["name"]: s["function"]["parameters"] for s in colour_built.schemas()
-    }
+    described = {s["function"]["name"]: s["function"]["parameters"] for s in colour_built.schemas()}
     move = next(k for k in described if k.startswith("move"))
     assert "color" in described[move]["properties"]["targets"]["description"]

@@ -16,7 +16,11 @@ import cv2
 import numpy as np
 import pytest
 from inspect_robots import eval as ir_eval
-from inspect_robots.rollout import TrialRecord
+
+try:  # inspect-robots 1.0 renamed TrialRecord to Record; castor.bench has its own Record
+    from inspect_robots.rollout import Record as TrialRecord
+except ImportError:  # inspect-robots < 1.0
+    from inspect_robots.rollout import TrialRecord
 from inspect_robots.types import Observation
 
 from castor.bench.sacpaint import cli, reference
