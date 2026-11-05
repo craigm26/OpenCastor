@@ -41,8 +41,12 @@ A STOP FROM ANYONE STOPS EVERYTHING THE BRIDGE OWNS. robotd zeroes once on
 `robot.stop`; a run the bridge itself is carrying (a bridge-side walk, a
 dream.act still waiting on the internet) would otherwise send its next move a
 tick later and the duck walks again. So every `robot.stop` the bridge sees,
-from any client, and every stop its own deadman sends, cancels every run in
+from any client, and every stop this relay sends itself, cancels every run in
 :class:`Runs` before the stop line goes out.
+
+A CLIENT THAT HANGS UP WITH A LIVE MOVE GETS ONE STOP AT ONCE. The deadman ends
+with the connection, so without this a walk the client left behind would wait
+on robotd's own deadman alone.
 
 THE TOKEN IS NOT A SECURITY BOUNDARY, and saying so is part of shipping it. It
 stops a television or a housemate's laptop stumbling into a robot. It does not
@@ -116,6 +120,10 @@ STOP_LINE = b'{"jsonrpc":"2.0","method":"robot.stop","params":{},"id":"bridge-de
 #: What a bridge-owned run sends when it finishes on its own (not cancelled):
 #: the same stop, named differently, so a robotd log tells the two apart.
 RUN_END_LINE = b'{"jsonrpc":"2.0","method":"robot.stop","params":{},"id":"bridge-run-end"}\n'
+
+#: What a relay sends when its client leaves with a move still live. Named too,
+#: so a robotd log tells "the app hung up" from "the app went quiet".
+HANGUP_LINE = b'{"jsonrpc":"2.0","method":"robot.stop","params":{},"id":"bridge-hangup"}\n'
 
 #: The only client verb that feeds the deadman. A head turn, a sound or a state
 #: poll is not steering; only a twist keeps a walking duck walking.
@@ -834,6 +842,12 @@ class BridgeRun:
     the same lock. So when `cancel()` returns, any send that was in flight has
     finished and no later one can start: the stop written after it is the last
     word robotd hears from this run.
+
+    LOCK ORDER: a relay's `robotd_lock`, then `lock`, never the other way. A
+    stop cancels while holding its relay's `robotd_lock`, so a run that took
+    `lock` first and then waited for `robotd_lock` would deadlock against it.
+    A sender takes `robotd_lock` around `send_unless_cancelled`; `lock` is a
+    leaf.
     """
 
     def __init__(self, name: str) -> None:
@@ -935,14 +949,16 @@ class MoveStream(BridgeRun):
         end = time.monotonic() + self.duration_s
         try:
             while self.relay.running and time.monotonic() < end:
-                if not self.send_unless_cancelled(self.relay.to_robotd, self._line()):
-                    return
-                self.sent += 1
-                self.relay.motion_seen()
+                with self.relay.robotd_lock:
+                    if not self.send_unless_cancelled(self.relay.to_robotd, self._line()):
+                        return
+                    self.sent += 1
+                    self.relay.motion_seen()
                 if self.cancelled.wait(self.period):
                     return
-            if self.send_unless_cancelled(self.relay.to_robotd, RUN_END_LINE):
-                self.relay.armed = False  # that was the stop; the deadman has nothing left to do
+            with self.relay.robotd_lock:
+                if self.send_unless_cancelled(self.relay.to_robotd, RUN_END_LINE):
+                    self.relay.armed = False  # that was the stop; nothing left for the deadman
         except OSError:
             pass
         finally:
@@ -989,7 +1005,12 @@ class Relay:
         self.client_lock = threading.Lock()
         # AND ONE WRITER AT A TIME TO ROBOTD: the client's lines, the deadman's
         # stop and a bridge run's moves come from three threads.
-        self.robotd_lock = threading.Lock()
+        # IT ALSO COVERS `armed`: the deadman's check, its clear and its write
+        # are one step, and so are a move's arming and its write. Otherwise a
+        # move arriving between the check and the clear is live and unarmed.
+        # Re-entrant, because each of them writes through `to_robotd`. See
+        # `BridgeRun` for its order against a run's own lock.
+        self.robotd_lock = threading.RLock()
         self.robotd_pending = b""
         # THE DEADMAN IS ARMED BY MOTION AND ONLY BY MOTION. A client that has
         # never sent a move has nothing to go stale; one that has, and then
@@ -1041,6 +1062,7 @@ class Relay:
             for run in self.runs.active():
                 if getattr(run, "relay", None) is self:
                     run.cancel()
+            self._stop_if_steering()
             if self.dream is not None:
                 # A client that left frees its Dream seat now, not at idle eviction.
                 threading.Thread(
@@ -1117,39 +1139,64 @@ class Relay:
                 self._dream_line(line)
                 continue
             method = line_method(line)
-            if method == STOP_METHOD:
-                # CANCEL FIRST, THEN FORWARD. When cancel_all returns, no run
-                # can send again, so this stop is the last motion word robotd
-                # hears, not a pause before the next tick of somebody's walk.
-                self.runs.cancel_all("robot.stop from a client")
-                self.armed = False
-            elif method in MOTION_METHODS:
-                if is_zero_twist(line):
-                    self.armed = False  # standing still: nothing for the deadman to stop
-                else:
-                    self.motion_seen()
-            self.to_robotd(line + b"\n")
+            with self.robotd_lock:
+                if method == STOP_METHOD:
+                    # CANCEL FIRST, THEN FORWARD. When cancel_all returns, no run
+                    # can send again, so this stop is the last motion word robotd
+                    # hears, not a pause before the next tick of somebody's walk.
+                    self.runs.cancel_all("robot.stop from a client")
+                    self.armed = False
+                elif method in MOTION_METHODS:
+                    if is_zero_twist(line):
+                        self.armed = False  # standing still: nothing for the deadman to stop
+                    else:
+                        self.motion_seen()
+                self.to_robotd(line + b"\n")
 
     def motion_seen(self) -> None:
-        """A move just went to robotd on this relay: arm the deadman and restart its clock."""
+        """A move is going to robotd on this relay: arm the deadman and restart its clock.
+
+        The caller holds `robotd_lock`, so the arming and the write are one step.
+        """
         self.last_motion = time.monotonic()
         self.armed = True
+
+    def _stop_if_steering(self) -> None:
+        """The client left: if its last move is still live, stop now, once.
+
+        The watchdog ended with the connection, so nothing else on this side
+        would. A stop is a stop, so it cancels every run first, like the others.
+        """
+        with self.robotd_lock:
+            if self.deadman <= 0 or not self.armed:
+                return
+            self.armed = False
+            self.runs.cancel_all("client left while steering")
+            try:
+                self.to_robotd(HANGUP_LINE)
+            except OSError:
+                return
+        self.log("client left while steering, sent robot.stop")
 
     def _watch(self) -> None:
         while self.running:
             time.sleep(0.05)
-            if self.deadman <= 0 or not self.armed:
+            if self.deadman <= 0:
                 continue
-            quiet = time.monotonic() - self.last_motion
-            if quiet < self.deadman:
-                continue
-            try:
-                self.armed = False
-                self.runs.cancel_all("bridge deadman")
-                self.to_robotd(STOP_LINE)
-                self.log(f"deadman: {quiet * 1000:.0f} ms without a move, sent robot.stop")
-            except OSError:
-                self.running = False
+            with self.robotd_lock:
+                if not self.armed:
+                    continue
+                quiet = time.monotonic() - self.last_motion
+                if quiet < self.deadman:
+                    continue
+                try:
+                    self.armed = False
+                    self.runs.cancel_all("bridge deadman")
+                    self.to_robotd(STOP_LINE)
+                except OSError:
+                    self.running = False
+                    continue
+            self.log(f"deadman: {quiet * 1000:.0f} ms without a move, sent robot.stop")
 
 
 def _stopped_reply(line: bytes) -> bytes:

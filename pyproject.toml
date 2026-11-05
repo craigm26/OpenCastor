@@ -165,7 +165,10 @@ simulation = []  # Gazebo uses ROS2/rclpy; Webots via REST — no extra pip deps
 # Sacramento PaintBench (castor bench sacpaint): the Inspect Robots eval stack. Kept out of core so
 # `pip install opencastor` and the ten-minute path never pull an eval framework.
 paintbench = ["inspect-robots>=0.58.0"]
-paintbench-agent = ["inspect-robots>=0.58.0", "inspect-robots-agent>=0.26.0"]
+# Below 0.30: agent_strokes wraps the plugin's toolset, and 0.30 replaced it with
+# inspect-robots' ToolAdapter, whose setpoint tracking a stroke's planned targets
+# would have to go through. Port that before lifting this pin.
+paintbench-agent = ["inspect-robots>=0.58.0", "inspect-robots-agent>=0.26.0,<0.30"]
 all = [
     # Keep this installable across supported Python versions.
     # Neonize-based extras (rpi/whatsapp/channels) are intentionally excluded because
