@@ -183,3 +183,31 @@ def test_a_client_that_leaves_cancels_the_runs_on_its_relay(duck):
     assert _wait(lambda: len(_walk_moves(robotd)) >= 2)
     client.close()
     assert walk.finished.wait(1)
+
+
+# ---------------------------------------------------------------------------
+# a zero twist is standing, so a slow dream.act is not cut off
+# ---------------------------------------------------------------------------
+
+
+ZERO = b'{"jsonrpc":"2.0","method":"robot.move","params":{"vx":0,"vy":0,"vyaw":0},"id":2}\n'
+
+
+def test_a_zero_twist_disarms_the_deadman(duck):
+    """DreamPilot's pattern: walk, then a zero twist, then a long wait. No deadman stop."""
+    robotd, connect = duck
+    client, relay = connect()
+    client.sendall(MOVE)
+    assert _wait(lambda: relay.armed)
+    client.sendall(ZERO)
+    assert _wait(lambda: not relay.armed)
+    time.sleep(0.6)  # twice the 300 ms deadman
+    assert not any('"bridge-deadman"' in line for line in _stops(robotd))
+    client.close()
+
+
+def test_zero_twist_parsing():
+    assert bridge.is_zero_twist(ZERO)
+    assert bridge.is_zero_twist(b'{"jsonrpc":"2.0","method":"robot.move","params":{},"id":2}')
+    assert not bridge.is_zero_twist(MOVE)
+    assert not bridge.is_zero_twist(b'{"method":"robot.move","params":{"vx":"fast"}}')

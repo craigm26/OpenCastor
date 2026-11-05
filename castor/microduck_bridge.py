@@ -139,6 +139,22 @@ def line_method(line: bytes) -> str | None:
     return method if isinstance(method, str) else None
 
 
+def is_zero_twist(line: bytes) -> bool:
+    """True when a `robot.move` line asks for no motion at all (every speed 0 or missing).
+
+    A ZERO TWIST IS STANDING, NOT STEERING. Studio's DreamPilot sends one before
+    every later `dream.act` so the duck stands while the model thinks; that wait
+    can run past the deadman, and a standing duck has nothing to time out. So a
+    zero twist disarms the deadman instead of arming it. Unparseable params
+    count as motion (the safe side: the deadman stays armed).
+    """
+    try:
+        params = json.loads(line.decode("utf-8")).get("params") or {}
+        return all(float(params.get(k, 0.0) or 0.0) == 0.0 for k in ("vx", "vy", "vyaw"))
+    except (ValueError, TypeError, UnicodeDecodeError, AttributeError):
+        return False
+
+
 #: The handshake version. Both ends refuse anything else BY NAME rather than
 #: guessing — `BridgeHandshake.Refusal.wrongVersion` on the app side.
 HELLO_VERSION = "v1"
@@ -1108,7 +1124,10 @@ class Relay:
                 self.runs.cancel_all("robot.stop from a client")
                 self.armed = False
             elif method in MOTION_METHODS:
-                self.motion_seen()
+                if is_zero_twist(line):
+                    self.armed = False  # standing still: nothing for the deadman to stop
+                else:
+                    self.motion_seen()
             self.to_robotd(line + b"\n")
 
     def motion_seen(self) -> None:
