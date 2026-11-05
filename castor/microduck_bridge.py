@@ -27,11 +27,22 @@ and it is a verb robotd does not have rather than one this rewrites.)
 THE DEADMAN IS THE REASON TO PREFER THIS OVER A RAW `socat`. A simulator gives
 you a duck that stops when nobody is asking it to move; hardware does not. If
 the phone goes down a lift, the Wi-Fi drops, or the app is killed mid-hold, the
-robot is still walking. This sends `robot.stop` when no client line has arrived
-for `--deadman` milliseconds, then keeps sending nothing. It is a floor, not a
+robot is still walking. This sends `robot.stop` when no MOTION line (a
+`robot.move`, or a step of a run the bridge owns) has arrived for `--deadman`
+milliseconds, then keeps sending nothing until motion starts again. Other
+traffic (state polls, sounds, dream.* questions) does not feed it: a client
+that keeps asking for state but stopped steering is a client whose last move
+has gone stale, and a stale move expires into a stop. It is a floor, not a
 guarantee: it cannot act if this process itself dies, which is why the systemd
 unit restarts it and why robotd's own twist deadman (500 ms) stays the real
 backstop underneath.
+
+A STOP FROM ANYONE STOPS EVERYTHING THE BRIDGE OWNS. robotd zeroes once on
+`robot.stop`; a run the bridge itself is carrying (a bridge-side walk, a
+dream.act still waiting on the internet) would otherwise send its next move a
+tick later and the duck walks again. So every `robot.stop` the bridge sees,
+from any client, and every stop its own deadman sends, cancels every run in
+:class:`Runs` before the stop line goes out.
 
 THE TOKEN IS NOT A SECURITY BOUNDARY, and saying so is part of shipping it. It
 stops a television or a housemate's laptop stumbling into a robot. It does not
@@ -79,7 +90,7 @@ DEFAULT_SOCKET = "/run/robotd.sock"
 #: them finds the other three.
 DEFAULT_PORT = 7788
 
-#: Milliseconds of client silence before `robot.stop`. duck-studio's number,
+#: Milliseconds without a `robot.move` before `robot.stop`. duck-studio's number,
 #: and the one the app prints on screen through `BridgeHandshake.deadmanSaid`.
 #: It sits ABOVE robotd's own 500 ms twist deadman on purpose: this is the
 #: layer that acts when the CLIENT vanished, robotd's is the layer that acts
@@ -101,6 +112,32 @@ DEFAULT_TOKEN_FILE = "~/.microduck-bridge-token"
 #: WHO stopped the robot, which is the difference between "the link dropped"
 #: and "the pilot let go".
 STOP_LINE = b'{"jsonrpc":"2.0","method":"robot.stop","params":{},"id":"bridge-deadman"}\n'
+
+#: What a bridge-owned run sends when it finishes on its own (not cancelled):
+#: the same stop, named differently, so a robotd log tells the two apart.
+RUN_END_LINE = b'{"jsonrpc":"2.0","method":"robot.stop","params":{},"id":"bridge-run-end"}\n'
+
+#: The only client verb that feeds the deadman. A head turn, a sound or a state
+#: poll is not steering; only a twist keeps a walking duck walking.
+MOTION_METHODS = frozenset({"robot.move"})
+STOP_METHOD = "robot.stop"
+
+
+def line_method(line: bytes) -> str | None:
+    """The JSON-RPC method of one client line, or None, parsed only when it could matter.
+
+    The substring tests are the cheap gate every line pays; the parse is the
+    exact one, so a line that merely mentions "robot.move" in a parameter (a
+    sound called that, say) is not mistaken for motion.
+    """
+    if b'"robot.move"' not in line and b'"robot.stop"' not in line:
+        return None
+    try:
+        method = json.loads(line.decode("utf-8")).get("method")
+    except (ValueError, UnicodeDecodeError, AttributeError):
+        return None
+    return method if isinstance(method, str) else None
+
 
 #: The handshake version. Both ends refuse anything else BY NAME rather than
 #: guessing — `BridgeHandshake.Refusal.wrongVersion` on the app side.
@@ -769,6 +806,134 @@ class DreamVerbs:
 
 
 # ---------------------------------------------------------------------------
+# Runs the bridge owns, and the stop that cancels all of them
+# ---------------------------------------------------------------------------
+
+
+class BridgeRun:
+    """One thing the bridge is doing on a client's behalf that a stop must end.
+
+    CANCEL IS A FENCE, NOT A REQUEST. Every send a run makes happens under
+    `lock` after checking `cancelled`, and :meth:`cancel` sets the flag under
+    the same lock. So when `cancel()` returns, any send that was in flight has
+    finished and no later one can start: the stop written after it is the last
+    word robotd hears from this run.
+    """
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.lock = threading.Lock()
+        self.cancelled = threading.Event()
+        self.finished = threading.Event()
+
+    def cancel(self) -> None:
+        with self.lock:
+            self.cancelled.set()
+
+    def send_unless_cancelled(self, send, data: bytes) -> bool:
+        with self.lock:
+            if self.cancelled.is_set():
+                return False
+            send(data)
+            return True
+
+
+class Runs:
+    """Every run the bridge owns, across ALL clients, so one stop reaches them all.
+
+    One instance per `serve()`: a stop from the phone has to end a run another
+    client started (a `castor run`, an MCP tool, a Siri intent on a second
+    connection), because robotd has one twist and they all share it.
+    """
+
+    def __init__(self, log=print) -> None:
+        self.log = log
+        self._lock = threading.Lock()
+        self._runs: set[BridgeRun] = set()
+
+    def add(self, run: BridgeRun) -> BridgeRun:
+        with self._lock:
+            self._runs.add(run)
+        return run
+
+    def done(self, run: BridgeRun) -> None:
+        run.finished.set()
+        with self._lock:
+            self._runs.discard(run)
+
+    def active(self) -> list[BridgeRun]:
+        with self._lock:
+            return list(self._runs)
+
+    def cancel_all(self, why: str) -> int:
+        """Cancel every run, and return how many there were. Never waits on a run's thread."""
+        with self._lock:
+            runs, self._runs = list(self._runs), set()
+        for run in runs:
+            run.cancel()
+        if runs:
+            self.log(f"stop ({why}): cancelled {', '.join(sorted(r.name for r in runs))}")
+        return len(runs)
+
+
+class MoveStream(BridgeRun):
+    """The bridge's own walk: a twist sent at `hz` for `duration_s`, then a stop.
+
+    THE PRIMITIVE A BRIDGE-SIDE WALK IS BUILT ON, so the stop fence is in the
+    one place every such walk goes through rather than in each of them. Each
+    step feeds its relay's deadman exactly as a client's `robot.move` would; a
+    cancelled stream sends nothing more (the stop that cancelled it is already
+    on its way), and a stream that runs to its end sends `RUN_END_LINE`.
+    """
+
+    def __init__(
+        self,
+        relay: Relay,
+        twist: dict,
+        hz: float = 10.0,
+        duration_s: float = 2.0,
+        name: str = "walk",
+    ) -> None:
+        super().__init__(name)
+        self.relay = relay
+        self.twist = {k: float(twist.get(k, 0.0)) for k in ("vx", "vy", "vyaw")}
+        self.period = 1.0 / hz if hz > 0 else 0.1
+        self.duration_s = duration_s
+        self.sent = 0
+
+    def start(self) -> MoveStream:
+        self.relay.runs.add(self)
+        threading.Thread(target=self._loop, daemon=True).start()
+        return self
+
+    def _line(self) -> bytes:
+        message = {
+            "jsonrpc": "2.0",
+            "method": "robot.move",
+            "params": self.twist,
+            "id": f"bridge-{self.name}-{self.sent}",
+        }
+        return json.dumps(message, separators=(",", ":")).encode() + b"\n"
+
+    def _loop(self) -> None:
+        end = time.monotonic() + self.duration_s
+        try:
+            while self.relay.running and time.monotonic() < end:
+                if not self.send_unless_cancelled(self.relay.to_robotd, self._line()):
+                    return
+                self.sent += 1
+                self.relay.motion_seen()
+                if self.cancelled.wait(self.period):
+                    return
+            if self.send_unless_cancelled(self.relay.to_robotd, RUN_END_LINE):
+                self.relay.armed = False  # that was the stop; the deadman has nothing left to do
+        except OSError:
+            pass
+        finally:
+            self.relay.runs.done(self)
+
+
+# ---------------------------------------------------------------------------
 # The relay
 # ---------------------------------------------------------------------------
 
@@ -784,6 +949,7 @@ class Relay:
         log=print,
         installer: Installer | None = None,
         dream: DreamVerbs | None = None,
+        runs: Runs | None = None,
     ) -> None:
         self.client = client
         self.robotd = robotd
@@ -791,6 +957,9 @@ class Relay:
         self.log = log
         self.installer = installer
         self.dream = dream
+        # SHARED WITH EVERY OTHER CLIENT when `serve()` built this relay, so a
+        # stop here cancels a run somebody else started.
+        self.runs = runs if runs is not None else Runs(log=log)
         # THIS CLIENT'S DREAM SESSION, and whether a dream.act is out. A Dream
         # call waits on the internet for up to 15 s, so it runs on its own
         # thread and the relay keeps moving robotd's bytes meanwhile.
@@ -802,9 +971,15 @@ class Relay:
         # forwarded up to their last newline (the rest waits for its own), and
         # every write to the client holds this lock.
         self.client_lock = threading.Lock()
+        # AND ONE WRITER AT A TIME TO ROBOTD: the client's lines, the deadman's
+        # stop and a bridge run's moves come from three threads.
+        self.robotd_lock = threading.Lock()
         self.robotd_pending = b""
-        self.last_from_client = time.monotonic()
-        self.stopped_for_silence = False
+        # THE DEADMAN IS ARMED BY MOTION AND ONLY BY MOTION. A client that has
+        # never sent a move has nothing to go stale; one that has, and then
+        # only polls state, has a move going stale and gets a stop.
+        self.last_motion = time.monotonic()
+        self.armed = False
         self.running = True
         # WHAT THE CLIENT HAS SENT SINCE ITS LAST NEWLINE. The one verb this
         # relay answers itself has to be seen whole to be recognised, so the
@@ -832,12 +1007,10 @@ class Relay:
                         self.running = False
                         break
                     if who == "client":
-                        # ANY BYTE FROM THE CLIENT FEEDS THE DEADMAN, not only a
-                        # move: a client that is asking for state is a client
-                        # that is still there, and a robot that stops because
-                        # nobody drove it for a moment is a robot nobody trusts.
-                        self.last_from_client = time.monotonic()
-                        self.stopped_for_silence = False
+                        # ONLY MOTION FEEDS THE DEADMAN (see `_from_client`).
+                        # It used to be any byte, which meant a phone polling
+                        # state at 10 Hz kept a duck walking on a twist it sent
+                        # minutes ago (brains-layer review, A1/A3).
                         self._from_client(chunk)
                         continue
                     self._from_robotd(chunk)
@@ -848,11 +1021,19 @@ class Relay:
             selector.close()
             if watchdog:
                 watchdog.join(timeout=1)
+            # Runs this client's relay carries cannot outlive its robotd line.
+            for run in self.runs.active():
+                if getattr(run, "relay", None) is self:
+                    run.cancel()
             if self.dream is not None:
                 # A client that left frees its Dream seat now, not at idle eviction.
                 threading.Thread(
                     target=DreamVerbs._end, args=(self.dream_state,), daemon=True
                 ).start()
+
+    def to_robotd(self, data: bytes) -> None:
+        with self.robotd_lock:
+            self.robotd.sendall(data)
 
     def _to_client(self, data: bytes) -> None:
         with self.client_lock:
@@ -883,14 +1064,28 @@ class Relay:
             self._to_client(json.dumps(refusal, separators=(",", ":")).encode() + b"\n")
             return
 
+        # A WAITING ACT IS A RUN THE BRIDGE OWNS. It moves nothing itself, but
+        # its answer is rows the client is about to play; a stop that lands
+        # while it waits must not be followed by a fresh chunk of motion. The
+        # call itself cannot be cut short (it is already on the internet), so
+        # the stop drops its answer, ends the session, and says so.
+        run = self.runs.add(BridgeRun("dream.act"))
+
         def work() -> None:
             try:
                 answer = self.dream.handle(line, self.dream_state)
+                with run.lock:
+                    stopped = run.cancelled.is_set()
+                    run.cancelled.set()  # a late cancel now has nothing to fence
+                if stopped:
+                    DreamVerbs._end(self.dream_state)
+                    answer = _stopped_reply(line)
                 if self.running:
                     self._to_client(answer)
             except OSError:
                 pass
             finally:
+                self.runs.done(run)
                 self.dream_busy.release()
 
         threading.Thread(target=work, daemon=True).start()
@@ -905,22 +1100,56 @@ class Relay:
             if self.dream is not None and DreamVerbs.wants(line):
                 self._dream_line(line)
                 continue
-            self.robotd.sendall(line + b"\n")
+            method = line_method(line)
+            if method == STOP_METHOD:
+                # CANCEL FIRST, THEN FORWARD. When cancel_all returns, no run
+                # can send again, so this stop is the last motion word robotd
+                # hears, not a pause before the next tick of somebody's walk.
+                self.runs.cancel_all("robot.stop from a client")
+                self.armed = False
+            elif method in MOTION_METHODS:
+                self.motion_seen()
+            self.to_robotd(line + b"\n")
+
+    def motion_seen(self) -> None:
+        """A move just went to robotd on this relay: arm the deadman and restart its clock."""
+        self.last_motion = time.monotonic()
+        self.armed = True
 
     def _watch(self) -> None:
         while self.running:
             time.sleep(0.05)
-            if self.deadman <= 0 or self.stopped_for_silence:
+            if self.deadman <= 0 or not self.armed:
                 continue
-            quiet = time.monotonic() - self.last_from_client
+            quiet = time.monotonic() - self.last_motion
             if quiet < self.deadman:
                 continue
             try:
-                self.robotd.sendall(STOP_LINE)
-                self.stopped_for_silence = True
-                self.log(f"deadman: {quiet * 1000:.0f} ms of silence, sent robot.stop")
+                self.armed = False
+                self.runs.cancel_all("bridge deadman")
+                self.to_robotd(STOP_LINE)
+                self.log(f"deadman: {quiet * 1000:.0f} ms without a move, sent robot.stop")
             except OSError:
                 self.running = False
+
+
+def _stopped_reply(line: bytes) -> bytes:
+    """The answer a run's client gets when a stop ended the run before it answered."""
+    try:
+        rpc_id = json.loads(line.decode("utf-8")).get("id")
+    except (ValueError, UnicodeDecodeError, AttributeError):
+        rpc_id = None
+    reply = {
+        "jsonrpc": "2.0",
+        "id": rpc_id,
+        "error": {
+            "code": -32000,
+            "message": "stopped: a robot.stop arrived while this was waiting; "
+            "its actions were dropped",
+            "data": {"code": "stopped"},
+        },
+    }
+    return json.dumps(reply, separators=(",", ":")).encode() + b"\n"
 
 
 def serve(
@@ -953,6 +1182,7 @@ def serve(
     # waiting on a reply that never comes.
     installer = Installer(policy_dir, robotd_toml, log=log)
     dream = DreamVerbs(log=log)
+    runs = Runs(log=log)
     log(
         f"{VERSION} on {host}:{listener.getsockname()[1]} -> {up.describe()}, "
         f"deadman {deadman_ms} ms, policy.install "
@@ -965,7 +1195,7 @@ def serve(
             client, where = listener.accept()
             threading.Thread(
                 target=_greet,
-                args=(client, where, up, token, deadman_ms, log, installer, dream),
+                args=(client, where, up, token, deadman_ms, log, installer, dream, runs),
                 daemon=True,
             ).start()
     finally:
@@ -982,6 +1212,7 @@ def _greet(
     log,
     installer: Installer | None = None,
     dream: DreamVerbs | None = None,
+    runs: Runs | None = None,
 ) -> None:
     client.settimeout(5)
     try:
@@ -1006,7 +1237,9 @@ def _greet(
             greeting_line(deadman_ms, bool(installer and installer.policy_dir), dream is not None)
         )
         log(f"relaying {where[0]}")
-        Relay(client, robotd, deadman_ms, log=log, installer=installer, dream=dream).run()
+        Relay(
+            client, robotd, deadman_ms, log=log, installer=installer, dream=dream, runs=runs
+        ).run()
         robotd.close()
         log(f"closed {where[0]}")
     except TimeoutError:
@@ -1082,7 +1315,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--deadman",
         type=int,
         default=int(_env("DEADMAN_MS", DEFAULT_DEADMAN_MS)),
-        help="milliseconds of client silence before robot.stop. "
+        help="milliseconds without a robot.move before robot.stop. "
         "0 disables it, which you should not do on hardware.",
     )
     return parser

@@ -258,12 +258,8 @@ def test_a_client_that_keeps_talking_is_never_stopped(relay):
     client.close()
 
 
-def test_any_byte_feeds_the_deadman_not_only_a_move(relay):
-    """A client asking for state is a client that is still there.
-
-    Named because the opposite is a tempting optimisation: a robot that stops
-    because nobody drove it for a moment is a robot nobody trusts.
-    """
+def test_a_client_that_never_moved_is_never_stopped(relay):
+    """Nothing was commanded, so nothing can go stale: state polls alone send no stop."""
     robotd, connect = relay
     client = connect()
     _line(client)

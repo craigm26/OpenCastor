@@ -397,6 +397,51 @@ def test_a_second_act_while_one_waits_is_refused(duck, fake):
     assert json.loads(_line(client))["id"] == 1
 
 
+def test_a_stop_while_an_act_waits_drops_its_actions_and_ends_the_session(duck, fake):
+    """A waiting dream.act is a bridge-owned run: a robot.stop from ANY client cancels it.
+
+    Without this, a stop that lands during the up-to-15 s wait is followed by a
+    fresh chunk of rows the client plays straight into robot.move (A1/A3).
+    """
+    robotd, connect = duck
+    dream.save_key(GOOD)
+    fake.delay_s = 0.5
+    pilot, _ = connect()
+    pilot.sendall(
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 7,
+                "method": "dream.act",
+                "params": {"checkpoint": "m", "prompt": "walk"},
+            }
+        ).encode()
+        + b"\n"
+    )
+    time.sleep(0.15)  # the act is out on the internet now
+    studio, _ = connect()
+    studio.sendall(b'{"jsonrpc":"2.0","method":"robot.stop","params":{},"id":"s"}\n')
+    answer = json.loads(_line(pilot))
+    assert answer["id"] == 7 and "result" not in answer
+    assert answer["error"]["data"]["code"] == "stopped"
+    deadline = time.time() + 3
+    while time.time() < deadline and fake.requests[-1]["path"] != "/v1/end_session":
+        time.sleep(0.05)
+    assert fake.requests[-1]["path"] == "/v1/end_session"
+    assert any('"robot.stop"' in line for line in robotd.lines)
+
+
+def test_an_act_that_answers_before_a_stop_is_not_disturbed(duck, fake):
+    _, connect = duck
+    dream.save_key(GOOD)
+    client, _ = connect()
+    first = _call(client, "dream.act", {"checkpoint": "m", "prompt": "x"})
+    client.sendall(b'{"jsonrpc":"2.0","method":"robot.stop","params":{},"id":"s"}\n')
+    time.sleep(0.1)
+    second = _call(client, "dream.act", {"checkpoint": "m", "prompt": "x"}, rpc_id=2)
+    assert "actions" in first["result"] and "actions" in second["result"]
+
+
 def test_a_line_that_only_mentions_dream_still_reaches_robotd(duck):
     robotd, connect = duck
     client, _ = connect()
