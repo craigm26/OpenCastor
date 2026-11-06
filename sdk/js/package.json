@@ -56,6 +56,6 @@
   "overrides": {
     "handlebars": "^4.7.9",
     "picomatch": "^4.0.4",
-    "brace-expansion": "^1.1.13"
+    "brace-expansion": "^1.1.21"
   }
 }
