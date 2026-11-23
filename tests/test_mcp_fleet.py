@@ -55,11 +55,14 @@ def _mock_get(url: str, **kwargs):  # noqa: ANN001
 
 def _mock_post(url: str, **kwargs):  # noqa: ANN001
     mock = MagicMock()
+    mock.status_code = 200
     mock.raise_for_status = MagicMock()
-    if "/api/estop" in url:
+    if "/api/stop" in url or "/api/estop" in url:
         mock.json.return_value = ESTOP_OK
     elif "/api/command" in url:
         mock.json.return_value = COMMAND_OK
+    elif "/v1/invoke" in url:
+        mock.json.return_value = {"success": True, "outcome_kind": "executed"}
     return mock
 
 

@@ -39,7 +39,6 @@ from typing import Any
 import httpx
 import yaml
 
-from . import mcp_fleet as _mcp_fleet  # noqa: F401 — registers fleet tools
 from .mcp_auth import resolve_loa
 
 try:
@@ -93,12 +92,77 @@ def _default_rrn() -> str:
     return cfg.get("rrn", os.environ.get("CASTOR_RRN", "RRN-000000000001"))
 
 
-def _headers() -> dict[str, str]:
-    token = _gateway_token()
+def _headers(token_override: str = "") -> dict[str, str]:
+    token = token_override or _gateway_token()
     h = {"Content-Type": "application/json"}
     if token:
         h["Authorization"] = f"Bearer {token}"
     return h
+
+
+def _fleet_registry() -> dict[str, dict[str, Any]]:
+    """Return a per-RRN routing map {rrn: {gateway_url, runtime_url, token, name, stop_tool}}.
+
+    Reads from:
+      1. `fleet_peers:` in CASTOR_CONFIG (e.g. bob.rcan.yaml)
+      2. `CASTOR_FLEET_PEERS` environment variable (JSON object)
+      3. Local pair-payload files (`~/bob/pair-payload.json`, `~/rover/pair-payload.json`)
+         when present on disk.
+    """
+    import json as _json
+
+    cfg = _load_config()
+    reg: dict[str, dict[str, Any]] = {}
+
+    for entry in (cfg.get("fleet_peers") or []):
+        if isinstance(entry, dict) and entry.get("rrn"):
+            reg[str(entry["rrn"])] = dict(entry)
+
+    raw_env = os.environ.get("CASTOR_FLEET_PEERS", "").strip()
+    if raw_env:
+        try:
+            parsed = _json.loads(raw_env)
+            if isinstance(parsed, dict):
+                for rrn, info in parsed.items():
+                    if isinstance(info, dict):
+                        reg[str(rrn)] = {**reg.get(str(rrn), {}), **info, "rrn": str(rrn)}
+        except Exception:
+            pass
+
+    for home_dir, default_rrn, default_gw, default_rt, stop_tool in (
+        (Path.home() / "bob", "RRN-000000000011", "http://127.0.0.1:8080", "http://127.0.0.1:8001", "arm.estop"),
+        (Path.home() / "rover", "RRN-000000000012", "http://127.0.0.1:8081", "http://127.0.0.1:8003", "drive.estop"),
+    ):
+        if default_rrn in reg:
+            continue
+        pair_file = home_dir / "pair-payload.json"
+        if pair_file.exists():
+            try:
+                pair = _json.loads(pair_file.read_text())
+                rrn = str(pair.get("rrn") or default_rrn)
+                reg[rrn] = {
+                    "rrn": rrn,
+                    "name": pair.get("robot_name") or home_dir.name,
+                    "gateway_url": default_gw,
+                    "runtime_url": default_rt,
+                    "token": pair.get("bearer") or "",
+                    "stop_tool": stop_tool,
+                    "manifest_path": str(home_dir / "ROBOT.md"),
+                }
+            except Exception:
+                pass
+    return reg
+
+
+def _resolve_robot_endpoint(rrn: str = "") -> tuple[str, dict[str, str], dict[str, Any]]:
+    """Return (base_url, headers, peer_meta) for `rrn` (or default gateway)."""
+    reg = _fleet_registry()
+    peer = reg.get(rrn) if rrn else None
+    if peer:
+        url = peer.get("runtime_url") or peer.get("gateway_url") or _gateway_url()
+        tok = peer.get("token") or _gateway_token()
+        return str(url).rstrip("/"), _headers(tok), peer
+    return _gateway_url().rstrip("/"), _headers(), {}
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +196,8 @@ mcp = FastMCP(
     ),
 )
 
+from . import mcp_fleet as _mcp_fleet  # noqa: E402, F401 — registers fleet tools
+
 
 # ---------------------------------------------------------------------------
 # Tier 0 — Read-only (LoA 0)
@@ -149,8 +215,9 @@ def robot_status(rrn: str = "") -> dict[str, Any]:
     """
     _check_loa(0)
     rrn = rrn or _default_rrn()
+    base_url, hdrs, _ = _resolve_robot_endpoint(rrn)
     try:
-        resp = httpx.get(f"{_gateway_url()}/api/status", headers=_headers(), timeout=10)
+        resp = httpx.get(f"{base_url}/api/status", headers=hdrs, timeout=10)
         data = resp.json() if resp.status_code == 200 else {"error": resp.text}
     except Exception as exc:
         data = {"error": str(exc)}
@@ -167,15 +234,16 @@ def robot_telemetry(rrn: str = "") -> dict[str, Any]:
     """
     _check_loa(0)
     rrn = rrn or _default_rrn()
+    base_url, hdrs, _ = _resolve_robot_endpoint(rrn)
     try:
         resp = httpx.get(
-            f"{_gateway_url()}/api/telemetry",
-            headers=_headers(),
+            f"{base_url}/api/telemetry",
+            headers=hdrs,
             timeout=10,
         )
         if resp.status_code == 404:
             # Fallback: /api/status covers the basics
-            resp = httpx.get(f"{_gateway_url()}/api/status", headers=_headers(), timeout=10)
+            resp = httpx.get(f"{base_url}/api/status", headers=hdrs, timeout=10)
         data = resp.json() if resp.status_code == 200 else {"error": resp.text}
     except Exception as exc:
         data = {"error": str(exc)}
@@ -205,6 +273,85 @@ def fleet_list() -> dict[str, Any]:
     except Exception as exc:
         data = {"error": str(exc)}
     return {"fleet": data}
+
+
+@mcp.tool()
+def robot_doctor(rrn: str = "", home: str = "") -> dict[str, Any]:
+    """Run hardware, bus, power, and service fault-isolation diagnostics for a robot.
+
+    Separates software/service faults from physical bus/power/servo faults:
+    - Systemd unit & gateway/runtime port reachability
+    - I2C bus (/dev/i2c-1) and PCA9685 register persistence (0x40) / battery gauge (0x36)
+    - USB power budget & kernel over-current checks
+    - Live gateway `status.report` telemetry (Feetech STS3215 servo positions,
+      temperatures, loads, voltages, or drive hardware reachability & envelope state)
+
+    LoA 0 — read-only diagnostic.
+
+    Args:
+        rrn:  Robot Registry Number (e.g. RRN-000000000011 for Bob, RRN-000000000012 for Rover).
+        home: Optional robot home directory override (e.g. '/home/craigm26/bob' or '/home/craigm26/rover').
+    """
+    _check_loa(0)
+    from dataclasses import asdict
+    from .doctor import run_robot_checks
+
+    rrn = rrn or _default_rrn()
+    _, hdrs, peer = _resolve_robot_endpoint(rrn)
+
+    # Determine local robot home directory if running on this host
+    target_home = home
+    if not target_home and peer and peer.get("manifest_path"):
+        target_home = str(Path(peer["manifest_path"]).parent)
+    if not target_home:
+        if rrn.endswith("12") and (Path.home() / "rover").exists():
+            target_home = str(Path.home() / "rover")
+        elif (Path.home() / "bob").exists():
+            target_home = str(Path.home() / "bob")
+
+    report = run_robot_checks(home=target_home if target_home else None)
+    checks_out = [asdict(c) for c in report.checks]
+    blocking_out = [asdict(c) for c in report.blocking_failures]
+
+    # Also query live actuator state via gateway /v1/invoke status.report if reachable
+    gateway_telemetry: dict[str, Any] = {}
+    gw_url = (peer.get("gateway_url") if peer else None)
+    manifest_path = (peer.get("manifest_path") if peer else None) or (
+        str(Path(target_home) / "ROBOT.md") if target_home else ""
+    )
+    if gw_url:
+        try:
+            resp = httpx.post(
+                f"{str(gw_url).rstrip('/')}/v1/invoke",
+                json={
+                    "tool_name": "status.report",
+                    "tool_args": {},
+                    "scope": "OBSERVE",
+                    "manifest_path": manifest_path,
+                },
+                headers=hdrs,
+                timeout=4,
+            )
+            if resp.status_code == 200:
+                gateway_telemetry = resp.json()
+        except Exception as exc:
+            gateway_telemetry = {"gateway_probe_error": str(exc)}
+
+    return {
+        "rrn": rrn,
+        "home": target_home,
+        "can_move": report.can_move,
+        "all_ok": report.all_ok,
+        "summary": {
+            "ok": report.ok_count,
+            "warn": report.warn_count,
+            "fail": report.fail_count,
+            "blocking": len(blocking_out),
+        },
+        "blocking_failures": blocking_out,
+        "checks": checks_out,
+        "live_actuator_telemetry": gateway_telemetry,
+    }
 
 
 @mcp.tool()
@@ -270,6 +417,7 @@ def robot_command(
     """
     _check_loa(1)
     rrn = rrn or _default_rrn()
+    base_url, hdrs, _ = _resolve_robot_endpoint(rrn)
     payload: dict[str, Any] = {
         "instruction": instruction,
         "scope": scope,
@@ -280,9 +428,9 @@ def robot_command(
         payload["reason"] = reason
     try:
         resp = httpx.post(
-            f"{_gateway_url()}/api/command",
+            f"{base_url}/api/command",
             json=payload,
-            headers=_headers(),
+            headers=hdrs,
             timeout=60,
         )
         data = (

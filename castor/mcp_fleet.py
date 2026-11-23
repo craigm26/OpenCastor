@@ -11,27 +11,59 @@ from typing import Any
 
 import httpx
 
-from .mcp_server import _check_loa, _gateway_url, mcp
+from .mcp_server import (
+    _check_loa,
+    _fleet_registry,
+    _gateway_url,
+    _headers,
+    _resolve_robot_endpoint,
+    mcp,
+)
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 
+def _normalize_robot_entry(r: dict[str, Any]) -> dict[str, Any]:
+    """Normalize both `/api/fleet` (`ruri`, `status`) and legacy (`rrn`, `online`) shapes."""
+    out = dict(r)
+    if "rrn" not in out and "ruri" in out:
+        out["rrn"] = out["ruri"]
+    if "online" not in out:
+        st = str(out.get("status", "")).lower()
+        out["online"] = st in ("online", "ok", "ready", "active", "running", "true") or bool(
+            out.get("ip") or out.get("gateway_url")
+        )
+    return out
+
+
 def _fleet_robots() -> list[dict[str, Any]]:
-    """Return the fleet robot list from the gateway."""
+    """Return the fleet robot list from the gateway, normalized across shapes."""
     url = f"{_gateway_url()}/api/fleet"
     try:
-        resp = httpx.get(url, timeout=8)
+        resp = httpx.get(url, headers=_headers(), timeout=8)
         resp.raise_for_status()
         data = resp.json()
-        return data.get("fleet", data.get("robots", []))
+        raw_list = data.get("fleet", data.get("robots", []))
+        return [_normalize_robot_entry(r) for r in raw_list if isinstance(r, dict)]
     except Exception as exc:  # noqa: BLE001
         return [{"error": str(exc)}]
 
 
+def _robot_url_and_headers(default_base: str, rrn: str) -> tuple[str, dict[str, str], dict[str, Any]]:
+    """Resolve the per-robot base URL and auth headers for `rrn`."""
+    reg = _fleet_registry()
+    peer = reg.get(rrn)
+    if peer:
+        base = str(peer.get("runtime_url") or peer.get("gateway_url") or default_base).rstrip("/")
+        return base, _headers(str(peer.get("token") or "")), peer
+    return default_base.rstrip("/"), _headers(), {}
+
+
 def _robot_status_sync(base_url: str, rrn: str) -> dict[str, Any]:
     """Fetch /api/status for a single robot gateway."""
+    target_base, hdrs, _ = _robot_url_and_headers(base_url, rrn)
     try:
-        resp = httpx.get(f"{base_url}/api/status", timeout=6)
+        resp = httpx.get(f"{target_base}/api/status", headers=hdrs, timeout=6)
         resp.raise_for_status()
         return {"rrn": rrn, "ok": True, "data": resp.json()}
     except Exception as exc:  # noqa: BLE001
@@ -41,12 +73,14 @@ def _robot_status_sync(base_url: str, rrn: str) -> dict[str, Any]:
 async def _send_command_async(
     base_url: str, rrn: str, instruction: str, scope: str
 ) -> dict[str, Any]:
-    """POST /api/command asynchronously."""
+    """POST /api/command asynchronously, routing per RRN when registered."""
+    target_base, hdrs, _ = _robot_url_and_headers(base_url, rrn)
     try:
         async with httpx.AsyncClient(timeout=8) as client:
             resp = await client.post(
-                f"{base_url}/api/command",
-                json={"instruction": instruction, "scope": scope},
+                f"{target_base}/api/command",
+                json={"instruction": instruction, "scope": scope, "rrn": rrn},
+                headers=hdrs,
             )
             resp.raise_for_status()
             return {"rrn": rrn, "ok": True, "result": resp.json()}
@@ -55,10 +89,21 @@ async def _send_command_async(
 
 
 async def _estop_async(base_url: str, rrn: str) -> dict[str, Any]:
-    """POST /api/estop asynchronously."""
+    """POST /api/stop (with fallback to /api/estop) asynchronously."""
+    target_base, hdrs, _ = _robot_url_and_headers(base_url, rrn)
     try:
         async with httpx.AsyncClient(timeout=6) as client:
-            resp = await client.post(f"{base_url}/api/estop", json={"rrn": rrn})
+            resp = await client.post(
+                f"{target_base}/api/stop",
+                json={"rrn": rrn},
+                headers=hdrs,
+            )
+            if resp.status_code == 404:
+                resp = await client.post(
+                    f"{target_base}/api/estop",
+                    json={"rrn": rrn},
+                    headers=hdrs,
+                )
             resp.raise_for_status()
             return {"rrn": rrn, "ok": True}
     except Exception as exc:  # noqa: BLE001
@@ -202,16 +247,55 @@ def fleet_estop(rrns: list[str] | None = None) -> dict[str, Any]:
     # Synchronous sequential ESTOPs — safety-critical, no async fan-out
     results: list[dict[str, Any]] = []
     for rrn in rrns:
+        target_base, hdrs, peer = _robot_url_and_headers(base, rrn)
+        stopped_ok = False
+        err_msg = ""
         try:
             resp = httpx.post(
-                f"{base}/api/estop",
+                f"{target_base}/api/stop",
                 json={"rrn": rrn},
+                headers=hdrs,
                 timeout=5,
             )
+            if resp.status_code == 404:
+                resp = httpx.post(
+                    f"{target_base}/api/estop",
+                    json={"rrn": rrn},
+                    headers=hdrs,
+                    timeout=5,
+                )
             resp.raise_for_status()
-            results.append({"rrn": rrn, "ok": True})
+            stopped_ok = True
         except Exception as exc:  # noqa: BLE001
-            results.append({"rrn": rrn, "ok": False, "error": str(exc)})
+            err_msg = str(exc)
+
+        # Also invoke the robot-md-gateway latching stop (arm.estop / drive.estop)
+        # when a dedicated gateway_url is registered for this RRN.
+        gw_url = peer.get("gateway_url") if peer else None
+        stop_tool = peer.get("stop_tool") if peer else None
+        if gw_url and stop_tool:
+            try:
+                gw_resp = httpx.post(
+                    f"{str(gw_url).rstrip('/')}/v1/invoke",
+                    json={
+                        "tool_name": stop_tool,
+                        "tool_args": {},
+                        "scope": "SAFETY",
+                        "manifest_path": peer.get("manifest_path", ""),
+                    },
+                    headers=hdrs,
+                    timeout=5,
+                )
+                if gw_resp.status_code == 200:
+                    stopped_ok = True
+            except Exception as gw_exc:  # noqa: BLE001
+                if not stopped_ok:
+                    err_msg = f"{err_msg}; gateway: {gw_exc}".strip("; ")
+
+        if stopped_ok:
+            results.append({"rrn": rrn, "ok": True})
+        else:
+            results.append({"rrn": rrn, "ok": False, "error": err_msg})
 
     return {
         "results": results,
