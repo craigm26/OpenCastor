@@ -1,0 +1,23 @@
+[Unit]
+Description=OpenCastor robot-md-gateway (%i)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=craigm26
+WorkingDirectory=/home/craigm26/%i
+EnvironmentFile=-/home/craigm26/%i/gateway-policy.env
+ExecStart=/home/craigm26/venvs/castor/bin/robot-md-gateway --manifest /home/craigm26/%i/ROBOT.md
+Restart=always
+RestartSec=3
+WatchdogSec=15
+TimeoutStopSec=10
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
